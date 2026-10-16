@@ -7,7 +7,9 @@ import org.joml.Quaternionf
 import org.joml.Vector3f
 import kotlin.math.PI
 import kotlin.math.cos
+import kotlin.math.hypot
 import kotlin.math.sin
+import kotlin.random.Random
 
 internal const val STAFF_NOVA_HOLD_TICKS = 70
 internal const val STAFF_NOVA_FAN_REACH = 18.0
@@ -16,94 +18,144 @@ internal const val STAFF_NOVA_FAN_START_TICK = 2
 internal const val STAFF_NOVA_CONTACT_TICK = 14
 internal const val STAFF_NOVA_FIELD_TICKS = 26
 internal const val STAFF_NOVA_ATTACK_TICKS = STAFF_NOVA_CONTACT_TICK + STAFF_NOVA_HOLD_TICKS + 6
-internal data class StaffRootBranch(val key: String, val points: List<Vector3f>)
+internal data class StaffRootBranch(val key: String, val points: List<Vector3f>, val width: Double = 1.0,
+    val parentKey: String? = null)
 internal data class StaffRootWrap(val key: String, val feet: Vector3f, val radius: Double, val height: Double,
     val ageOffset: Int = 0)
 
-/** Flat reference paths; runtime projects these same knots onto physical ground and clips at cover. */
-internal fun staffNovaFanPaths(reach: Double): List<StaffRootBranch> = (0..6).map { lane ->
-    val across = (lane - 3) / 3.0
-    StaffRootBranch("lane-$lane", (0..4).map { knot ->
-        val t = knot / 4.0
-        val distance = .75 + (reach.coerceAtLeast(.75) - .75) * t
-        val angle = across * STAFF_NOVA_FAN_HALF_ANGLE + sin(t * PI) * sin(lane * 1.8) * .045
-        Vector3f((sin(angle) * distance).toFloat(), .12f, (cos(angle) * distance).toFloat())
-    })
+/** A cast owns its seed: crooked branches vary between casts, never between animation frames. */
+internal fun staffNovaFanPaths(reach: Double, seed: Long = 0L): List<StaffRootBranch> {
+    val random = Random(seed)
+    val roots = (0..6).map { lane ->
+        val across = (lane - 3) / 3.0
+        val bend = random.nextDouble(-.10, .10)
+        val phase = random.nextDouble(0.0, PI * 2)
+        val tip = random.nextDouble(-.018, .018)
+        StaffRootBranch("lane-$lane", (0..5).map { knot ->
+            val t = knot / 5.0
+            val distance = .75 + (reach.coerceAtLeast(.75) - .75) * t
+            val angle = across * STAFF_NOVA_FAN_HALF_ANGLE + tip * t +
+                sin(t * PI) * (bend + sin(t * PI * 2.3 + phase) * .07)
+            Vector3f((sin(angle) * distance).toFloat(), .12f, (cos(angle) * distance).toFloat())
+        }, random.nextDouble(.87, 1.16))
+    }
+    return roots + listOf(1, 3, 5).map { index -> rootOffshoot(roots[index], random, index) }
 }
 
-internal fun staffNovaSnarePaths(radius: Double): List<StaffRootBranch> = (0..7).map { root ->
-    val angle = root * PI / 4 + sin(root * 1.7) * .08
-    StaffRootBranch("claw-$root", (0..3).map { knot ->
-        val t = knot / 3.0
-        val bend = angle + sin(t * PI) * (if (root % 2 == 0) .24 else -.20)
-        val distance = radius.coerceAtLeast(.5) * (1.0 - t * .78)
-        Vector3f((cos(bend) * distance).toFloat(), .12f, (sin(bend) * distance).toFloat())
-    })
+internal fun staffNovaSnarePaths(radius: Double, seed: Long = 0L): List<StaffRootBranch> {
+    val random = Random(seed xor 0x62495L)
+    val roots = (0..7).map { root ->
+        val angle = root * PI / 4 + random.nextDouble(-.13, .13)
+        val curl = random.nextDouble(.22, .48) * if (root % 2 == 0) 1 else -1
+        StaffRootBranch("claw-$root", (0..5).map { knot ->
+            val t = knot / 5.0
+            val bend = angle + sin(t * PI) * curl + sin(t * PI * 2) * .12
+            val distance = radius.coerceAtLeast(.5) * (1.0 - t * .97)
+            Vector3f((cos(bend) * distance).toFloat(), .12f, (sin(bend) * distance).toFloat())
+        }, random.nextDouble(.86, 1.15))
+    }
+    return roots + listOf(0, 2, 4, 6).map { index -> rootOffshoot(roots[index], random, index) }
 }
+
+private fun rootOffshoot(parent: StaffRootBranch, random: Random, index: Int): StaffRootBranch {
+    val start = Vector3f(parent.points[2 + index % 2])
+    val direction = Vector3f(parent.points[3 + index % 2]).sub(start).normalize()
+    val side = if (index % 3 == 0) -1f else 1f
+    val sideways = Vector3f(direction.z * side, 0f, -direction.x * side)
+    val length = random.nextDouble(1.05, 1.85).toFloat()
+    return StaffRootBranch("${parent.key}:twig", listOf(start,
+        Vector3f(start).add(Vector3f(direction).mul(length * .28f)).add(Vector3f(sideways).mul(length * .55f)),
+        Vector3f(start).add(Vector3f(direction).mul(length * .9f)).add(Vector3f(sideways).mul(length))),
+        .53, parent.key)
+}
+
+internal fun staffRootNearestPoint(path: StaffRootBranch, at: Vector3f): Vector3f? =
+    path.points.zipWithNext().map { (from, to) ->
+        val dx = to.x - from.x
+        val dz = to.z - from.z
+        val length = dx * dx + dz * dz
+        val t = if (length < 1e-8f) 1f else (((at.x - from.x) * dx + (at.z - from.z) * dz) / length).coerceIn(0f, 1f)
+        Vector3f(from).lerp(to, t)
+    }.minByOrNull { hypot((it.x - at.x).toDouble(), (it.z - at.z).toDouble()) }
 
 internal fun staffNovaFanFront(age: Int, reach: Double): Double = .75 +
     (reach.coerceAtLeast(.75) - .75) * ((age - STAFF_NOVA_FAN_START_TICK).toDouble() /
         (STAFF_NOVA_CONTACT_TICK - STAFF_NOVA_FAN_START_TICK)).coerceIn(0.0, 1.0)
 
-/** Seven thick, ground-sampled roots carry one readable front; hooks never imply a captured target. */
+private data class RootGrowth(val body: List<StaffDisplayPart>, val tip: Vector3f, val heading: Vector3f)
+
+private fun rootGrowth(path: StaffRootBranch, distance: Double, fade: Double, prefix: String,
+    radialFront: Double? = null): RootGrowth {
+    val lengths = path.points.zipWithNext().map { (from, to) -> hypot((to.x - from.x).toDouble(), (to.z - from.z).toDouble()) }
+    val total = lengths.sum().coerceAtLeast(.001)
+    var passed = 0.0
+    var active = 0
+    var tip = Vector3f(path.points.first())
+    var heading = Vector3f(0f, 0f, 1f)
+    val body = path.points.zipWithNext().mapIndexed { joint, (from, to) ->
+        val length = lengths[joint]
+        val startRadius = hypot(from.x.toDouble(), from.z.toDouble())
+        val endRadius = hypot(to.x.toDouble(), to.z.toDouble())
+        val grow = if (radialFront != null) {
+            if (endRadius - startRadius < .001) if (radialFront >= startRadius) 1.0 else 0.0
+            else ((radialFront - startRadius) / (endRadius - startRadius)).coerceIn(0.0, 1.0)
+        } else if (length < .001) if (distance >= passed) 1.0 else 0.0
+            else ((distance - passed) / length).coerceIn(0.0, 1.0)
+        val end = Vector3f(from).lerp(to, grow.toFloat())
+        val width = (.42 - .18 * passed / total) * path.width * fade * grow
+        val part = rootLink("$prefix:${path.key}:$joint", from, end, width,
+            if (joint % 3 == 1) Material.MOSS_BLOCK else Material.DARK_OAK_WOOD)
+        if (grow > 0) {
+            active = joint
+            tip = end
+            val delta = Vector3f(to).sub(from)
+            if (delta.lengthSquared() > 1e-8f) heading = delta.normalize()
+        }
+        passed += length
+        part
+    }
+    // Burrow the old tail on very jagged terrain; two pooled scenes still fit the 96-part field budget.
+    val segments = if (path.parentKey == null) 8 else 4
+    val start = (active - segments + 1).coerceAtLeast(0)
+    return RootGrowth(body.drop(start).take(segments), tip, heading)
+}
+
+/** Crooked surface roots share a swept radial front and keep their accepted victim wraps separate. */
 internal fun staffNovaFanParts(age: Int, duration: Int, reach: Double,
     paths: List<StaffRootBranch>): List<StaffDisplayPart> {
     if (age >= duration) return emptyList()
     val fade = rootSmooth((duration - age) / 6.0)
-    val parts = mutableListOf<StaffDisplayPart>()
-    val front = staffNovaFanFront(age, reach) - .75
-    paths.take(7).forEachIndexed { lane, path ->
-        val points = path.points.take(5)
-        if (points.size < 2) return@forEachIndexed
-        var passed = 0.0
-        var tip = Vector3f(points.first())
-        var heading = Vector3f(points[1]).sub(points.first()).normalize()
-        points.zipWithNext().forEachIndexed { joint, (from, to) ->
-            val length = from.distance(to).toDouble().coerceAtLeast(.001)
-            val grow = ((front - passed) / length).coerceIn(0.0, 1.0)
-            val end = Vector3f(from).lerp(to, grow.toFloat())
-            parts += rootLink("root:fan:${path.key}:$joint", from, end,
-                (.42 - joint * .038 + (lane % 2) * .035) * fade * grow,
-                if ((lane + joint) % 3 == 1) Material.MOSS_BLOCK else Material.DARK_OAK_WOOD)
-            if (front >= passed) {
-                tip = end
-                heading = Vector3f(to).sub(from).normalize()
-            }
-            passed += length
-        }
-        val lift = rootSmooth(front / 2.0) * fade
-        val fork = Vector3f(tip).add(heading.x * .30f, (.68 * lift).toFloat(), heading.z * .30f)
-        val hook = Vector3f(fork).add(heading.x * .38f, (-.24 * lift).toFloat(), heading.z * .38f)
-        parts += rootLink("root:fan:${path.key}:hook:0", tip, fork, .23 * lift, Material.MOSS_BLOCK)
-        parts += rootLink("root:fan:${path.key}:hook:1", fork, hook, .13 * lift, Material.FLOWERING_AZALEA_LEAVES)
+    val front = staffNovaFanFront(age, reach)
+    return paths.flatMap { path ->
+        if (path.points.size < 2) return@flatMap emptyList()
+        val first = path.points.first()
+        val grown = front - hypot(first.x.toDouble(), first.z.toDouble())
+        val root = rootGrowth(path, grown, fade, "root:fan", front)
+        if (path.parentKey != null) return@flatMap root.body
+        val lift = rootSmooth(grown / 2.0) * fade
+        val fork = Vector3f(root.tip).add(root.heading.x * .30f, (.68 * lift).toFloat(), root.heading.z * .30f)
+        val hook = Vector3f(fork).add(root.heading.x * .38f, (-.24 * lift).toFloat(), root.heading.z * .38f)
+        root.body + rootLink("root:fan:${path.key}:hook:0", root.tip, fork, .23 * lift, Material.MOSS_BLOCK) +
+            rootLink("root:fan:${path.key}:hook:1", fork, hook, .13 * lift, Material.FLOWERING_AZALEA_LEAVES)
     }
-    return parts
 }
 
-/** Perimeter buds warn for eight ticks, then eight ground claws sweep inward together. */
+/** Perimeter buds warn for eight ticks, then irregular claws and their offshoots close together. */
 internal fun staffNovaSnareParts(age: Int, duration: Int, paths: List<StaffRootBranch>): List<StaffDisplayPart> {
     if (age >= duration) return emptyList()
     val prepare = rootSmooth(age / 8.0)
     val close = rootSmooth((age - 8.0) / (STAFF_NOVA_CONTACT_TICK - 8))
     val progress = .18 * prepare + .82 * close
     val fade = rootSmooth((duration - age) / 6.0)
-    return paths.take(8).flatMap { path ->
-        val points = path.points.take(4)
-        if (points.size < 2) return@flatMap emptyList()
-        val body = points.zipWithNext().mapIndexed { joint, (from, to) ->
-            val grow = (progress * (points.size - 1) - joint).coerceIn(0.0, 1.0)
-            rootLink("root:snare:${path.key}:$joint", from, Vector3f(from).lerp(to, grow.toFloat()),
-                (.38 - joint * .055) * fade * grow,
-                if (joint == 1) Material.MOSS_BLOCK else Material.DARK_OAK_WOOD)
-        }
-        val pathPosition = progress * (points.size - 1)
-        val segment = pathPosition.toInt().coerceIn(0, points.size - 2)
-        val tip = Vector3f(points[segment]).lerp(points[segment + 1], (pathPosition - segment).toFloat())
-        val heading = Vector3f(points.last()).sub(points.first()).normalize()
+    return paths.flatMap { path ->
+        if (path.points.size < 2) return@flatMap emptyList()
+        val length = path.points.zipWithNext().sumOf { (a, b) -> hypot((b.x - a.x).toDouble(), (b.z - a.z).toDouble()) }
+        val root = rootGrowth(path, length * progress, fade, "root:snare")
+        if (path.parentKey != null) return@flatMap root.body
         val lift = (.18 * prepare + .75 * close) * fade
-        val fork = Vector3f(tip).add(heading.x * .18f, lift.toFloat(), heading.z * .18f)
-        val hook = Vector3f(fork).add(heading.x * .50f, (-.35 * lift).toFloat(), heading.z * .50f)
-        body + rootLink("root:snare:${path.key}:hook:0", tip, fork, .24 * prepare * fade, Material.MOSS_BLOCK) +
+        val fork = Vector3f(root.tip).add(root.heading.x * .18f, lift.toFloat(), root.heading.z * .18f)
+        val hook = Vector3f(fork).add(root.heading.x * .50f, (-.35 * lift).toFloat(), root.heading.z * .50f)
+        root.body + rootLink("root:snare:${path.key}:hook:0", root.tip, fork, .24 * prepare * fade, Material.MOSS_BLOCK) +
             rootLink("root:snare:${path.key}:hook:1", fork, hook, .14 * prepare * fade, Material.FLOWERING_AZALEA_LEAVES)
     }
 }

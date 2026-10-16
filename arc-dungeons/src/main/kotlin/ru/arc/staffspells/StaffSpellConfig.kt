@@ -184,6 +184,14 @@ internal data class StaffSpellHudPositionSettings(
     val scale: Double = 0.66,
 )
 
+internal data class StaffSpellHudMotionSettings(
+    val predictionTicks: Double = 2.0,
+    val maxLeadBlocks: Double = 4.0,
+    val forwardBlocks: Double = 2.0,
+    val verticalBlocks: Double = 0.9,
+    val settleTicks: Int = 10,
+)
+
 internal open class StaffSpellConfig(private val config: Config) {
     /** Camera-plane placement is read from this config generation and validated before use. */
     val hudPosition get() = StaffSpellHudPositionSettings(
@@ -191,6 +199,14 @@ internal open class StaffSpellConfig(private val config: Config) {
         verticalBlocks = number("hud.position.vertical-blocks", 0.85, 0.1..2.0),
         horizontalBlocks = number("hud.position.horizontal-blocks", 0.0, -1.5..1.5),
         scale = number("hud.position.scale", 0.66, 0.35..1.0),
+    )
+
+    val hudMotion get() = StaffSpellHudMotionSettings(
+        predictionTicks = number("hud.motion.prediction-ticks", 2.0, 0.0..4.0),
+        maxLeadBlocks = number("hud.motion.max-lead-blocks", 4.0, 0.0..8.0),
+        forwardBlocks = number("hud.motion.forward-blocks", 2.0, 0.0..4.0),
+        verticalBlocks = number("hud.motion.vertical-blocks", 0.9, 0.0..2.0),
+        settleTicks = config.integer("hud.motion.settle-ticks", 10).coerceIn(1, 40),
     )
 
     open val settings get() = StaffSpellSettings(

@@ -3,9 +3,14 @@ package ru.arc.staffspells
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
+import io.mockk.mockk
+import net.kyori.adventure.text.Component
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.entity.LivingEntity
+import org.bukkit.event.entity.PlayerDeathEvent
+import org.bukkit.event.player.PlayerChangedWorldEvent
+import org.bukkit.event.player.PlayerQuitEvent
 import java.util.UUID
 
 class StaffSpellTechniquesRuntimeTest : FreeSpec({
@@ -59,7 +64,7 @@ class StaffSpellTechniquesRuntimeTest : FreeSpec({
     }
 
     "an empty Q cast without a display allocation does not consume its admission budget" {
-        for (spell in listOf(StaffSpell.ICICLE, StaffSpell.LANCE, StaffSpell.GRAVITY, StaffSpell.NECROMANCER)) {
+        for (spell in listOf(StaffSpell.ICICLE, StaffSpell.LANCE, StaffSpell.GRAVITY, StaffSpell.NECROMANCER, StaffSpell.GALE)) {
             withTechniqueScenes { h, activeScenes ->
                 every { h.effects.custom(any(), any(), any(), any(), any()) } returns null
                 val world = h.paper.addSimpleWorld("staff-empty-q-budget-${spell.id}")
@@ -92,7 +97,30 @@ class StaffSpellTechniquesRuntimeTest : FreeSpec({
         }
     }
 
-    "Chain recast is admitted for its own orb, and impact stops at cover" {
+    "Chain proximity fuse catches an off-axis enemy and bursts once across its visible area" {
+        withTechniqueScenes { h, activeScenes ->
+            val world = h.paper.addSimpleWorld("staff-chain-q-proximity")
+            val player = h.player("staff-chain-q-proximity", world, StaffSpell.CHAIN)
+            val nearMiss = h.zombie(world, 2.5, 7.0)
+            val areaTarget = h.zombie(world, 4.0, 7.5)
+            val outside = h.zombie(world, 6.0, 7.5)
+            h.controller.start()
+
+            h.controller.hotkey(player, StaffSpell.CHAIN, StaffHotkey.Q)
+            h.hits shouldBe emptyList<LivingEntity>()
+            h.scheduler.tick(8)
+
+            h.hits.toSet() shouldBe setOf(nearMiss, areaTarget)
+            h.hits.size shouldBe 2
+            h.damageScales shouldBe listOf(1.0 to 6.0, 1.0 to 6.0)
+            h.scheduler.tick(14)
+            h.hits.count { it == nearMiss } shouldBe 1
+            (outside in h.hits) shouldBe false
+            activeScenes shouldBe emptySet<UUID>()
+        }
+    }
+
+    "Chain automatically bursts before cover without damaging a fully hidden enemy" {
         withTechniqueScenes { h, activeScenes ->
             val world = h.paper.addSimpleWorld("staff-chain-q-collision")
             val player = h.player("staff-chain-q-collision", world, StaffSpell.CHAIN)
@@ -102,19 +130,156 @@ class StaffSpellTechniquesRuntimeTest : FreeSpec({
 
             h.controller.hotkey(player, StaffSpell.CHAIN, StaffHotkey.Q)
             val orb = activeScenes.single()
-            h.scheduler.tick(5)
-            player.inventory.setItemInMainHand(h.config.item(StaffSpell.GRAVITY))
-            h.controller.hotkey(player, StaffSpell.GRAVITY, StaffHotkey.Q)
-            activeScenes.size shouldBe 2
-            (orb in activeScenes) shouldBe true
-            h.scheduler.tick(4)
-            player.inventory.setItemInMainHand(h.config.item(StaffSpell.CHAIN))
-            h.controller.hotkey(player, StaffSpell.CHAIN, StaffHotkey.Q)
+            h.scheduler.tick(2)
+            val impact = h.movedEffects.last { it.first == orb }.second
+            (impact.z in 2.90..2.999) shouldBe true
+            activeScenes.size shouldBe 1 // Short visible fracture stays at the wall; no second damage phase.
+            h.scheduler.tick(STAFF_CHAIN_BURST_TICKS.toLong())
 
             h.hits shouldBe emptyList<LivingEntity>()
             (orb in activeScenes) shouldBe false
-            activeScenes.size shouldBe 1
+            activeScenes shouldBe emptySet<UUID>()
             target.isValid shouldBe true
+        }
+    }
+
+    "Chain manual detonation stays available during flight and cannot repeat during its burst" {
+        withTechniqueScenes { h, activeScenes ->
+            val world = h.paper.addSimpleWorld("staff-chain-q-recast")
+            val player = h.player("staff-chain-q-recast", world, StaffSpell.CHAIN)
+            h.controller.start()
+            h.controller.hotkey(player, StaffSpell.CHAIN, StaffHotkey.Q)
+            h.scheduler.tick(4)
+            val target = h.zombie(world, .5, 7.5)
+
+            h.controller.hotkey(player, StaffSpell.CHAIN, StaffHotkey.Q)
+            h.hits shouldBe listOf(target)
+            h.scheduler.tick(4)
+            h.controller.hotkey(player, StaffSpell.CHAIN, StaffHotkey.Q)
+            h.scheduler.tick(STAFF_CHAIN_BURST_TICKS.toLong())
+
+            h.hits shouldBe listOf(target)
+            activeScenes shouldBe emptySet<UUID>()
+        }
+    }
+
+    "Chain reaches its bounded terminal range and bursts in empty air without acquiring ineligible players" {
+        withTechniqueScenes { h, activeScenes ->
+            val world = h.paper.addSimpleWorld("staff-chain-q-empty")
+            val player = h.player("staff-chain-q-empty", world, StaffSpell.CHAIN)
+            h.player("staff-chain-q-ineligible", world, StaffSpell.CHAIN)
+                .teleport(Location(world, .5, 64.0, 6.5))
+            h.controller.start()
+            h.controller.hotkey(player, StaffSpell.CHAIN, StaffHotkey.Q)
+            val orb = activeScenes.single()
+            h.scheduler.tick(27)
+
+            val impact = h.movedEffects.last { it.first == orb }.second
+            (impact.z in 29.24..29.26) shouldBe true
+            activeScenes.size shouldBe 1
+            h.hits shouldBe emptyList<LivingEntity>()
+            h.scheduler.tick(STAFF_CHAIN_BURST_TICKS.toLong())
+            activeScenes shouldBe emptySet<UUID>()
+        }
+    }
+
+    "GALE hurricane remains at its airborne cast point and delivers only its bounded sustained budget" {
+        withTechniqueScenes { h, activeScenes ->
+            val world = h.paper.addSimpleWorld("staff-gale-q-air")
+            val player = h.player("staff-gale-q-air", world, StaffSpell.GALE)
+            player.teleport(player.location.add(0.0, 20.0, 0.0))
+            val target = h.zombie(world, .5, 5.5).apply { teleport(location.add(0.0, 20.0, 0.0)) }
+            h.zombie(world, 8.2, .5).apply { teleport(location.add(0.0, 20.0, 0.0)) }
+            h.controller.start()
+            h.controller.hotkey(player, StaffSpell.GALE, StaffHotkey.Q)
+
+            activeScenes.size shouldBe 1
+            val scene = h.visualPlays.single { it.spell == StaffSpell.GALE }
+            scene.from.y shouldBe 84.0
+            h.scheduler.tick((STAFF_GALE_HURRICANE_BUILD_TICKS - 1).toLong())
+            h.hits shouldBe emptyList<LivingEntity>()
+            h.scheduler.tick(1)
+            h.hits shouldBe listOf(target)
+            player.teleport(player.location.add(14.0, 0.0, 0.0))
+            h.scheduler.tick(STAFF_GALE_HURRICANE_TICKS.toLong())
+
+            h.hits shouldBe List(STAFF_GALE_HURRICANE_MAX_TARGET_HITS) { target }
+            h.damageScales.sumOf { it.first } shouldBe 2.0
+            h.damageScales.sumOf { it.second } shouldBe 12.0
+            h.movedEffects.filter { it.first == scene.id } shouldBe emptyList<Pair<UUID, Location>>()
+            activeScenes shouldBe emptySet<UUID>()
+        }
+    }
+
+    "GALE hurricane never hits through cover and caps its entire cast at eight admitted targets" {
+        withTechniqueScenes { h, activeScenes ->
+            val world = h.paper.addSimpleWorld("staff-gale-q-limits")
+            val player = h.player("staff-gale-q-limits", world, StaffSpell.GALE)
+            val hidden = h.zombie(world, .5, 5.5)
+            for (x in -1..1) for (y in 64..77) world.getBlockAt(x, y, 2).type = Material.STONE
+            val visible = (0..8).map { index -> h.zombie(world, 2.5 + index * .35, -.5) }
+            h.controller.start()
+            h.controller.hotkey(player, StaffSpell.GALE, StaffHotkey.Q)
+            h.scheduler.tick(STAFF_GALE_HURRICANE_TICKS.toLong())
+
+            (hidden in h.hits) shouldBe false
+            h.hits.toSet() shouldBe visible.take(8).toSet()
+            h.hits.groupingBy { it }.eachCount().values.toSet() shouldBe setOf(STAFF_GALE_HURRICANE_MAX_TARGET_HITS)
+            h.hits.size shouldBe 64
+            activeScenes shouldBe emptySet<UUID>()
+        }
+    }
+
+    "GALE Q has a separate thirty-second deadline for ordinary and duel-marked staves" {
+        for (duelItem in listOf(false, true)) withTechniqueScenes { h, activeScenes ->
+            val world = h.paper.addSimpleWorld("staff-gale-q-cooldown-$duelItem")
+            val player = h.player("staff-gale-q-cooldown-$duelItem", world, StaffSpell.GALE)
+            if (duelItem) player.inventory.setItemInMainHand(h.controller.duelItem(StaffSpell.GALE))
+            h.controller.start()
+            h.controller.hotkey(player, StaffSpell.GALE, StaffHotkey.Q)
+            activeScenes.size shouldBe 1
+            h.scheduler.tick(STAFF_GALE_HURRICANE_TICKS.toLong())
+            activeScenes shouldBe emptySet<UUID>()
+            h.controller.canHotkey(player, StaffSpell.GALE, StaffHotkey.Q) shouldBe false
+            h.controller.canHotkey(player, StaffSpell.GALE, StaffHotkey.F) shouldBe true
+            h.scheduler.tick(499)
+            h.controller.canHotkey(player, StaffSpell.GALE, StaffHotkey.Q) shouldBe false
+            h.scheduler.tick(1)
+            h.controller.canHotkey(player, StaffSpell.GALE, StaffHotkey.Q) shouldBe true
+        }
+    }
+
+    "Q flight and hurricane scenes clean up on quit death world change reset eviction and close" {
+        withTechniqueScenes { h, activeScenes ->
+            val world = h.paper.addSimpleWorld("staff-q-lifecycle")
+            val quitting = h.player("staff-q-quit", world, StaffSpell.GALE)
+            val dying = h.player("staff-q-death", world, StaffSpell.GALE)
+            val changing = h.player("staff-q-world", world, StaffSpell.GALE)
+            val resetting = h.player("staff-q-reset", world, StaffSpell.CHAIN)
+            h.controller.start()
+            listOf(quitting, dying, changing).forEach { h.controller.hotkey(it, StaffSpell.GALE, StaffHotkey.Q) }
+            h.controller.hotkey(resetting, StaffSpell.CHAIN, StaffHotkey.Q)
+            activeScenes.size shouldBe 4
+
+            h.controller.onQuit(PlayerQuitEvent(quitting, Component.empty()))
+            h.controller.onDeath(mockk<PlayerDeathEvent> { every { entity } returns dying })
+            changing.teleport(Location(h.paper.addSimpleWorld("staff-q-other-world"), .5, 64.0, .5))
+            h.controller.onWorldChange(PlayerChangedWorldEvent(changing, world))
+            h.controller.resetPlayer(resetting.uniqueId)
+            activeScenes shouldBe emptySet<UUID>()
+
+            val evicted = h.player("staff-q-evicted", world, StaffSpell.GALE)
+            h.controller.hotkey(evicted, StaffSpell.GALE, StaffHotkey.Q)
+            activeScenes.clear()
+            h.zombie(world, .5, 4.5)
+            h.scheduler.tick(14)
+            h.hits shouldBe emptyList<LivingEntity>()
+
+            val closing = h.player("staff-q-closing", world, StaffSpell.GALE)
+            h.controller.hotkey(closing, StaffSpell.GALE, StaffHotkey.Q)
+            activeScenes.size shouldBe 1
+            h.controller.close()
+            activeScenes shouldBe emptySet<UUID>()
         }
     }
 
@@ -283,7 +448,15 @@ private fun withTechniqueScenes(
     withStaffHarness(settings = settings) { h ->
         val activeScenes = mutableSetOf<UUID>()
         every { h.effects.custom(any(), any(), any(), any(), any()) } answers {
-            UUID.randomUUID().also(activeScenes::add)
+            UUID.randomUUID().also { id ->
+                activeScenes += id
+                val at = arg<Location>(2).clone()
+                h.visualPlays += StaffVisualPlay(id, arg(1), at, at.clone(), false, false, false, null)
+            }
+        }
+        every { h.effects.updateCustom(any(), any(), any()) } answers {
+            firstArg<UUID?>()?.let { h.movedEffects += it to secondArg<Location>().clone() }
+            Unit
         }
         every { h.effects.isActive(any()) } answers { firstArg<UUID?>()?.let(activeScenes::contains) == true }
         every { h.effects.remove(any()) } answers {

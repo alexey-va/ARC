@@ -53,8 +53,18 @@ internal class StaffSpellTechniques(
         var sceneId: UUID?,
         var ageTicks: Int = 0,
         var travelled: Double = 0.0,
-        var blocked: Boolean = false,
-        val attemptedTargets: MutableSet<UUID> = mutableSetOf(),
+        var burstAge: Int? = null,
+    )
+
+    private data class GaleHurricane(
+        val casterId: UUID,
+        val cast: StaffSpellCast,
+        val tuning: StaffSpellTuning,
+        val worldId: UUID,
+        val origin: Location,
+        val sceneId: UUID,
+        var ageTicks: Int = 0,
+        val targetHits: MutableMap<UUID, Int> = linkedMapOf(),
     )
 
     private data class IcicleBurst(
@@ -121,6 +131,7 @@ internal class StaffSpellTechniques(
     private val tasks = LifecycleTaskScope()
     private val lunarFlights = linkedMapOf<UUID, LunarFlight>()
     private val chainOrbs = linkedMapOf<UUID, ChainOrb>()
+    private val galeHurricanes = linkedMapOf<UUID, GaleHurricane>()
     private val icicleBursts = linkedMapOf<UUID, IcicleBurst>()
     private val prismWards = linkedMapOf<UUID, PrismWard>()
     private val gravityHolds = linkedMapOf<UUID, GravityHold>()
@@ -144,6 +155,7 @@ internal class StaffSpellTechniques(
         if (closed || !started || !ready(player, cast)) return false
         return when (spell) {
             StaffSpell.CHAIN -> castChain(player, cast, tuning)
+            StaffSpell.GALE -> castGaleHurricane(player, cast, tuning)
             StaffSpell.ICICLE -> castIcicleBurst(player, cast, tuning)
             StaffSpell.LUNAR -> castLunar(player, cast, tuning)
             StaffSpell.PRISM -> castPrismWard(player, cast, tuning)
@@ -180,6 +192,7 @@ internal class StaffSpellTechniques(
 
     private fun castChain(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning): Boolean {
         chainOrbs[player.uniqueId]?.let { orb ->
+            if (orb.burstAge != null) return false
             detonateChain(player, orb)
             return true
         }
@@ -188,10 +201,12 @@ internal class StaffSpellTechniques(
         val direction = targeting.assistedDirection(player, StaffSpell.CHAIN, cast,
             direction = eye.direction, from = eye, range = settings.range)
         if (!safeDirection(direction)) return false
-        val origin = eye.clone().add(direction.clone().multiply(CHAIN_LAUNCH_OFFSET))
+        val origin = targeting.rayEnd(eye, direction, CHAIN_LAUNCH_OFFSET)
+        if (!isLoaded(origin)) return false
         val yaw = atan2(-direction.x, direction.z).toFloat()
         val orb = ChainOrb(player.uniqueId, cast, tuning, player.world.uid, origin.clone(), direction, null)
-        orb.sceneId = effects.custom(player.uniqueId, StaffSpell.CHAIN, origin, CHAIN_MAX_TICKS) { age ->
+        orb.sceneId = effects.custom(player.uniqueId, StaffSpell.CHAIN, origin,
+            CHAIN_MAX_TICKS + STAFF_CHAIN_BURST_TICKS) { age ->
             staffChainTechniqueParts(yaw, age / 2)
         } ?: return false
         chainOrbs[player.uniqueId] = orb
@@ -199,6 +214,7 @@ internal class StaffSpellTechniques(
             visuals.cue(origin, Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, .62f, 1.35f)
             visuals.particles(origin, chainTrailSamples(), clearance = 0.0)
         }
+        if (eye.distance(origin) + BLOCK_CLIP_EPSILON < CHAIN_LAUNCH_OFFSET) detonateChain(player, orb)
         return true
     }
 
@@ -207,46 +223,54 @@ internal class StaffSpellTechniques(
             removeChain(orb)
             return
         }
-        val impact = orb.position.clone().add(0.0, .25, 0.0)
+        if (orb.burstAge != null) return
+        // Enter the terminal phase before invoking damage: a synchronous hit callback can re-enter Q.
+        orb.burstAge = 0
+        val impact = orb.position.clone()
+        effects.updateCustom(orb.sceneId, impact, staffChainBurstParts(0))
         visuals.withOwner(orb.casterId) {
             visuals.cue(impact, Sound.ENTITY_LIGHTNING_BOLT_IMPACT, .85f, 1.35f)
             visuals.cue(impact, Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, .32f, 1.65f)
-            visuals.particles(impact, chainBurstSamples(), clearance = 0.0)
+            visuals.particles(impact, staffChainBurstParticles(), clearance = 0.0)
         }
-        val targets = targeting.nearby(player, impact, CHAIN_DETONATION_RADIUS, orb.cast)
+        val targets = targeting.nearby(player, impact, STAFF_CHAIN_DETONATION_RADIUS, orb.cast)
+            .filter { staffVisibleTargetPoint(impact, it, player.eyeLocation) != null }
             .sortedBy { center(it).distanceSquared(impact) }
             .take(settings.maxAreaTargets.coerceIn(1, MAX_CHAIN_TARGETS))
         for (target in targets) {
             if (chainOrbs[orb.casterId] !== orb || !damage.isCurrent(player, orb.cast)) break
-            if (target.uniqueId in orb.attemptedTargets || !target.isValid || target.isDead || target.isInvulnerable ||
-                target.world.uid != orb.worldId || !visible(player.eyeLocation, target) ||
-                !visible(impact, target) || !damage.eligible(player, target, orb.cast)) continue
-            orb.attemptedTargets += target.uniqueId
+            if (!validTechniqueTarget(player, target, orb.cast, orb.worldId) ||
+                staffVisibleTargetPoint(impact, target, player.eyeLocation) == null) continue
             damage.hit(player, target, orb.cast, orb.tuning.power, orb.tuning.vanillaDamage)
         }
-        removeChain(orb)
     }
 
     private fun tickChainOrbs() {
         chainOrbs.values.toList().forEach { orb ->
             if (chainOrbs[orb.casterId] !== orb) return@forEach
             val player = Bukkit.getPlayer(orb.casterId)
-            if (player == null || !ready(player, orb.cast) || player.world.uid != orb.worldId) {
+            if (player == null || !ready(player, orb.cast) || player.world.uid != orb.worldId ||
+                !isLoaded(orb.position) || !effects.isActive(orb.sceneId)) {
                 removeChain(orb)
                 return@forEach
             }
             orb.ageTicks++
-            if (!orb.blocked) {
-                val look = player.eyeLocation.direction
-                if (safeDirection(look)) orb.direction = rotateToward(orb.direction, look, CHAIN_TURN_RADIANS)
-                val step = min(CHAIN_SPEED, (CHAIN_MAX_RANGE - orb.travelled).coerceAtLeast(0.0))
-                if (step <= MIN_MOVE_DISTANCE) orb.blocked = true
-                else {
-                    val next = orb.position.clone().add(orb.direction.clone().multiply(step))
-                    if (!moveChain(orb, player, next)) orb.blocked = true
-                }
+            orb.burstAge?.let { age ->
+                orb.burstAge = age + 1
+                if (age + 1 >= STAFF_CHAIN_BURST_TICKS) removeChain(orb)
+                else effects.updateCustom(orb.sceneId, orb.position, staffChainBurstParts(age + 1))
+                return@forEach
             }
-            if (chainOrbs[orb.casterId] !== orb) return@forEach
+            val look = player.eyeLocation.direction
+            if (safeDirection(look)) orb.direction = rotateToward(orb.direction, look, CHAIN_TURN_RADIANS)
+            val step = min(CHAIN_SPEED, (CHAIN_MAX_RANGE - orb.travelled).coerceAtLeast(0.0))
+            val next = orb.position.clone().add(orb.direction.clone().multiply(step))
+            val reached = step > MIN_MOVE_DISTANCE && moveChain(orb, player, next)
+            if (chainOrbs[orb.casterId] !== orb || orb.burstAge != null) return@forEach
+            if (!reached || orb.travelled + MIN_MOVE_DISTANCE >= CHAIN_MAX_RANGE || orb.ageTicks >= CHAIN_MAX_TICKS) {
+                detonateChain(player, orb)
+                return@forEach
+            }
             effects.updateCustom(orb.sceneId, orb.position, staffChainTechniqueParts(
                 atan2(-orb.direction.x, orb.direction.z).toFloat(), orb.ageTicks / 2))
             if (orb.ageTicks % 2 == 0) visuals.withOwner(orb.casterId) {
@@ -255,7 +279,6 @@ internal class StaffSpellTechniques(
             if (orb.ageTicks == 12) visuals.withOwner(orb.casterId) {
                 visuals.cue(orb.position, Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, .24f, 1.85f)
             }
-            if (orb.ageTicks >= CHAIN_MAX_TICKS) detonateChain(player, orb)
         }
     }
 
@@ -265,25 +288,35 @@ internal class StaffSpellTechniques(
         if (!distance.isFinite() || distance < MIN_MOVE_DISTANCE) return false
         val clipped = targeting.rayEnd(orb.position, delta.multiply(1.0 / distance), distance)
         val moved = orb.position.distance(clipped)
-        if (!moved.isFinite() || moved < MIN_MOVE_DISTANCE) return false
-        sweepChain(orb, player, orb.position, clipped)
-        if (chainOrbs[orb.casterId] !== orb) return false
+        if (!moved.isFinite()) return false
+        val proximity = chainProximityPoint(orb, player, orb.position, clipped)
+        if (proximity != null) {
+            orb.travelled += orb.position.distance(proximity)
+            orb.position = proximity
+            detonateChain(player, orb)
+            return false
+        }
+        if (moved < MIN_MOVE_DISTANCE) return false
         orb.position = clipped
         orb.travelled += moved
         return moved + BLOCK_CLIP_EPSILON >= distance
     }
 
-    private fun sweepChain(orb: ChainOrb, player: Player, from: Location, to: Location) {
-        targeting.lineTargets(player, from, to, CHAIN_SWEEP_WIDTH, orb.cast).forEach { target ->
-            if (chainOrbs[orb.casterId] !== orb || !damage.isCurrent(player, orb.cast)) return
-            if (!target.isValid || target.isDead || target.isInvulnerable || target.world.uid != orb.worldId ||
-                !visible(player.eyeLocation, target) || !visible(from, target) ||
-                !damage.eligible(player, target, orb.cast) || !orb.attemptedTargets.add(target.uniqueId)) return@forEach
-            if (damage.hit(player, target, orb.cast, orb.tuning.power * CHAIN_DIRECT_SCALE,
-                    orb.tuning.vanillaDamage * CHAIN_DIRECT_SCALE)) visuals.withOwner(orb.casterId) {
-                visuals.cue(center(target), Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, .32f, 1.8f)
+    /** A swept proximity fuse; the chosen point always remains on the already-clipped flight segment. */
+    private fun chainProximityPoint(orb: ChainOrb, player: Player, from: Location, to: Location): Location? {
+        val delta = to.toVector().subtract(from.toVector())
+        val lengthSquared = delta.lengthSquared()
+        val midpoint = from.clone().add(delta.clone().multiply(.5))
+        return targeting.nearby(player, midpoint, delta.length() * .5 + CHAIN_PROXIMITY_RADIUS + 1.0, orb.cast)
+            .sortedBy { center(it).distanceSquared(from) }.take(MAX_CHAIN_PROXIMITY_CANDIDATES)
+            .firstNotNullOfOrNull { target ->
+                if (!validTechniqueTarget(player, target, orb.cast, orb.worldId)) return@firstNotNullOfOrNull null
+                val along = if (lengthSquared < MIN_DIRECTION_SQUARED) 0.0 else
+                    (center(target).toVector().subtract(from.toVector()).dot(delta) / lengthSquared).coerceIn(0.0, 1.0)
+                val point = from.clone().add(delta.clone().multiply(along))
+                val body = staffVisibleTargetPoint(point, target, player.eyeLocation) ?: return@firstNotNullOfOrNull null
+                point.takeIf { body.distanceSquared(it) <= CHAIN_PROXIMITY_RADIUS * CHAIN_PROXIMITY_RADIUS }
             }
-        }
     }
 
     private fun removeChain(orb: ChainOrb) {
@@ -297,12 +330,101 @@ internal class StaffSpellTechniques(
             speed = .008, data = staffFade(0xA8E8FF, 0x8357FF, 1.25f)),
     )
 
-    private fun chainBurstSamples() = listOf(
-        StaffParticleSample(Particle.ELECTRIC_SPARK, Vector(), count = 24, spread = Vector(.8, .65, .8), speed = .16),
-        StaffParticleSample(Particle.END_ROD, Vector(), count = 10, spread = Vector(.55, .55, .55), speed = .06),
-        StaffParticleSample(Particle.DUST_COLOR_TRANSITION, Vector(), count = 20,
-            spread = Vector(.75, .65, .75), speed = .035, data = staffFade(0xD3FAFF, 0x9257FF, 1.35f)),
-    )
+    private fun castGaleHurricane(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning): Boolean {
+        if (player.uniqueId in galeHurricanes || !admitNewScenes(1)) return false
+        // Wind is anchored to the cast point, including mid-air; it neither tracks the caster nor needs a floor.
+        val origin = player.location.clone()
+        if (!isLoaded(origin)) return false
+        val scene = effects.custom(player.uniqueId, StaffSpell.GALE, origin,
+            STAFF_GALE_HURRICANE_TICKS, ::staffGaleHurricaneParts) ?: return false
+        galeHurricanes[player.uniqueId] = GaleHurricane(player.uniqueId, cast, tuning, player.world.uid, origin, scene)
+        visuals.withOwner(player.uniqueId) {
+            visuals.cue(origin, Sound.ENTITY_BREEZE_CHARGE, 1.1f, .55f)
+            visuals.cue(origin, Sound.ENTITY_BREEZE_WIND_BURST, 1.15f, .62f)
+            visuals.particles(origin, staffGaleHurricaneParticles(0), clearance = 2.0)
+        }
+        return true
+    }
+
+    private fun tickGaleHurricanes() {
+        galeHurricanes.values.toList().forEach { hurricane ->
+            if (galeHurricanes[hurricane.casterId] !== hurricane) return@forEach
+            val player = Bukkit.getPlayer(hurricane.casterId)
+            if (player == null || !ready(player, hurricane.cast) || player.world.uid != hurricane.worldId ||
+                !isLoaded(hurricane.origin) || !effects.isActive(hurricane.sceneId)) {
+                removeGaleHurricane(hurricane)
+                return@forEach
+            }
+            hurricane.ageTicks++
+            val age = hurricane.ageTicks
+            if (age >= STAFF_GALE_HURRICANE_TICKS) {
+                removeGaleHurricane(hurricane)
+                return@forEach
+            }
+            if (age % 2 == 0) visuals.withOwner(hurricane.casterId) {
+                visuals.particles(hurricane.origin, staffGaleHurricaneParticles(age), clearance = 2.0)
+            }
+            if (age == STAFF_GALE_HURRICANE_BUILD_TICKS || age == 42 || age == 72) visuals.withOwner(hurricane.casterId) {
+                visuals.cue(hurricane.origin.clone().add(0.0, 2.0, 0.0), Sound.ENTITY_BREEZE_IDLE_AIR,
+                    1.15f, if (age == STAFF_GALE_HURRICANE_BUILD_TICKS) .55f else .72f)
+                visuals.cue(hurricane.origin, Sound.ENTITY_BREEZE_WHIRL, .86f, .62f + age * .002f)
+            }
+            if (age >= STAFF_GALE_HURRICANE_BUILD_TICKS &&
+                age < STAFF_GALE_HURRICANE_BUILD_TICKS + STAFF_GALE_HURRICANE_ACTIVE_TICKS &&
+                (age - STAFF_GALE_HURRICANE_BUILD_TICKS) % STAFF_GALE_HURRICANE_PULSE_TICKS == 0) {
+                pulseGaleHurricane(player, hurricane)
+            }
+        }
+    }
+
+    private fun pulseGaleHurricane(player: Player, hurricane: GaleHurricane) {
+        val origin = hurricane.origin
+        val source = origin.clone().add(0.0, .9, 0.0)
+        val query = origin.clone().add(0.0, STAFF_GALE_HURRICANE_HEIGHT * .5, 0.0)
+        val limit = settings.maxAreaTargets.coerceIn(1, GALE_HURRICANE_TARGET_LIMIT)
+        val targets = targeting.nearby(player, query, GALE_HURRICANE_QUERY_RADIUS, hurricane.cast)
+            .filter { inGaleHurricane(origin, it) }
+            .sortedBy { center(it).distanceSquared(source) }
+            .take(GALE_HURRICANE_CANDIDATE_LIMIT)
+        for (target in targets) {
+            if (galeHurricanes[hurricane.casterId] !== hurricane || !ready(player, hurricane.cast)) break
+            val previousHits = hurricane.targetHits[target.uniqueId]
+            if (previousHits == null && hurricane.targetHits.size >= limit ||
+                previousHits != null && previousHits >= STAFF_GALE_HURRICANE_MAX_TARGET_HITS ||
+                !validTechniqueTarget(player, target, hurricane.cast, hurricane.worldId) ||
+                !inGaleHurricane(origin, target) ||
+                staffVisibleTargetPoint(source, target, player.eyeLocation) == null) continue
+            // Reserve before callbacks: at most eight targets and eight attempts per target for this entire cast.
+            hurricane.targetHits[target.uniqueId] = (previousHits ?: 0) + 1
+            if (!damage.hit(player, target, hurricane.cast,
+                    hurricane.tuning.power * STAFF_GALE_HURRICANE_PULSE_SCALE,
+                    hurricane.tuning.vanillaDamage * STAFF_GALE_HURRICANE_PULSE_SCALE)) continue
+            if (galeHurricanes[hurricane.casterId] !== hurricane ||
+                !validTechniqueTarget(player, target, hurricane.cast, hurricane.worldId) ||
+                !inGaleHurricane(origin, target) ||
+                staffVisibleTargetPoint(source, target, player.eyeLocation) == null) continue
+            val inward = origin.toVector().subtract(target.location.toVector()).apply { y = 0.0 }
+            if (inward.lengthSquared() > MIN_DIRECTION_SQUARED) inward.normalize()
+            val tangent = Vector(-inward.z, .12, inward.x).multiply(.26)
+            target.velocity = target.velocity.multiply(.45).add(inward.multiply(.18)).add(tangent).apply {
+                y = y.coerceIn(.08, .24)
+                val horizontal = kotlin.math.hypot(x, z)
+                if (horizontal > .65) { x *= .65 / horizontal; z *= .65 / horizontal }
+            }
+        }
+    }
+
+    private fun inGaleHurricane(origin: Location, target: LivingEntity): Boolean {
+        if (target.world != origin.world) return false
+        val offset = center(target).subtract(origin)
+        return offset.x * offset.x + offset.z * offset.z <= STAFF_GALE_HURRICANE_RADIUS * STAFF_GALE_HURRICANE_RADIUS &&
+            offset.y in -.5..STAFF_GALE_HURRICANE_HEIGHT
+    }
+
+    private fun removeGaleHurricane(hurricane: GaleHurricane) {
+        galeHurricanes.remove(hurricane.casterId, hurricane)
+        effects.remove(hurricane.sceneId)
+    }
 
     private fun castIcicleBurst(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning): Boolean {
         if (player.uniqueId in icicleBursts || !admitNewScenes(1)) return false
@@ -938,23 +1060,25 @@ internal class StaffSpellTechniques(
     )
 
     fun canRecast(casterId: UUID, spell: StaffSpell? = null): Boolean = when (spell) {
-        StaffSpell.CHAIN -> casterId in chainOrbs
+        StaffSpell.CHAIN -> chainOrbs[casterId]?.let { it.burstAge == null } == true
         StaffSpell.EMBER -> emberTrails[casterId]?.stage == EmberStage.RECORDING
         StaffSpell.GRAVITY -> casterId in gravityHolds
-        null -> casterId in chainOrbs || emberTrails[casterId]?.stage == EmberStage.RECORDING ||
+        null -> chainOrbs[casterId]?.let { it.burstAge == null } == true || emberTrails[casterId]?.stage == EmberStage.RECORDING ||
             casterId in gravityHolds
         else -> false
     }
 
     fun continuationLabel(casterId: UUID, spell: StaffSpell? = null): String? = when (spell) {
-        StaffSpell.CHAIN -> "Detonate Chain orb".takeIf { casterId in chainOrbs }
+        StaffSpell.CHAIN -> "Detonate Chain orb".takeIf { canRecast(casterId, StaffSpell.CHAIN) }
+        StaffSpell.GALE -> "Ураган активен".takeIf { casterId in galeHurricanes }
         StaffSpell.EMBER -> "Ignite Ember trail".takeIf { emberTrails[casterId]?.stage == EmberStage.RECORDING }
         StaffSpell.GRAVITY -> "Throw suspended target".takeIf { casterId in gravityHolds }
         StaffSpell.LUNAR -> lunarFlights[casterId]?.let { flight ->
             if (flight.phase == LunarPhase.RETURN) "Returning crescent" else "Crescent in flight"
         }
         null -> when {
-            casterId in chainOrbs -> "Detonate Chain orb"
+            canRecast(casterId, StaffSpell.CHAIN) -> "Detonate Chain orb"
+            casterId in galeHurricanes -> "Ураган активен"
             emberTrails[casterId]?.stage == EmberStage.RECORDING -> "Ignite Ember trail"
             casterId in gravityHolds -> "Throw suspended target"
             lunarFlights[casterId] != null -> if (lunarFlights.getValue(casterId).phase == LunarPhase.RETURN)
@@ -967,6 +1091,7 @@ internal class StaffSpellTechniques(
     fun cancel(casterId: UUID) {
         lunarFlights.remove(casterId)?.let(::removeLunar)
         chainOrbs.remove(casterId)?.let(::removeChain)
+        galeHurricanes.remove(casterId)?.let(::removeGaleHurricane)
         icicleBursts.remove(casterId)?.let(::removeIcicleBurst)
         prismWards.remove(casterId)?.let(::removePrism)
         gravityHolds.remove(casterId)?.let(::releaseGravity)
@@ -979,6 +1104,7 @@ internal class StaffSpellTechniques(
         closed = true
         tasks.close()
         chainOrbs.values.toList().forEach(::removeChain)
+        galeHurricanes.values.toList().forEach(::removeGaleHurricane)
         lunarFlights.values.toList().forEach(::removeLunar)
         icicleBursts.values.toList().forEach(::removeIcicleBurst)
         prismWards.values.toList().forEach(::removePrism)
@@ -987,6 +1113,7 @@ internal class StaffSpellTechniques(
         emberTrails.values.toList().forEach(::removeEmber)
         lunarFlights.clear()
         chainOrbs.clear()
+        galeHurricanes.clear()
         icicleBursts.clear()
         prismWards.clear()
         gravityHolds.clear()
@@ -998,6 +1125,7 @@ internal class StaffSpellTechniques(
     private fun tickAll() {
         tick++
         tickChainOrbs()
+        tickGaleHurricanes()
         tickIcicleBursts()
         tickPrismWards()
         tickGravityHolds()
@@ -1148,10 +1276,10 @@ internal class StaffSpellTechniques(
             damage.isCurrent(player, cast)
 
     private fun activeSessionCount(): Int = lunarFlights.size + chainOrbs.size + icicleBursts.size +
-        prismWards.size + gravityHolds.size + lancePins.size + emberTrails.size
+        prismWards.size + gravityHolds.size + lancePins.size + emberTrails.size + galeHurricanes.size
 
     private fun activeDisplaySceneCount(): Int = lunarFlights.size + chainOrbs.size + icicleBursts.size + prismWards.size +
-        gravityHolds.size + lancePins.size + emberTrails.size
+        gravityHolds.size + lancePins.size + emberTrails.size + galeHurricanes.size
 
     private fun admitNewScenes(requested: Int): Boolean = requested > 0 &&
         activeSessionCount() < MAX_TECHNIQUE_SESSIONS && activeDisplaySceneCount() + requested <= MAX_TECHNIQUE_SCENES
@@ -1237,10 +1365,13 @@ internal class StaffSpellTechniques(
         const val CHAIN_MAX_RANGE = 28.0
         const val CHAIN_SPEED = 1.05
         const val CHAIN_TURN_RADIANS = .16
-        const val CHAIN_DETONATION_RADIUS = 4.25
-        const val CHAIN_SWEEP_WIDTH = .48
-        const val CHAIN_DIRECT_SCALE = .55
+        const val CHAIN_PROXIMITY_RADIUS = 2.25
+        const val MAX_CHAIN_PROXIMITY_CANDIDATES = 32
         const val MAX_CHAIN_TARGETS = 8
+
+        const val GALE_HURRICANE_TARGET_LIMIT = 8
+        const val GALE_HURRICANE_CANDIDATE_LIMIT = 32
+        const val GALE_HURRICANE_QUERY_RADIUS = 10.5
 
         const val PRISM_WARD_RANGE = 14.0
         const val PRISM_GROUND_RAY_HEIGHT = 2.5

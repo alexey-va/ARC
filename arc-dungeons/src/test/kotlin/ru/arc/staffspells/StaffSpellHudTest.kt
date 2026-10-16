@@ -77,7 +77,8 @@ class StaffSpellHudTest : FreeSpec({
             val initial = record.spawn.clone()
             player.teleport(Location(harness.world, 1.5, 64.0, 0.5))
             harness.scheduler.tick(2)
-            record.teleports.size shouldBe afterSneak + 1
+            (record.teleports.size > afterSneak) shouldBe true
+            harness.scheduler.tick(12)
             record.teleports.last().distance(initial) shouldBe 1.0
             record.textWrites.size shouldBe 3
 
@@ -142,7 +143,8 @@ class StaffSpellHudTest : FreeSpec({
 
             val record = harness.recorder.records.single()
             val distance = record.spawn.distance(player.eyeLocation)
-            (kotlin.math.abs(distance - staffHudSafeDistance(staffSpellHudPose().distance, 1.6)) < 1.0e-8) shouldBe true
+            // The outer corners may meet a wall before the origin; the entire card must fit.
+            (distance <= staffHudSafeDistance(staffSpellHudPose().distance, 1.6)) shouldBe true
             (kotlin.math.abs(record.scale - staffSpellHudPose(distance).textScale) < 1.0e-6) shouldBe true
             record.visibleByDefault shouldBe false
         }
@@ -238,6 +240,95 @@ class StaffSpellHudTest : FreeSpec({
             record.teleports.size shouldBe 0
         }
     }
+
+    "flight leads forward upward downward and strafing cameras with full card clearance on both chosen sides" {
+        val settings = StaffSpellHudMotionSettings()
+        val position = StaffSpellHudPositionSettings()
+        val bounds = staffSpellHudBounds("Shift + ПКМ · Метеоры\n55% ■■■■■□□□□□\nQ готово   F готово", 220)
+        for (preference in listOf(StaffHudPlacement.TOP, StaffHudPlacement.BOTTOM)) {
+            for (pitch in listOf(-80f, 0f, 80f)) {
+                val eye = Location(null, 0.0, 64.0, 0.0, 35f, pitch)
+                val forward = eye.direction.normalize()
+                val yaw = Math.toRadians(eye.yaw.toDouble())
+                val right = Vector(kotlin.math.cos(yaw), 0.0, kotlin.math.sin(yaw))
+                val down = right.clone().crossProduct(forward).normalize()
+                for (velocity in listOf(forward.clone().multiply(1.5), Vector(0.0, 1.5, 0.0),
+                        Vector(0.0, -1.5, 0.0), right.clone().multiply(1.5))) {
+                    var motion = StaffSpellHudMotion()
+                    repeat(3) { motion = staffSpellHudMotion(motion, velocity, 1.0, true, settings) }
+                    val moving = staffHudMovingPosition(position, settings, motion,
+                        forward, down, right, preference, bounds)
+                    val offset = forward.clone().multiply(moving.forwardBlocks)
+                        .add(down.clone().multiply(moving.verticalBlocks))
+                        .add(right.clone().multiply(moving.horizontalBlocks))
+                    val side = if (preference == StaffHudPlacement.BOTTOM) 1 else -1
+                    for (latency in listOf(0.0, 1.0, 2.0)) {
+                        val relative = offset.clone().subtract(velocity.clone().multiply(latency))
+                        (relative.dot(forward) > 0.0) shouldBe true
+                        (side * relative.dot(down) - bounds.verticalRadius * position.scale >
+                            relative.dot(forward) * 0.13) shouldBe true
+                    }
+                    (moving.forwardBlocks >= position.forwardBlocks + settings.forwardBlocks) shouldBe true
+                }
+            }
+        }
+    }
+
+    "motion is bounded settles after stopping and never preserves a stale heading through a reversal" {
+        val settings = StaffSpellHudMotionSettings()
+        StaffSpellConfig(StaffTestConfig(emptyMap())).hudMotion shouldBe settings
+        StaffSpellConfig(StaffTestConfig(mapOf(
+            "hud.motion.prediction-ticks" to 99.0, "hud.motion.max-lead-blocks" to -1.0,
+            "hud.motion.forward-blocks" to 99.0, "hud.motion.vertical-blocks" to -1.0,
+            "hud.motion.settle-ticks" to 0,
+        ))).hudMotion shouldBe StaffSpellHudMotionSettings(4.0, 0.0, 4.0, 0.0, 1)
+        StaffSpellConfig(StaffTestConfig(mapOf(
+            "hud.motion.prediction-ticks" to -1.0, "hud.motion.max-lead-blocks" to 99.0,
+            "hud.motion.forward-blocks" to -1.0, "hud.motion.vertical-blocks" to 99.0,
+            "hud.motion.settle-ticks" to 99,
+        ))).hudMotion shouldBe StaffSpellHudMotionSettings(0.0, 8.0, 0.0, 2.0, 40)
+        var motion = StaffSpellHudMotion()
+        repeat(4) { motion = staffSpellHudMotion(motion, Vector(0.0, 0.0, 3.0), 1.0, true, settings) }
+        motion.lead.length() shouldBe settings.maxLeadBlocks
+        motion.retreat shouldBe 1.0
+        staffSpellHudMotion(motion, Vector(), 1.0, true, settings.copy(maxLeadBlocks = 0.0))
+            .lead.length() shouldBe 0.0
+        val firstStop = staffSpellHudMotion(motion, Vector(), 1.0, true, settings)
+        (firstStop.lead.z in 0.1..<motion.lead.z) shouldBe true
+        (firstStop.retreat in 0.1..<motion.retreat) shouldBe true
+        motion = firstStop
+        repeat(settings.settleTicks) { motion = staffSpellHudMotion(motion, Vector(), 1.0, true, settings) }
+        motion.retreat shouldBe 0.0
+        (motion.lead.length() < 1.0e-8) shouldBe true
+        motion = staffSpellHudMotion(motion, Vector(0.0, 0.0, 1.5), 1.0, true, settings)
+        motion = staffSpellHudMotion(motion, Vector(0.0, 0.0, -1.5), 1.0, true, settings)
+        motion.lead.z shouldBe -3.0
+        motion = staffSpellHudMotion(motion, Vector(), 1.0, true, settings, Math.toRadians(12.0))
+        motion.turnRadiansPerTick shouldBe Math.toRadians(12.0)
+        repeat(settings.settleTicks) { motion = staffSpellHudMotion(motion, Vector(), 1.0, true, settings) }
+        motion.turnRadiansPerTick shouldBe 0.0
+        staffSpellHudMotion(motion, Vector(0.0, 0.0, 80.0), 1.0, true, settings) shouldBe StaffSpellHudMotion()
+    }
+
+    "unsafe turn and top-bottom change snap both interpolation channels rather than cross the reticle" {
+        withHudHarness { harness ->
+            val player = harness.player("staff-hud-turn", StaffSpell.EMBER)
+            harness.hud.ready(player, StaffSpell.EMBER, secondary = false)
+            val record = harness.recorder.records.single()
+            val turned = player.location.apply { pitch = 55f }
+            player.teleport(turned)
+            harness.scheduler.tick(1)
+            record.teleportTicks shouldBe 0
+            record.transformTicks shouldBe 0
+            harness.scheduler.tick(12)
+            record.teleportTicks shouldBe 1
+            harness.preferences.value = StaffSpellHudPreferences(StaffHudMode.HOLOGRAM, StaffHudPlacement.TOP)
+            harness.scheduler.tick(1)
+            record.teleportTicks shouldBe 0
+            record.transformTicks shouldBe 0
+            harness.recorder.records.size shouldBe 1
+        }
+    }
 })
 
 private fun text(component: Component) = PlainTextComponentSerializer.plainText().serialize(component)
@@ -255,6 +346,8 @@ private data class HudDisplayRecord(
     val visibleViewers: MutableSet<UUID> = mutableSetOf(),
     var visibleByDefault: Boolean = true,
     var scale: Float = 0.0f,
+    var teleportTicks: Int = 0,
+    var transformTicks: Int = 0,
     var removals: Int = 0,
 )
 
@@ -279,6 +372,8 @@ private class HudDisplayRecorder {
                 record.scale = firstArg<org.bukkit.util.Transformation>().scale.x
                 Unit
             }
+            every { handle.teleportDuration = any() } answers { record.teleportTicks = firstArg<Int>() }
+            every { handle.interpolationDuration = any() } answers { record.transformTicks = firstArg<Int>() }
             every { handle.text(any()) } answers {
                 record.text = firstArg<Component>()
                 record.textWrites += record.text

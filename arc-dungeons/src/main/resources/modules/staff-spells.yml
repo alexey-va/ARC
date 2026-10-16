@@ -25,8 +25,15 @@ hud:
     vertical-blocks: 0.85
     horizontal-blocks: 0.0
     scale: 0.66
+  # Camera movement lead and extra clearance on the player's selected top/bottom side.
+  motion:
+    prediction-ticks: 2.0
+    max-lead-blocks: 4.0
+    forward-blocks: 2.0
+    vertical-blocks: 0.9
+    settle-ticks: 10
 # Raw damage before the arena kit multiplier (0.4); read again on ARC reload.
-# Cooldown is shared across attack modes and staff swaps. Ember and Icicle primary casts charge for 36 ticks.
+# Each ability has its own cooldown plus a shared 4-tick GCD. Charged primaries use native RMB release.
 duel:
   chain: {damage: 6.5, cooldown-ticks: 26}
   mark: {damage: 10.0, cooldown-ticks: 44}
@@ -39,7 +46,7 @@ chain:
   hotkeys:
     q:
       name: 'Шаровая молния'
-      description: 'Ведите взглядом; повторное Q — разряд'
+      description: 'Взрывается рядом с врагом или в конце полёта'
       cooldown-ticks: 160
     f:
       name: 'Искровой скачок'
@@ -214,10 +221,10 @@ nova:
       description: 'Притянитесь к видимой опоре'
       cooldown-ticks: 90
   secondary-name: 'Терновая клетка'
-  secondary: '<#87e7ac><attack-secondary> <#e8dfd2>— корни смыкаются в области прицела, наносят урон и удерживают врагов 3,5 с'
+  secondary: '<#87e7ac><attack-secondary> <#e8dfd2>— ветвящиеся корни оплетают область прицела, наносят урон и удерживают врагов 3,5 с'
   name: '<#9fffd4>Терновый хват'
-  description: '<#e8dfd2>Семь толстых корней расходятся веером вперёд, наносят урон и удерживают каждого врага 3,5 с.'
-  aim: '<#9fffd4>Веер корней · до 18 блоков'
+  description: '<#e8dfd2>Извилистые корни ветвятся по земле, поднимаются на ступени и удерживают задетых врагов 3,5 с.'
+  aim: '<#9fffd4>Корневая сеть · до 18 блоков · можно призывать с воздуха'
   quick-name: 'Терновый заслон'
   quick: '<#9fffd4><defense> <#e8dfd2>— щит спереди: три удара за 1,6 с; перезарядка 4 с'
   quick-secondary-name: 'Круговой покров'
@@ -285,9 +292,9 @@ lunar:
 gale:
   hotkeys:
     q:
-      name: 'Боковой шквал'
-      description: 'Коридор ветра сносит врагов в сторону'
-      cooldown-ticks: 180
+      name: 'Око урагана'
+      description: 'Огромный ураган поднимает и бьёт врагов вокруг точки призыва'
+      cooldown-ticks: 600
     f:
       name: 'Попутный ветер'
       description: 'Направляйте парение взглядом'
@@ -296,7 +303,7 @@ gale:
   description: '<#e8dfd2>Воронка беспорядочно движется вокруг точки прицела и поднимает встреченных врагов.'
   aim: '<#d4eaff>Блуждающая воронка · до 56 блоков'
   secondary-name: 'Шквал'
-  secondary: '<#d4eaff><attack-secondary> <#e8dfd2>— ветровой таран летит по прицелу, включая вверх, до 56 блоков и раскрывается при столкновении'
+  secondary: '<#d4eaff><attack-secondary> <#e8dfd2>— ветровой шар летит по прицелу до 56 блоков и разрывается объёмным воздушным взрывом'
   quick-name: 'Ветряной щит'
   quick: '<#d4eaff><defense> <#e8dfd2>— щит спереди: два удара за 1,2 с; перезарядка 4 с'
   quick-secondary-name: 'Круговой покров'
@@ -319,8 +326,8 @@ tide:
       description: 'Прокатитесь вперёд на волне'
       cooldown-ticks: 100
   name: '<#8ce9e4>Сердце прилива'
-  description: '<#e8dfd2>Высокий водяной гребень накрывает область перед вами и сметает врагов.'
-  aim: '<#8be9ff><attack> · фронтальная волна до 7 блоков · без зарядки'
+  description: '<#e8dfd2>Сжатая вращающаяся капля летит по прицелу и разрывается водяным всплеском при попадании.'
+  aim: '<#8be9ff><attack> · водяной снаряд до 32 блоков · без зарядки'
   secondary-name: 'Приливный вал'
   secondary: '<#8ce9e4><attack-secondary> <#e8dfd2>— широкая волна проходит до 56 блоков, сбивая врагов на пути'
   quick-name: 'Водяной заслон'
@@ -509,10 +516,11 @@ messages:
   retired: '<#e8dfd2>Этот посох временно убран из набора. Возьмите другой посох.'
   no-summon-cap: '<#e8dfd2>Можно держать не больше десяти миньонов. Дождитесь свободного места; перезарядка не потрачена.'
   unavailable: '<#e8dfd2>Модуль тестовых посохов сейчас недоступен'
-  no-ground: '<#e8dfd2>Направьте посох на видимую поверхность земли'
+  no-ground: '<#e8dfd2>Нет подходящей поверхности для атаки. Перезарядка не потрачена.'
   skin-unavailable: '<#e8dfd2>Модель посоха недоступна в ItemsAdder. Подробности в журнале сервера.'
   channel-use: '<#82dcff>Удерживайте <attack> — захват; отпустите — бросок. <attack-secondary> — гравитационный обвал. <defense> — защита; <defense-secondary> — круговой покров.'
-  no-summon-ground: '<#e8dfd2>Для призыва нет места: встаньте на ровную площадку и освободите пространство перед собой. Перезарядка не потрачена.'
+  no-summon-ground: '<#e8dfd2>Под местом призыва нет свободной площадки в пределах 64 блоков. Выберите другое место; перезарядка не потрачена.'
+  blocked-path: '<#e8dfd2>Путь заклинания закрыт препятствием. Перезарядка не потрачена.'
   no-grab: '<#e8dfd2>Для захвата направьте посох на твёрдую видимую поверхность в 3–32 блоках.'
   shield-active: '<ability> <#fff1ae>Поглощение <white><remaining>/<capacity> <#e8dfd2>урона'
   defense-active: '<ability> <#fff1ae>Защита активна'

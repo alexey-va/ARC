@@ -10,11 +10,12 @@ class StaffRootPrismGeometryTest : FreeSpec({
         val snarePaths = staffNovaSnarePaths(4.5)
         val fan = staffNovaFanParts(STAFF_NOVA_CONTACT_TICK, STAFF_NOVA_FIELD_TICKS, STAFF_NOVA_FAN_REACH, fanPaths)
         val snare = staffNovaSnareParts(STAFF_NOVA_CONTACT_TICK, STAFF_NOVA_FIELD_TICKS, snarePaths)
-        fan.size shouldBe 42
-        snare.size shouldBe 40
-        fanPaths.size shouldBe 7
+        (fan.size <= 96) shouldBe true
+        (snare.size <= 96) shouldBe true
+        fanPaths.count { it.parentKey == null } shouldBe 7
+        fanPaths.count { it.parentKey != null } shouldBe 3
         (fan.maxOf { it.center.x } - fan.minOf { it.center.x } > 15f) shouldBe true
-        fan.filter { it.identity!!.endsWith(":0") }.all { it.scale.x >= .23f } shouldBe true
+        fan.filter { it.identity!!.endsWith(":0") && !it.identity!!.contains(":twig") }.all { it.scale.x >= .23f } shouldBe true
         fan.map { it.identity } shouldBe staffNovaFanParts(6, STAFF_NOVA_FIELD_TICKS, STAFF_NOVA_FAN_REACH, fanPaths).map { it.identity }
         snare.map { it.identity } shouldBe staffNovaSnareParts(8, STAFF_NOVA_FIELD_TICKS, snarePaths).map { it.identity }
         staffNovaFanFront(2, 18.0) shouldBe .75
@@ -40,6 +41,24 @@ class StaffRootPrismGeometryTest : FreeSpec({
         staffNovaWrapParts(8, STAFF_NOVA_HOLD_TICKS, listOf(later)) shouldBe emptyList()
         staffNovaWrapParts(70, STAFF_NOVA_HOLD_TICKS, listOf(later)).size shouldBe 6
         staffNovaWrapParts(80, STAFF_NOVA_HOLD_TICKS, listOf(later)) shouldBe emptyList()
+    }
+
+    "a cast seed changes root structure while retaining deterministic geometry and its part budget" {
+        val first = staffNovaFanPaths(18.0, 871L)
+        val next = staffNovaFanPaths(18.0, 1251L)
+        first shouldBe staffNovaFanPaths(18.0, 871L)
+        (first == next) shouldBe false
+        first.filter { it.parentKey == null }.zip(next.filter { it.parentKey == null }).all { (a, b) ->
+            a.points.zip(b.points).any { (x, y) -> x.distance(y) > .2f }
+        } shouldBe true
+        val frame = staffNovaFanParts(14, 26, 18.0, first)
+        frame shouldBe staffNovaFanParts(14, 26, 18.0, first)
+        listOf(first, next).forEach { paths ->
+            (0..26).forEach { age -> (staffNovaFanParts(age, 26, 18.0, paths).size <= 96) shouldBe true }
+        }
+        val snare = staffNovaSnarePaths(4.5, 871L)
+        (snare == staffNovaSnarePaths(4.5, 1251L)) shouldBe false
+        (0..26).forEach { age -> (staffNovaSnareParts(age, 26, snare).size <= 96) shouldBe true }
     }
 
     "refraction grows serially through fixed visible mirrors and keeps stable part identities" {

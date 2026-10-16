@@ -57,7 +57,7 @@ private fun samePose(left: List<StaffDisplayPart>, right: List<StaffDisplayPart>
     }
 
 class StaffMeleeGeometryTest : FreeSpec({
-    val meleeSpells = listOf(StaffSpell.FROST, StaffSpell.FAULT, StaffSpell.LUNAR, StaffSpell.TIDE)
+    val meleeSpells = listOf(StaffSpell.FROST, StaffSpell.FAULT, StaffSpell.LUNAR)
     val keyframeAges = (0 until STAFF_MELEE_EFFECT_TICKS step StaffSpellDisplayEffects.FRAME_TICKS).toList()
     val forbiddenParticles = setOf(
         Particle.SMOKE, Particle.LARGE_SMOKE, Particle.CLOUD,
@@ -90,7 +90,7 @@ class StaffMeleeGeometryTest : FreeSpec({
             val landed = frames[STAFF_MELEE_CONTACT_TICK / StaffSpellDisplayEffects.FRAME_TICKS]
             (abs(meleeTestBounds(contact).maxZ - 7.0f) < 0.002f) shouldBe true
             val contactMinZ = meleeTestBounds(contact).minZ
-            if (spell == StaffSpell.TIDE || spell == StaffSpell.LUNAR) {
+            if (spell == StaffSpell.LUNAR) {
                 (contactMinZ >= 1.4f && contactMinZ < 6.0f) shouldBe true
             } else {
                 (contactMinZ in 1.7f..2.6f) shouldBe true
@@ -168,18 +168,7 @@ class StaffMeleeGeometryTest : FreeSpec({
         (crown.x < minOf(left.x, right.x) - 2.0f) shouldBe true
         (meleeTestBounds(lunar).maxY - meleeTestBounds(lunar).minY > 2.4f) shouldBe true
 
-        val tide = staffMeleeDisplayParts(StaffSpell.TIDE, 4, 16, 7.0)
-        val water = tide.filter { it.identity?.startsWith("tide:water:") == true }
-        val foam = tide.filter { it.identity?.startsWith("tide:foam:") == true }
-        val curl = tide.filter { it.identity?.startsWith("tide:curl:") == true }
-        (water.size == 8 && foam.size == 8 && curl.size == 8) shouldBe true
-        (water.maxOf { it.scale.y } > foam.maxOf { it.scale.y } * 2.0f) shouldBe true
-        (meleeTestBounds(tide).maxX - meleeTestBounds(tide).minX > 7.0f) shouldBe true
-        val tideAfterImpact = staffMeleeDisplayParts(StaffSpell.TIDE, 8, 16, 7.0).associateBy { it.identity }
-        (tideAfterImpact.getValue("tide:water:0").scale.y <
-            tide.single { it.identity == "tide:water:0" }.scale.y) shouldBe true
-        tideAfterImpact.getValue("tide:curl:7").rotation.dot(tide.single { it.identity == "tide:curl:7" }.rotation)
-            .let { abs(it) < 0.999f } shouldBe true
+
     }
 
     "the central reticle remains clear while the lunar crescent has an upright hollow center" {

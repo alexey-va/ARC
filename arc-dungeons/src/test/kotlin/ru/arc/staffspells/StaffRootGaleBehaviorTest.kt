@@ -68,9 +68,9 @@ class StaffRootGaleBehaviorTest : FreeSpec({
             h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
             h.scheduler.tick(12)
             h.hits shouldBe emptyList()
-            scenes.size shouldBe 1
-            h.scheduler.tick(2)
             scenes.size shouldBe 2
+            h.scheduler.tick(2)
+            scenes.size shouldBe 3
             accepted.getPotionEffect(PotionEffectType.SLOWNESS)?.amplifier shouldBe 7
             rejected.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
             val wrap = scenes.last()
@@ -85,6 +85,120 @@ class StaffRootGaleBehaviorTest : FreeSpec({
             (scenes.first().first in h.removedEffects) shouldBe true
             (wrap.first in h.removedEffects) shouldBe false
             wrap.second(4).size shouldBe 6
+        }
+    }
+
+    "both NOVA attacks climb a one-block terrace and use the exposed target floor" {
+        listOf(StaffCastInput.PRIMARY, StaffCastInput.SECONDARY).forEach { input -> withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("nova-step-${input.name}")
+            for (x in -12..12) for (z in 0..24) {
+                world.getBlockAt(x, 63, z).type = Material.STONE
+                if (z >= 8) world.getBlockAt(x, 64, z).type = Material.STONE
+            }
+            val player = h.player("nova-step-${input.name}", world, StaffSpell.NOVA)
+            val target = h.zombie(world, .5, 12.5).apply { teleport(location.add(0.0, 1.0, 0.0)) }
+            player.teleport(player.location.setDirection(center(target).toVector().subtract(player.eyeLocation.toVector())))
+            val fields = mutableListOf<(Int) -> List<StaffDisplayPart>>()
+            every { h.effects.custom(any(), any(), any(), any(), any()) } answers {
+                fields += arg<(Int) -> List<StaffDisplayPart>>(4)
+                UUID.randomUUID()
+            }
+            h.controller.start()
+            h.controller.cast(player, input, 0.0)
+            val atContact = fields.take(2).flatMap { it(14) }
+            atContact.filter { it.identity!!.startsWith("root:") }.all { part ->
+                listOf(part.center.x, part.center.y, part.center.z).all(Float::isFinite)
+            } shouldBe true
+            h.scheduler.tick(14)
+            h.hits.count { it == target } shouldBe 1
+            target.getPotionEffect(PotionEffectType.SLOWNESS)?.amplifier shouldBe 7
+        } }
+    }
+
+    "airborne NOVA primary and secondary seed the aimed ledge without ground beneath the caster" {
+        listOf(StaffCastInput.PRIMARY, StaffCastInput.SECONDARY).forEach { input -> withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("nova-air-${input.name}")
+            for (x in -7..7) for (z in 8..26) world.getBlockAt(x, 75, z).type = Material.STONE
+            val player = h.player("nova-air-${input.name}", world, StaffSpell.NOVA).apply {
+                teleport(location.add(0.0, 30.0, 0.0))
+            }
+            val target = h.zombie(world, .5, 14.5).apply { teleport(location.add(0.0, 12.0, 0.0)) }
+            player.teleport(player.location.setDirection(center(target).toVector().subtract(player.eyeLocation.toVector())))
+            val origins = mutableListOf<Location>()
+            every { h.effects.custom(any(), any(), any(), any(), any()) } answers {
+                origins += arg<Location>(2).clone()
+                UUID.randomUUID()
+            }
+            h.controller.start()
+            h.controller.cast(player, input, 0.0)
+            origins.size shouldBe 2
+            origins.all { it.y in 76.0..76.3 && it.z >= 10.0 } shouldBe true
+            h.scheduler.tick(14)
+            h.hits.count { it == target } shouldBe 1
+            target.getPotionEffect(PotionEffectType.SLOWNESS)?.amplifier shouldBe 7
+        } }
+    }
+
+    "failed NOVA ground admission consumes neither cooldown and an immediate valid retry succeeds" {
+        listOf(StaffCastInput.PRIMARY, StaffCastInput.SECONDARY).forEach { input -> withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("nova-retry-${input.name}")
+            val player = h.player("nova-retry-${input.name}", world, StaffSpell.NOVA).apply {
+                teleport(location.add(0.0, 56.0, 0.0))
+            }
+            h.controller.start()
+            h.controller.cast(player, input, 0.0)
+            h.cooldowns.remainingTicks(player.uniqueId) shouldBe 0L
+            h.controller.skillRemaining(player.uniqueId, StaffSpell.NOVA, input.secondary) shouldBe 0L
+            for (x in -8..8) for (z in 0..24) world.getBlockAt(x, 119, z).type = Material.STONE
+            val target = h.zombie(world, .5, 8.5).apply { teleport(location.add(0.0, 56.0, 0.0)) }
+            player.teleport(player.location.setDirection(center(target).toVector().subtract(player.eyeLocation.toVector())))
+            h.controller.cast(player, input, 0.0)
+            h.cooldowns.remainingTicks(player.uniqueId) shouldBe 4L
+            (h.controller.skillRemaining(player.uniqueId, StaffSpell.NOVA, input.secondary) > 0) shouldBe true
+            h.scheduler.tick(14)
+            h.hits.count { it == target } shouldBe 1
+        } }
+    }
+
+    "NOVA Q can seed a visible ledge while its caster flies above unsupported space" {
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("nova-q-air")
+            for (x in -3..3) for (z in 10..20) world.getBlockAt(x, 75, z).type = Material.STONE
+            val player = h.player("nova-q-air", world, StaffSpell.NOVA).apply { teleport(location.add(0.0, 30.0, 0.0)) }
+            val target = h.zombie(world, .5, 14.5).apply { teleport(location.add(0.0, 12.0, 0.0)) }
+            player.teleport(player.location.setDirection(center(target).toVector().subtract(player.eyeLocation.toVector())))
+            val anchor = slot<Location>()
+            every { h.effects.custom(any(), any(), capture(anchor), any(), any()) } answers { UUID.randomUUID() }
+            h.controller.start()
+            h.controller.hotkey(player, StaffSpell.NOVA, StaffHotkey.Q)
+            (anchor.captured.y in 76.0..76.2) shouldBe true
+            h.scheduler.tick(10)
+            h.hits.count { it == target } shouldBe 1
+            target.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe true
+        }
+    }
+
+    "TIDE primary flies at the aimed height and bursts once at a real airborne contact" {
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("tide-air-contact")
+            val player = h.player("tide-air-contact", world, StaffSpell.TIDE).apply {
+                teleport(location.add(0.0, 14.0, 0.0))
+            }
+            val target = h.zombie(world, .5, 15.5).apply { teleport(location.add(0.0, 21.0, 0.0)) }
+            val behind = h.zombie(world, .5, 24.0).apply { teleport(location.add(0.0, 25.0, 0.0)) }
+            player.teleport(player.location.setDirection(center(target).toVector().subtract(player.eyeLocation.toVector())))
+            h.controller.start()
+            h.controller.cast(player, StaffCastInput.PRIMARY, .5)
+            val scene = h.visualPlays.single { it.spell == StaffSpell.TIDE }
+            val flight = scene.to.toVector().subtract(scene.from.toVector()).normalize()
+            (flight.dot(player.eyeLocation.direction) > .999) shouldBe true
+            (scene.to.y > scene.from.y + 8) shouldBe true
+            val at = slot<Location>()
+            h.scheduler.tick(40)
+            h.hits.count { it == target } shouldBe 1
+            (behind in h.hits) shouldBe false
+            verify(exactly = 1) { h.effects.impact(scene.id, capture(at), any(), STAFF_TIDE_PRIMARY_IMPACT_TICKS) }
+            (at.captured.y in 83.5..87.0) shouldBe true
         }
     }
 

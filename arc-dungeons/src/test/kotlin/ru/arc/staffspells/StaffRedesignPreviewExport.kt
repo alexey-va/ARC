@@ -1,6 +1,11 @@
 package ru.arc.staffspells
 
 import com.google.gson.GsonBuilder
+import io.mockk.every
+import io.mockk.mockk
+import org.bukkit.Location
+import org.bukkit.entity.Player
+import java.util.UUID
 import org.bukkit.Particle
 import org.bukkit.Material
 import org.joml.Vector3f
@@ -128,8 +133,9 @@ object StaffRedesignPreviewExport {
         duration: Int,
         age: Int,
         galePitchDegrees: Double = 0.0,
+        boneShapes: List<StaffOssuaryShape> = emptyList(),
     ): Map<String, Any> {
-        val galeRotation = if (spell == StaffSpell.GALE && input.secondary)
+        val galeRotation = if (spell == StaffSpell.GALE && input.secondary || spell == StaffSpell.TIDE && !input.secondary)
             Quaternionf().rotationX(-Math.toRadians(galePitchDegrees).toFloat()) else null
         val galeDirection = galeRotation?.transform(Vector3f(0f, 0f, 1f)) ?: Vector3f(0f, 0f, 1f)
         fun airPoint(distance: Double) = Vector(galeDirection.x * distance,
@@ -152,9 +158,11 @@ object StaffRedesignPreviewExport {
             sceneLength: Double = 1.0, impact: Boolean = false, localRadius: Double = displayRadius) {
             // Display scenes expire before rendering at age == duration in StaffSpellDisplayEffects.
             if (localAge !in 0 until localDuration) return
-            staffArsenalParts(spell, localAge, localDuration, sceneLength, localRadius,
-                impact = impact, secondary = input.secondary, input = input, charge = charge)
-                .forEachIndexed { partIndex, display ->
+            val authored = if (spell == StaffSpell.OSSUARY) staffOssuaryRibParts(localAge, localDuration,
+                localRadius, input.secondary, charge, boneShapes[index]) else
+                staffArsenalParts(spell, localAge, localDuration, sceneLength, localRadius,
+                    impact = impact, secondary = input.secondary, input = input, charge = charge)
+            authored.forEachIndexed { partIndex, display ->
                     val oriented = if (galeRotation == null) display else display.copy(
                         center = galeRotation.transform(Vector3f(display.center)),
                         rotation = Quaternionf(galeRotation).mul(display.rotation))
@@ -182,6 +190,7 @@ object StaffRedesignPreviewExport {
         }
 
         val pathLength = when {
+            spell == StaffSpell.TIDE && !input.secondary -> STAFF_TIDE_PRIMARY_RANGE - FIXED_LAUNCH_OFFSET_BLOCKS
             spell == StaffSpell.TIDE || spell == StaffSpell.GALE && input.secondary ->
                 GALE_TIDE_PATH_BLOCKS
             spell == StaffSpell.OSSUARY && !input.secondary -> OSSUARY_PATH_BLOCKS
@@ -189,15 +198,15 @@ object StaffRedesignPreviewExport {
         }
         val launchOffset = if (spell == StaffSpell.TIDE || spell == StaffSpell.GALE && input.secondary ||
             spell == StaffSpell.OSSUARY && !input.secondary) FIXED_LAUNCH_OFFSET_BLOCKS else 0.0
-        val endpoint = if (spell == StaffSpell.GALE && input.secondary) airPoint(launchOffset + pathLength)
+        val endpoint = if (spell == StaffSpell.GALE && input.secondary || spell == StaffSpell.TIDE && !input.secondary) airPoint(launchOffset + pathLength)
             else Vector(0.0, 0.0, launchOffset + pathLength)
         when {
             spell == StaffSpell.TIDE && !input.secondary -> {
                 val localAge = age - STAFF_TIDE_PRIMARY_ARRIVAL_TICK
                 val progress = ((age - STAFF_TIDE_PRIMARY_LAUNCH_TICK).toDouble() / STAFF_TIDE_PRIMARY_TRAVEL_TICKS)
                     .coerceIn(0.0, 1.0)
-                val anchor = Vector(0.0, 1.2, FIXED_LAUNCH_OFFSET_BLOCKS + GALE_TIDE_PATH_BLOCKS * progress)
-                if (age < STAFF_TIDE_PRIMARY_ARRIVAL_TICK) addParts(age, duration, 0, anchor, GALE_TIDE_PATH_BLOCKS)
+                val anchor = airPoint(FIXED_LAUNCH_OFFSET_BLOCKS + pathLength * progress)
+                if (age < STAFF_TIDE_PRIMARY_ARRIVAL_TICK) addParts(age, duration, 0, anchor, pathLength)
                 else {
                     val impactRadius = 2.2 + charge * .25
                     addParts(localAge, STAFF_TIDE_PRIMARY_IMPACT_TICKS, 0, anchor, 1.0, impact = true,
@@ -244,14 +253,12 @@ object StaffRedesignPreviewExport {
                 addParticles(age, duration, radius, anchor, rootLength)
             }
             spell == StaffSpell.OSSUARY && !input.secondary -> {
-                val nodeParts = staffArsenalParts(spell, 0, 22, 1.0, displayRadius,
-                    impact = false, secondary = false, input = input, charge = charge).size
-                    .coerceIn(1, StaffSpellDisplayEffects.MAX_PARTS)
-                val nodeLimit = minOf(StaffSpellDisplayEffects.MAX_PER_CASTER,
-                    StaffSpellDisplayEffects.MAX_PARTS_PER_CASTER / nodeParts)
-                // Live admission evicts oldest complete scenes, even while their particles continue.
-                val visibleNodes = (0 until nodeCount).filter { age - 4 - it * 2 in 0 until 22 }
-                    .takeLast(nodeLimit).toSet()
+                val alive = (0 until nodeCount).filter { age - 4 - it * 2 in 0 until 22 }
+                var total = 0
+                val visibleNodes = alive.asReversed().takeWhile { node ->
+                    total += staffOssuaryRibParts(age - 4 - node * 2, 22, displayRadius, false, charge, boneShapes[node]).size
+                    total <= StaffSpellDisplayEffects.MAX_PARTS_PER_CASTER
+                }.take(StaffSpellDisplayEffects.MAX_PER_CASTER).toSet()
                 repeat(nodeCount) { node ->
                     val localAge = age - 4 - node * 2
                     val anchor = Vector(0.0, 0.0,
@@ -290,16 +297,21 @@ object StaffRedesignPreviewExport {
     }
 
     private fun arsenalClip(spell: StaffSpell, input: StaffCastInput, charge: Double,
-        galePitchDegrees: Double = 0.0): Map<String, Any> {
+        galePitchDegrees: Double = 0.0, castVariant: Int = 0): Map<String, Any> {
+        val boneShapes = if (spell == StaffSpell.OSSUARY) List(OSSUARY_PREVIEW_NODE_COUNT) {
+            staffOssuaryShape(UUID(0L, if (castVariant == 0) 871L else 1251L), it)
+        } else emptyList()
         val duration = staffArsenalLifetime(spell, input.secondary)
-        val frames = ticks(duration).map { age -> arsenalFrame(spell, input, charge, duration, age, galePitchDegrees) }
+        val frames = ticks(duration).map { age -> arsenalFrame(spell, input, charge, duration, age, galePitchDegrees, boneShapes) }
         val previewReach = when {
+            spell == StaffSpell.TIDE && !input.secondary -> STAFF_TIDE_PRIMARY_RANGE
             spell == StaffSpell.TIDE || spell == StaffSpell.GALE && input.secondary ->
                 FIXED_GALE_TIDE_REACH_BLOCKS
             spell == StaffSpell.OSSUARY && !input.secondary -> FIXED_OSSUARY_REACH_BLOCKS
             else -> PREVIEW_REACH_BLOCKS
         }
         val previewPath = when {
+            spell == StaffSpell.TIDE && !input.secondary -> STAFF_TIDE_PRIMARY_RANGE - FIXED_LAUNCH_OFFSET_BLOCKS
             spell == StaffSpell.TIDE || spell == StaffSpell.GALE && input.secondary ->
                 GALE_TIDE_PATH_BLOCKS
             spell == StaffSpell.OSSUARY && !input.secondary -> OSSUARY_PATH_BLOCKS
@@ -308,18 +320,18 @@ object StaffRedesignPreviewExport {
         }
         val notes = when {
             spell == StaffSpell.TIDE && !input.secondary ->
-                "One water orb launches at tick $STAFF_TIDE_PRIMARY_LAUNCH_TICK and flies for $STAFF_TIDE_PRIMARY_TRAVEL_TICKS ticks from a point 2.5 blocks ahead of the caster to the fixed 36-block caster reach (33.5 blocks of scene travel). In this flat, unobstructed preview it reaches the endpoint and starts the source water-splash burst at tick $STAFF_TIDE_PRIMARY_ARRIVAL_TICK; the $STAFF_TIDE_PRIMARY_IMPACT_TICKS-tick impact stage gives a ${STAFF_TIDE_PRIMARY_ATTACK_TICKS}-tick total clip. Its display uses the source 24-link crown and 8 droplets; particles emit 24 SPLASH and 8 FALLING_WATER samples over the burst. Runtime radius is 2.2–2.45 blocks and contact with a victim or wall can start the burst earlier."
+                "Three broad rotating water ribbons carry a compressed droplet along full-pitch aim ${galePitchDegrees} degrees upward. Launch tick $STAFF_TIDE_PRIMARY_LAUNCH_TICK, flight $STAFF_TIDE_PRIMARY_TRAVEL_TICKS ticks, caster reach $STAFF_TIDE_PRIMARY_RANGE blocks. At contact the mass opens into a directional splash cup with detached droplets for $STAFF_TIDE_PRIMARY_IMPACT_TICKS ticks. The unobstructed export reaches the endpoint; live swept collision releases earlier at a target or wall, with one accepted hit per victim and radius 2.2–2.45 blocks."
             spell == StaffSpell.NOVA && !input.secondary ->
                 "Two crawling root runners grow from a launch point 2.5 blocks ahead toward the target, then six thorn fingers close around the endpoint at tick 30. Display geometry and native particles use an illustrative 9.5-block path ending 12 blocks from the caster."
             spell == StaffSpell.LUNAR && input.secondary ->
                 "The paired crescents converge at the selected ground point, strike at tick $LUNAR_SECONDARY_DAMAGE_START_TICK, then crumble downward over six ticks into the existing bounded shard field. Its visible ${String.format(Locale.ROOT, "%.1f", arsenalRadius(spell, input, charge) + LUNAR_SECONDARY_RADIUS_BONUS)}-block damage radius remains active through tick $LUNAR_SECONDARY_DAMAGE_END_TICK, with line-of-sight checks preserving cover and one hit per target."
             spell == StaffSpell.GALE ->
-                if (input.secondary) "Two interwoven display bands and a hollow ram head follow the source smoothstep controller from a launch point $FIXED_LAUNCH_OFFSET_BLOCKS blocks ahead to a fixed $FIXED_GALE_TIDE_REACH_BLOCKS-block caster reach ($GALE_TIDE_PATH_BLOCKS blocks of scene travel), from tick $GALE_RAM_LAUNCH_TICK over $GALE_RAM_TRAVEL_TICKS ticks. In this unobstructed flat preview, the ram releases twelve arcing wind petals at the endpoint at tick $GALE_RAM_RELEASE_TICK; its $GALE_RAM_RELEASE_TICKS-tick terminal stage matches the runtime ${GALE_RAM_BASE_BURST_RADIUS}–${GALE_RAM_BASE_BURST_RADIUS + GALE_RAM_CHARGE_BURST_RADIUS}-block damage radius. The center follows full pitch ${galePitchDegrees} degrees upward from the caster eye, with the same orientation for displays and particles. Runtime releases early at a wall, eligible victim, or endpoint; it does not project the ram onto ground."
+                if (input.secondary) "Two interwoven display bands and a hollow ram head follow the source smoothstep controller from a launch point $FIXED_LAUNCH_OFFSET_BLOCKS blocks ahead to a fixed $FIXED_GALE_TIDE_REACH_BLOCKS-block caster reach ($GALE_TIDE_PATH_BLOCKS blocks of scene travel), from tick $GALE_RAM_LAUNCH_TICK over $GALE_RAM_TRAVEL_TICKS ticks. In this unobstructed flat preview, the ram releases a spherical pressure shell of 36 tangential fragments at the endpoint at tick $GALE_RAM_RELEASE_TICK; its $GALE_RAM_RELEASE_TICKS-tick terminal stage matches the runtime ${GALE_RAM_BASE_BURST_RADIUS}–${GALE_RAM_BASE_BURST_RADIUS + GALE_RAM_CHARGE_BURST_RADIUS}-block damage radius. The center follows full pitch ${galePitchDegrees} degrees upward from the caster eye, with the same orientation for displays and particles. Runtime releases early at a wall, eligible victim, or endpoint; it does not project the ram onto ground."
                 else "Three translucent ribbons twist around an open tornado core whose ground anchor wanders irregularly around the aimed point. The exported movement calls staffGaleWanderStep at the runtime two-tick cadence with its 1.05-block step cap; display and native particles share the same moving center. Flat ground and no cover are assumed; runtime clips movement and sweeps damage along this center."
             spell == StaffSpell.TIDE && input.secondary ->
                 "A five-row curled water wall and foam crest follow a yaw-only, floor-sampled path from a launch point $FIXED_LAUNCH_OFFSET_BLOCKS blocks ahead to a fixed $FIXED_GALE_TIDE_REACH_BLOCKS-block caster reach ($GALE_TIDE_PATH_BLOCKS blocks of scene travel), starting at tick $TIDE_WAVE_LAUNCH_TICK and travelling for $TIDE_WAVE_TRAVEL_TICKS ticks. Its ${staffTideWaveHalfWidth(0.0) * 2}–${staffTideWaveHalfWidth(1.0) * 2}-block width matches the runtime damage radius from tick $TIDE_WAVE_DAMAGE_START_TICK through tick $TIDE_WAVE_DAMAGE_END_TICK; walls and raised ground stop the wave. The offline preview shows the flat, unobstructed path."
             spell == StaffSpell.OSSUARY && !input.secondary ->
-                "Eleven branching bone clusters rise along a 21.5-block ground path from the launch point 2.5 blocks ahead to a fixed 24-block caster reach. Their spacing follows ceil(path/2), they start 2 ticks apart, and each uses a matching ${OSSUARY_PRIMARY_BASE_RADIUS}–${OSSUARY_PRIMARY_BASE_RADIUS + OSSUARY_PRIMARY_CHARGE_RADIUS}-block visual and damage radius at local tick 6. The production 192-part caster budget keeps at most six 30-part clusters together and evicts the oldest display scenes; the preview applies that same limit while their particles continue. This unobstructed preview places no blocks."
+                "Eleven branching bone clusters rise along a 21.5-block ground path from the launch point 2.5 blocks ahead to a fixed 24-block caster reach. Their spacing follows ceil(path/2), they start 2 ticks apart, and each uses a matching ${OSSUARY_PRIMARY_BASE_RADIUS}–${OSSUARY_PRIMARY_BASE_RADIUS + OSSUARY_PRIMARY_CHARGE_RADIUS}-block visual and damage radius at local tick 6. Each cast/node owns a seeded 20–30-part skeleton with different bends, ribs and forks; the preview sums actual shape sizes against the production 192-part caster budget while their particles continue. This unobstructed preview places no blocks."
             spell == StaffSpell.OSSUARY && input.secondary ->
                 "Branching bone clusters erupt at varied angles, with tall main spikes and smaller side forks. The broad 5.5–6.0-block display footprint matches its runtime damage radius around the selected ground point; visibility checks preserve cover and the cast never places blocks."
             spell == StaffSpell.PRISM && input.secondary ->
@@ -329,13 +341,13 @@ object StaffRedesignPreviewExport {
             else -> "Source-authored local particle and display geometry at a fixed anchor."
         }
         return mapOf(
-            "id" to "${spell.id}-${input.name.lowercase(Locale.ROOT)}-${charge.toInt()}${if (galePitchDegrees == 0.0) "" else "-upward"}",
+            "id" to "${spell.id}-${input.name.lowercase(Locale.ROOT)}-${charge.toInt()}${if (galePitchDegrees == 0.0) "" else "-upward"}${if (castVariant == 0) "" else "-cast-b"}",
             "spell" to spell.id, "input" to input.name, "quick" to false,
             "charge" to charge, "durationTicks" to duration,
             "tailTicks" to 40, "frameStepTicks" to FRAME_STEP_TICKS,
             "particleOnly" to (frames.all { (it["parts"] as List<*>).isEmpty() }),
             "anchor" to when {
-                spell == StaffSpell.GALE && input.secondary ->
+                spell == StaffSpell.GALE && input.secondary || spell == StaffSpell.TIDE && !input.secondary ->
                     "caster eye at y=1.62, launch 2.5 blocks along full-pitch aim; air path and impact share the same orientation"
                 spell == StaffSpell.TIDE ->
                     "cast-ground launch point 2.5 blocks ahead of caster; local +Z points to the fixed endpoint"
@@ -548,43 +560,86 @@ object StaffRedesignPreviewExport {
         )
     }
 
-    private fun rootNetworkClip(input: StaffCastInput, charge: Double): Map<String, Any> {
-        val duration = STAFF_NOVA_ATTACK_TICKS
-        val reach = STAFF_NOVA_FAN_REACH
-        val radius = 4.5 + charge * .4
-        val paths = if (input.secondary) staffNovaSnarePaths(radius).map { branch ->
-            branch.copy(points = branch.points.map { Vector3f(it).add(0f, 0f, 12f) })
-        } else staffNovaFanPaths(reach)
-        val feet = if (input.secondary) listOf(Vector3f(-2.5f, 0f, 11f), Vector3f(2.8f, 0f, 12f),
-            Vector3f(.3f, 0f, 14.5f), Vector3f(-2.8f, 0f, 13.6f))
-        else listOf(Vector3f(-2.5f, 0f, 8f), Vector3f(2.8f, 0f, 12f),
-            Vector3f(.3f, 0f, 16f), Vector3f(-2.8f, 0f, 13.6f))
-        val wraps = feet.mapIndexed { i, target ->
-            val contact = if (input.secondary) STAFF_NOVA_CONTACT_TICK else
-                (4..STAFF_NOVA_CONTACT_TICK step 2).first { staffNovaFanFront(it, reach) + .3 >=
-                    kotlin.math.hypot(target.x.toDouble(), target.z.toDouble()) }
-            StaffRootWrap("target-$i", target, .48, 1.8, contact)
+    private fun rootNetworkClip(input: StaffCastInput, charge: Double, seed: Long = 871L,
+        raised: Boolean = false, airborne: Boolean = false): Map<String, Any> {
+        var result: Map<String, Any> = emptyMap()
+        withStaffHarness { h ->
+            val settings = staffSettings(range = 56.0)
+            val world = h.paper.addSimpleWorld("root-preview-$seed-${input.name}-$raised-$airborne")
+            for (x in -14..14) for (z in -4..32) {
+                world.getBlockAt(x, 63, z).type = Material.STONE
+                if (raised && z >= 8) world.getBlockAt(x, 64, z).type = Material.STONE
+            }
+            val player = h.player("root-preview", world, StaffSpell.NOVA)
+            if (airborne) player.teleport(player.location.add(0.0, 20.0, 0.0))
+            val targets = listOf(.5 to 12.5, -2.2 to 11.0, 2.8 to 13.0, .3 to 16.0).map { (x, z) ->
+                h.zombie(world, x, z).apply { if (raised) teleport(location.add(0.0, 1.0, 0.0)) }
+            }
+            player.teleport(player.location.setDirection(center(targets.first()).toVector().subtract(player.eyeLocation.toVector())))
+            var age = 0
+            data class ExportScene(val id: UUID, val origin: Location, val born: Int, val duration: Int,
+                val geometry: (Int) -> List<StaffDisplayPart>)
+            val scenes = mutableListOf<ExportScene>()
+            val expiry = mutableMapOf<UUID, Int>()
+            val contacts = linkedMapOf<UUID, Int>()
+            val emissions = mutableListOf<Map<String, Any>>()
+            every { h.effects.custom(any(), any(), any(), any(), any()) } answers {
+                val id = UUID.randomUUID()
+                scenes += ExportScene(id, arg<Location>(2).clone(), age, arg(3), arg(4))
+                id
+            }
+            val damage = mockk<StaffSpellDamage>()
+            every { damage.isCurrent(any(), any()) } returns true
+            every { damage.eligible(any(), any(), any()) } answers { secondArg<org.bukkit.entity.LivingEntity>() !is Player }
+            every { damage.hit(any(), any(), any(), any(), any()) } answers {
+                contacts[secondArg<org.bukkit.entity.LivingEntity>().uniqueId] = age
+                true
+            }
+            val visuals = mockk<StaffSpellVisuals>(relaxed = true)
+            every { visuals.withOwner(any(), any()) } answers { secondArg<() -> Unit>().invoke() }
+            every { visuals.particles(any(), any(), any()) } answers {
+                val at = firstArg<Location>()
+                secondArg<List<StaffParticleSample>>().forEach { emissions += sample(it, Vector(at.x, at.y - 64.0, at.z)) }
+            }
+            val arsenal = StaffSpellArsenal(settings, damage, h.effects, visuals, StaffSpellTargeting(settings, damage),
+                rootTarget = { _, target, _, duration -> expiry[target.uniqueId] = age + duration; true },
+                rootActive = { target, _ -> (expiry[target] ?: 0) > age }, clearRoots = { expiry.clear() })
+            val frames = mutableListOf<Map<String, Any>>()
+            try {
+                arsenal.start()
+                check(arsenal.cast(player, StaffSpell.NOVA,
+                    StaffSpellCast(player.uniqueId, UUID(0L, seed), 1, null, null, false),
+                    settings.tuning.getValue(StaffSpell.NOVA), input, charge) == StaffArsenalCastResult.ACCEPTED)
+                ticks(STAFF_NOVA_ATTACK_TICKS).forEach { tick ->
+                    age = tick
+                    if (tick > 0) h.scheduler.tick(FRAME_STEP_TICKS.toLong())
+                    val parts = scenes.filter { it.id !in h.removedEffects && age - it.born in 0 until it.duration }
+                        .flatMapIndexed { sceneIndex, scene -> scene.geometry(age - scene.born).mapIndexed { index, display ->
+                            part(display, "nova:$sceneIndex", index, Vector(scene.origin.x, scene.origin.y - 64.0, scene.origin.z))
+                        } }
+                    frames += mapOf("tick" to tick, "parts" to parts, "emissions" to emissions.toList())
+                    emissions.clear()
+                }
+            } finally { arsenal.close() }
+            val suffix = when { airborne -> "-air-terrace"; raised -> "-terrace"; seed != 871L -> "-cast-b"; else -> "" }
+            result = mapOf("id" to "nova-${input.name.lowercase(Locale.ROOT)}-${charge.toInt()}$suffix",
+                "spell" to "nova", "input" to input.name, "charge" to charge, "quick" to false,
+                "durationTicks" to STAFF_NOVA_ATTACK_TICKS, "tailTicks" to 0, "frameStepTicks" to FRAME_STEP_TICKS,
+                "particleOnly" to false, "previewReachBlocks" to STAFF_NOVA_FAN_REACH,
+                "casterFeet" to point(player.location.x, player.location.y - 64.0, player.location.z),
+                "casterEye" to point(player.eyeLocation.x, player.eyeLocation.y - 64.0, player.eyeLocation.z),
+                "casterLook" to point(player.eyeLocation.direction.x, player.eyeLocation.direction.y, player.eyeLocation.direction.z),
+                "illustrativeTargets" to targets.map { point(it.location.x, it.location.y - 64.0, it.location.z) },
+                "syntheticTerrain" to if (raised) (-9..9).flatMap { x -> (8..23).map { z -> point(x + .5, .5, z + .5) } } else emptyList(),
+                "acceptedContacts" to targets.mapIndexedNotNull { index, target -> contacts[target.uniqueId]?.let { mapOf("target" to index, "tick" to it) } },
+                "timelineNote" to "Actual StaffSpellArsenal frames and sampled block collision in the test harness. Cast seed $seed stays fixed through growth; other casts change bends, widths and side branches. " +
+                    (if (raised) "Targets stand one block above the approach floor. " else "Flat connected floor. ") +
+                    (if (airborne) "The caster flies 20 blocks above the floor; roots seed the aimed ledge and follow its connected surface. " else "The caster stands at the approach floor. ") +
+                    "Two field pools stay within 96 parts. Only harness-accepted hits create independently timed 70-tick wraps. Combat bridge and server packet/client rendering are mocked; this is source/runtime geometry evidence, not native-client acceptance.",
+                "sourceFunctions" to listOf("StaffSpellArsenal.cast", "staffRootSurfacePath", "staffNovaFanPaths", "staffNovaSnarePaths",
+                    "staffNovaFanParts", "staffNovaSnareParts", "staffNovaWrapParts"), "frames" to frames)
         }
-        return mapOf("id" to "nova-${input.name.lowercase(Locale.ROOT)}-${charge.toInt()}",
-            "spell" to "nova", "input" to input.name, "charge" to charge,
-            "quick" to false, "durationTicks" to duration, "tailTicks" to 0,
-            "frameStepTicks" to FRAME_STEP_TICKS, "particleOnly" to false,
-            "previewReachBlocks" to reach,
-            "illustrativeTargets" to feet.map { point(it.x.toDouble(), it.y.toDouble(), it.z.toDouble()) },
-            "timelineNote" to (if (input.secondary)
-                "Eight perimeter claws warn through tick 8 and sweep inward until contact at tick 14 in the aimed ${radius}-block area. "
-                else "Seven thick roots fan across 18 blocks; their shared front travels from tick 2 to tick 14. ") +
-                "Four illustrative accepted victims receive individually timed 70-tick wraps. Field geometry withers by tick 26; wraps remain until each victim's own expiry. Flat-floor source geometry is shared with runtime; target selection, accepted damage, immobilization and cover are not simulated.",
-            "sourceFunctions" to listOf("staffNovaFanPaths", "staffNovaFanFront", "staffNovaFanParts",
-                "staffNovaSnarePaths", "staffNovaSnareParts", "staffNovaFieldParticles", "staffNovaWrapParts"),
-            "frames" to ticks(duration).map { age ->
-                val field = if (input.secondary) staffNovaSnareParts(age, STAFF_NOVA_FIELD_TICKS, paths)
-                    else staffNovaFanParts(age, STAFF_NOVA_FIELD_TICKS, reach, paths)
-                mapOf("tick" to age,
-                    "parts" to (field + staffNovaWrapParts(age, STAFF_NOVA_HOLD_TICKS, wraps))
-                        .mapIndexed { index, display -> part(display, "nova", index, Vector()) },
-                    "emissions" to staffNovaFieldParticles(age, input.secondary, reach, paths).map(::sample))
-            })
+        return result
     }
 
     private fun prismRefractionClip(charge: Double): Map<String, Any> {
@@ -872,19 +927,21 @@ object StaffRedesignPreviewExport {
         require(focusedOutput.toAbsolutePath().normalize() != output.toAbsolutePath().normalize()) {
             "The focused preview must use a separate file from the full export."
         }
-        val (clips, chargeClips, preparationClips) = MockBukkitTestRuntime.open().use {
+        val (otherClips, chargeClips, preparationClips) = MockBukkitTestRuntime.open().use {
             val clips = buildList {
-                redesignArsenal.forEach { spell ->
+                redesignArsenal.filter { it != StaffSpell.NOVA }.forEach { spell ->
                     listOf(StaffCastInput.PRIMARY, StaffCastInput.SECONDARY).forEach { input ->
                         if (!input.secondary && staffMeleeReach(spell) != null) add(meleeClip(spell))
                         else listOf(0.0, 1.0).forEach { charge -> add(when {
-                            spell == StaffSpell.NOVA -> rootNetworkClip(input, charge)
                             spell == StaffSpell.PRISM && input.secondary -> prismRefractionClip(charge)
                             else -> arsenalClip(spell, input, charge)
                         }) }
                     }
                 }
                 add(arsenalClip(StaffSpell.GALE, StaffCastInput.SECONDARY, 0.0, galePitchDegrees = 25.0))
+                add(arsenalClip(StaffSpell.TIDE, StaffCastInput.PRIMARY, 0.0, galePitchDegrees = 25.0))
+                add(arsenalClip(StaffSpell.OSSUARY, StaffCastInput.PRIMARY, 0.0, castVariant = 1))
+                add(arsenalClip(StaffSpell.OSSUARY, StaffCastInput.SECONDARY, 0.0, castVariant = 1))
                 add(meleeClip(StaffSpell.FROST))
                 add(frostRingClip())
                 add(meleeClip(StaffSpell.FAULT))
@@ -910,6 +967,14 @@ object StaffRedesignPreviewExport {
                 },
             )
         }
+        val clips = otherClips + buildList {
+            listOf(StaffCastInput.PRIMARY, StaffCastInput.SECONDARY).forEach { input ->
+                listOf(0.0, 1.0).forEach { charge -> add(rootNetworkClip(input, charge)) }
+                add(rootNetworkClip(input, 0.0, seed = 1251L))
+                add(rootNetworkClip(input, 0.0, raised = true))
+                add(rootNetworkClip(input, 0.0, raised = true, airborne = true))
+            }
+        }
         val fullExport = mapOf(
             "title" to "ARC · Атаки и защита посохов",
             "coordinates" to mapOf(
@@ -919,7 +984,7 @@ object StaffRedesignPreviewExport {
             "frameStepTicks" to FRAME_STEP_TICKS,
             "particleTailTicks" to 40,
             "previewReachBlocks" to PREVIEW_REACH_BLOCKS,
-            "evidence" to "Кадры вызывают production-геометрию и частицы. Четыре фронтальные ПКМ используют staffMeleeDisplayParts/staffMeleeParticles; Shift-атаки сохраняют свои геометрии. Интерполяция Display моделируется по экспортированным ключевым кадрам. Это офлайн-превью: урон, столкновения, звук и нативный клиент не проверяются.",
+            "evidence" to "Кадры вызывают production-геометрию и частицы. Три фронтальные ПКМ используют staffMeleeDisplayParts/staffMeleeParticles; Shift-атаки сохраняют свои геометрии. Интерполяция Display моделируется по экспортированным ключевым кадрам. Это офлайн-превью: урон, столкновения, звук и нативный клиент не проверяются.",
             "clips" to clips,
         )
         output.parent?.let { Files.createDirectories(it) }
@@ -942,7 +1007,7 @@ object StaffRedesignPreviewExport {
                 "frameStepTicks" to FRAME_STEP_TICKS,
                 "particleTailTicks" to 40,
                 "previewReachBlocks" to PREVIEW_REACH_BLOCKS,
-            "evidence" to "Кадры вызывают production-геометрию и частицы. Четыре фронтальные ПКМ используют staffMeleeDisplayParts/staffMeleeParticles; Shift-атаки сохраняют свои геометрии. Интерполяция Display моделируется по экспортированным ключевым кадрам. Это офлайн-превью: урон, столкновения, звук и нативный клиент не проверяются.",
+            "evidence" to "Кадры вызывают production-геометрию и частицы. Три фронтальные ПКМ используют staffMeleeDisplayParts/staffMeleeParticles; Shift-атаки сохраняют свои геометрии. Интерполяция Display моделируется по экспортированным ключевым кадрам. Это офлайн-превью: урон, столкновения, звук и нативный клиент не проверяются.",
                 "clips" to focusedClips,
             )).plus("\n"))
             println("STAFF_REDESIGN_FOCUSED_PREVIEW clips=${focusedClips.size} output=$focusedOutput")

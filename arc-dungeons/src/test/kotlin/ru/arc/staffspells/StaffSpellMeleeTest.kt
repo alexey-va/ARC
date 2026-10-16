@@ -18,13 +18,13 @@ import org.bukkit.util.Vector
 class StaffSpellMeleeTest : FreeSpec({
     "empty-air frontal casts have bounded launch contact and tail cues with no per-frame sound" {
         withStaffHarness { h ->
-            listOf(StaffSpell.FROST, StaffSpell.FAULT, StaffSpell.LUNAR, StaffSpell.TIDE).forEach { spell ->
+            listOf(StaffSpell.FROST, StaffSpell.FAULT, StaffSpell.LUNAR).forEach { spell ->
                 val world = h.paper.addSimpleWorld("staff-frontal-audio-${spell.id}")
                 val player = h.player("staff-frontal-audio-${spell.id}", world, spell)
                 val hits = mutableListOf<Pair<LivingEntity, Pair<Double, Double>>>()
                 val damage = meleeDamage(hits)
                 val sounds = mutableListOf<Sound>()
-                val contactLayers = if (spell == StaffSpell.TIDE) 3 else 2
+                val contactLayers = 2
                 val visuals = mockk<StaffSpellVisuals>(relaxed = true)
                 every { visuals.withOwner(any(), any()) } answers { secondArg<() -> Unit>().invoke() }
                 every { visuals.cue(any(), any(), any(), any()) } answers { sounds += secondArg<Sound>() }
@@ -37,7 +37,6 @@ class StaffSpellMeleeTest : FreeSpec({
                     sounds.size shouldBe 1
                     h.scheduler.tick(1)
                     sounds.size shouldBe 1 + contactLayers
-                    if (spell == StaffSpell.TIDE) sounds.last() shouldBe Sound.ITEM_TRIDENT_RIPTIDE_1
                     h.scheduler.tick((staffMeleeDuration(spell) - 2) - STAFF_FRONTAL_CONTACT_TICK)
                     sounds.size shouldBe 2 + contactLayers
                     h.scheduler.tick(30)
@@ -48,16 +47,16 @@ class StaffSpellMeleeTest : FreeSpec({
         }
     }
 
-    "only FROST, FAULT, LUNAR, and TIDE own the broad primary contact" {
-        val frontal = setOf(StaffSpell.FROST, StaffSpell.FAULT, StaffSpell.LUNAR, StaffSpell.TIDE)
+    "only FROST, FAULT, and LUNAR own the broad primary contact" {
+        val frontal = setOf(StaffSpell.FROST, StaffSpell.FAULT, StaffSpell.LUNAR)
 
         frontal.forEach { staffMeleeReach(it) shouldBe 7.0 }
         StaffSpell.entries.filterNot { it in frontal }.forEach { staffMeleeReach(it) shouldBe null }
         STAFF_FRONTAL_CONTACT_TICK shouldBe 6L
     }
 
-    "the four frontal primaries reach seven blocks and a wide arc, contact at tick six, and hit once" {
-        val spells = listOf(StaffSpell.FROST, StaffSpell.FAULT, StaffSpell.LUNAR, StaffSpell.TIDE)
+    "the three frontal primaries reach seven blocks and a wide arc, contact at tick six, and hit once" {
+        val spells = listOf(StaffSpell.FROST, StaffSpell.FAULT, StaffSpell.LUNAR)
         val settings = staffSettings(maxAreaTargets = 8)
 
         withStaffHarness(settings = settings) { h ->
@@ -150,9 +149,9 @@ class StaffSpellMeleeTest : FreeSpec({
         }
     }
 
-    "FROST, FAULT, and TIDE apply crowd control only after accepted damage; LUNAR has none" {
-        val expectedPush = mapOf(StaffSpell.FAULT to 0.42, StaffSpell.TIDE to 0.35)
-        listOf(StaffSpell.FROST, StaffSpell.FAULT, StaffSpell.LUNAR, StaffSpell.TIDE).forEach { spell ->
+    "FROST and FAULT apply crowd control only after accepted damage; LUNAR has none" {
+        val expectedPush = mapOf(StaffSpell.FAULT to 0.42)
+        listOf(StaffSpell.FROST, StaffSpell.FAULT, StaffSpell.LUNAR).forEach { spell ->
             val settings = staffSettings()
             withStaffHarness(settings = settings) { h ->
                 val world = h.paper.addSimpleWorld("staff-frontal-hit-effects-${spell.id}")
@@ -183,7 +182,7 @@ class StaffSpellMeleeTest : FreeSpec({
                             slow.duration shouldBe 16
                             slow.amplifier shouldBe 0
                         }
-                        StaffSpell.FAULT, StaffSpell.TIDE -> {
+                        StaffSpell.FAULT -> {
                             abs(denied.velocity.z) shouldBe 0.0
                             (abs(accepted.velocity.z - requireNotNull(expectedPush[spell])) < 1.0e-9) shouldBe true
                         }

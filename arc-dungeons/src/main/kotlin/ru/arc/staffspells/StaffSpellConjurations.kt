@@ -40,7 +40,6 @@ internal class StaffSpellConjurations(
         val rootTicks: Int = 0,
         var triggered: Boolean = false,
     ) : Payload
-    private data class GalePayload(val sideways: Vector, var hit: Boolean = false) : Payload
     private data class TidePayload(val targetId: UUID?) : Payload
     private data class RequiemPayload(var struck: Boolean = false) : Payload
     private data class FrostPulsePayload(val targets: List<UUID>) : Payload
@@ -111,7 +110,6 @@ internal class StaffSpellConjurations(
             StaffSpell.FROST -> thaw(player, cast, tuning)
             StaffSpell.NOVA -> placeTrap(player, cast, tuning, TrapKind.NOVA)
             StaffSpell.FAULT -> placeFaultBarrier(player, cast, tuning)
-            StaffSpell.GALE -> placeGaleCorridor(player, cast, tuning)
             StaffSpell.TIDE -> castTideCapsule(player, cast, tuning)
             StaffSpell.REQUIEM -> placeRequiem(player, cast, tuning)
             StaffSpell.OSSUARY -> placeTrap(player, cast, tuning, TrapKind.OSSUARY)
@@ -293,7 +291,16 @@ internal class StaffSpellConjurations(
     }
 
     private fun placeTrap(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning, kind: TrapKind): Boolean {
-        val point = groundPoint(player, TRAP_PLACEMENT_RANGE, TRAP_MIN_DISTANCE) ?: return false
+        val point = if (kind == TrapKind.NOVA) {
+            val eye = player.eyeLocation
+            val target = targeting.aimed(player, minOf(settings.range, 56.0), settings.aimDegrees, cast).firstOrNull()
+            val aim = target?.let { staffVisibleTargetPoint(eye, it) }
+                ?: targeting.rayEnd(eye, eye.direction, minOf(settings.range, 56.0))
+            val floor = targeting.groundBelow(aim.clone().add(0.0, 1.25, 0.0), 64.0) ?: return false
+            if (eye.distanceSquared(floor) < TRAP_MIN_DISTANCE * TRAP_MIN_DISTANCE ||
+                !visible(eye, floor.clone().add(0.0, .4, 0.0))) return false
+            floor
+        } else groundPoint(player, TRAP_PLACEMENT_RANGE, TRAP_MIN_DISTANCE) ?: return false
         val forward = horizontal(player.eyeLocation.direction, player.eyeLocation.yaw) ?: return false
         val yaw = atan2(forward.x, forward.z)
         val payload = when (kind) {
@@ -313,28 +320,6 @@ internal class StaffSpellConjurations(
             visuals.cue(point.clone().add(0.0, 0.35, 0.0), sound, 0.76f,
                 if (kind == TrapKind.NOVA) 1.2f else 0.72f)
             visuals.particles(point.clone().add(0.0, 0.25, 0.0), trapParticles(kind))
-        }
-        return true
-    }
-
-    private fun placeGaleCorridor(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning): Boolean {
-        val eye = player.eyeLocation
-        val forward = horizontal(eye.direction, eye.yaw) ?: return false
-        val sideways = Vector(forward.z, 0.0, -forward.x)
-        val yaw = atan2(forward.x, forward.z)
-        val anchor = player.location.clone().add(0.0, 0.08, 0.0)
-        val payload = GalePayload(sideways)
-        val session = newSession(player, StaffSpell.GALE, cast, tuning, anchor, forward, sideways, yaw,
-            GALE_CORRIDOR_DURATION, payload) { age -> staffGaleCorridorParts(age, GALE_CORRIDOR_LENGTH, GALE_CORRIDOR_HALF_WIDTH, yaw) }
-            ?: return false
-        sessions[player.uniqueId] = session
-        visuals.withOwner(player.uniqueId) {
-            visuals.cue(anchor.clone().add(forward.clone().multiply(3.0)).add(0.0, 0.8, 0.0),
-                Sound.ENTITY_BREEZE_WIND_BURST, 0.82f, 1.15f)
-            visuals.particles(anchor.clone().add(forward.clone().multiply(1.8)).add(0.0, 0.8, 0.0), listOf(
-                StaffParticleSample(Particle.GUST, Vector(), 1),
-                StaffParticleSample(Particle.CRIT, Vector(0.0, 0.1, 0.0), 8, Vector(0.7, 0.25, 0.7), 0.02),
-            ))
         }
         return true
     }
@@ -536,10 +521,6 @@ internal class StaffSpellConjurations(
                 is MarkPayload -> tickMark(player, session, payload)
                 is TrapPayload -> if (payload.kind == TrapKind.OSSUARY && payload.triggered) Unit
                     else tickTrap(player, session, payload)
-                is GalePayload -> if (!payload.hit && session.age >= GALE_CONTACT_TICK) {
-                    payload.hit = true
-                    hitGaleCorridor(player, session, payload)
-                }
                 is TidePayload -> tickTideCapsule(player, session, payload)
                 is RequiemPayload -> if (session.age == REQUIEM_RECAST_START) visuals.withOwner(session.ownerId) {
                     visuals.cue(session.anchor.clone().add(0.0, 1.4, 0.0), Sound.BLOCK_BELL_USE, 0.025f, 1.55f)
@@ -637,39 +618,6 @@ internal class StaffSpellConjurations(
             return
         }
         endSession(session)
-    }
-
-    private fun hitGaleCorridor(player: Player, session: Session, payload: GalePayload) {
-        val centerLine = session.anchor.clone().add(session.forward.clone().multiply(GALE_CORRIDOR_LENGTH * 0.5))
-            .add(0.0, 1.0, 0.0)
-        visuals.withOwner(session.ownerId) {
-            visuals.cue(centerLine, Sound.ENTITY_BREEZE_WIND_BURST, 0.62f, 0.78f)
-        }
-        val targets = targeting.nearby(player, centerLine, GALE_QUERY_RADIUS, session.cast)
-            .filter { inGaleCorridor(session, it) && visible(player.eyeLocation, it) && visible(centerLine, it) }
-            .sortedBy { center(it).distanceSquared(centerLine) }
-            .take(settings.maxAreaTargets.coerceIn(1, GALE_TARGET_LIMIT))
-        for (target in targets) {
-            if (!current(player, session) || !damage.eligible(player, target, session.cast)) break
-            if (!target.isValid || target.isDead || target.isInvulnerable || !inGaleCorridor(session, target) ||
-                !visible(player.eyeLocation, target) || !visible(centerLine, target)) continue
-            if (!damage.hit(player, target, session.cast,
-                    session.tuning.power * GALE_DAMAGE_MULTIPLIER, session.tuning.vanillaDamage * GALE_DAMAGE_MULTIPLIER)) continue
-            if (!current(player, session) || !damage.eligible(player, target, session.cast) ||
-                !visible(player.eyeLocation, target) || !visible(centerLine, target)) continue
-            target.velocity = target.velocity.clone()
-                .add(payload.sideways.clone().multiply(GALE_SIDE_IMPULSE))
-                .add(Vector(0.0, GALE_LIFT_IMPULSE, 0.0))
-        }
-    }
-
-    private fun inGaleCorridor(session: Session, target: LivingEntity): Boolean {
-        if (target.world != session.anchor.world) return false
-        val offset = center(target).toVector().subtract(session.anchor.toVector())
-        val along = offset.dot(session.forward)
-        val lateral = offset.dot(session.normal)
-        return along in GALE_CORRIDOR_MIN_FORWARD..(GALE_CORRIDOR_LENGTH + 1.0) &&
-            abs(lateral) <= GALE_CORRIDOR_HALF_WIDTH && offset.y in -0.25..GALE_CORRIDOR_HEIGHT
     }
 
     private fun tickTideCapsule(player: Player, session: Session, payload: TidePayload) {
@@ -860,17 +808,6 @@ internal class StaffSpellConjurations(
         const val TRAP_MIN_DISTANCE = 1.5
         const val GROUND_PROBE_HEIGHT = 3.5
         const val GROUND_PROBE_RANGE = 6.5
-        const val GALE_CORRIDOR_DURATION = 22
-        const val GALE_CONTACT_TICK = 7
-        const val GALE_CORRIDOR_LENGTH = 6.5
-        const val GALE_CORRIDOR_HALF_WIDTH = 2.0
-        const val GALE_CORRIDOR_HEIGHT = 3.0
-        const val GALE_CORRIDOR_MIN_FORWARD = 0.8
-        const val GALE_QUERY_RADIUS = 5.5
-        const val GALE_TARGET_LIMIT = 3
-        const val GALE_DAMAGE_MULTIPLIER = 0.45
-        const val GALE_SIDE_IMPULSE = 0.52
-        const val GALE_LIFT_IMPULSE = 0.07
         const val OSSUARY_TRAP_RADIUS = 2.85
         const val OSSUARY_ARM_TICKS = 8
         const val OSSUARY_TRAP_DURATION = 56

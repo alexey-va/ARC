@@ -382,8 +382,19 @@ internal class StaffSpellController(
             }
         }
         if (spell == StaffSpell.GRAVITY && !channels.gravityPulse(player, cast, tuning)) return
-        val adjustedCooldownTicks = beginCooldown(player, spell, secondary, cooldownTicks, cast)
         val closeAttack = !secondary && staffMeleeReach(spell) != null
+        if (!closeAttack && spell in ARSENAL_SPELLS) {
+            val admission = arsenal.cast(player, spell, cast, tuning, input, level)
+            if (admission != StaffArsenalCastResult.ACCEPTED) {
+                player.sendActionBar(config.text(when (admission) {
+                    StaffArsenalCastResult.NO_GROUND -> "no-ground"
+                    StaffArsenalCastResult.BLOCKED -> "blocked-path"
+                    else -> "unavailable"
+                }))
+                return
+            }
+        }
+        val adjustedCooldownTicks = beginCooldown(player, spell, secondary, cooldownTicks, cast)
         if (!closeAttack && staffPreparationParts(spell, secondary, 0).isNotEmpty())
             effects.play(player.uniqueId, spell, player.eyeLocation, durationTicks = 10,
                 secondary = secondary, preparation = true)
@@ -392,7 +403,7 @@ internal class StaffSpellController(
         if (closeAttack) melee.cast(player, cast, spell, tuning)
         else if (spell == StaffSpell.GRAVITY) Unit // Already admitted before consuming cooldown.
         else if (spell == StaffSpell.NECROMANCER) Unit // Already admitted before consuming cooldown.
-        else if (spell in ARSENAL_SPELLS) arsenal.cast(player, spell, cast, tuning, input, level)
+        else if (spell in ARSENAL_SPELLS) Unit // Admitted before consuming cooldown.
         else if (secondary) castSecondary(player, spell, cast, tuning, level) else when (spell) {
             StaffSpell.CHAIN -> chain(player, cast, tuning)
             StaffSpell.MARK -> {
@@ -1385,7 +1396,7 @@ internal class StaffSpellController(
     private companion object {
         const val GLOBAL_COOLDOWN_TICKS = 4L
         val CONJURATION_SPELLS = setOf(StaffSpell.MARK, StaffSpell.FROST, StaffSpell.NOVA, StaffSpell.FAULT,
-            StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM, StaffSpell.OSSUARY)
+            StaffSpell.TIDE, StaffSpell.REQUIEM, StaffSpell.OSSUARY)
         val ARSENAL_SPELLS = setOf(StaffSpell.NOVA, StaffSpell.LUNAR, StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM, StaffSpell.PRISM, StaffSpell.OSSUARY)
         const val WAVE_STEP_TICKS = 2
         const val WAVE_START_DELAY_TICKS = 2

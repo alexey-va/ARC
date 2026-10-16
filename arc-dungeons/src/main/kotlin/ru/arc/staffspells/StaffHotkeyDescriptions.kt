@@ -7,7 +7,7 @@ internal data class StaffHotkeyDescription(
 )
 
 internal val staffHotkeyDescriptions = mapOf(
-    StaffSpell.CHAIN to StaffHotkeyDescription("Шаровая молния", "Ведите взглядом; повторное Q — разряд", "Искровой скачок", "Искровой блинк вперёд", 160, 80),
+    StaffSpell.CHAIN to StaffHotkeyDescription("Шаровая молния", "Взрывается рядом с врагом или в конце полёта", "Искровой скачок", "Искровой блинк вперёд", 160, 80),
     StaffSpell.MARK to StaffHotkeyDescription("Гравитационная привязь", "Враг получает удар, покинув привязь", "Шаг в разлом", "Блинк через пространство", 180, 100),
     StaffSpell.FROST to StaffHotkeyDescription("Оттепель", "Расколите собственную заморозку на врагах", "Ледяное скольжение", "Скользите вперёд по земле", 160, 80),
     StaffSpell.LANCE to StaffHotkeyDescription("Солнечный гвоздь", "Прибейте врага к стене за ним", "Солнечный отскок", "Отскок назад с упором копьём", 160, 90),
@@ -16,7 +16,7 @@ internal val staffHotkeyDescriptions = mapOf(
     StaffSpell.ICICLE to StaffHotkeyDescription("Кристальный всплеск", "Кристаллы поражают врагов вокруг в радиусе 4,5 блока", "Ледяная ступень", "Прыжок по ледяным ступеням", 160, 90),
     StaffSpell.FAULT to StaffHotkeyDescription("Обсидиановая преграда", "Закройтесь от магии; повторное Q — осколки", "Каменный таран", "Мощный каменный рывок вперёд", 200, 100),
     StaffSpell.LUNAR to StaffHotkeyDescription("Возвратный серп", "Серп летит вперёд и возвращается к вам", "Лунная поступь", "Мгновенный фазовый шаг", 160, 80),
-    StaffSpell.GALE to StaffHotkeyDescription("Боковой шквал", "Коридор ветра сносит врагов в сторону", "Попутный ветер", "Направляйте парение взглядом", 180, 100),
+    StaffSpell.GALE to StaffHotkeyDescription("Око урагана", "Огромный ураган поднимает и бьёт врагов вокруг точки призыва", "Попутный ветер", "Направляйте парение взглядом", 600, 100),
     StaffSpell.TIDE to StaffHotkeyDescription("Водяной плен", "Капсула удерживает до первого попадания", "Прибой", "Прокатитесь вперёд на волне", 200, 100),
     StaffSpell.REQUIEM to StaffHotkeyDescription("Час расплаты", "Подвесьте колокол; повторное Q — удар", "Шаг за грань", "Блинк под глухой звон", 180, 100),
     StaffSpell.PRISM to StaffHotkeyDescription("Режущие грани", "Поставьте треугольник, опасный при пересечении", "Преломление", "Управляемый разгон", 180, 80),

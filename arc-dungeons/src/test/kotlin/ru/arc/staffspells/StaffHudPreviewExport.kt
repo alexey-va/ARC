@@ -9,6 +9,9 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.configuration.file.YamlConfiguration
+import org.bukkit.Location
+import org.bukkit.util.Vector
+import ru.arc.staffspells.api.StaffHudPlacement
 
 /** Exports the production HUD text, source-owned layout settings, and two camera poses as offline JSON. */
 object StaffHudPreviewExport {
@@ -75,7 +78,10 @@ object StaffHudPreviewExport {
                 "wallAt1_6Blocks" to poseMap(nearWallPose),
             ),
             "states" to states,
-            "evidenceLimit" to "Source-derived component text/layout; does not simulate native-client depth, FOV, lighting, or interpolation.",
+            "motionClips" to listOf(StaffHudPlacement.TOP, StaffHudPlacement.BOTTOM).map { preference ->
+                motionClip(config, states.first { it.id == "charging" }, preference)
+            },
+            "evidenceLimit" to "Source-derived component text/layout and moving-camera keyframes. Linear one-tick transport/interpolation model only; native-client depth, lighting, latency and rendering remain unverified.",
         )
         Files.createDirectories(requireNotNull(output.parent))
         Files.writeString(output, GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create().toJson(document) + "\n")
@@ -112,12 +118,87 @@ object StaffHudPreviewExport {
     private fun poseMap(pose: StaffSpellHudPose) = mapOf(
         "forwardBlocks" to pose.forwardOffset,
         "cameraDownBlocks" to pose.cameraDownOffset,
+        "horizontalBlocks" to pose.horizontalOffset,
         "eyeDistanceBlocks" to pose.distance,
         "textScale" to pose.textScale,
         "screenAngleBelowReticleDegrees" to Math.toDegrees(kotlin.math.atan2(
             pose.cameraDownOffset, pose.forwardOffset,
         )),
     )
+
+    private fun motionClip(config: StaffSpellConfig, state: State, preference: StaffHudPlacement): Map<String, Any> {
+        val bounds = staffSpellHudBounds(state.plainText, staffSpellHudVisualSpec().lineWidth)
+        val eye = Location(null, 0.0, 65.62, 0.0)
+        var motion = StaffSpellHudMotion()
+        var previous: Vector? = null
+        var previousDirection = eye.direction
+        val frames = (0..125).map { tick ->
+            val phase = when (tick) {
+                in 0..9 -> "rest"
+                in 10..19 -> "accelerate"
+                in 20..39 -> "forward"
+                in 40..49 -> "ascend"
+                in 50..59 -> "descend"
+                in 60..69 -> "strafe"
+                in 70..89 -> "turn"
+                in 90..99 -> "pitch-down"
+                else -> "settle"
+            }
+            eye.yaw = when {
+                tick < 70 -> 0f
+                tick < 80 -> (tick - 69) * 12f
+                else -> 120f
+            }
+            eye.pitch = when {
+                tick < 80 -> 0f
+                tick < 90 -> -(tick - 79) * 6f
+                tick < 100 -> -60f + (tick - 89) * 12f
+                else -> 60f
+            }
+            val forward = eye.direction.normalize()
+            val yaw = Math.toRadians(eye.yaw.toDouble())
+            val right = Vector(kotlin.math.cos(yaw), 0.0, kotlin.math.sin(yaw))
+            val down = right.clone().crossProduct(forward).normalize()
+            val velocity = when (tick) {
+                in 10..19 -> Vector(0.0, 0.0, (tick - 9) * 0.15)
+                in 20..39 -> Vector(0.0, 0.0, 1.5)
+                in 40..49 -> Vector(0.0, 1.2, 1.0)
+                in 50..59 -> Vector(0.0, -1.2, 1.0)
+                in 60..69 -> Vector(1.4, 0.0, 0.5)
+                in 70..99 -> forward.clone().multiply(1.5)
+                else -> Vector()
+            }
+            eye.add(velocity)
+            val turn = kotlin.math.acos(forward.dot(previousDirection).coerceIn(-1.0, 1.0))
+            motion = staffSpellHudMotion(motion, velocity, 1.0, flying = true, config.hudMotion, turn)
+            previousDirection = forward.clone()
+            val moving = staffHudMovingPosition(config.hudPosition, config.hudMotion, motion,
+                forward, down, right, preference, bounds)
+            fun at(position: StaffSpellHudPositionSettings) = eye.toVector()
+                .add(forward.clone().multiply(position.forwardBlocks))
+                .add(down.clone().multiply(position.verticalBlocks))
+                .add(right.clone().multiply(position.horizontalBlocks))
+            val target = at(moving)
+            val smooth = previous?.let { staffHudInterpolationClear(eye, it, target,
+                moving.scale.toFloat(), moving.scale.toFloat(), velocity, bounds, preference) } ?: true
+            previous = target
+            val legacy = config.hudPosition.copy(verticalBlocks = config.hudPosition.verticalBlocks *
+                if (preference == StaffHudPlacement.BOTTOM) 1 else -1)
+            mapOf(
+                "tick" to tick, "phase" to phase,
+                "eye" to vectorMap(eye.toVector()), "yaw" to eye.yaw, "pitch" to eye.pitch,
+                "velocity" to vectorMap(velocity), "retreat" to motion.retreat,
+                "target" to vectorMap(target), "scale" to moving.scale,
+                "interpolationTicks" to if (smooth) 1 else 0,
+                "beforeTarget" to vectorMap(at(legacy)), "beforeSend" to (tick % 2 == 0),
+            )
+        }
+        return mapOf("placement" to preference.name.lowercase(), "stateId" to state.id,
+            "bounds" to mapOf("halfWidth" to bounds.halfWidth, "verticalRadius" to bounds.verticalRadius),
+            "transportDelayTicks" to 1, "frames" to frames)
+    }
+
+    private fun vectorMap(value: Vector) = listOf(value.x, value.y, value.z)
 
     private fun configValues(defaults: YamlConfiguration): Map<String, Any> = buildMap {
         listOf(
@@ -138,6 +219,8 @@ object StaffHudPreviewExport {
         listOf(
             "hud.position.forward-blocks", "hud.position.vertical-blocks",
             "hud.position.horizontal-blocks", "hud.position.scale",
+            "hud.motion.prediction-ticks", "hud.motion.max-lead-blocks", "hud.motion.forward-blocks",
+            "hud.motion.vertical-blocks", "hud.motion.settle-ticks",
         ).forEach { key ->
             require(defaults.contains(key)) { "Missing HUD position setting: $key" }
             put(key, defaults.getDouble(key))

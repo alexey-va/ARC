@@ -556,7 +556,7 @@ class StaffSpellSummonsTest : FreeSpec({
     }
 
     "airborne summons project to loaded ground within sixty-four blocks and count only live owned actors" {
-        for (height in listOf(80.0, 128.0, 129.0)) withSummonHarness { h ->
+        for (secondary in listOf(false, true)) for (height in listOf(80.0, 128.0, 129.0)) withSummonHarness { h ->
             val world = h.paper.addSimpleWorld("summon-airborne-$height")
             loadSummonChunks(world)
             val owner = h.player("summon-airborne-owner", world, StaffSpell.NECROMANCER)
@@ -565,17 +565,20 @@ class StaffSpellSummonsTest : FreeSpec({
             owner.isFlying = true
             h.controller.start()
 
-            h.controller.cast(owner, StaffCastInput.PRIMARY, 0.0)
+            owner.isSneaking = secondary
+            h.controller.onInteract(org.bukkit.event.player.PlayerInteractEvent(owner,
+                org.bukkit.event.block.Action.RIGHT_CLICK_AIR, owner.inventory.itemInMainHand,
+                null, org.bukkit.block.BlockFace.SELF, org.bukkit.inventory.EquipmentSlot.HAND))
 
             val actors = world.entities.filterIsInstance<AbstractSkeleton>()
-            val expected = if (height <= 128.0) 2 else 0
+            val expected = if (height > 128.0) 0 else if (secondary) 1 else 2
             actors.size shouldBe expected
             actors.all { it.location.y == 64.0 } shouldBe true
             h.controller.summons.countFor(owner.uniqueId) shouldBe expected
             h.controller.summons.countFor(UUID.randomUUID()) shouldBe 0
             if (actors.isNotEmpty()) {
                 actors.first().remove()
-                h.controller.summons.countFor(owner.uniqueId) shouldBe 1
+                h.controller.summons.countFor(owner.uniqueId) shouldBe expected - 1
             }
             h.controller.onQuit(PlayerQuitEvent(owner, Component.empty()))
             h.controller.summons.countFor(owner.uniqueId) shouldBe 0

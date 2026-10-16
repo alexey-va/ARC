@@ -21,6 +21,7 @@ object StaffHotkeyPreviewExport {
             buildList {
                 StaffSpell.available.forEach { spell ->
                     add(if (spell == StaffSpell.LUNAR) lunarClip() else if (spell == StaffSpell.FAULT) faultClip() else qClip(spell))
+                    if (spell == StaffSpell.CHAIN) add(chainProximityClip())
                     add(mobilityClip(spell))
                 }
             }
@@ -69,14 +70,14 @@ object StaffHotkeyPreviewExport {
 
     private fun qClip(spell: StaffSpell): Map<String, Any> {
         val duration = when (spell) {
-            StaffSpell.CHAIN -> 30
+            StaffSpell.CHAIN -> 27 + STAFF_CHAIN_BURST_TICKS
             StaffSpell.MARK -> 60
             StaffSpell.FROST -> 18
             StaffSpell.LANCE -> 14
             StaffSpell.EMBER -> 66
             StaffSpell.NOVA -> 72
             StaffSpell.ICICLE -> STAFF_ICICLE_RADIAL_TICKS
-            StaffSpell.GALE -> 22
+            StaffSpell.GALE -> STAFF_GALE_HURRICANE_TICKS
             StaffSpell.TIDE -> 25
             StaffSpell.REQUIEM -> 56
             StaffSpell.PRISM -> 60
@@ -93,10 +94,10 @@ object StaffHotkeyPreviewExport {
         val frame: (Int) -> Frame
         when (spell) {
             StaffSpell.CHAIN -> {
-                note = "Шаровая молния: production orb geometry; центр проходит синтетические +Z 1.05 блока/тик до лимита дальности 28 блоков."
-                sources = listOf("staffChainTechniqueParts")
+                note = "Шаровая молния: полёт по синтетической оси +Z со скоростью 1.05 блока/тик; в t27 предел 28 блоков вызывает полный объёмный разрыв радиусом 4.25. Geometry и burst particles — production helpers; обнаружение врага, стена и урон здесь не симулируются."
+                sources = listOf("staffChainTechniqueParts", "staffChainBurstParts", "staffChainBurstParticles")
                 anchor = "кастерский глаз; +Z — синтетическая ось полёта"
-                frame = { age -> Frame(staffChainTechniqueParts(0f, age / 2), Vector(0.0, 1.0, .75 + min(28.0, age * 1.05))) }
+                frame = { age -> chainFrame(age, detonationTick = 27, travel = 28.0) }
             }
             StaffSpell.MARK -> {
                 note = "Гравитационная привязь: production tether между исходной точкой цели и синтетическим смещением цели на 3 блока. Это не запись движения противника."
@@ -145,10 +146,11 @@ object StaffHotkeyPreviewExport {
                 frame = { age -> Frame(staffIcicleRadialParts(age), Vector(0.0, .04, 0.0)) }
             }
             StaffSpell.GALE -> {
-                note = "Боковой шквал: production geometry проходит поперёк фиксированного коридора +Z по локальной оси +X, вслед за направлением реального бокового толчка в t7. После t10 ветер рассеивается; цели и урон здесь не симулируются."
-                sources = listOf("staffGaleCorridorParts")
-                anchor = "пол у кастера; коридор вдоль +Z"
-                frame = { age -> Frame(staffGaleCorridorParts(age, 6.5, 2.0, 0.0), Vector(0.0, .08, 0.0)) }
+                note = "Око урагана: production funnel и частицы закреплены у точки Q. Рост t0–12, восемь импульсов t12–82 в радиусе 7.5 и высоте 13, рассеивание t92–100; центр остаётся открытым. Одинаковая геометрия на земле и в воздухе; урон, толчки и звук не симулируются."
+                sources = listOf("staffGaleHurricaneParts", "staffGaleHurricaneParticles")
+                anchor = "фиксированная точка ног кастера при Q; земля не требуется"
+                frame = { age -> Frame(staffGaleHurricaneParts(age), emissions =
+                    listOf(ParticleEmission(staffGaleHurricaneParticles(age)))) }
             }
             StaffSpell.TIDE -> {
                 note = "Водяной плен: production capsule geometry вокруг синтетически выбранной цели."
@@ -194,6 +196,23 @@ object StaffHotkeyPreviewExport {
         }
         return clip(spell, "Q", duration, note, sources, anchor, frame,
             particleOnly = false)
+    }
+
+    private fun chainProximityClip() = clip(
+        StaffSpell.CHAIN, "Q", 8 + STAFF_CHAIN_BURST_TICKS,
+        "Синтетическое срабатывание proximity-fuse в t8 без прямого попадания: один полный разрыв и короткое затухание. Runtime использует видимую общую точку тела и останавливает путь у стены; эти проверки не моделируются офлайн.",
+        listOf("staffChainTechniqueParts", "staffChainBurstParts", "staffChainBurstParticles"),
+        "кастерский глаз; синтетическая ближняя детонация на +Z", geometry = { age ->
+            chainFrame(age, detonationTick = 8, travel = 8.4)
+        },
+    ) + mapOf("id" to "chain-q-proximity")
+
+    private fun chainFrame(age: Int, detonationTick: Int, travel: Double): Frame {
+        val at = Vector(0.0, 1.6, .75 + min(travel, age * 1.05))
+        return Frame(if (age < detonationTick) staffChainTechniqueParts(0f, age / 2)
+            else staffChainBurstParts(age - detonationTick), at,
+            emissions = if (age in detonationTick..detonationTick + 1)
+                listOf(ParticleEmission(staffChainBurstParticles(), at)) else emptyList())
     }
 
     private fun mobilityClip(spell: StaffSpell): Map<String, Any> {

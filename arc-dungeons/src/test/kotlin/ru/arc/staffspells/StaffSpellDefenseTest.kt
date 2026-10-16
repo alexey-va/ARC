@@ -20,6 +20,30 @@ import kotlin.math.min
 
 @Suppress("DEPRECATION")
 class StaffSpellDefenseTest : FreeSpec({
+    "airborne NOVA left clicks activate both defenses through the ordinary input route" {
+        for (secondary in listOf(false, true)) withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("staff-air-defense-$secondary")
+            val player = h.player("staff-air-defense-$secondary", world, StaffSpell.NOVA)
+            player.teleport(player.location.add(0.0, 30.0, 0.0))
+            player.allowFlight = true
+            player.isFlying = true
+            player.isSneaking = secondary
+            h.controller.start()
+            val input = org.bukkit.event.player.PlayerInteractEvent(player,
+                org.bukkit.event.block.Action.LEFT_CLICK_AIR, player.inventory.itemInMainHand,
+                null, org.bukkit.block.BlockFace.SELF, org.bukkit.inventory.EquipmentSlot.HAND)
+
+            h.controller.onInteract(input)
+
+            io.mockk.verify(exactly = 1) { h.effects.defend(player, StaffSpell.NOVA, any(), secondary) }
+            input.useItemInHand() shouldBe org.bukkit.event.Event.Result.DENY
+            val attacker = h.zombie(world, .5, 3.0).apply { teleport(location.add(0.0, 30.0, 0.0)) }
+            val incoming = attack(attacker, player)
+            h.controller.defense.onDamage(incoming)
+            incoming.isCancelled shouldBe true
+        }
+    }
+
     "normal LMB guard blocks frontal attacks within its hit budget, leaves the rear open, and keeps its cooldown" {
         withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("staff-defense-arc")

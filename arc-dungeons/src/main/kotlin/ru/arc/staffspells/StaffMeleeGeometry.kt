@@ -24,7 +24,7 @@ private const val FLOOR_Y = -1.15
 private const val MAX_PARTS = 48
 
 /**
- * Four large local frontal attacks. The renderer supplies an eyeY - 0.25 anchor and yaw-only
+ * Three large local frontal attacks. The renderer supplies an eyeY - 0.25 anchor and yaw-only
  * orientation, so positive local Z is forward and these shapes are laid out from that origin.
  */
 internal fun staffMeleeDisplayParts(
@@ -137,7 +137,7 @@ internal fun staffMeleeParticles(
     return samples.filterNotNull()
 }
 
-private val STAFF_MELEE_SPELLS = setOf(StaffSpell.FROST, StaffSpell.FAULT, StaffSpell.LUNAR, StaffSpell.TIDE)
+private val STAFF_MELEE_SPELLS = setOf(StaffSpell.FROST, StaffSpell.FAULT, StaffSpell.LUNAR)
 
 private fun surfaceSample(
     parts: List<StaffDisplayPart>,

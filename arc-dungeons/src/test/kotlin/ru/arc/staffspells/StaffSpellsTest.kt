@@ -617,6 +617,8 @@ class StaffSpellsTest : FreeSpec({
     "all spells cast into empty space and respect the short global cooldown" {
         withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("staff-empty-casts")
+            // Ground spells require support even when the arena contains no targets.
+            for (x in -12..12) for (z in -2..28) world.getBlockAt(x, 63, z).type = Material.STONE
             val player = h.player("staff-empty-casts", world, StaffSpell.CHAIN)
             val spells = StaffSpell.entries.filterNot { it in setOf(StaffSpell.NECROMANCER, StaffSpell.INFERNO, StaffSpell.GRAVITY) }
             h.controller.start()
@@ -1194,6 +1196,8 @@ class StaffSpellsTest : FreeSpec({
 
     "short GCD separates per-spell primary secondary Q and F cooldowns" {
         withStaffHarness { h ->
+            every { h.effects.custom(any(), any(), any(), any(), any()) } returns UUID.randomUUID()
+            every { h.effects.isActive(any()) } returns true
             val world = h.paper.addSimpleWorld("staff-specific-cooldown")
             val player = h.player("staff-specific-cooldown", world, StaffSpell.CHAIN)
             h.controller.start()

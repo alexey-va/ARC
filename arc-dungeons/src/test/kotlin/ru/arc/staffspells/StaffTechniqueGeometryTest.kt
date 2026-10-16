@@ -128,6 +128,61 @@ class StaffTechniqueGeometryTest : FreeSpec({
         (parts.single { it.identity == "ember:q:flame:2" }.center.y > 2f) shouldBe true
         parts.map { it.identity } shouldBe staffEmberTrailParts(points, origin, 2).map { it.identity }
     }
+
+    "CHAIN area fracture covers its radius in volume and keeps one shrinking core through the seam" {
+        val orbCore = staffChainTechniqueParts(0f, 4).single { it.identity == "chain:q:core" }
+        val frames = (0 until STAFF_CHAIN_BURST_TICKS).map(::staffChainBurstParts)
+        frames.forEach { frame ->
+            assertFiniteParts(frame, 25)
+            frame.map { it.identity } shouldBe frames.first().map { it.identity }
+            frame.single { it.identity == orbCore.identity }.center shouldBe orbCore.center
+        }
+        val first = frames.first()
+        val endpoints = first.filter { it.identity?.endsWith(":outer") == true }.map { part ->
+            part.rotation.transform(Vector3f(0f, 0f, part.scale.z * .5f)).add(part.center)
+        }
+        endpoints.all { abs(it.length() - STAFF_CHAIN_DETONATION_RADIUS.toFloat()) < .01f } shouldBe true
+        (endpoints.maxOf { it.y } > 3.5f && endpoints.minOf { it.y } < -3.5f) shouldBe true
+        (frames.last().first().scale.x < first.first().scale.x * .1f) shouldBe true
+        staffChainBurstParts(STAFF_CHAIN_BURST_TICKS) shouldBe emptyList()
+    }
+
+    "GALE ultimate retains its hollow eye and broad footprint through buildup circulation and dissipation" {
+        val frames = (0 until STAFF_GALE_HURRICANE_TICKS).map(::staffGaleHurricaneParts)
+        val identities = frames.first().map { it.identity }
+        frames.forEach { parts ->
+            parts.size shouldBe 48
+            assertFiniteParts(parts, 48)
+            parts.map { it.identity } shouldBe identities
+            parts.forEach { part ->
+                val relativeEye = org.joml.Quaternionf(part.rotation).conjugate()
+                    .transform(Vector3f(0f, 1.6f, 0f).sub(part.center))
+                val nearest = Vector3f(relativeEye.x.coerceIn(-part.scale.x * .5f, part.scale.x * .5f),
+                    relativeEye.y.coerceIn(-part.scale.y * .5f, part.scale.y * .5f),
+                    relativeEye.z.coerceIn(-part.scale.z * .5f, part.scale.z * .5f))
+                (relativeEye.distance(nearest) > 1.25f) shouldBe true
+            }
+        }
+        val active = frames[STAFF_GALE_HURRICANE_BUILD_TICKS]
+        (active.maxOf { it.center.y } > 12.0f) shouldBe true
+        repeat(3) { strand ->
+            val band = (0 until 13).map { index ->
+                active.single { it.identity == "gale:q:hurricane:band:$strand:$index" }
+            }
+            band.zipWithNext().forEach { (a, b) ->
+                val end = a.rotation.transform(Vector3f(0f, 0f, a.scale.z / (2f * 1.16f))).add(a.center)
+                val start = b.rotation.transform(Vector3f(0f, 0f, -b.scale.z / (2f * 1.16f))).add(b.center)
+                (end.distance(start) < .01f) shouldBe true
+            }
+        }
+        active.filter { it.identity?.contains(":ground:") == true }.forEach { part ->
+            (kotlin.math.hypot(part.center.x.toDouble(), part.center.z.toDouble()) in 6.2..6.9) shouldBe true
+            (part.center.y < .6f) shouldBe true
+        }
+        (frames[1].maxOf { it.center.y } < 1f) shouldBe true
+        (frames.last().sumOf { it.scale.length().toDouble() } < active.sumOf { it.scale.length().toDouble() } * .1) shouldBe true
+        staffGaleHurricaneParts(STAFF_GALE_HURRICANE_TICKS) shouldBe emptyList()
+    }
 })
 
 private fun assertFiniteParts(parts: List<StaffDisplayPart>, maximum: Int) {

@@ -28,7 +28,7 @@ internal fun staffMeleeDuration(spell: StaffSpell): Int = when (spell) {
 
 /** Only spells with an authored broad frontal impact replace their ranged primary. */
 internal fun staffMeleeReach(spell: StaffSpell): Double? = when (spell) {
-    StaffSpell.FROST, StaffSpell.FAULT, StaffSpell.LUNAR, StaffSpell.TIDE -> 7.0
+    StaffSpell.FROST, StaffSpell.FAULT, StaffSpell.LUNAR -> 7.0
     else -> null
 }
 

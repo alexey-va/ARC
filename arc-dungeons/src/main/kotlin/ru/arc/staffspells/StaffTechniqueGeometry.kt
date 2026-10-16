@@ -1,12 +1,15 @@
 package ru.arc.staffspells
 
 import org.bukkit.Material
+import org.bukkit.Particle
+import org.bukkit.util.Vector
 import org.joml.Quaternionf
 import org.joml.Vector3f
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 internal const val STAFF_LUNAR_OUTBOUND_TICKS = 10
 internal const val STAFF_LUNAR_TURN_TICKS = 2
@@ -121,6 +124,116 @@ internal fun staffChainTechniqueParts(yaw: Float, pulse: Int): List<StaffDisplay
                     point(index), point(index + 1), .105, .105, rotation, "chain:q:arc:$plane:$index"))
             }
         }
+    }
+}
+
+internal const val STAFF_CHAIN_DETONATION_RADIUS = 4.25
+internal const val STAFF_CHAIN_BURST_TICKS = 10
+
+/** One instantaneous electrical fracture in volume, followed by a short thinning afterimage. */
+internal fun staffChainBurstParts(ageTicks: Int): List<StaffDisplayPart> {
+    if (ageTicks !in 0 until STAFF_CHAIN_BURST_TICKS) return emptyList()
+    val fade = 1f - smoothTechnique(((ageTicks - 1) / 9f).coerceIn(0f, 1f))
+    return buildList(25) {
+        add(StaffDisplayPart(Material.SEA_LANTERN, Vector3f(), Vector3f(.58f * fade), Quaternionf(),
+            identity = "chain:q:core"))
+        repeat(12) { ray ->
+            val direction = chainBurstDirection(ray)
+            val bend = Vector3f(direction).mul((STAFF_CHAIN_DETONATION_RADIUS * .52).toFloat())
+                .add((sin(ray * 2.1) * .22).toFloat(), (cos(ray * 1.7) * .22).toFloat(), 0f)
+            val end = Vector3f(direction).mul(STAFF_CHAIN_DETONATION_RADIUS.toFloat())
+            add(techniqueLink(if (ray % 3 == 0) Material.SEA_LANTERN else Material.LIGHT_BLUE_STAINED_GLASS,
+                Vector3f(direction).mul(.28f), bend, .13 * fade, .13 * fade, Quaternionf(), "chain:q:burst:$ray:inner"))
+            add(techniqueLink(if (ray % 2 == 0) Material.WHITE_STAINED_GLASS else Material.LIGHT_BLUE_STAINED_GLASS,
+                bend, end, .08 * fade, .08 * fade, Quaternionf(), "chain:q:burst:$ray:outer"))
+        }
+    }
+}
+
+internal fun staffChainBurstParticles(): List<StaffParticleSample> = List(24) { index ->
+    val direction = chainBurstDirection(index / 2).mul((STAFF_CHAIN_DETONATION_RADIUS *
+        if (index % 2 == 0) .52 else 1.0).toFloat())
+    StaffParticleSample(Particle.ELECTRIC_SPARK,
+        Vector(direction.x.toDouble(), direction.y.toDouble(), direction.z.toDouble()),
+        count = 2, spread = Vector(.1, .1, .1), speed = .035)
+}
+
+private fun chainBurstDirection(index: Int): Vector3f {
+    val y = 1.0 - 2.0 * (index + .5) / 12.0
+    val radial = sqrt(1.0 - y * y)
+    val angle = index * 2.399963
+    return Vector3f((cos(angle) * radial).toFloat(), y.toFloat(), (sin(angle) * radial).toFloat())
+}
+
+internal const val STAFF_GALE_HURRICANE_RADIUS = 7.5
+internal const val STAFF_GALE_HURRICANE_HEIGHT = 13.0
+internal const val STAFF_GALE_HURRICANE_BUILD_TICKS = 12
+internal const val STAFF_GALE_HURRICANE_ACTIVE_TICKS = 80
+internal const val STAFF_GALE_HURRICANE_TICKS = 100
+internal const val STAFF_GALE_HURRICANE_PULSE_TICKS = 10
+internal const val STAFF_GALE_HURRICANE_MAX_TARGET_HITS = 8
+internal const val STAFF_GALE_HURRICANE_PULSE_SCALE = .25
+
+/** The same three turbulent funnel ribbons, enlarged around a deliberately hollow caster eye. */
+internal fun staffGaleHurricaneParts(ageTicks: Int): List<StaffDisplayPart> {
+    if (ageTicks !in 0 until STAFF_GALE_HURRICANE_TICKS) return emptyList()
+    val grow = smoothTechnique((ageTicks.toFloat() / STAFF_GALE_HURRICANE_BUILD_TICKS).coerceIn(0f, 1f))
+    val fade = smoothTechnique(((STAFF_GALE_HURRICANE_TICKS - ageTicks) / 8f).coerceIn(0f, 1f))
+    val funnel = staffTideGaleParts(StaffSpell.GALE, ageTicks + 12, STAFF_GALE_HURRICANE_TICKS + 14,
+        STAFF_GALE_HURRICANE_RADIUS, impact = false, secondary = false, charge = 1.0)
+    fun expand(point: Vector3f): Vector3f {
+        val radius = kotlin.math.hypot(point.x.toDouble(), point.z.toDouble()).coerceAtLeast(.001)
+        val expanded = (2.75 + radius * 1.05 * grow).coerceAtMost(STAFF_GALE_HURRICANE_RADIUS - .25)
+        return Vector3f((point.x / radius * expanded).toFloat(), (.12 + point.y * 1.48 * grow).toFloat(),
+            (point.z / radius * expanded).toFloat())
+    }
+    return buildList(48) {
+        funnel.forEach { part ->
+            val band = part.identity?.contains(":band:") == true
+            val oldTangent = part.rotation.transform(Vector3f(0f, 0f, 1f))
+            // The shared funnel adds 16% overlap and fade to its link length; recover its authored joints.
+            val halfLength = part.scale.z / (2f * 1.16f * fade)
+            val from = expand(Vector3f(part.center).fma(-halfLength, oldTangent))
+            val to = expand(Vector3f(part.center).fma(halfLength, oldTangent))
+            val tangent = Vector3f(to).sub(from)
+            val length = tangent.length().coerceAtLeast(.001f)
+            add(part.copy(
+                material = when (part.material) {
+                    Material.WHITE_STAINED_GLASS -> Material.LIGHT_GRAY_STAINED_GLASS
+                    Material.LIGHT_GRAY_STAINED_GLASS -> Material.LIGHT_BLUE_STAINED_GLASS
+                    else -> part.material
+                },
+                center = if (band) Vector3f(from).add(to).mul(.5f) else expand(part.center),
+                scale = (if (band) Vector3f(part.scale.x * 1.28f, part.scale.y * 1.48f, length * 1.16f * fade)
+                    else Vector3f(part.scale).mul(1.28f, 1.48f, 1.28f)).mul(.12f + .88f * grow),
+                rotation = if (band) Quaternionf().rotationTo(oldTangent, tangent.mul(1f / length)).mul(part.rotation)
+                    else part.rotation,
+                identity = part.identity?.replace("gale:tornado:", "gale:q:hurricane:"),
+            ))
+        }
+        // Three low sweeping sheets mark the actual wide footprint without filling the player's eye line.
+        repeat(3) { index ->
+            val angle = index * PI * 2 / 3 - ageTicks * .18 + sin(ageTicks * .27 + index) * .12
+            val radius = 6.55 + .25 * sin(ageTicks * .31 + index * 2.0)
+            add(StaffDisplayPart(if (index == 1) Material.GRAY_STAINED_GLASS else Material.LIGHT_BLUE_STAINED_GLASS,
+                Vector3f((cos(angle) * radius).toFloat(), (.35 + .18 * sin(ageTicks * .3 + index)).toFloat(),
+                    (sin(angle) * radius).toFloat()),
+                Vector3f(.48f, .13f, 4.2f).mul((.15f + .85f * grow) * fade),
+                Quaternionf().rotateY((-angle).toFloat()).rotateZ((.12 * sin(ageTicks * .17 + index)).toFloat()),
+                identity = "gale:q:hurricane:ground:$index"))
+        }
+    }
+}
+
+/** Sparse authored accents follow the ribbon silhouette; no lingering smoke or explosion emitters. */
+internal fun staffGaleHurricaneParticles(ageTicks: Int): List<StaffParticleSample> {
+    if (ageTicks !in 0 until STAFF_GALE_HURRICANE_TICKS) return emptyList()
+    val parts = staffGaleHurricaneParts(ageTicks)
+    return parts.filterIndexed { index, _ -> index % 3 == (ageTicks / 2) % 3 }.mapIndexed { index, part ->
+        StaffParticleSample(if (index % 4 == 0) Particle.CRIT else Particle.DUST_COLOR_TRANSITION,
+            Vector(part.center.x.toDouble(), part.center.y.toDouble(), part.center.z.toDouble()), count = 1,
+            spread = Vector(.035, .035, .035), speed = .012,
+            data = if (index % 4 == 0) null else staffFade(0xA5CFD6, 0x475A69, .9f))
     }
 }
 

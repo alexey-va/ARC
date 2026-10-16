@@ -7,8 +7,8 @@ to issue the set after checking inventory space. The items carry ARC prototype
 metadata; they are not FMM or EliteMobs loot, and this catalog adds no shop,
 reward or economy changes.
 
-Four primaries — Frost, Fault, Lunar and Tide — use substantial frontal area
-attacks with a seven-block reach. The other twelve keep their ranged, targeted,
+Three primaries — Frost, Fault and Lunar — use substantial frontal area
+attacks with a seven-block reach. The other thirteen keep their ranged, targeted,
 summoned or charged primary mechanics; Solar is a piercing ranged spear again.
 Secondary attacks retain distinct ranged, targeted or radial roles. Native particles accent stable
 display bodies; the last sent pose collapses before cleanup.
@@ -43,7 +43,11 @@ independent defense capacity bar retains its own lifecycle.
 The server controls the base hologram pose through `hud.position`
 settings: forward, horizontal and vertical displacement and scale. Top/bottom
 uses the same vertical magnitude above/below the sightline. These settings
-are read on module reload.
+are read on module reload. `hud.motion` controls bounded movement prediction,
+extra forward/vertical clearance, and settling. The card follows every tick,
+keeps the player's top/bottom preference during flight, and avoids interpolating
+through the reticle on unsafe turns. Whole-card wall clipping uses the center and
+corners rather than the anchor alone.
 
 Gravity's primary uses held right-click: press to grab, release to throw. Shift + right-click instead creates a caster-centered gravity pulse.
 Inferno is temporarily retired from issuance and casting. Existing EliteMobs
@@ -90,7 +94,7 @@ are denied during duel preparation, countdown, spectator and locked states.
 
 | Staff | Q | F |
 | --- | --- | --- |
-| Chain | Steerable lightning orb; Q again detonates | Spark blink |
+| Chain | Lightning orb detonates near an exposed enemy or at its terminal point; optional Q recast | Spark blink |
 | Mark | Tether punishes leaving its anchor | Rift blink |
 | Frost | Shatter the caster's existing slows | Ground ice slide |
 | Lance | Pin an enemy near the wall behind it | Backward vault |
@@ -99,7 +103,7 @@ are denied during duel preparation, countdown, spectator and locked states.
 | Icicle | Compact 4.5-block radial crystal burst | Ice-step double impulse |
 | Fault | Magic-cover wall; Q shatters it forward | Ground rush |
 | Lunar | Wide outbound and returning crescent | Short phase blink |
-| Gale | Sideways gust corridor | Brief steerable glide |
+| Gale | Fixed five-second hurricane, radius 7.5 / height 13; separate 30-second recovery | Brief steerable glide |
 | Tide | Water capsule breaks on accepted damage | Forward surf |
 | Requiem | Timed bell; Q strikes during its active window | Bell blink |
 | Prism | Triangle damages enemies crossing its edges | Steerable speed burst |
@@ -142,17 +146,17 @@ prove native movement, collisions, sound, damage or client appearance.
 | `frost` · Ледяной хлопок | A broad field of clustered ice teeth rises in front, reaches seven blocks and briefly slows enemies | Полярный круг expands an ice front eight blocks from the caster | Ледяной щит | Круговой покров | `3dfantasyweaponscit:northgate_guardian_staff` |
 | `lance` · Солнечное копьё | A ranged solar spear pierces up to three enemies, applying damage when its light front arrives | Three diverging solar beams | Солнечный щит | Круговой покров | `3dfantasyweaponscit:sagrada_winged_staff` |
 | `ember` · Пепельная комета | Fireball grows below the reticle with four-tick interpolation, then launches immediately with forward speed and accelerates | Three ground circles lock on cast; the first meteor launches after a 15-tick warning | Огненный заслон | Круговой покров | `3dfantasyweaponscit:bermunde_hermit_staff` |
-| `nova` · Терновый хват | Seven thick ground roots fan forward up to 18 blocks and grip each accepted victim | Терновая клетка warns around the aimed 4.5-block area, then closes inward | Терновый заслон | Круговой покров | `3dfantasyweaponscit:holy_celtic_staff` |
+| `nova` · Терновый хват | Seeded winding roots branch over terrain and climb one-block steps up to 18 blocks; airborne casts seed a visible surface | Терновая клетка warns around the aimed 4.5-block area, then closes inward | Терновый заслон | Круговой покров | `3dfantasyweaponscit:holy_celtic_staff` |
 | `icicle` · Ледяной венец | An irregular crown grows from zero to eleven icicles and retains the same bodies on release. The volley focuses one visible enemy; after losing it, airborne and delayed shards seek another near the current reticle, within their remaining travel budget | Five shards fall around the aimed point immediately | Кристальный заслон | Круговой покров | `3dfantasyweaponscit:olwen_staff` |
 | `fault` · Обсидиановый раскол | A broad basalt and obsidian rupture rises in front up to seven blocks and pushes enemies back | Каменный выброс warns, then erupts at the aimed point and lifts enemies | Каменный бастион | Круговой покров | `3dfantasyweaponscit:staff_of_unholy_wisdom` |
 | `lunar` · Лунный серп | One large moon crescent cuts across a seven-block frontal area | Two moon blades converge on the target | Лунный покров | Круговой покров | `3dfantasyweaponscit:black_snake_staff` |
 | `gale` · Посох бури | An open tornado wanders irregularly around the aimed point and lifts enemies along its path | Шквал follows full-pitch aim up to 56 blocks, including upward; contact with an enemy, cover or the endpoint triggers the burst | Ветряной щит | Круговой покров | `3dfantasyweaponscit:goblin_witch_staff` |
-| `tide` · Сердце прилива | A thick curling breaker covers a seven-block frontal area and pushes enemies back | Приливный вал is a broad curled wave with a foamy crest that travels forward | Водяной заслон | Круговой покров | `3dfantasyweaponscit:northgate_guardian_staff` |
+| `tide` · Сердце прилива | A compressed rotating water droplet flies up to 32 blocks along full-pitch aim and bursts on contact, cover or range | Приливный вал is a broad curled wave with a foamy crest that travels forward | Водяной заслон | Круговой покров | `3dfantasyweaponscit:northgate_guardian_staff` |
 | `requiem` · Реквием | A copper-and-gold bell forms above the aimed point, tolls at 0.8 seconds and releases a five-block soul wave | Погребальный перезвон suspends the bell above the caster and releases three seven-block waves, with five-second minimum recovery | Покров душ | Круговой покров | `3dfantasyweaponscit:lich_staff` |
 | `prism` · Кристальная призма | A crystal grows at the aimed point and refracts beams into up to three enemies | Three rays converge on the selected point | Гранёный щит | Круговой покров | `3dfantasyweaponscit:northgate_golden_crook` |
 | `necromancer` · Зов могилы | Adds two skeleton archers for 45 seconds; up to ten minions can coexist | Костяной жнец summons one larger wither-skeleton commander | Костяной заслон | Круговой покров | `3dfantasyweaponscit:lich_staff` |
 | `gravity` · Гравитационный захват | Grab a surface within 32 blocks, hold the same boulder, and release into a fast accelerating throw up to 32 blocks | Гравитационный обвал lifts visible enemies within 6.5 blocks, then slams those that actually rose; contact damage occurs once on landing | Каменный заслон | Круговой покров | `3dfantasyweaponscit:staff_of_unholy_wisdom` |
-| `ossuary` · Костяной прокол | Dense bone-spike clusters erupt in sequence along a fixed 24-block forward path, blocked by walls | Костяной прорыв warns at the aimed point, then irregular branching bone clusters erupt across a 5.5–6 block radius | Щит рёбер | Круговой покров | `3dfantasyweaponscit:lich_staff` |
+| `ossuary` · Костяной прокол | Individually seeded curved bone clusters erupt along a fixed 24-block forward path, blocked by walls | Костяной прорыв warns at the aimed point, then irregular branching bone clusters erupt across a 5.5–6 block radius | Щит рёбер | Круговой покров | `3dfantasyweaponscit:lich_staff` |
 
 Each sample uses its configured ItemsAdder skin; issuance fails with a player
 message and a server warning if that configured skin is unavailable. Duel
@@ -191,11 +195,18 @@ launches retain their individual sampled aim. A blocked launch step may turn up
 to 45 degrees onto an already clear straight line to the aim point; it cannot
 cross a wall or shield. Each enemy still receives at most one damage hit per volley.
 
+Roots and bones generate their shape once per cast and per branch or cluster.
+Curvature, segment lengths and side branches vary independently; animation retains
+the sampled topology and stable part IDs. Ground roots can climb connected one-block
+steps, while full walls and unsupported gaps still stop them. Their airborne casts
+search up to 64 blocks down on loaded, reachable surfaces. A rejected Arsenal cast
+spends neither its ability cooldown nor the global cooldown.
+
 Frontal primaries contact once after six ticks, matching the interpolated full-size
 pose. They select up to three eligible targets at contact within seven blocks,
 a 110-degree front sector and 2.5 blocks vertically. Cover is rechecked from
 both the cast origin and current player eye. Frost slows for 16 ticks; Fault
-and Tide push only after accepted damage. Cancelled or stale casts cannot hit.
+pushes only after accepted damage. Cancelled or stale casts cannot hit.
 
 Damage attempts recheck their captured combat context and target eligibility;
 the damage path requires a visible target when the hit is applied. Moving
@@ -229,9 +240,9 @@ within safe reachable ground instead of pathfinding around obstacles. Pickup,
 persistence and drops are disabled; each squad expires after 45 seconds. New squads preserve earlier summons;
 up to ten actors may coexist per caster, within a shared global budget of 32 actors. A full
 roster rejects the cast without consuming cooldown. Summoning while flying
-searches up to64loaded blocks downward for a safe support/body footprint;
+searches up to 64 loaded blocks downward for a safe support/body footprint;
 void or unloaded columns reject safely. The Necromancer HUD shows the live army
-count out of10 in both hologram and bossbar modes. Archers fire visible, bounded native arrow actors with scripted swept collision;
+count out of 10 in both hologram and bossbar modes. Archers fire visible, bounded native arrow actors with scripted swept collision;
 these carry no independent native damage or pickup. They hit only on contact,
 stop at solid cover, and disappear with the summon session. Each archer has four HP. Opponents can
 destroy archers, while bystanders and teammates cannot interfere. Actors recover for three seconds between attacks and have a half-second windup.

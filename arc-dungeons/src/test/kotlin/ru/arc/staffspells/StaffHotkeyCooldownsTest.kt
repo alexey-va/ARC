@@ -37,6 +37,7 @@ class StaffHotkeyCooldownsTest : FreeSpec({
         staffHotkeyDescriptions.keys shouldBe StaffSpell.available.toSet()
         staffHotkeyDescriptions.values.map { it.qName }.distinct().size shouldBe 16
         staffHotkeyDescriptions.values.map { it.fName }.distinct().size shouldBe 16
-        staffHotkeyDescriptions.values.all { it.qCooldown in 40..240 && it.fCooldown in 80..120 } shouldBe true
+        staffHotkeyDescriptions.values.all { it.qCooldown in 40..600 && it.fCooldown in 80..120 } shouldBe true
+        StaffSpellConfig(StaffTestConfig()).hotkeyCooldown(StaffSpell.GALE, StaffHotkey.Q) shouldBe 600
     }
 })

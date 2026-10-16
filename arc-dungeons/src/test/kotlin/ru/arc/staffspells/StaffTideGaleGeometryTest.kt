@@ -120,35 +120,36 @@ class StaffTideGaleGeometryTest : FreeSpec({
         motes.none { it.particle == Particle.CLOUD } shouldBe true
     }
 
-    "GALE ram impact fans twelve arcing sheets outward without smoke" {
-        val charge = .4
-        val burstRadius = 2.3 + charge * .45
-        val frame = staffTideGaleParts(StaffSpell.GALE, 3, 12, burstRadius,
-            impact = true, secondary = true, charge = charge)
-        frame.size shouldBe 36
-        frame.count { it.identity?.startsWith("gale:burst:petal:") == true } shouldBe 36
-        (frame.maxOf { it.center.y } > .8f) shouldBe true
-        frame.mapNotNull { it.identity }.distinct().size shouldBe frame.size
-        val edge = frame.maxOf { kotlin.math.sqrt((it.center.x * it.center.x + it.center.z * it.center.z).toDouble()) }
-        // Arc centers sit inside the outer ring because each display is a chord, not a point on the edge.
-        (edge in (burstRadius * .80)..(burstRadius + .03)) shouldBe true
-
-        val release = staffTideGaleParticleSamples(StaffSpell.GALE, 0, 12, burstRadius,
-            secondary = true, charge = charge, impact = true)
-        release.count { it.particle == Particle.GUST } shouldBe 1
-        release.size shouldBe 37
-        release.none { it.particle in setOf(Particle.CLOUD, Particle.EXPLOSION, Particle.EXPLOSION_EMITTER) } shouldBe true
-        staffTideGaleParticleSamples(StaffSpell.GALE, 12, 12, burstRadius,
-            secondary = true, charge = charge, impact = true) shouldBe emptyList()
+    "GALE ram release expands as tangential spherical fragments in all directions" {
+        val radius = 2.48
+        val compressed = staffTideGaleParts(StaffSpell.GALE, 0, 12, radius, true, true, .4)
+        val expanded = staffTideGaleParts(StaffSpell.GALE, 3, 12, radius, true, true, .4)
+        expanded.size shouldBe 36
+        expanded.all { it.identity!!.startsWith("gale:burst:shell:") } shouldBe true
+        (expanded.maxOf { it.center.y } > 2f && expanded.minOf { it.center.y } < -2f) shouldBe true
+        (expanded.maxOf { it.center.x } > 2f && expanded.minOf { it.center.x } < -2f) shouldBe true
+        (expanded.maxOf { it.center.z } > 2f && expanded.minOf { it.center.z } < -2f) shouldBe true
+        expanded.all { kotlin.math.abs(it.center.length() - radius) < .001 } shouldBe true
+        compressed.all { it.center.length() < .23f } shouldBe true
+        expanded.all { part ->
+            val normal = part.rotation.transform(org.joml.Vector3f(0f, 0f, 1f))
+            normal.dot(org.joml.Vector3f(part.center).normalize()) > .99f && part.scale.z < part.scale.x * .15f
+        } shouldBe true
+        val samples = staffTideGaleParticleSamples(StaffSpell.GALE, 3, 12, radius, true, .4, true)
+        samples.zip(expanded).all { (sample, part) ->
+            sample.offset.distance(org.bukkit.util.Vector(part.center.x, part.center.y, part.center.z)) < .001
+        } shouldBe true
+        staffTideGaleParticleSamples(StaffSpell.GALE, 0, 12, radius, true, .4, true)
+            .count { it.particle == Particle.GUST } shouldBe 1
     }
 
-    "TIDE primary reaches its clipped endpoint by tick 14 then opens into a hollow splash crown" {
+    "TIDE primary rotates a trailing water mass then opens a directional splash cup" {
         STAFF_TIDE_PRIMARY_LAUNCH_TICK shouldBe 2
-        STAFF_TIDE_PRIMARY_TRAVEL_TICKS shouldBe 12
-        STAFF_TIDE_PRIMARY_ARRIVAL_TICK shouldBe 14
+        STAFF_TIDE_PRIMARY_TRAVEL_TICKS shouldBe 16
+        STAFF_TIDE_PRIMARY_ARRIVAL_TICK shouldBe 18
         STAFF_TIDE_PRIMARY_IMPACT_TICKS shouldBe 12
-        STAFF_TIDE_PRIMARY_ATTACK_TICKS shouldBe 26
-        staffArsenalLifetime(StaffSpell.TIDE, secondary = false) shouldBe 26
+        STAFF_TIDE_PRIMARY_ATTACK_TICKS shouldBe 30
+        staffArsenalLifetime(StaffSpell.TIDE, secondary = false) shouldBe 30
         staffArsenalLifetime(StaffSpell.TIDE, secondary = true) shouldBe 44
 
         val flight = staffDisplayParts(StaffSpell.TIDE, 12, STAFF_TIDE_PRIMARY_ATTACK_TICKS, 12.0, 2.7, false, false,
@@ -157,14 +158,14 @@ class StaffTideGaleGeometryTest : FreeSpec({
             input = StaffCastInput.PRIMARY, charge = .5)
         val crown = staffDisplayParts(StaffSpell.TIDE, 6, STAFF_TIDE_PRIMARY_IMPACT_TICKS, 12.0, 2.3, true, false,
             input = StaffCastInput.PRIMARY, charge = .5)
-        flight.size shouldBe 34
+        flight.size shouldBe 36
         arrival.size shouldBe 32
         crown.size shouldBe 32
-        flight.count { it.identity?.contains(":panel:") == true } shouldBe 32
-        flight.count { it.identity?.contains(":pole:") == true } shouldBe 2
-        flight.filter { it.identity?.contains(":panel:") == true }.all {
-            it.scale.x > it.scale.z * 1.8f && it.scale.y > it.scale.z * 3.0f
-        } shouldBe true
+        flight.count { it.identity!!.startsWith("tide:jet:ribbon:") } shouldBe 30
+        flight.count { it.identity!!.startsWith("tide:jet:foam:") } shouldBe 6
+        (flight.minOf { it.center.z } < -2f) shouldBe true
+        val later = staffTideGaleParts(StaffSpell.TIDE, 14, STAFF_TIDE_PRIMARY_ATTACK_TICKS, 2.7, false, false, .5)
+        flight.zip(later).any { (a, b) -> a.center.distance(b.center) > .2f } shouldBe true
         arrival.mapNotNull { it.identity }.all { it.startsWith("tide:burst:") } shouldBe true
         crown.mapNotNull { it.identity }.distinct().size shouldBe crown.size
         crown.count { it.identity?.startsWith("tide:burst:crown:") == true } shouldBe 24
@@ -173,10 +174,10 @@ class StaffTideGaleGeometryTest : FreeSpec({
         crown.any { it.material == Material.CYAN_STAINED_GLASS } shouldBe true
         crown.none { it.identity?.startsWith("tide:prison:") == true } shouldBe true
         flight.all { it.material in setOf(Material.LIGHT_BLUE_STAINED_GLASS, Material.CYAN_STAINED_GLASS,
-            Material.BLUE_STAINED_GLASS) } shouldBe true
-        (crown.maxOf { it.center.x * it.center.x + it.center.z * it.center.z } > 2.5f) shouldBe true
-        (crown.maxOf { it.center.y } > 1.2f) shouldBe true
-        (arrival.maxOf { it.center.y } < crown.maxOf { it.center.y }) shouldBe true
+            Material.BLUE_STAINED_GLASS, Material.WHITE_STAINED_GLASS) } shouldBe true
+        (crown.maxOf { it.center.x * it.center.x + it.center.y * it.center.y } > 2.5f) shouldBe true
+        (crown.maxOf { it.center.z } > 1.2f) shouldBe true
+        (arrival.maxOf { it.center.z } < crown.maxOf { it.center.z }) shouldBe true
 
         val particles = staffArsenalParticles(StaffSpell.TIDE, 0, STAFF_TIDE_PRIMARY_IMPACT_TICKS, 2.3, false, .5,
             impact = true)
@@ -230,13 +231,13 @@ class StaffTideGaleGeometryTest : FreeSpec({
                 STAFF_TIDE_PRIMARY_ATTACK_TICKS, 1.0, false, charge)
             val arrived = staffTideGaleParticleSamples(StaffSpell.TIDE, 6,
                 STAFF_TIDE_PRIMARY_IMPACT_TICKS, 2.3, false, charge, impact = true)
-            flying.size shouldBe 32
+            flying.size shouldBe 38
             arrived.size shouldBe 32
             flying.all { it.particle in setOf(Particle.BUBBLE, Particle.DUST_COLOR_TRANSITION, Particle.SPLASH) } shouldBe true
             flying.any { it.particle == Particle.DUST_COLOR_TRANSITION } shouldBe true
             flying.any { it.particle == Particle.BUBBLE } shouldBe true
             arrived.all { it.particle in setOf(Particle.SPLASH, Particle.FALLING_WATER) } shouldBe true
-            (arrived.maxOf { it.offset.length() } > flying.maxOf { it.offset.length() } * 1.4) shouldBe true
+            (arrived.maxOf { kotlin.math.abs(it.offset.y) } > flying.maxOf { kotlin.math.abs(it.offset.y) } * 1.5) shouldBe true
         }
     }
 
