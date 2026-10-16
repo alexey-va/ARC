@@ -212,7 +212,7 @@ internal class StaffSpellChannels(
         val origin = player.location.clone()
         val targets = targeting.nearby(player, origin, GRAVITY_PULSE_RADIUS, cast)
             .filter { center(it).distanceSquared(origin) <= GRAVITY_PULSE_RADIUS * GRAVITY_PULSE_RADIUS }
-            .filter { visible(player.eyeLocation, center(it)) }
+            .filter { visible(player.eyeLocation, it) }
             .sortedBy { center(it).distanceSquared(origin) }
             .take(settings.maxAreaTargets.coerceIn(1, MAX_PULSE_TARGETS))
             .map { PulseTarget(it, it.location.y) }
@@ -319,7 +319,7 @@ internal class StaffSpellChannels(
         if (muzzle.distanceSquared(end) < 0.01) return
         val victim = targeting.lineTargets(player, muzzle, end, INFERNO_SWEEP_WIDTH, channel.cast).firstOrNull()
             ?: return
-        if (!current(player, channel.cast, channel.worldId) || !visible(eye, center(victim))) return
+        if (!current(player, channel.cast, channel.worldId) || !visible(eye, victim)) return
         damage.hit(player, victim, channel.cast,
             channel.tuning.power * fraction, channel.tuning.vanillaDamage * fraction)
     }
@@ -480,7 +480,7 @@ internal class StaffSpellChannels(
                         (GRAVITY_PULSE_RADIUS + 0.35) * (GRAVITY_PULSE_RADIUS + 0.35)
                     if (withinRadius && current(player, pulse.cast, pulse.worldId) &&
                         damage.eligible(player, target, pulse.cast) &&
-                        visible(player.eyeLocation, center(target)) && visible(contact, center(target))) {
+                        visible(player.eyeLocation, target) && visible(contact, target)) {
                         val hit = damage.hit(player, target, pulse.cast,
                             pulse.tuning.power, pulse.tuning.vanillaDamage)
                         target.fallDistance = 0f
@@ -526,13 +526,13 @@ internal class StaffSpellChannels(
         }
         val targets = targeting.nearby(player, at, radius, flight.cast)
             .filter { center(it).distanceSquared(at) <= radius * radius }
-            .filter { visible(at, center(it)) && visible(player.eyeLocation, center(it)) }
+            .filter { visible(at, it) && visible(player.eyeLocation, it) }
             .sortedBy { center(it).distanceSquared(at) }
             .take(settings.maxAreaTargets.coerceIn(1, 16))
         for (target in targets) {
             if (flight.cancelled || !current(player, flight.cast, flight.worldId) ||
-                !damage.eligible(player, target, flight.cast) || !visible(at, center(target)) ||
-                !visible(player.eyeLocation, center(target))) break
+                !damage.eligible(player, target, flight.cast) || !visible(at, target) ||
+                !visible(player.eyeLocation, target)) break
             damage.hit(player, target, flight.cast, flight.tuning.power, flight.tuning.vanillaDamage)
         }
         flights.remove(flight)

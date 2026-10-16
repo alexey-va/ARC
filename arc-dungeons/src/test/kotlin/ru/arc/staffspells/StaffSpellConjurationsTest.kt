@@ -12,6 +12,32 @@ import org.bukkit.util.Vector
 import java.util.UUID
 
 class StaffSpellConjurationsTest : FreeSpec({
+    "MARK anchors to an exposed head and expires only when the whole body is covered" {
+        withStaffHarness { h ->
+            val scenes = mutableListOf<CustomConjurationScene>()
+            val removed = mutableListOf<UUID?>()
+            recordConjurationScenes(h, scenes, removed)
+            val world = h.paper.addSimpleWorld("staff-mark-partial-cover")
+            val player = h.player("staff-mark-partial-cover", world, StaffSpell.MARK)
+            val target = h.zombie(world, .5, 8.5)
+            target.teleport(Location(world, .5, 63.6, 8.5))
+            world.getBlockAt(0, 64, 6).type = Material.STONE
+            visible(player.eyeLocation, center(target)) shouldBe false
+            visible(player.eyeLocation, target) shouldBe true
+
+            h.controller.conjurations.cast(player, StaffSpell.MARK, conjurationCast(player),
+                staffSettings().tuning.getValue(StaffSpell.MARK)) shouldBe true
+            h.scheduler.tick(4)
+            (scenes.single().id in removed) shouldBe false
+            h.hits shouldBe emptyList()
+
+            world.getBlockAt(0, 65, 6).type = Material.STONE
+            h.scheduler.tick(2)
+            (scenes.single().id in removed) shouldBe true
+            h.hits shouldBe emptyList()
+        }
+    }
+
     "empty MARK FROST and TIDE Q casts keep a visible bounded scene without damage or roots" {
         for (spell in listOf(StaffSpell.MARK, StaffSpell.FROST, StaffSpell.TIDE)) withStaffHarness { h ->
             val scenes = mutableListOf<CustomConjurationScene>()
@@ -127,7 +153,8 @@ class StaffSpellConjurationsTest : FreeSpec({
             h.controller.conjurations.cast(coveredPlayer, StaffSpell.MARK, coveredCast, tuning) shouldBe true
             h.scheduler.tick(30)
             coveredTarget.teleport(Location(world, 0.5, 64.0, 8.5))
-            world.getBlockAt(0, 65, 6).type = Material.STONE
+            for (y in 64..66) world.getBlockAt(0, y, 6).type = Material.STONE
+            visible(coveredPlayer.eyeLocation, coveredTarget) shouldBe false
             h.scheduler.tick(1)
             h.hits.any { it.uniqueId == coveredTarget.uniqueId } shouldBe false
             (scenes.first().id in removed) shouldBe true

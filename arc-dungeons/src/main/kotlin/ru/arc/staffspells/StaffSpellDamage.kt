@@ -87,7 +87,7 @@ internal class StaffSpellDamage(private val duelAccess: StaffSpellDuelAccess? = 
         if (cast.casterId != player.uniqueId || !isCurrent(player, cast)) return false
         if (!power.isFinite() || power <= 0.0 || !vanillaDamage.isFinite() || vanillaDamage <= 0.0) return false
         // Last mutation boundary: a target moving behind cover before contact must be safe for every spell owner.
-        if (player.world != target.world || !visible(player.eyeLocation, center(target))) return false
+        if (player.world != target.world || !visible(player.eyeLocation, target)) return false
         val authorization = cast.duelAuthorization
         if (authorization != null) {
             if (cast.eliteMobsEnabled ||

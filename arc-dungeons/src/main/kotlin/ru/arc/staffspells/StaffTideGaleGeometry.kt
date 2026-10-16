@@ -28,6 +28,18 @@ internal fun staffTideWaveHalfWidth(charge: Double): Double {
     return STAFF_TIDE_SECONDARY_BASE_HALF_WIDTH + q * STAFF_TIDE_SECONDARY_CHARGE_HALF_WIDTH
 }
 
+/** Continuous irregular circulation; the per-frame cap also prevents a jump after wall clipping. */
+internal fun staffGaleWanderStep(previous: Vector3f, age: Int, charge: Double): Vector3f {
+    val q = charge.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
+    val grow = smoothTideGale(age / 8.0)
+    val angle = age * .17 + sin(age * .23) * .32
+    val radius = (1.80 + .55 * sin(age * .27) + .24 * sin(age * .59)) * grow * (1.0 + q * .1)
+    val requested = Vector3f((cos(angle) * radius).toFloat(), 0f, (sin(angle) * radius * .88).toFloat())
+    val delta = Vector3f(requested).sub(previous)
+    if (delta.length() > 1.05f) delta.normalize().mul(1.05f)
+    return Vector3f(previous).add(delta)
+}
+
 /** Local surfaces shared by the solid ribbons and their native-particle accents. */
 private fun galeFunnelPoint(t: Double, strand: Int, age: Double, q: Double, grow: Double): Vector3f {
     val scale = .8 + q * .45
@@ -40,7 +52,8 @@ private fun galeFunnelPoint(t: Double, strand: Int, age: Double, q: Double, grow
     val taper = (.34 + 3.25 * t.pow(.82) + q * .06) * grow * gust
     val height = t * (8.2 + q * .45) / scale * grow +
         sin(age * .15 + t * 14.0 + strand * 1.7) * .07 * grow
-    return Vector3f((cos(angle) * taper).toFloat(), height.toFloat(), (sin(angle) * taper).toFloat())
+    return Vector3f((cos(angle) * taper + sin(age * .14) * .65 * t * t * grow).toFloat(), height.toFloat(),
+        (sin(angle) * taper + cos(age * .19) * .45 * t * t * grow).toFloat())
 }
 
 private fun tideWavePoint(across: Double, t: Double, q: Double, grow: Double, fold: Double = 0.0): Vector3f {

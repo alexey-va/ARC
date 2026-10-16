@@ -3,6 +3,7 @@ package ru.arc.staffspells
 import org.bukkit.FluidCollisionMode
 import org.bukkit.Location
 import org.bukkit.World
+import org.bukkit.block.data.type.Leaves
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Player
 import org.bukkit.util.RayTraceResult
@@ -15,7 +16,7 @@ internal data class StaffBlockRayResult(val pathLoaded: Boolean, val hit: RayTra
 
 /** A native block ray guarded against invalid inputs and unloaded chunks; never requests a chunk. */
 internal fun staffBlockHit(from: Location, direction: Vector, range: Double,
-    includeMagicBarriers: Boolean = true): StaffBlockRayResult {
+    includeMagicBarriers: Boolean = true, ignoreVegetation: Boolean = false): StaffBlockRayResult {
     val world = from.world ?: return StaffBlockRayResult(pathLoaded = false, hit = null)
     if (!from.x.isFinite() || !from.y.isFinite() || !from.z.isFinite() ||
         abs(from.x) > MAX_COORDINATE || abs(from.z) > MAX_COORDINATE ||
@@ -31,7 +32,11 @@ internal fun staffBlockHit(from: Location, direction: Vector, range: Double,
     if (!staffRayPathLoaded(world, from.x, from.z, unitDirection.x, unitDirection.z, range)) {
         return StaffBlockRayResult(pathLoaded = false, hit = null)
     }
-    val hit = world.rayTraceBlocks(from, unitDirection, range, FluidCollisionMode.NEVER, false)
+    // Attack rays ignore soft decoration, but retain Paper's exact solid-block shapes.
+    // Floor placement, HUD and player movement keep the physical ray by default.
+    val hit = if (ignoreVegetation) world.rayTraceBlocks(from, unitDirection, range,
+        FluidCollisionMode.NEVER, true) { block -> block.blockData !is Leaves }
+    else world.rayTraceBlocks(from, unitDirection, range, FluidCollisionMode.NEVER, false)
     val barrier = if (includeMagicBarriers) StaffMagicBarriers.firstHit(from, unitDirection, range) else null
     val nearest = if (barrier != null && (hit == null ||
         barrier.hitPosition.distanceSquared(from.toVector()) < hit.hitPosition.distanceSquared(from.toVector()))) barrier else hit
@@ -87,6 +92,40 @@ private const val MIN_RAY_DIRECTION = 1.0e-9
 private const val MAX_STAFF_BLOCK_RAY = 64.0
 private const val MAX_COORDINATE = (Int.MAX_VALUE - 8).toDouble() * 16.0
 
+internal fun visible(from: Location, to: Location): Boolean {
+    if (from.world != to.world) return false
+    val offset = to.toVector().subtract(from.toVector())
+    val distance = offset.length()
+    if (distance < 0.01) return true
+    val trace = staffBlockHit(from, offset.multiply(1.0 / distance), distance, ignoreVegetation = true)
+    return trace.pathLoaded && trace.hit == null
+}
+
+/** An exposed head/shoulder counts, but a fully covered body never does. */
+internal fun visible(from: Location, target: LivingEntity): Boolean =
+    staffVisibleTargetPoint(from, target) != null
+
+/** One real point of the body must be reachable from both the projectile and its observer. */
+internal fun staffVisibleTargetPoint(from: Location, target: LivingEntity, observer: Location? = null): Location? {
+    val middle = center(target)
+    if (from.world != middle.world || observer != null && observer.world != middle.world) return null
+    fun clear(at: Location) = visible(from, at) && (observer == null || visible(observer, at))
+    if (clear(middle)) return middle
+    val box = target.boundingBox
+    val x = (box.minX + box.maxX) * .5
+    val z = (box.minZ + box.maxZ) * .5
+    val shoulderY = box.minY + box.height * .65
+    // Bounded samples stay inside the hitbox; this is not an enlarged collision volume.
+    return sequenceOf(
+        Location(middle.world, x, box.minY + box.height * .88, z),
+        Location(middle.world, x - box.widthX * .4, shoulderY, z),
+        Location(middle.world, x + box.widthX * .4, shoulderY, z),
+        Location(middle.world, x, shoulderY, z - box.widthZ * .4),
+        Location(middle.world, x, shoulderY, z + box.widthZ * .4),
+        Location(middle.world, x, box.minY + box.height * .22, z),
+    ).firstOrNull(::clear)
+}
+
 /** Shared, bounded staff targeting; eligibility remains owned by the damage bridge. */
 internal class StaffSpellTargeting(private val settings: StaffSpellSettings, private val damage: StaffSpellDamage) {
     /** A launch nudge only: keeps exact hits, never locks or changes collision/damage eligibility. */
@@ -114,8 +153,8 @@ internal class StaffSpellTargeting(private val settings: StaffSpellSettings, pri
         // Do not pull an already accurate ray off a nearer, directly aimed target.
         val endpoint = rayEnd(eye, look, range)
         if (lineTargets(player, eye, endpoint, .05, cast).isNotEmpty()) return look
-        val target = candidates.firstOrNull { visible(eye, it.third) && visible(from, it.third) } ?: return look
-        val offset = target.third.toVector().subtract(eye.toVector())
+        val targetPoint = candidates.firstNotNullOfOrNull { staffVisibleTargetPoint(from, it.first, eye) } ?: return look
+        val offset = targetPoint.toVector().subtract(eye.toVector())
         if (horizontal) offset.y = 0.0
         return staffNudgeDirection(look, offset, assist.strength)
     }
@@ -136,7 +175,7 @@ internal class StaffSpellTargeting(private val settings: StaffSpellSettings, pri
             .mapNotNull { entity ->
                 entity.boundingBox.expand(hitWidth).rayTrace(from.toVector(), direction, length)
                     ?.let { entity to it.hitPosition.distanceSquared(from.toVector()) }
-            }.sortedBy { it.second }.map { it.first }.filter { visible(from, center(it)) }
+            }.sortedBy { it.second }.map { it.first }.filter { visible(from, it) }
     }
 
     fun aimPoint(player: Player) = rayEnd(player.eyeLocation, player.eyeLocation.direction, settings.range)
@@ -149,7 +188,7 @@ internal class StaffSpellTargeting(private val settings: StaffSpellSettings, pri
     }
 
     fun rayEnd(from: Location, direction: Vector, range: Double): Location {
-        val ray = staffBlockHit(from, direction, range)
+        val ray = staffBlockHit(from, direction, range, ignoreVegetation = true)
         if (!ray.pathLoaded) return from.clone()
         val unitDirection = direction.clone().normalize()
         // Keep bursts just outside the collision shape, so line-of-sight starts in air.
@@ -168,7 +207,7 @@ internal class StaffSpellTargeting(private val settings: StaffSpellSettings, pri
                 ?.let { Triple(target, it, offset.lengthSquared()) }
         }.sortedWith(compareByDescending<Triple<LivingEntity, Double, Double>> { it.second }.thenBy { it.third })
             .take(32) // Bound expensive line-of-sight checks in dense mob farms.
-            .filter { visible(eye, center(it.first)) }.map { it.first }
+            .filter { visible(eye, it.first) }.map { it.first }
     }
 
     fun nearby(player: Player, origin: Location, radius: Double, cast: StaffSpellCast? = null): List<LivingEntity> {

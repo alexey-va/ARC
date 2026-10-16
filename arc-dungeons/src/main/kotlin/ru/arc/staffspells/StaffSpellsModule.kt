@@ -1,7 +1,6 @@
 package ru.arc.staffspells
 
 import org.bukkit.Bukkit
-import org.bukkit.FluidCollisionMode
 import org.bukkit.GameMode
 import org.bukkit.Location
 import org.bukkit.Particle
@@ -507,7 +506,7 @@ internal class StaffSpellController(
         when (spell) {
             StaffSpell.CHAIN -> chainStormNova(player, cast, tuning)
             StaffSpell.MARK -> {
-                val at = target(player, cast)?.let(::center) ?: aimPoint(player)
+                val at = target(player, cast)?.let { staffVisibleTargetPoint(player.eyeLocation, it) } ?: aimPoint(player)
                 effects.remove(marks.remove(player.uniqueId)?.visualId)
                 val visualId = effects.play(player.uniqueId, spell, at, radius = 4.5,
                     durationTicks = 40, secondary = true, charge = cast.visualCharge)
@@ -569,7 +568,7 @@ internal class StaffSpellController(
                 lineTargets(player, from, to, lance.width, lance.cast).forEach { victim ->
                     if (lance !in lances || !ready(player) || player.world != lance.from.world || !damage.isCurrent(player, lance.cast)) return@forEach
                     if (lance.visited.size < settings.lanceTargets && lance.visited.add(victim.uniqueId) &&
-                        visible(player.eyeLocation, center(victim)))
+                        visible(player.eyeLocation, victim))
                         damage.hit(player, victim, lance.cast, lance.tuning.power, lance.tuning.vanillaDamage)
                 }
             }
@@ -687,6 +686,7 @@ internal class StaffSpellController(
             org.joml.Vector3f(direction.x.toFloat(), direction.y.toFloat(), direction.z.toFloat()))
         // Depart away from the camera in the same frame as the visible charged crown.
         val visited = mutableSetOf<UUID>()
+        val volley = PendingIcicleVolley()
 
         repeat(count) { index ->
             val heldId = chargedScenes.getOrNull(index)
@@ -705,14 +705,14 @@ internal class StaffSpellController(
             }
             bolts += PendingStaffBolt(anchor, direction.clone(), null, cast, tuning, 1.0, 1,
                 visited, settings.range, visualId, spell = StaffSpell.ICICLE,
-                aimOnLaunch = true,
+                volley = volley,
                 launchDelayTicks = staffIcicleLaunchDelay(index), holdForwardTicks = 4)
         }
         chargedScenes.drop(count).forEach(effects::remove)
     }
 
     private fun hail(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning, count: Int = 5) {
-        val selected = target(player, cast)?.let(::center) ?: aimPoint(player)
+        val selected = target(player, cast)?.let { staffVisibleTargetPoint(player.eyeLocation, it) } ?: aimPoint(player)
         val center = groundBelow(selected.clone().add(0.0, 0.2, 0.0), 16.0) ?: selected
         val visited = mutableSetOf<UUID>()
         repeat(count) { index ->
@@ -736,7 +736,7 @@ internal class StaffSpellController(
     private fun fault(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning, secondary: Boolean) {
         val worldId = player.world.uid
         val points = if (secondary) {
-            val selected = target(player, cast)?.let(::center) ?: aimPoint(player)
+            val selected = target(player, cast)?.let { staffVisibleTargetPoint(player.eyeLocation, it) } ?: aimPoint(player)
             listOfNotNull(groundBelow(selected.clone().add(0.0, 0.2, 0.0), 16.0))
         } else {
             val yaw = Math.toRadians(player.location.yaw.toDouble())
@@ -805,10 +805,12 @@ internal class StaffSpellController(
     }
 
     private fun tickBolts() {
+        val advancedVolleys = mutableSetOf<PendingIcicleVolley>()
         bolts.toList().forEach { bolt ->
             if (bolt !in bolts) return@forEach
             val player = Bukkit.getPlayer(bolt.cast.casterId)
             if (player == null || !ready(player) || player.world != bolt.position.world ||
+                !bolt.position.world.isChunkLoaded(bolt.position.blockX shr 4, bolt.position.blockZ shr 4) ||
                 !damage.isCurrent(player, bolt.cast) ||
                 (bolt.spell != StaffSpell.ICICLE && bolt.target?.let { !damage.eligible(player, it, bolt.cast) } == true)) {
                 bolts.remove(bolt); effects.remove(bolt.visualId); return@forEach
@@ -818,37 +820,37 @@ internal class StaffSpellController(
                 if (bolt.launchDelayTicks > 0) return@forEach
             }
             val from = bolt.position
-            if (bolt.age == 0 && bolt.aimOnLaunch) {
-                // Each shot follows the current reticle, including turns made during the volley.
-                // Already airborne shots retain their own destination; the whole crown never snaps sideways.
+            val volley = bolt.volley
+            if (volley != null && advancedVolleys.add(volley))
+                volley.searchCooldown = (volley.searchCooldown - 1).coerceAtLeast(0)
+            if (bolt.age == 0 && volley != null) {
+                // Empty-space shots keep their launch aim; a real target belongs to the whole volley.
                 val eye = player.eyeLocation
-                val aimedPoint = aimPoint(player)
-                // Direct reticle hits retain the crown's inherent tracking. A near miss gets
-                // only a fractional, launch-time correction, never a perfect target lock.
-                bolt.target = lineTargets(player, eye, aimedPoint, .25, bolt.cast).firstOrNull {
-                    visible(from, center(it))
-                }
                 val assisted = targeting.assistedDirection(player, StaffSpell.ICICLE, bolt.cast, from = from)
                 bolt.fixedAimPoint = rayEnd(eye, assisted, settings.range)
             }
+            val targetAt = if (volley != null) icicleVolleyTarget(player, bolt, volley) else
+                bolt.target?.takeIf { damage.eligible(player, it, bolt.cast) }
+                    ?.let { staffVisibleTargetPoint(from, it, player.eyeLocation) } ?: bolt.fixedAimPoint
             bolt.age++
-            val targetAt = if (bolt.aimOnLaunch) {
-                val target = bolt.target?.takeIf {
-                    damage.eligible(player, it, bolt.cast) && visible(player.eyeLocation, center(it)) &&
-                        visible(from, center(it))
-                }
-                if (bolt.target != null && target == null) bolt.target = null
-                target?.let(::center) ?: bolt.fixedAimPoint
-            } else {
-                bolt.target?.takeIf { damage.eligible(player, it, bolt.cast) }?.let(::center) ?: bolt.fixedAimPoint
-            }
             if (targetAt != null && bolt.age > bolt.holdForwardTicks) {
                 val desired = targetAt.toVector().subtract(from.toVector())
                 steerStaffBolt(bolt.direction, desired, bolt.age)
             }
             val step = min(if (bolt.spell == StaffSpell.ICICLE) staffIcicleStep(bolt.age)
                 else staffLightningStep(bolt.age), bolt.remainingDistance)
-            val blockEnd = rayEnd(from, bolt.direction, step)
+            var blockEnd = rayEnd(from, bolt.direction, step)
+            if (volley != null && targetAt != null && from.distanceSquared(blockEnd) < step * step - 0.0001) {
+                val direct = targetAt.toVector().subtract(from.toVector())
+                if (direct.lengthSquared() > 1e-8 &&
+                    direct.lengthSquared() <= bolt.remainingDistance * bolt.remainingDistance &&
+                    direct.clone().normalize().dot(bolt.direction) >= 0.7071067811865476 && visible(from, targetAt)) {
+                    // A clear diagonal may miss the column that the launch impulse would touch.
+                    // Use that straight line early, never a route around cover or a backward turn.
+                    bolt.direction.copy(direct.normalize())
+                    blockEnd = rayEnd(from, bolt.direction, step)
+                }
+            }
             val frostIcicle = bolt.spell == StaffSpell.ICICLE
             val victim = lineTargets(player, from, blockEnd, 0.38, bolt.cast).firstOrNull {
                 frostIcicle || it.uniqueId !in bolt.visited
@@ -880,8 +882,14 @@ internal class StaffSpellController(
                         }
                     }
                 } else effects.finishTrail(bolt.visualId)
-                if (victim != null && visible(player.eyeLocation, center(victim))) {
+                if (victim != null && visible(player.eyeLocation, victim)) {
                     if (frostIcicle) {
+                        bolt.volley?.takeIf { it.target == null && victim.uniqueId !in bolt.visited }?.let {
+                            // A real collision also establishes focus after a merely assisted launch.
+                            it.target = victim
+                            it.focused = true
+                            it.searchCooldown = 0
+                        }
                         if (bolt.burstRadius == 0.0 && bolt.visited.add(victim.uniqueId) &&
                             damage.hit(player, victim, bolt.cast, bolt.tuning.power * bolt.scale,
                                 bolt.tuning.vanillaDamage * bolt.scale)) {
@@ -901,15 +909,74 @@ internal class StaffSpellController(
                         bolt.jumps > 1 && ready(player)) {
                         val next = nearby(player, end, settings.chainRadius, bolt.cast).filter { it.uniqueId !in bolt.visited }
                             .sortedBy { center(it).distanceSquared(end) }
-                            .firstOrNull { visible(end, center(it)) && visible(player.eyeLocation, center(it)) }
-                        if (next != null) launchBolt(player, end,
-                            center(next).toVector().subtract(end.toVector()).normalize().rotateAroundY(-0.4),
-                            next, bolt.cast, bolt.tuning, bolt.scale * settings.chainDecay, bolt.jumps - 1,
-                            bolt.visited, settings.chainRadius * 2.0)
+                            .firstOrNull { visible(end, it) && visible(player.eyeLocation, it) }
+                        if (next != null) {
+                            val destination = staffVisibleTargetPoint(end, next, player.eyeLocation) ?: return@forEach
+                            launchBolt(player, end,
+                                destination.toVector().subtract(end.toVector()).normalize().rotateAroundY(-0.4),
+                                next, bolt.cast, bolt.tuning, bolt.scale * settings.chainDecay, bolt.jumps - 1,
+                                bolt.visited, settings.chainRadius * 2.0)
+                        }
                     }
                 }
             } else bolt.position = end
         }
+    }
+
+    private fun icicleVolleyTarget(player: Player, bolt: PendingStaffBolt, volley: PendingIcicleVolley): Location? {
+        val eye = player.eyeLocation
+        val focus = volley.target
+        if (focus != null && (focus.world != player.world || !damage.eligible(player, focus, bolt.cast) ||
+                !icicleWithinAim(player, focus, retaining = true) || !visible(eye, focus))) {
+            volley.target = null
+            volley.searchCooldown = 0
+        }
+        if (volley.target == null && (bolt.age == 0 || volley.focused && volley.searchCooldown == 0)) {
+            // A fresh volley still requires a direct reticle hit. Soft acquisition is only a
+            // replacement for a lost focus, and respects the configured aim-assist limits.
+            val direct = lineTargets(player, eye, aimPoint(player), .25, bolt.cast).firstOrNull {
+                (!volley.focused || it.uniqueId !in bolt.visited) && icicleFlightPoint(player, bolt, it) != null
+            }
+            val assist = settings.aimAssist
+            val replacement = direct ?: if (volley.focused && assist.enabled && assist.strength > 0.0 &&
+                StaffSpell.ICICLE.id !in assist.excludedSpells) {
+                aimed(player, settings.range, minOf(12.0, assist.halfAngleDegrees), bolt.cast).firstOrNull {
+                    it.uniqueId !in bolt.visited && icicleWithinAim(player, it, retaining = false) &&
+                        icicleFlightPoint(player, bolt, it) != null
+                }
+            } else null
+            volley.target = replacement
+            if (replacement != null) volley.focused = true
+            volley.searchCooldown = 4
+        }
+        // Once any shard has acquired a target, no shard may revive its obsolete launch point.
+        if (volley.focused) bolt.fixedAimPoint = null
+        return volley.target?.let { icicleFlightPoint(player, bolt, it) } ?: bolt.fixedAimPoint
+    }
+
+    private fun icicleWithinAim(player: Player, target: LivingEntity, retaining: Boolean): Boolean {
+        val eye = player.eyeLocation
+        val look = eye.direction
+        if (target.boundingBox.expand(.25).rayTrace(eye.toVector(), look, settings.range) != null) return true
+        val assist = settings.aimAssist
+        if (!assist.enabled || assist.strength <= 0.0 || StaffSpell.ICICLE.id in assist.excludedSpells) return false
+        val offset = center(target).toVector().subtract(eye.toVector())
+        val along = offset.dot(look)
+        if (along <= .1 || along > settings.range) return false
+        val allowance = if (retaining) 1.5 else 1.0
+        val angle = minOf(if (retaining) 18.0 else 12.0, assist.halfAngleDegrees * allowance)
+        val miss = offset.clone().subtract(look.clone().multiply(along)).length()
+        return miss <= assist.maxMiss * allowance && miss <= along * tan(Math.toRadians(angle))
+    }
+
+    private fun icicleFlightPoint(player: Player, bolt: PendingStaffBolt, target: LivingEntity): Location? {
+        val point = staffVisibleTargetPoint(bolt.position, target, player.eyeLocation) ?: return null
+        val offset = point.toVector().subtract(bolt.position.toVector())
+        // Retarget only through visible air that this shard can still reach; never turn back
+        // through the caster or extend the original travel budget to chase a moving target.
+        if (offset.lengthSquared() > bolt.remainingDistance * bolt.remainingDistance ||
+            offset.dot(bolt.direction) <= 0.0) return null
+        return point
     }
 
     private fun frostRing(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning, range: Double) {
@@ -1144,8 +1211,8 @@ internal class StaffSpellController(
                 if (marks[player.uniqueId] !== mark || !ready(player) || player.world.uid != mark.worldId ||
                     !damage.isCurrent(player, mark.cast)) break
                 if (attempts >= settings.maxAreaTargets) break
-                if (!damage.eligible(player, victim, mark.cast) || !visible(origin, center(victim)) ||
-                    !visible(player.eyeLocation, center(victim))) continue
+                if (!damage.eligible(player, victim, mark.cast) || !visible(origin, victim) ||
+                    !visible(player.eyeLocation, victim)) continue
                 attempts++
                 if (damage.hit(player, victim, mark.cast, mark.tuning.power * 0.12, mark.tuning.vanillaDamage * 0.12) &&
                     marks[player.uniqueId] === mark && damage.isCurrent(player, mark.cast) &&
@@ -1233,7 +1300,7 @@ internal class StaffSpellController(
         if (!visible(player.eyeLocation, origin)) return emptyList()
         return (listOfNotNull(primary) + nearby(player, origin, radius, cast).sortedBy { center(it).distanceSquared(origin) })
             .distinctBy { it.uniqueId }
-            .filter { visible(origin, center(it)) && visible(player.eyeLocation, center(it)) }
+            .filter { visible(origin, it) && visible(player.eyeLocation, it) }
             .filter { hitTargets == null || it.uniqueId !in hitTargets }
             .take((settings.maxAreaTargets - (hitTargets?.size ?: 0)).coerceAtLeast(0))
             .filter {
@@ -1362,7 +1429,13 @@ private data class PendingStaffBolt(var position: Location, val direction: Vecto
     val visited: MutableSet<UUID>, var remainingDistance: Double, val visualId: UUID?, var age: Int = 0,
     val trail: MutableList<Location> = mutableListOf(position.clone()), val spell: StaffSpell = StaffSpell.CHAIN,
     var fixedAimPoint: Location? = null, var launchDelayTicks: Int = 0, val holdForwardTicks: Int = 0,
-    val burstRadius: Double = 0.0, val aimOnLaunch: Boolean = false)
+    val burstRadius: Double = 0.0, val volley: PendingIcicleVolley? = null)
+
+private class PendingIcicleVolley {
+    var target: LivingEntity? = null
+    var focused = false
+    var searchCooldown = 0
+}
 
 private class PendingStaffWave(
     val casterId: UUID,
@@ -1420,15 +1493,6 @@ internal fun steerStaffBolt(direction: Vector, offset: Vector, age: Int) {
     if (offset.lengthSquared() <= 0.000001) return
     val turn = if (offset.lengthSquared() < 36.0) 0.72 else if (age < 4) 0.10 else 0.42
     direction.multiply(1.0 - turn).add(offset.clone().normalize().multiply(turn)).normalize()
-}
-
-internal fun visible(from: Location, to: Location): Boolean {
-    if (from.world != to.world) return false
-    val offset = to.toVector().subtract(from.toVector())
-    val distance = offset.length()
-    if (distance < 0.01) return true
-    val trace = staffBlockHit(from, offset.multiply(1.0 / distance), distance)
-    return trace.pathLoaded && trace.hit == null
 }
 
 /** A short probing leader followed by a fast discharge, repeated along the homing route. */

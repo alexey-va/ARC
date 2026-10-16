@@ -20,10 +20,13 @@ class StaffSpellArsenalTest : FreeSpec({
             fun tick(count: Int) = repeat(count) { h.paper.performTicks(1); h.scheduler.tick(1) }
             h.controller.start()
             h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
-            tick(20)
+            tick(12)
+            h.hits shouldBe emptyList()
+            tick(2)
             h.hits.map { it.uniqueId }.toSet() shouldBe targets.map { it.uniqueId }.toSet()
             (covered in h.hits) shouldBe false
             targets.all { it.getPotionEffect(org.bukkit.potion.PotionEffectType.SLOWNESS)?.amplifier == 7 } shouldBe true
+            tick(6)
             player.inventory.setItemInMainHand(h.config.item(StaffSpell.GALE))
             h.controller.cast(player, StaffCastInput.PRIMARY, 0.0)
             tick(10)
@@ -47,6 +50,7 @@ class StaffSpellArsenalTest : FreeSpec({
                 val particleBudget = when (spell) {
                     StaffSpell.OSSUARY -> 0..32
                     StaffSpell.LUNAR -> 16..32
+                    StaffSpell.NOVA -> 7..8
                     // Water/wind silhouettes are displays; native particles only accent their surfaces.
                     StaffSpell.TIDE, StaffSpell.GALE -> 1..64
                     else -> 32..192
@@ -74,17 +78,12 @@ class StaffSpellArsenalTest : FreeSpec({
         val soulSignature = soul.map { it.particle }.toSet()
         (galeSignature != tideSignature && tideSignature != soulSignature && galeSignature != soulSignature) shouldBe true
 
-        val rootParts = staffArsenalParts(StaffSpell.NOVA, 30, 48, 12.0, 3.0, false, false,
+        val rootParts = staffArsenalParts(StaffSpell.NOVA, 14, STAFF_NOVA_ATTACK_TICKS, 18.0, 4.5, false, false,
             StaffCastInput.PRIMARY, 1.0)
-        val roots = rootParts.mapNotNull { it.identity }
-        roots.any { it.startsWith("root:trail:") } shouldBe true
-        roots.any { it.startsWith("root:grasp:") } shouldBe true
-        rootParts.filter { it.identity?.startsWith("root:trail:") == true }.all {
-            it.center.y - it.scale.y / 2 in 0.02f..0.08f
-        } shouldBe true
-        rootParts.filter { it.identity?.startsWith("root:thorn:") == true }.all {
-            it.center.y - it.scale.y / 2 in 0.02f..0.08f
-        } shouldBe true
+        rootParts.count { it.identity!!.startsWith("root:fan:") } shouldBe 42
+        rootParts.none { it.identity!!.startsWith("root:wrap:") } shouldBe true
+        staffArsenalParts(StaffSpell.NOVA, 30, STAFF_NOVA_ATTACK_TICKS, 18.0, 4.5, false, false,
+            StaffCastInput.PRIMARY, 1.0) shouldBe emptyList()
 
         val bone = staffArsenalParts(StaffSpell.OSSUARY, 8, 22, 1.0, 1.0, false, false,
             StaffCastInput.PRIMARY, 0.0)
@@ -144,7 +143,8 @@ class StaffSpellArsenalTest : FreeSpec({
             val player = h.player("moon-collapse-cover", world, StaffSpell.LUNAR)
             val target = h.zombie(world, x = .5, z = 8.0)
             val covered = h.zombie(world, x = 3.0, z = 8.0)
-            for (y in 64..68) world.getBlockAt(1, y, 8).type = Material.STONE
+            for (y in 64..68) for (z in 7..9) world.getBlockAt(1, y, z).type = Material.STONE
+            visible(target.location.clone().add(0.0, 1.3, 0.0), covered) shouldBe false
             h.controller.start()
             h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
             h.scheduler.tick(40)
@@ -476,7 +476,7 @@ class StaffSpellArsenalTest : FreeSpec({
         }
     }
 
-    "moving Gale and TIDE alternate fronts stop at a one-block ridge while flat fronts reach targets" {
+    "airborne Gale clears a low ridge while ground-following TIDE stops at it" {
         withStaffHarness { h ->
             fun arena(name: String, spell: StaffSpell, ridge: Boolean, targetZ: Double = 12.0): Pair<org.bukkit.entity.Player, org.bukkit.entity.Zombie> {
                 val world = h.paper.addSimpleWorld(name)
@@ -499,15 +499,15 @@ class StaffSpellArsenalTest : FreeSpec({
             h.scheduler.tick(76)
 
             h.hits.map { it.uniqueId }.toSet() shouldBe setOf(
-                flatGaleTarget.uniqueId, flatTideTarget.uniqueId)
-            (h.hits.none { it.uniqueId in setOf(ridgeGaleTarget.uniqueId, ridgeTideTarget.uniqueId) }) shouldBe true
+                ridgeGaleTarget.uniqueId, flatGaleTarget.uniqueId, flatTideTarget.uniqueId)
+            (ridgeTideTarget in h.hits) shouldBe false
         }
     }
 
-    "Gale and OSSUARY forward attacks keep fixed horizontal reach while TIDE primary stays close across aim and charge" {
+    "OSSUARY keeps fixed horizontal reach while TIDE primary stays close across aim and charge" {
         withStaffHarness(settings = staffSettings(range = 48.0)) { h ->
             h.controller.start()
-            listOf(StaffSpell.GALE, StaffSpell.OSSUARY, StaffSpell.TIDE).forEach { spell ->
+            listOf(StaffSpell.OSSUARY, StaffSpell.TIDE).forEach { spell ->
                 listOf(0.0, 1.0).forEach { charge ->
                     listOf(-65f, 65f).forEach { pitch ->
                         val world = h.paper.addSimpleWorld("fixed-${spell.id}-$charge-$pitch")
@@ -515,19 +515,13 @@ class StaffSpellArsenalTest : FreeSpec({
                         val player = h.player("${spell.id}-$charge-$pitch", world, spell)
                         player.teleport(player.location.apply { this.pitch = pitch })
                         val near = h.zombie(world, .5, 4.0)
-                        val far = h.zombie(world, .5, if (spell == StaffSpell.GALE) 32.0 else 8.0)
-                        h.controller.cast(player, if (spell == StaffSpell.GALE) StaffCastInput.SECONDARY
-                            else StaffCastInput.PRIMARY, charge)
+                        val far = h.zombie(world, .5, 8.0)
+                        h.controller.cast(player, StaffCastInput.PRIMARY, charge)
                         h.scheduler.tick(54)
                         (near in h.hits) shouldBe true
                         (far in h.hits) shouldBe (spell == StaffSpell.OSSUARY)
                         val scenes = h.visualPlays.filter { it.from.world == world }
                         when (spell) {
-                            StaffSpell.GALE -> {
-                                val gust = scenes.single()
-                                (kotlin.math.abs(gust.to.z - player.location.z - 48.0) < .01) shouldBe true
-                                (kotlin.math.abs(gust.to.y - gust.from.y) < .01) shouldBe true
-                            }
                             StaffSpell.OSSUARY -> {
                                 scenes.size shouldBe 11
                                 scenes.zipWithNext().all { (a, b) -> b.from.z - a.from.z in 1.8..2.0 } shouldBe true

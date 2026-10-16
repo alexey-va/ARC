@@ -177,7 +177,7 @@ internal class StaffSpellSummons(
         if (closed || !started || cast.casterId != player.uniqueId || !ready(player, cast) ||
             target.uniqueId == player.uniqueId || target.world.uid != player.world.uid ||
             !target.isValid || target.isDead || target.isInvulnerable || !loaded(target.location) ||
-            !damage.eligible(player, target, cast) || !visible(player.eyeLocation, center(target))) return false
+            !damage.eligible(player, target, cast) || !visible(player.eyeLocation, target)) return false
         val session = activeCommandSession(player) ?: return false
         session.focusTargetId = target.uniqueId
         session.rallyPoint = null
@@ -321,7 +321,7 @@ internal class StaffSpellSummons(
             .filter { it.world.uid == session.worldId && loaded(it.location) }
             .filter { !it.isInvulnerable }
             .sortedBy { center(it).distanceSquared(center(actor.mob)) }
-            .firstOrNull { visible(actor.mob.eyeLocation, center(it)) }
+            .firstOrNull { visible(actor.mob.eyeLocation, it) }
     }
 
     private fun validFocusTarget(
@@ -332,7 +332,7 @@ internal class StaffSpellSummons(
     ): Boolean = target !== mob && !isCasterActor(session.casterId, target) && target.isValid && !target.isDead &&
         !target.isInvulnerable && target.world.uid == session.worldId && loaded(target.location) &&
         center(target).distanceSquared(center(mob)) <= FOCUS_COMMAND_RANGE * FOCUS_COMMAND_RANGE &&
-        visible(mob.eyeLocation, center(target)) && damage.isCurrent(owner, session.cast) &&
+        visible(mob.eyeLocation, target) && damage.isCurrent(owner, session.cast) &&
         damage.eligible(owner, target, session.cast)
 
     private fun attack(session: Session, actor: Actor, owner: Player, target: org.bukkit.entity.LivingEntity): Int {
@@ -375,7 +375,7 @@ internal class StaffSpellSummons(
             center(target).distanceSquared(center(mob)) <=
             (if (session.commander) COMMANDER_CLEAVE_REACH else targetSearchRadius) *
             (if (session.commander) COMMANDER_CLEAVE_REACH else targetSearchRadius) &&
-            visible(mob.eyeLocation, center(target)) && damage.isCurrent(owner, session.cast) &&
+            visible(mob.eyeLocation, target) && damage.isCurrent(owner, session.cast) &&
             damage.eligible(owner, target, session.cast)
 
     private fun moveToward(mob: AbstractSkeleton, destination: Location) {
@@ -706,7 +706,7 @@ internal class StaffSpellSummons(
                 val currentTarget = ready(owner, flight.cast) && victim.isValid && !victim.isDead &&
                     !isCasterActor(session.casterId, victim) &&
                     !victim.isInvulnerable && victim.world.uid == flight.worldId && loaded(victim.location) &&
-                    visible(from, center(victim)) && damage.eligible(owner, victim, flight.cast)
+                    visible(from, victim) && damage.eligible(owner, victim, flight.cast)
                 if (currentTarget && damage.hit(
                         owner,
                         victim,

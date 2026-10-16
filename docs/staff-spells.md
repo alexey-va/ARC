@@ -142,11 +142,11 @@ prove native movement, collisions, sound, damage or client appearance.
 | `frost` · Ледяной хлопок | A broad field of clustered ice teeth rises in front, reaches seven blocks and briefly slows enemies | Полярный круг expands an ice front eight blocks from the caster | Ледяной щит | Круговой покров | `3dfantasyweaponscit:northgate_guardian_staff` |
 | `lance` · Солнечное копьё | A ranged solar spear pierces up to three enemies, applying damage when its light front arrives | Three diverging solar beams | Солнечный щит | Круговой покров | `3dfantasyweaponscit:sagrada_winged_staff` |
 | `ember` · Пепельная комета | Fireball grows below the reticle with four-tick interpolation, then launches immediately with forward speed and accelerates | Three ground circles lock on cast; the first meteor launches after a 15-tick warning | Огненный заслон | Круговой покров | `3dfantasyweaponscit:bermunde_hermit_staff` |
-| `nova` · Терновый хват | Roots travel along the ground toward the target, close around it and slow enemies | Терновая клетка closes around the aimed point | Терновый заслон | Круговой покров | `3dfantasyweaponscit:holy_celtic_staff` |
-| `icicle` · Ледяной венец | Seven icicles form an irregular cloud at different heights, depths, sizes and tilts around the caster's view; full charge adds four satellites. Each shot samples the current reticle, with mild aim assistance near it and cover checks. The charge follows camera yaw and pitch and retains the same bodies on release | Five shards fall around the aimed point immediately | Кристальный заслон | Круговой покров | `3dfantasyweaponscit:olwen_staff` |
+| `nova` · Терновый хват | Seven thick ground roots fan forward up to 18 blocks and grip each accepted victim | Терновая клетка warns around the aimed 4.5-block area, then closes inward | Терновый заслон | Круговой покров | `3dfantasyweaponscit:holy_celtic_staff` |
+| `icicle` · Ледяной венец | An irregular crown grows from zero to eleven icicles and retains the same bodies on release. The volley focuses one visible enemy; after losing it, airborne and delayed shards seek another near the current reticle, within their remaining travel budget | Five shards fall around the aimed point immediately | Кристальный заслон | Круговой покров | `3dfantasyweaponscit:olwen_staff` |
 | `fault` · Обсидиановый раскол | A broad basalt and obsidian rupture rises in front up to seven blocks and pushes enemies back | Каменный выброс warns, then erupts at the aimed point and lifts enemies | Каменный бастион | Круговой покров | `3dfantasyweaponscit:staff_of_unholy_wisdom` |
 | `lunar` · Лунный серп | One large moon crescent cuts across a seven-block frontal area | Two moon blades converge on the target | Лунный покров | Круговой покров | `3dfantasyweaponscit:black_snake_staff` |
-| `gale` · Посох бури | An open tornado forms at the aimed point and lifts nearby enemies | Шквал is a twisting air ram with a fixed 36-block horizontal reach, clipped at cover | Ветряной щит | Круговой покров | `3dfantasyweaponscit:goblin_witch_staff` |
+| `gale` · Посох бури | An open tornado wanders irregularly around the aimed point and lifts enemies along its path | Шквал follows full-pitch aim up to 56 blocks, including upward; contact with an enemy, cover or the endpoint triggers the burst | Ветряной щит | Круговой покров | `3dfantasyweaponscit:goblin_witch_staff` |
 | `tide` · Сердце прилива | A thick curling breaker covers a seven-block frontal area and pushes enemies back | Приливный вал is a broad curled wave with a foamy crest that travels forward | Водяной заслон | Круговой покров | `3dfantasyweaponscit:northgate_guardian_staff` |
 | `requiem` · Реквием | A copper-and-gold bell forms above the aimed point, tolls at 0.8 seconds and releases a five-block soul wave | Погребальный перезвон suspends the bell above the caster and releases three seven-block waves, with five-second minimum recovery | Покров душ | Круговой покров | `3dfantasyweaponscit:lich_staff` |
 | `prism` · Кристальная призма | A crystal grows at the aimed point and refracts beams into up to three enemies | Three rays converge on the selected point | Гранёный щит | Круговой покров | `3dfantasyweaponscit:northgate_golden_crook` |
@@ -173,10 +173,23 @@ impact starts the existing homing chain jumps. Radial pulses, selected ground
 zones and summons keep their own targeting; soft target selection uses an
 eight-degree cone. Close attacks retain their seven-block reach.
 
-Each Icicle samples the current reticle when it launches. A direct reticle hit
-may track that target while it remains visible; a near miss receives only the
-configured fractional launch correction, not a guaranteed lock. Acquisition
-requires visibility from both the eye and release point.
+Combat rays ignore passable vegetation and leaf blocks while preserving exact
+solid-block collisions and magic shields. An exposed head or shoulder can
+satisfy visibility; these sampled body points stay inside the existing hitbox
+and do not enlarge damage collision.
+
+Icicles share one live focus across airborne and delayed shards. A direct
+reticle acquisition or real collision establishes it; an initial near miss
+still receives only fractional launch assistance. Death, invalidation, cover
+or moving the reticle away releases focus and discards the obsolete aim point.
+A replacement must be near the current reticle, visible from the eye and shard,
+ahead of the shard and reachable within its original remaining travel budget.
+Soft replacement obeys the configured assist switches, cone (at most 12 degrees)
+and maximum miss; retention allows 1.5 times those bounds, capped at 18 degrees.
+With no replacement, airborne shards continue their current heading. Empty-space
+launches retain their individual sampled aim. A blocked launch step may turn up
+to 45 degrees onto an already clear straight line to the aim point; it cannot
+cross a wall or shield. Each enemy still receives at most one damage hit per volley.
 
 Frontal primaries contact once after six ticks, matching the interpolated full-size
 pose. They select up to three eligible targets at contact within seven blocks,
@@ -193,9 +206,22 @@ that authorization. EliteMobs retains its instance/minion eligibility rules.
 Area attacks obey the configured target limit. Each ordinary sequence attempts
 a target at most once at contact; Requiem has explicit repeated pulses and
 divides its original cast damage across three primary or five secondary strikes.
-NOVA grows a terrain-sampled root network, damages accepted targets and holds
-them for70ticks (3.5seconds); changing staves preserves that hold. World changes,
-death, expired combat authorization and cover still end invalid control.
+NOVA primary grows seven terrain-sampled roots across a forward fan up to 18 blocks
+between ticks 2 and 14. Its swept front attempts each reachable victim once. The
+secondary warns for eight ticks around the aimed 4.5-block area, closes through
+tick 14 and then applies contact. Only accepted damage followed by successful root
+control creates a wrap. Every victim keeps its own 70-tick (3.5-second) hold from
+contact; changing staves and eviction of an old attack controller preserve that
+hold. The ground field withers by tick 26, while individual wraps remain attached
+to their victims. World changes, death, expired combat authorization and cover
+still end invalid control.
+
+GALE primary uses one continuously moving center for its funnel, particles and
+swept damage. The bounded irregular path is clipped at cover and requires physical
+ground. GALE secondary launches from the eye along full-pitch aim, including upward
+toward roof targets; its body and particle accents keep that orientation through
+travel and the airborne terminal burst. Its swept path checks current cover and
+eligible targets, with one damage attempt per target across contact and burst.
 
 Necromancer summons use temporary native skeleton actors with native movement
 and their normal targeting/action goals removed. They follow visible enemies

@@ -219,8 +219,8 @@ internal class StaffSpellTechniques(
         for (target in targets) {
             if (chainOrbs[orb.casterId] !== orb || !damage.isCurrent(player, orb.cast)) break
             if (target.uniqueId in orb.attemptedTargets || !target.isValid || target.isDead || target.isInvulnerable ||
-                target.world.uid != orb.worldId || !visible(player.eyeLocation, center(target)) ||
-                !visible(impact, center(target)) || !damage.eligible(player, target, orb.cast)) continue
+                target.world.uid != orb.worldId || !visible(player.eyeLocation, target) ||
+                !visible(impact, target) || !damage.eligible(player, target, orb.cast)) continue
             orb.attemptedTargets += target.uniqueId
             damage.hit(player, target, orb.cast, orb.tuning.power, orb.tuning.vanillaDamage)
         }
@@ -277,7 +277,7 @@ internal class StaffSpellTechniques(
         targeting.lineTargets(player, from, to, CHAIN_SWEEP_WIDTH, orb.cast).forEach { target ->
             if (chainOrbs[orb.casterId] !== orb || !damage.isCurrent(player, orb.cast)) return
             if (!target.isValid || target.isDead || target.isInvulnerable || target.world.uid != orb.worldId ||
-                !visible(player.eyeLocation, center(target)) || !visible(from, center(target)) ||
+                !visible(player.eyeLocation, target) || !visible(from, target) ||
                 !damage.eligible(player, target, orb.cast) || !orb.attemptedTargets.add(target.uniqueId)) return@forEach
             if (damage.hit(player, target, orb.cast, orb.tuning.power * CHAIN_DIRECT_SCALE,
                     orb.tuning.vanillaDamage * CHAIN_DIRECT_SCALE)) visuals.withOwner(orb.casterId) {
@@ -338,13 +338,13 @@ internal class StaffSpellTechniques(
                         val offset = center(target).subtract(burst.origin)
                         offset.x * offset.x + offset.z * offset.z <= STAFF_ICICLE_RADIAL_RADIUS * STAFF_ICICLE_RADIAL_RADIUS &&
                             kotlin.math.abs(offset.y) <= 2.5 &&
-                            visible(burst.origin.clone().add(0.0, .65, 0.0), center(target))
+                            visible(burst.origin.clone().add(0.0, .65, 0.0), target)
                     }.sortedBy { center(it).distanceSquared(burst.origin) }
                     .take(settings.maxAreaTargets.coerceIn(1, 8))
                 for (target in targets) {
                     if (icicleBursts[burst.casterId] !== burst || !ready(player, burst.cast)) break
                     if (!validTechniqueTarget(player, target, burst.cast, burst.worldId) ||
-                        !visible(burst.origin.clone().add(0.0, .65, 0.0), center(target))) continue
+                        !visible(burst.origin.clone().add(0.0, .65, 0.0), target)) continue
                     damage.hit(player, target, burst.cast, burst.tuning.power * .72, burst.tuning.vanillaDamage * .72)
                 }
             }
@@ -406,8 +406,8 @@ internal class StaffSpellTechniques(
             targeting.nearby(player, ward.origin, PRISM_DETECTION_RADIUS, ward.cast).forEach targetLoop@{ target ->
                 if (prismWards[ward.casterId] !== ward || !damage.isCurrent(player, ward.cast)) return@targetLoop
                 if (!target.isValid || target.isDead || target.isInvulnerable || target.world.uid != ward.worldId ||
-                    !damage.eligible(player, target, ward.cast) || !visible(player.eyeLocation, center(target)) ||
-                    !visible(ward.origin.clone().add(0.0, .35, 0.0), center(target)) ||
+                    !damage.eligible(player, target, ward.cast) || !visible(player.eyeLocation, target) ||
+                    !visible(ward.origin.clone().add(0.0, .35, 0.0), target) ||
                     kotlin.math.abs(center(target).y - ward.origin.y) > PRISM_VERTICAL_TOLERANCE ||
                     !staffPrismTripwireContains(center(target), ward.origin, ward.yaw)) return@targetLoop
                 present += target.uniqueId
@@ -467,7 +467,7 @@ internal class StaffSpellTechniques(
         val target = targeting.aimed(player, min(settings.range, NECROMANCER_COMMAND_RANGE), settings.aimDegrees, cast)
             .firstOrNull()
         if (target != null) {
-            if (!visible(eye, center(target)) || !damage.isCurrent(player, cast) ||
+            if (!visible(eye, target) || !damage.isCurrent(player, cast) ||
                 !damage.eligible(player, target, cast)) return false
             effects.custom(player.uniqueId, StaffSpell.NECROMANCER, target.location, 24,
                 ::staffNecromancerCommandParts) ?: return false
@@ -750,7 +750,7 @@ internal class StaffSpellTechniques(
             val target = pin.target
             if (player == null || !ready(player, pin.cast) || player.world.uid != pin.worldId ||
                 target != null && (!target.isValid || target.isDead || target.world.uid != pin.worldId ||
-                !damage.eligible(player, target, pin.cast) || pin.pin && !visible(player.eyeLocation, center(target)))) {
+                !damage.eligible(player, target, pin.cast) || pin.pin && !visible(player.eyeLocation, target))) {
                 removeLancePin(pin)
                 return@forEach
             }
@@ -893,7 +893,7 @@ internal class StaffSpellTechniques(
             .sortedBy { center(it).distanceSquared(point) }) {
             if (emberTrails[trail.casterId] !== trail || !damage.isCurrent(player, trail.cast)) return
             if (target.uniqueId in trail.alreadyHit || !validTechniqueTarget(player, target, trail.cast, trail.worldId) ||
-                !visible(point.clone().add(0.0, .25, 0.0), center(target))) continue
+                !visible(point.clone().add(0.0, .25, 0.0), target)) continue
             trail.alreadyHit += target.uniqueId
             if (damage.hit(player, target, trail.cast,
                     trail.tuning.power * EMBER_NODE_DAMAGE_SCALE,
@@ -1122,7 +1122,7 @@ internal class StaffSpellTechniques(
             if (lunarFlights[flight.casterId] !== flight || !damage.isCurrent(player, flight.cast)) return
             if (!flight.attemptedTargets.add(target.uniqueId)) continue
             if (!target.isValid || target.isDead || target.isInvulnerable || target.world.uid != flight.worldId ||
-                !visible(player.eyeLocation, center(target)) || !visible(from, center(target)) ||
+                !visible(player.eyeLocation, target) || !visible(from, target) ||
                 !damage.eligible(player, target, flight.cast)) continue
             if (damage.hit(player, target, flight.cast, flight.tuning.power, flight.tuning.vanillaDamage)) {
                 visuals.withOwner(flight.casterId) {
@@ -1192,7 +1192,7 @@ internal class StaffSpellTechniques(
     private fun validTechniqueTarget(player: Player, target: LivingEntity, cast: StaffSpellCast, worldId: UUID): Boolean =
         ready(player, cast) && player.world.uid == worldId && target.isValid && !target.isDead &&
             !target.isInvulnerable && target.world.uid == worldId && isLoaded(target.location) &&
-            damage.eligible(player, target, cast) && visible(player.eyeLocation, center(target))
+            damage.eligible(player, target, cast) && visible(player.eyeLocation, target)
 
     private fun locationVector(location: Location) = Vector3f(location.x.toFloat(), location.y.toFloat(), location.z.toFloat())
 

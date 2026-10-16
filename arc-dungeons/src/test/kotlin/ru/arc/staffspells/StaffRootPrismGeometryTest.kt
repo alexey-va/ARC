@@ -5,21 +5,30 @@ import io.kotest.matchers.shouldBe
 import org.joml.Vector3f
 
 class StaffRootPrismGeometryTest : FreeSpec({
-    "all sixteen root targets have a grounded network and individually keyed wraps within existing budgets" {
-        val trunk = (0..12).map { Vector3f(0f, .12f, it.toFloat()) }
-        val branches = (0 until 16).map { i ->
-            StaffRootBranch("target-$i", listOf(Vector3f(0f, .12f, 12f),
-                Vector3f((i % 4 - 2).toFloat(), .12f, 13f), Vector3f((i % 4 - 2).toFloat(), .12f, (14 + i / 4).toFloat())))
-        }
-        val network = staffNovaNetworkParts(30, 106, 30, trunk, branches)
-        network.size shouldBe 44
-        network.all { it.center.y == .12f } shouldBe true
-        val targets = branches.map { StaffRootWrap(it.key, it.points.last(), .6, 1.8) }
+    "both root fields use stable thick ground paths and only accepted victims receive wraps" {
+        val fanPaths = staffNovaFanPaths(STAFF_NOVA_FAN_REACH)
+        val snarePaths = staffNovaSnarePaths(4.5)
+        val fan = staffNovaFanParts(STAFF_NOVA_CONTACT_TICK, STAFF_NOVA_FIELD_TICKS, STAFF_NOVA_FAN_REACH, fanPaths)
+        val snare = staffNovaSnareParts(STAFF_NOVA_CONTACT_TICK, STAFF_NOVA_FIELD_TICKS, snarePaths)
+        fan.size shouldBe 42
+        snare.size shouldBe 40
+        fanPaths.size shouldBe 7
+        (fan.maxOf { it.center.x } - fan.minOf { it.center.x } > 15f) shouldBe true
+        fan.filter { it.identity!!.endsWith(":0") }.all { it.scale.x >= .23f } shouldBe true
+        fan.map { it.identity } shouldBe staffNovaFanParts(6, STAFF_NOVA_FIELD_TICKS, STAFF_NOVA_FAN_REACH, fanPaths).map { it.identity }
+        snare.map { it.identity } shouldBe staffNovaSnareParts(8, STAFF_NOVA_FIELD_TICKS, snarePaths).map { it.identity }
+        staffNovaFanFront(2, 18.0) shouldBe .75
+        staffNovaFanFront(STAFF_NOVA_CONTACT_TICK, 18.0) shouldBe 18.0
+        staffNovaFanParts(STAFF_NOVA_FIELD_TICKS, STAFF_NOVA_FIELD_TICKS, 18.0, fanPaths) shouldBe emptyList()
+        staffNovaSnareParts(STAFF_NOVA_FIELD_TICKS, STAFF_NOVA_FIELD_TICKS, snarePaths) shouldBe emptyList()
+        (fan + snare).none { it.identity!!.startsWith("root:wrap:") } shouldBe true
+
+        val targets = (0 until 16).map { StaffRootWrap("target-$it", Vector3f(it.toFloat(), 0f, 12f), .6, 1.8) }
         val wraps = targets.chunked(8).map { staffNovaWrapParts(8, STAFF_NOVA_HOLD_TICKS, it) }
         wraps.map { it.size } shouldBe listOf(48, 48)
-        (network.size + wraps.sumOf { it.size } <= StaffSpellDisplayEffects.MAX_PARTS_PER_CASTER) shouldBe true
+        (fan.size + wraps.sumOf { it.size } <= StaffSpellDisplayEffects.MAX_PARTS_PER_CASTER) shouldBe true
         targets.forEach { target -> wraps.flatten().count { it.identity!!.startsWith("root:wrap:${target.key}:") } shouldBe 6 }
-        (network + wraps.flatten()).all { part ->
+        (fan + snare + wraps.flatten()).all { part ->
             listOf(part.center.x, part.center.y, part.center.z, part.scale.x, part.scale.y, part.scale.z,
                 part.rotation.x, part.rotation.y, part.rotation.z, part.rotation.w).all(Float::isFinite)
         } shouldBe true
@@ -27,6 +36,10 @@ class StaffRootPrismGeometryTest : FreeSpec({
         fading.map { it.identity } shouldBe wraps.first().map { it.identity }
         fading.zip(wraps.first()).all { (late, held) -> late.scale.x < held.scale.x * .3f } shouldBe true
         staffNovaWrapParts(STAFF_NOVA_HOLD_TICKS, STAFF_NOVA_HOLD_TICKS, targets).isEmpty() shouldBe true
+        val later = targets.first().copy(ageOffset = 10)
+        staffNovaWrapParts(8, STAFF_NOVA_HOLD_TICKS, listOf(later)) shouldBe emptyList()
+        staffNovaWrapParts(70, STAFF_NOVA_HOLD_TICKS, listOf(later)).size shouldBe 6
+        staffNovaWrapParts(80, STAFF_NOVA_HOLD_TICKS, listOf(later)) shouldBe emptyList()
     }
 
     "refraction grows serially through fixed visible mirrors and keeps stable part identities" {

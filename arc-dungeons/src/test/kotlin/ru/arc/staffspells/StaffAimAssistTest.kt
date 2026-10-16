@@ -30,11 +30,11 @@ class StaffAimAssistTest : FreeSpec({
     "cover and out-of-cone targets never pull the launch direction" {
         val fixture = AimFixture()
         val targeting = fixture.targeting(staffSettings())
-        every { fixture.world.rayTraceBlocks(any<Location>(), any<Vector>(), any<Double>(),
-            any<FluidCollisionMode>(), any<Boolean>()) } returns RayTraceResult(Vector(0.0, 1.6, 4.0))
+        every { fixture.world.rayTraceBlocks(any<io.papermc.paper.math.Position>(), any<Vector>(), any<Double>(),
+            any<FluidCollisionMode>(), any<Boolean>(), any<java.util.function.Predicate<org.bukkit.block.Block>>()) } returns RayTraceResult(Vector(0.0, 1.6, 4.0))
         targeting.assistedDirection(fixture.player, StaffSpell.EMBER, null) shouldBe Vector(0.0, 0.0, 1.0)
-        every { fixture.world.rayTraceBlocks(any<Location>(), any<Vector>(), any<Double>(),
-            any<FluidCollisionMode>(), any<Boolean>()) } returns null
+        every { fixture.world.rayTraceBlocks(any<io.papermc.paper.math.Position>(), any<Vector>(), any<Double>(),
+            any<FluidCollisionMode>(), any<Boolean>(), any<java.util.function.Predicate<org.bukkit.block.Block>>()) } returns null
         every { fixture.victim.location } returns Location(fixture.world, 4.0, .6, 15.0)
         targeting.assistedDirection(fixture.player, StaffSpell.EMBER, null) shouldBe Vector(0.0, 0.0, 1.0)
     }
@@ -99,8 +99,8 @@ private class AimFixture {
     private val damage = mockk<StaffSpellDamage>()
     init {
         every { world.isChunkLoaded(any<Int>(), any<Int>()) } returns true
-        every { world.rayTraceBlocks(any<Location>(), any<Vector>(), any<Double>(),
-            any<FluidCollisionMode>(), any<Boolean>()) } returns null
+        every { world.rayTraceBlocks(any<io.papermc.paper.math.Position>(), any<Vector>(), any<Double>(),
+            any<FluidCollisionMode>(), any<Boolean>(), any<java.util.function.Predicate<org.bukkit.block.Block>>()) } returns null
         every { world.getNearbyLivingEntities(any<Location>(), any<Double>(), any<Double>(), any<Double>()) } returns listOf(victim)
         every { world.getNearbyLivingEntities(any<Location>(), any<Double>()) } returns listOf(victim)
         every { player.eyeLocation } returns Location(world, 0.0, 1.6, 0.0)

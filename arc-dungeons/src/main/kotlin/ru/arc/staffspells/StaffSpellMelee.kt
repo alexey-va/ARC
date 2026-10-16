@@ -103,7 +103,7 @@ internal class StaffSpellMelee(
     private fun contact(player: Player, swing: Swing) {
         // Query at contact: entering/leaving the visibly growing area has a real consequence.
         val targets = targeting.nearby(player, swing.eye, swing.range, swing.cast)
-            .filter { inArea(swing, it) && visible(swing.eye, center(it)) && visible(player.eyeLocation, center(it)) }
+            .filter { inArea(swing, it) && visible(swing.eye, it) && visible(player.eyeLocation, it) }
             .sortedBy { center(it).distanceSquared(swing.eye) }
             .take(settings.maxAreaTargets.coerceIn(1, 3))
         visuals.withOwner(player.uniqueId) {
@@ -124,7 +124,7 @@ internal class StaffSpellMelee(
         for (target in targets) {
             if (pending[player.uniqueId] !== swing || !current(player, swing)) break
             if (!target.isValid || target.isDead || target.isInvulnerable || !inArea(swing, target) ||
-                !visible(swing.eye, center(target)) || !visible(player.eyeLocation, center(target)) ||
+                !visible(swing.eye, target) || !visible(player.eyeLocation, target) ||
                 !damage.eligible(player, target, swing.cast)) continue
             if (!damage.hit(player, target, swing.cast, swing.tuning.power, swing.tuning.vanillaDamage)) continue
             if (pending[player.uniqueId] !== swing || !current(player, swing)) break
@@ -132,7 +132,7 @@ internal class StaffSpellMelee(
             if (swing.spell == StaffSpell.FROST &&
                 target.addPotionEffect(PotionEffect(PotionEffectType.SLOWNESS, 16, 0, false, false)) &&
                 pending[player.uniqueId] === swing && current(player, swing) &&
-                damage.eligible(player, target, swing.cast) && visible(player.eyeLocation, center(target))) {
+                damage.eligible(player, target, swing.cast) && visible(player.eyeLocation, target)) {
                 onFrostSlow(player, target, 16)
             }
             val push = when (swing.spell) { StaffSpell.FAULT -> 0.42; StaffSpell.TIDE -> 0.35; else -> 0.0 }

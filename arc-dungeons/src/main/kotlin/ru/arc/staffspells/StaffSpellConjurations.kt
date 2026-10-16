@@ -140,7 +140,7 @@ internal class StaffSpellConjurations(
         start()
         val cast = damage.capture(player) ?: damage.capture(player, duelOnly = true) ?: return
         if (!damage.isCurrent(player, cast) || !damage.eligible(player, target, cast) ||
-            !visible(player.eyeLocation, center(target))) return
+            !visible(player.eyeLocation, target)) return
         val active = target.getPotionEffect(PotionEffectType.SLOWNESS) ?: return
         val duration = minOf(durationTicks, active.duration).coerceAtLeast(1)
         val key = SlowKey(player.uniqueId, target.uniqueId)
@@ -160,7 +160,7 @@ internal class StaffSpellConjurations(
         val target = Bukkit.getEntity(targetId) as? LivingEntity
         root.cast.attackId == attackId && player != null && target != null && target.isValid && !target.isDead &&
             current(player, root.cast) && damage.eligible(player, target, root.cast) &&
-            visible(player.eyeLocation, center(target)) && rootElapsed(root) < root.durationTicks && rootStillInstalled(target, root)
+            visible(player.eyeLocation, target) && rootElapsed(root) < root.durationTicks && rootStillInstalled(target, root)
     } == true
 
     fun clearRoots(attackId: UUID) {
@@ -228,10 +228,11 @@ internal class StaffSpellConjurations(
 
     private fun placeMark(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning): Boolean {
         val target = targeting.aimed(player, settings.range, settings.aimDegrees, cast).firstOrNull()
-        if (target != null && (!damage.eligible(player, target, cast) || !visible(player.eyeLocation, center(target)))) return false
+        if (target != null && (!damage.eligible(player, target, cast) || !visible(player.eyeLocation, target))) return false
         val eye = player.eyeLocation
         val forward = horizontal(eye.direction, eye.yaw) ?: return false
-        val anchor = target?.let(::center) ?: emptyAimPoint(player) ?: return false
+        val anchor = if (target != null) staffVisibleTargetPoint(eye, target) ?: return false
+            else emptyAimPoint(player) ?: return false
         val payload = MarkPayload(target?.uniqueId, if (target == null) Vector(0.0, 1.1, 0.0) else Vector())
         val duration = if (target == null) 36 else settings.markTicks.coerceIn(MARK_MIN_DURATION, MARK_MAX_DURATION)
         val session = newSession(player, StaffSpell.MARK, cast, tuning, anchor, forward, forward,
@@ -252,7 +253,7 @@ internal class StaffSpellConjurations(
             .filter { it.key.ownerId == player.uniqueId && frostSlowStillOwned(player, it) }
             .mapNotNull { mark -> (Bukkit.getEntity(mark.key.targetId) as? LivingEntity)?.let { mark to it } }
             .filter { (_, target) -> center(target).distanceSquared(player.location) <= FROST_THAW_RANGE * FROST_THAW_RANGE }
-            .filter { (_, target) -> damage.eligible(player, target, cast) && visible(player.eyeLocation, center(target)) }
+            .filter { (_, target) -> damage.eligible(player, target, cast) && visible(player.eyeLocation, target) }
             .sortedBy { (_, target) -> center(target).distanceSquared(player.location) }
             .take(settings.maxAreaTargets.coerceIn(1, CONJURATION_TARGET_LIMIT))
             .toList()
@@ -264,11 +265,11 @@ internal class StaffSpellConjurations(
         val consumed = mutableListOf<UUID>()
         for ((mark, target) in candidates) {
             if (!damage.isCurrent(player, cast) || !damage.eligible(player, target, cast) ||
-                !visible(player.eyeLocation, center(target)) || !frostSlowStillOwned(player, mark)) continue
+                !visible(player.eyeLocation, target) || !frostSlowStillOwned(player, mark)) continue
             if (!damage.hit(player, target, cast, tuning.power * FROST_THAW_DAMAGE_MULTIPLIER,
                     tuning.vanillaDamage * FROST_THAW_DAMAGE_MULTIPLIER)) continue
             if (!damage.isCurrent(player, cast) || !damage.eligible(player, target, cast) ||
-                !visible(player.eyeLocation, center(target)) || !frostSlowStillOwned(player, mark)) continue
+                !visible(player.eyeLocation, target) || !frostSlowStillOwned(player, mark)) continue
             target.removePotionEffect(PotionEffectType.SLOWNESS)
             frostSlows.remove(mark.key)
             consumed += target.uniqueId
@@ -340,7 +341,7 @@ internal class StaffSpellConjurations(
 
     private fun castTideCapsule(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning): Boolean {
         val target = targeting.aimed(player, settings.range, settings.aimDegrees, cast).firstOrNull()
-        if (target != null && (!damage.eligible(player, target, cast) || !visible(player.eyeLocation, center(target)))) return false
+        if (target != null && (!damage.eligible(player, target, cast) || !visible(player.eyeLocation, target))) return false
         val anchor = target?.location?.clone() ?: emptyAimPoint(player)?.subtract(0.0, .8, 0.0) ?: return false
         val forward = horizontal(player.eyeLocation.direction, player.eyeLocation.yaw) ?: return false
         val payload = TidePayload(target?.uniqueId)
@@ -352,7 +353,7 @@ internal class StaffSpellConjurations(
             return false
         }
         if (!damage.isCurrent(player, cast) || target != null && (!damage.eligible(player, target, cast) ||
-            !visible(player.eyeLocation, center(target)))) {
+            !visible(player.eyeLocation, target))) {
             effects.remove(session.sceneId)
             return true
         }
@@ -469,13 +470,13 @@ internal class StaffSpellConjurations(
             ))
         }
         val targets = targeting.nearby(player, impact, REQUIEM_STRIKE_RADIUS, session.cast)
-            .filter { visible(player.eyeLocation, center(it)) && visible(impact.clone().add(0.0, 0.9, 0.0), center(it)) }
+            .filter { visible(player.eyeLocation, it) && visible(impact.clone().add(0.0, 0.9, 0.0), it) }
             .sortedBy { center(it).distanceSquared(impact) }
             .take(settings.maxAreaTargets.coerceIn(1, REQUIEM_TARGET_LIMIT))
         for (target in targets) {
             if (!current(player, session) || !damage.eligible(player, target, session.cast)) break
             if (!target.isValid || target.isDead || target.isInvulnerable ||
-                !visible(player.eyeLocation, center(target)) || !visible(impact.clone().add(0.0, 0.9, 0.0), center(target))) continue
+                !visible(player.eyeLocation, target) || !visible(impact.clone().add(0.0, 0.9, 0.0), target)) continue
             damage.hit(player, target, session.cast,
                 session.tuning.power * REQUIEM_STRIKE_DAMAGE_MULTIPLIER,
                 session.tuning.vanillaDamage * REQUIEM_STRIKE_DAMAGE_MULTIPLIER)
@@ -572,8 +573,8 @@ internal class StaffSpellConjurations(
             endSession(session)
             return
         }
-        val targetAt = center(target)
-        if (!visible(player.eyeLocation, targetAt) || !visible(session.anchor, targetAt)) {
+        val targetAt = staffVisibleTargetPoint(session.anchor, target, player.eyeLocation)
+        if (targetAt == null) {
             // A blocked tether quietly expires; it cannot punish through cover.
             endSession(session)
             return
@@ -583,7 +584,7 @@ internal class StaffSpellConjurations(
         if (targetAt.distance(session.anchor) <= MARK_TETHER_RADIUS) return
         val hit = damage.hit(player, target, session.cast, session.tuning.power, session.tuning.vanillaDamage)
         if (hit && current(player, session) && damage.eligible(player, target, session.cast) &&
-            visible(player.eyeLocation, center(target))) {
+            visible(player.eyeLocation, target)) {
             visuals.withOwner(player.uniqueId) {
                 visuals.cue(center(target), Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, 0.8f, 1.5f)
                 visuals.particles(center(target), listOf(
@@ -603,21 +604,21 @@ internal class StaffSpellConjurations(
         }
         val targets = targeting.nearby(player, session.anchor, payload.radius, session.cast)
             .filter { center(it).distanceSquared(session.anchor) <= payload.radius * payload.radius }
-            .filter { visible(player.eyeLocation, center(it)) && visible(session.anchor.clone().add(0.0, 0.45, 0.0), center(it)) }
+            .filter { visible(player.eyeLocation, it) && visible(session.anchor.clone().add(0.0, 0.45, 0.0), it) }
             .sortedBy { center(it).distanceSquared(session.anchor) }
             .take(1)
         val target = targets.firstOrNull() ?: return
         payload.triggered = true
         if (!current(player, session) || !target.isValid || target.isDead || target.isInvulnerable ||
-            !damage.eligible(player, target, session.cast) || !visible(player.eyeLocation, center(target)) ||
-            !visible(session.anchor.clone().add(0.0, 0.45, 0.0), center(target))) {
+            !damage.eligible(player, target, session.cast) || !visible(player.eyeLocation, target) ||
+            !visible(session.anchor.clone().add(0.0, 0.45, 0.0), target)) {
             endSession(session)
             return
         }
         val hit = damage.hit(player, target, session.cast,
             session.tuning.power * payload.damageMultiplier, session.tuning.vanillaDamage * payload.damageMultiplier)
         if (hit && current(player, session) && damage.eligible(player, target, session.cast) &&
-            visible(player.eyeLocation, center(target)) && visible(session.anchor.clone().add(0.0, 0.45, 0.0), center(target))) {
+            visible(player.eyeLocation, target) && visible(session.anchor.clone().add(0.0, 0.45, 0.0), target)) {
             if (payload.kind == TrapKind.NOVA) applyRoot(player, target, session.cast, payload.rootTicks, breakOnDamage = false)
             visuals.withOwner(player.uniqueId) {
                 visuals.cue(center(target), if (payload.kind == TrapKind.NOVA) Sound.BLOCK_AZALEA_LEAVES_BREAK else Sound.BLOCK_BONE_BLOCK_BREAK,
@@ -645,17 +646,17 @@ internal class StaffSpellConjurations(
             visuals.cue(centerLine, Sound.ENTITY_BREEZE_WIND_BURST, 0.62f, 0.78f)
         }
         val targets = targeting.nearby(player, centerLine, GALE_QUERY_RADIUS, session.cast)
-            .filter { inGaleCorridor(session, it) && visible(player.eyeLocation, center(it)) && visible(centerLine, center(it)) }
+            .filter { inGaleCorridor(session, it) && visible(player.eyeLocation, it) && visible(centerLine, it) }
             .sortedBy { center(it).distanceSquared(centerLine) }
             .take(settings.maxAreaTargets.coerceIn(1, GALE_TARGET_LIMIT))
         for (target in targets) {
             if (!current(player, session) || !damage.eligible(player, target, session.cast)) break
             if (!target.isValid || target.isDead || target.isInvulnerable || !inGaleCorridor(session, target) ||
-                !visible(player.eyeLocation, center(target)) || !visible(centerLine, center(target))) continue
+                !visible(player.eyeLocation, target) || !visible(centerLine, target)) continue
             if (!damage.hit(player, target, session.cast,
                     session.tuning.power * GALE_DAMAGE_MULTIPLIER, session.tuning.vanillaDamage * GALE_DAMAGE_MULTIPLIER)) continue
             if (!current(player, session) || !damage.eligible(player, target, session.cast) ||
-                !visible(player.eyeLocation, center(target)) || !visible(centerLine, center(target))) continue
+                !visible(player.eyeLocation, target) || !visible(centerLine, target)) continue
             target.velocity = target.velocity.clone()
                 .add(payload.sideways.clone().multiply(GALE_SIDE_IMPULSE))
                 .add(Vector(0.0, GALE_LIFT_IMPULSE, 0.0))
@@ -676,7 +677,7 @@ internal class StaffSpellConjurations(
         val target = Bukkit.getEntity(targetId) as? LivingEntity
         val root = roots[targetId]
         if (target == null || root == null || !target.isValid || target.isDead ||
-            !damage.eligible(player, target, session.cast) || !visible(player.eyeLocation, center(target))) {
+            !damage.eligible(player, target, session.cast) || !visible(player.eyeLocation, target)) {
             cancel(session.ownerId)
             return
         }
@@ -689,7 +690,7 @@ internal class StaffSpellConjurations(
             val player = Bukkit.getPlayer(root.ownerId)
             val target = Bukkit.getEntity(root.targetId) as? LivingEntity
             if (player == null || target == null || !target.isValid || target.isDead || !current(player, root.cast) ||
-                !damage.eligible(player, target, root.cast) || !visible(player.eyeLocation, center(target))) {
+                !damage.eligible(player, target, root.cast) || !visible(player.eyeLocation, target)) {
                 clearRoot(root)
                 val session = sessions[root.ownerId]
                 if (session?.payload is TidePayload && session.payload.targetId == root.targetId) endSession(session)
@@ -704,7 +705,7 @@ internal class StaffSpellConjurations(
     private fun applyRoot(player: Player, target: LivingEntity, cast: StaffSpellCast, durationTicks: Int,
         breakOnDamage: Boolean): Boolean {
         if (closed || roots.containsKey(target.uniqueId) || !current(player, cast) ||
-            !damage.eligible(player, target, cast) || !visible(player.eyeLocation, center(target))) return false
+            !damage.eligible(player, target, cast) || !visible(player.eyeLocation, target)) return false
         val duration = durationTicks.coerceIn(1, ROOT_MAX_DURATION)
         val previous = target.getPotionEffect(PotionEffectType.SLOWNESS)
         val applied = target.addPotionEffect(PotionEffect(PotionEffectType.SLOWNESS, duration, ROOT_AMPLIFIER, false, false), true)
@@ -751,7 +752,7 @@ internal class StaffSpellConjurations(
         if (player.uniqueId != mark.key.ownerId || !current(player, mark.cast)) return false
         val target = Bukkit.getEntity(mark.key.targetId) as? LivingEntity ?: return false
         if (!target.isValid || target.isDead || !damage.eligible(player, target, mark.cast) ||
-            !visible(player.eyeLocation, center(target))) return false
+            !visible(player.eyeLocation, target)) return false
         val expected = (mark.durationTicks - (clock - mark.appliedAtTick).toInt()).coerceAtLeast(0)
         val active = target.getPotionEffect(PotionEffectType.SLOWNESS) ?: return false
         return expected > 0 && active.amplifier == mark.amplifier &&
@@ -791,16 +792,16 @@ internal class StaffSpellConjurations(
         }
 
         val targets = targeting.nearby(player, impact, BARRIER_SHATTER_RADIUS, session.cast)
-            .filter { inForwardBurst(session, it) && visible(player.eyeLocation, center(it)) && visible(impact, center(it)) }
+            .filter { inForwardBurst(session, it) && visible(player.eyeLocation, it) && visible(impact, it) }
             .sortedBy { center(it).distanceSquared(impact) }
             .take(settings.maxAreaTargets.coerceIn(1, BARRIER_TARGET_LIMIT))
         for (target in targets) {
             if (!current(player, session) || !damage.eligible(player, target, session.cast)) break
-            if (!target.isValid || target.isDead || target.isInvulnerable || !visible(player.eyeLocation, center(target)) ||
-                !visible(impact, center(target))) continue
+            if (!target.isValid || target.isDead || target.isInvulnerable || !visible(player.eyeLocation, target) ||
+                !visible(impact, target)) continue
             if (!damage.hit(player, target, session.cast, session.tuning.power, session.tuning.vanillaDamage)) continue
             if (!current(player, session) || !damage.eligible(player, target, session.cast) ||
-                !visible(player.eyeLocation, center(target)) || !visible(impact, center(target))) continue
+                !visible(player.eyeLocation, target) || !visible(impact, target)) continue
             target.velocity = target.velocity.clone().add(session.normal.clone().multiply(BARRIER_SHATTER_PUSH))
         }
         endSession(session)

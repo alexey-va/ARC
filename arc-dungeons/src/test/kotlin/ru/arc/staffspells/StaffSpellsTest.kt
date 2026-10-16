@@ -818,18 +818,12 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "icicle primary aims each staggered shot at the current reticle and slows only successful hits" {
-        var deniedId: UUID? = null
-        withStaffHarness(settings = staffSettings(range = 24.0, aimDegrees = 40.0),
-            hit = { _, target -> target.uniqueId != deniedId }) { h ->
+    "icicle primary keeps one live focus through staggered launches and nearby reticle turns" {
+        withStaffHarness(settings = staffSettings(range = 24.0)) { h ->
             val world = h.paper.addSimpleWorld("staff-frost-secondary")
             val player = h.player("staff-frost-secondary", world, StaffSpell.ICICLE)
-            val targets = listOf(
-                h.zombie(world, x = -3.5, z = 10.0),
-                h.zombie(world, x = 4.5, z = 12.0),
-                h.zombie(world, x = 4.5, z = 8.0),
-            )
-            deniedId = targets.last().uniqueId
+            val focus = h.zombie(world, x = 0.5, z = 12.0)
+            val neighbor = h.zombie(world, x = 1.5, z = 14.0)
             h.controller.start()
 
             h.controller.cast(player, StaffCastInput.PRIMARY, 0.6)
@@ -848,24 +842,22 @@ class StaffSpellsTest : FreeSpec({
                     direction = center(victim).toVector().subtract(player.eyeLocation.toVector())
                 })
             }
-            aimAt(targets[0])
+            aimAt(focus)
             h.scheduler.tick(3)
             h.projectileMoves shouldBe emptyList()
             h.scheduler.tick(1)
             h.projectileMoves.map { it.id } shouldBe listOf(icicles[0].id)
-            aimAt(targets[1])
+            aimAt(neighbor)
             h.scheduler.tick(2)
             h.projectileMoves.count { it.id == icicles[1].id } shouldBe 1
-            aimAt(targets[2])
             h.scheduler.tick(2)
             h.projectileMoves.count { it.id == icicles[2].id } shouldBe 1
             h.scheduler.tick(50)
 
-            h.hits.map { it.uniqueId }.toSet() shouldBe targets.map { it.uniqueId }.toSet()
-            h.hits.size shouldBe 3
-            h.damageScales shouldBe List(3) { 1.45 to 8.7 }
-            targets.filter { it.uniqueId != deniedId }.all { it.hasPotionEffect(PotionEffectType.SLOWNESS) } shouldBe true
-            targets.last().hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
+            h.hits.map { it.uniqueId } shouldBe listOf(focus.uniqueId)
+            h.damageScales shouldBe listOf(1.45 to 8.7)
+            focus.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe true
+            neighbor.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
             verify(exactly = 7) { h.effects.impact(any(), any(), 0.9, 10) }
         }
     }
@@ -980,7 +972,6 @@ class StaffSpellsTest : FreeSpec({
     }
 
     "icicle stops steering when a selected target becomes occluded" {
-        val baseline = firstIcicleHeadingAtAgeFive()
         withStaffHarness(settings = staffSettings(range = 24.0)) { h ->
             val world = h.paper.addSimpleWorld("staff-icicle-lost-cover")
             val player = h.player("staff-icicle-lost-cover", world, StaffSpell.ICICLE)
@@ -991,13 +982,14 @@ class StaffSpellsTest : FreeSpec({
             h.controller.cast(player, StaffCastInput.PRIMARY, 0.6)
             val firstShot = h.visualPlays.first { it.spell == StaffSpell.ICICLE && it.charging }.id
             h.scheduler.tick(4) // The first bolt acquires the directly aimed target.
+            val launchHeading = h.projectileMoves.single { it.id == firstShot }.direction
             for (x in -3..3) for (y in 64..66) world.getBlockAt(x, y, 11).type = Material.STONE
             visible(player.eyeLocation, center(target)) shouldBe false
             h.scheduler.tick(4)
 
             val firstShotMoves = h.projectileMoves.filter { it.id == firstShot }
             firstShotMoves.size shouldBe 5
-            (firstShotMoves[4].direction.distanceSquared(baseline) < 1e-8) shouldBe true
+            (firstShotMoves[4].direction.distanceSquared(launchHeading) < 1e-8) shouldBe true
         }
     }
 
@@ -1091,18 +1083,19 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "emerald bloom expands at the target after its warning" {
+    "NOVA ground claws contact the aimed area after their warning" {
         withStaffHarness(settings = staffSettings(range = 32.0)) { h ->
             val world = h.paper.addSimpleWorld("staff-bloom")
+            for (x in -6..6) for (z in 0..22) world.getBlockAt(x, 63, z).type = Material.STONE
             val player = h.player("bloom", world, StaffSpell.NOVA).apply { isSneaking = true }
             val target = h.zombie(world, x = 0.5, z = 16.0)
             val side = h.zombie(world, x = 2.5, z = 16.0)
             val remote = h.zombie(world, x = 8.0, z = 16.0)
             h.controller.start()
             h.controller.cast(player)
-            h.scheduler.tick(5)
+            h.scheduler.tick(12)
             h.hits shouldBe emptyList()
-            h.scheduler.tick(25)
+            h.scheduler.tick(2)
             h.hits.map { it.uniqueId }.toSet() shouldBe setOf(target.uniqueId, side.uniqueId)
             remote.isValid shouldBe true
             h.hits.distinctBy { it.uniqueId }.size shouldBe h.hits.size
@@ -1490,24 +1483,34 @@ internal fun withStaffHarness(
                     every { isEffect } returns true
                 }
             }
-            every {
-                anyConstructed<WorldMock>().rayTraceBlocks(
-                    any<Location>(), any<Vector>(), any<Double>(), any<FluidCollisionMode>(), any<Boolean>(),
-                )
-            } answers {
-                val start = firstArg<Location>()
-                val direction = secondArg<Vector>().clone().normalize()
-                val distance = thirdArg<Double>()
+            fun ray(start: Location, directionInput: Vector, distance: Double,
+                ignorePassable: Boolean, canCollide: (org.bukkit.block.Block) -> Boolean): RayTraceResult? {
+                val direction = directionInput.clone().normalize()
                 val world = requireNotNull(start.world)
                 val steps = (distance / rayStep).toInt().coerceAtLeast(1)
-                (1..steps).firstNotNullOfOrNull { step ->
+                return (1..steps).firstNotNullOfOrNull { step ->
                     val hitPosition = start.toVector().add(direction.clone().multiply(distance * step / steps))
                     val block = world.getBlockAt(hitPosition.blockX, hitPosition.blockY, hitPosition.blockZ)
-                    if (block.type.isAir) null else BoundingBox(
+                    if (block.type.isAir || ignorePassable && block.isPassable || !canCollide(block)) null else BoundingBox(
                         block.x.toDouble(), block.y.toDouble(), block.z.toDouble(),
                         block.x + 1.0, block.y + 1.0, block.z + 1.0,
                     ).rayTrace(start.toVector(), direction, distance)
                         ?.let { hit -> RayTraceResult(hit.hitPosition, block, hit.hitBlockFace ?: BlockFace.NORTH) }
+                }
+            }
+            every {
+                anyConstructed<WorldMock>().rayTraceBlocks(
+                    any<Location>(), any<Vector>(), any<Double>(), any<FluidCollisionMode>(), any<Boolean>(),
+                )
+            } answers { ray(firstArg(), secondArg(), thirdArg(), arg(4)) { true } }
+            every {
+                anyConstructed<WorldMock>().rayTraceBlocks(
+                    any<io.papermc.paper.math.Position>(), any<Vector>(), any<Double>(), any<FluidCollisionMode>(),
+                    any<Boolean>(), any<java.util.function.Predicate<org.bukkit.block.Block>>(),
+                )
+            } answers {
+                ray(firstArg<io.papermc.paper.math.Position>() as Location, secondArg(), thirdArg(), arg(4)) {
+                    arg<java.util.function.Predicate<org.bukkit.block.Block>>(5).test(it)
                 }
             }
             MockBukkitTestRuntime.open().use { paper ->

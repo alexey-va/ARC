@@ -9,13 +9,17 @@ import org.bukkit.entity.Player
 import org.bukkit.potion.PotionEffect
 import org.bukkit.potion.PotionEffectType
 import org.bukkit.util.Vector
+import org.joml.Quaternionf
 import org.joml.Vector3f
 import ru.arc.core.LifecycleTaskScope
 import java.util.UUID
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.cos
+import kotlin.math.hypot
 import kotlin.math.sin
+import kotlin.math.tan
 
 /** Authored spell sequences. Each stage owns its collision timing and its matching native VFX. */
 internal class StaffSpellArsenal(
@@ -28,6 +32,7 @@ internal class StaffSpellArsenal(
     private val rootActive: (UUID, UUID) -> Boolean = { _, _ -> false },
     private val clearRoots: (UUID) -> Unit = {},
 ) : AutoCloseable {
+    private data class RootCapture(val target: LivingEntity, val age: Int)
     private data class Attack(
         val casterId: UUID,
         val spell: StaffSpell,
@@ -57,9 +62,9 @@ internal class StaffSpellArsenal(
         var travelPoint: Location? = null,
         var galeImpactAge: Int? = null,
         var galeImpactPoint: Location? = null,
-        var novaTrunk: List<Vector3f> = emptyList(),
-        var novaBranches: List<StaffRootBranch> = emptyList(),
-        val novaTargets: MutableList<LivingEntity> = mutableListOf(),
+        var novaPaths: List<StaffRootBranch> = emptyList(),
+        val novaCaptures: MutableList<RootCapture> = mutableListOf(),
+        val novaWrapGroups: MutableSet<Int> = mutableSetOf(),
         val novaWrapScenes: MutableSet<UUID?> = mutableSetOf(),
         var prismScene: UUID? = null,
 
@@ -79,10 +84,11 @@ internal class StaffSpellArsenal(
     fun cast(player: Player, spell: StaffSpell, cast: StaffSpellCast, tuning: StaffSpellTuning,
         input: StaffCastInput, charge: Double = 0.0) {
         if (closed || input.quick || spell !in SPELLS || !ready(player) || !damage.isCurrent(player, cast)) return
+        if (spell == StaffSpell.NOVA) { castNova(player, cast, tuning, input, charge); return }
+        if (spell == StaffSpell.GALE && input.secondary) { castAirGale(player, cast, tuning, input, charge); return }
         val eye = player.eyeLocation
         val q = charge.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
-        val forwardPath = spell == StaffSpell.GALE && input.secondary ||
-            spell == StaffSpell.TIDE || spell == StaffSpell.OSSUARY && !input.secondary
+        val forwardPath = spell == StaffSpell.TIDE || spell == StaffSpell.OSSUARY && !input.secondary
         val range = minOf(settings.range, if (spell == StaffSpell.OSSUARY && !input.secondary) 24.0 else 56.0)
         val casterCenteredRequiem = spell == StaffSpell.REQUIEM && input.secondary
         val selected = if (forwardPath || casterCenteredRequiem) null
@@ -93,7 +99,7 @@ internal class StaffSpellArsenal(
         val aimDirection = if (forwardPath) targeting.assistedDirection(player, spell, cast,
             direction = initialDirection, from = eye, range = range) else initialDirection
         val aimed = if (casterCenteredRequiem) player.location.clone()
-            else selected?.let(::center) ?: targeting.rayEnd(eye, aimDirection, range)
+            else selected?.let { staffVisibleTargetPoint(eye, it) } ?: targeting.rayEnd(eye, aimDirection, range)
         val point = targeting.groundBelow(aimed.clone().add(0.0, 2.0, 0.0), 12.0) ?: aimed.clone().subtract(0.0, 1.2, 0.0)
         if (!casterCenteredRequiem && !visible(eye, aimed)) return
         val forward = Vector(point.x - eye.x, 0.0, point.z - eye.z).apply {
@@ -109,8 +115,7 @@ internal class StaffSpellArsenal(
         // The shared block ray below still clips their complete path at cover.
         val intendedTravelEnd = if (forwardPath) eye.clone().add(forward.clone().multiply(range)).apply { y = groundOrigin.y }
             else groundOrigin.clone().add(forward.clone().multiply(distance)).apply { y = point.y }
-        val pathSpell = spell == StaffSpell.TIDE || spell == StaffSpell.GALE && input.secondary ||
-            spell == StaffSpell.NOVA && !input.secondary || spell == StaffSpell.OSSUARY && !input.secondary
+        val pathSpell = spell == StaffSpell.TIDE || spell == StaffSpell.OSSUARY && !input.secondary
         val travelEnd = if (spell == StaffSpell.TIDE && !input.secondary) {
             // TIDE is a fast moving body: keep its full horizontal endpoint here and
             // clip each swept step against the current world in tideOrb. A cast-time
@@ -139,40 +144,24 @@ internal class StaffSpellArsenal(
             targeting.groundBelow(player.location.clone().add(0.0, 1.0, 0.0), 4.0) ?: player.location.clone()
         else point
         val attackOrigin = if (casterCenteredRequiem) attackPoint.clone() else groundOrigin
-        while (attacks.count { it.casterId == player.uniqueId } >= 2)
-            remove(attacks.first { it.casterId == player.uniqueId }, releaseRoots = false)
-        while (attacks.size >= 24) remove(attacks.first(), releaseRoots = false)
         val radius = when {
             spell == StaffSpell.OSSUARY && input.secondary -> ossuarySecondaryRadius(q)
             spell == StaffSpell.OSSUARY -> ossuaryPrimaryRadius(q)
             spell == StaffSpell.TIDE && input.secondary -> staffTideWaveHalfWidth(q)
-            spell == StaffSpell.NOVA -> if (input.secondary) 4.5 + q * .4 else 3.5 + q * .4
             else -> 2.2 + q
         }
         val a = Attack(player.uniqueId, spell, input, cast.copy(visualCharge = q), tuning,
-            attackOrigin, attackPoint, selected?.let(::center) ?: aimed, travelEnd, forward, nodes, radius,
+            attackOrigin, attackPoint, aimed, travelEnd, forward, nodes, radius,
             staffArsenalLifetime(spell, input.secondary)).apply {
-            if (spell == StaffSpell.GALE && input.secondary || spell == StaffSpell.TIDE && input.secondary)
+            if (spell == StaffSpell.TIDE && input.secondary)
                 travelPoint = groundOrigin.clone()
         }
-        attacks += a
         if (spell == StaffSpell.REQUIEM) a.requiemRayLimits = requiemRayLimits(a)
-        sound(a, a.origin, false)
+        admit(a)
         when (spell) {
             StaffSpell.LUNAR, StaffSpell.PRISM -> scene(a, a.point, a.duration)
-            StaffSpell.GALE -> if (input.secondary) scene(a, a.origin.clone().add(0.0, 1.1, 0.0), a.duration,
-                a.travelEnd.clone().add(0.0, 1.1, 0.0), controllerDriven = true)
-                else scene(a, a.point, a.duration)
+            StaffSpell.GALE -> scene(a, a.point, a.duration, controllerDriven = true)
             StaffSpell.REQUIEM -> scene(a, a.point, a.duration)
-            StaffSpell.NOVA -> {
-                val contactTick = novaContactTick(a)
-                if (!input.secondary) a.novaTrunk = rootFloorPath(a.origin, a.travelEnd, 12)
-                    .map { localPoint(a.origin, it) }
-                prepareNovaTargets(a, player)
-                a.scenes += effects.custom(a.casterId, a.spell, a.origin, a.duration) { age ->
-                    staffNovaNetworkParts(age, a.duration, contactTick, a.novaTrunk, a.novaBranches)
-                }
-            }
             StaffSpell.TIDE -> if (!input.secondary) {
                 scene(a, a.origin.clone().add(0.0, 1.2, 0.0), a.duration,
                     a.travelEnd.clone().add(0.0, 1.2, 0.0), controllerDriven = true)
@@ -180,6 +169,67 @@ internal class StaffSpellArsenal(
             StaffSpell.OSSUARY -> if (input.secondary) scene(a, a.point, a.duration)
             else -> Unit
         }
+        frame(a, player)
+    }
+
+    private fun admit(a: Attack) {
+        while (attacks.count { it.casterId == a.casterId } >= 2)
+            remove(attacks.first { it.casterId == a.casterId }, releaseRoots = false)
+        while (attacks.size >= 24) remove(attacks.first(), releaseRoots = false)
+        attacks += a
+        sound(a, a.origin, false)
+    }
+
+    private fun castNova(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning,
+        input: StaffCastInput, charge: Double) {
+        val eye = player.eyeLocation
+        val q = charge.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
+        val forward = eye.clone().apply { pitch = 0f }.direction.normalize()
+        val origin = targeting.groundBelow(player.location.clone().add(0.0, 1.0, 0.0), 4.0) ?: return
+        val reach = minOf(settings.range, STAFF_NOVA_FAN_REACH)
+        val selected = if (input.secondary)
+            targeting.aimed(player, minOf(settings.range, 56.0), settings.aimDegrees, cast).firstOrNull() else null
+        val aim = if (input.secondary) selected?.let { staffVisibleTargetPoint(eye, it) }
+            ?: targeting.rayEnd(eye, eye.direction, minOf(settings.range, 56.0))
+            else origin.clone().add(forward.clone().multiply(reach))
+        val point = if (input.secondary) targeting.groundBelow(aim.clone().add(0.0, 1.5, 0.0), 12.0) ?: return else aim
+        if (input.secondary && !visible(eye, point.clone().add(0.0, .4, 0.0))) return
+        val radius = (4.5 + q * .4) * cast.enchantments.radiusMultiplier
+        val a = Attack(player.uniqueId, StaffSpell.NOVA, input, cast.copy(visualCharge = q), tuning,
+            origin, point, aim, point, forward, emptyList(), radius,
+            STAFF_NOVA_ATTACK_TICKS)
+        val right = Vector(forward.z, 0.0, -forward.x)
+        val anchor = if (input.secondary) point else origin
+        val layout = if (input.secondary) staffNovaSnarePaths(radius) else staffNovaFanPaths(reach)
+        a.novaPaths = layout.mapNotNull { path ->
+            val knots = path.points.map { p -> anchor.clone().add(right.clone().multiply(p.x.toDouble()))
+                .add(forward.clone().multiply(p.z.toDouble())) }
+            val ground = rootFloorPath(knots)
+            ground.takeIf { it.size >= 2 }?.let { StaffRootBranch(path.key, it.map { at -> localPoint(origin, at) }) }
+        }
+        if (a.novaPaths.isEmpty()) return
+        admit(a)
+        a.scenes += effects.custom(a.casterId, a.spell, origin, STAFF_NOVA_FIELD_TICKS) { age ->
+            if (input.secondary) staffNovaSnareParts(age, STAFF_NOVA_FIELD_TICKS, a.novaPaths)
+            else staffNovaFanParts(age, STAFF_NOVA_FIELD_TICKS, reach, a.novaPaths)
+        }
+        frame(a, player)
+    }
+
+    private fun castAirGale(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning,
+        input: StaffCastInput, charge: Double) {
+        val eye = player.eyeLocation
+        val q = charge.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
+        val range = minOf(settings.range, 56.0)
+        val direction = targeting.assistedDirection(player, StaffSpell.GALE, cast, eye.direction, eye, range)
+        val origin = targeting.rayEnd(eye, direction, minOf(2.5, range * .25))
+        if (origin.distanceSquared(eye) < .25) return
+        val endpoint = eye.clone().add(direction.clone().multiply(range))
+        val a = Attack(player.uniqueId, StaffSpell.GALE, input, cast.copy(visualCharge = q), tuning,
+            origin, endpoint, endpoint, endpoint, direction, emptyList(), 2.2 + q,
+            staffArsenalLifetime(StaffSpell.GALE, true)).apply { travelPoint = origin.clone() }
+        admit(a)
+        scene(a, origin, a.duration, endpoint, controllerDriven = true)
         frame(a, player)
     }
 
@@ -219,16 +269,7 @@ internal class StaffSpellArsenal(
                     radius, lift = .25)
                 if (a.age == 34) sound(a, at, true)
             } else tideOrb(a, player)
-            StaffSpell.GALE -> if (a.input.secondary) galeRam(a, player) else {
-                particles(a, a.point, a.age, a.duration, radius = a.radius)
-                if (a.age in 6..42 && (a.age - 6) % 8 == 0) visuals.withOwner(a.casterId) {
-                    visuals.cue(a.point.clone().add(0.0, 1.2, 0.0), Sound.ITEM_ELYTRA_FLYING,
-                        .72f, .72f + (a.age % 16) * .018f)
-                }
-                if (a.age == 20) sound(a, a.point, true)
-                if (a.age in 20..28) area(a, player, a.point.clone().add(0.0, 1.1, 0.0),
-                    2.5 + a.cast.visualCharge * .45, lift = .2)
-            }
+            StaffSpell.GALE -> if (a.input.secondary) galeRam(a, player) else galeTornado(a, player)
             StaffSpell.LUNAR -> {
                 particles(a, a.point, a.age, a.duration, radius = a.radius)
                 if (a.age == LUNAR_SECONDARY_STRIKE_TICK) sound(a, a.point, true)
@@ -245,79 +286,93 @@ internal class StaffSpellArsenal(
         }
     }
 
-    private fun novaContactTick(a: Attack) = if (a.input.secondary) 20 else NOVA_ROOT_TRAVEL_TICKS
-
     private fun localPoint(origin: Location, at: Location) = Vector3f(
         (at.x - origin.x).toFloat(), (at.y - origin.y).toFloat(), (at.z - origin.z).toFloat())
 
-    private fun rootFloorPath(from: Location, to: Location, segments: Int): List<Location> {
-        val delta = to.toVector().subtract(from.toVector())
-        val points = (0..segments).map { index ->
-            val at = from.clone().add(delta.clone().multiply(index.toDouble() / segments))
-            val floor = targeting.groundBelow(at.clone().add(0.0, 1.5, 0.0), 4.0) ?: at
-            floor.add(0.0, .12, 0.0)
-        }
-        return if (points.zipWithNext().all { (a, b) -> visible(a, b) }) points else emptyList()
-    }
-
-    private fun prepareNovaTargets(a: Attack, player: Player) {
-        val anchor = if (a.input.secondary) a.point else a.travelEnd
-        val candidates = targeting.nearby(player, anchor.clone().add(0.0, .6, 0.0), a.radius, a.cast)
-            .filter { visible(anchor.clone().add(0.0, .55, 0.0), center(it)) }
-            .sortedBy { it.location.distanceSquared(anchor) }.take(settings.maxAreaTargets.coerceIn(1, 16))
-        val routes = candidates.mapNotNull { target ->
-            val path = rootFloorPath(anchor, target.location, 2)
-            if (path.isEmpty()) null else target to StaffRootBranch(target.uniqueId.toString(),
-                path.map { localPoint(a.origin, it) })
-        }
-        a.novaTargets.clear()
-        a.novaTargets += routes.map { it.first }
-        a.novaBranches = routes.map { it.second }.ifEmpty {
-            (0 until 6).mapNotNull { i ->
-                val angle = i * PI / 3 + sin(i * 1.7) * .15
-                val tip = anchor.clone().add(cos(angle) * a.radius * .85, 0.0, sin(angle) * a.radius * .85)
-                val path = rootFloorPath(anchor, tip, 2)
-                path.takeIf { it.isNotEmpty() }?.let { StaffRootBranch("empty:$i", it.map { at -> localPoint(a.origin, at) }) }
+    /** Check between authored knots too, so long roots cannot bridge a hidden gap or ridge. */
+    private fun rootFloorPath(knots: List<Location>): List<Location> {
+        val result = mutableListOf<Location>()
+        var previous: Location? = null
+        for ((index, knot) in knots.withIndex()) {
+            val start = if (index == 0) knot else knots[index - 1]
+            val delta = knot.toVector().subtract(start.toVector())
+            val samples = ceil(delta.length() / .65).toInt().coerceAtLeast(1)
+            for (sample in 1..samples) {
+                val at = start.clone().add(delta.clone().multiply(sample.toDouble() / samples))
+                val floor = targeting.groundBelow(at.add(0.0, 1.5, 0.0), 4.0)?.add(0.0, .12, 0.0)
+                val prior = previous
+                if (floor == null || prior != null && (abs(prior.y - floor.y) > 1.25 || !visible(prior, floor))) {
+                    if (prior != null && result.lastOrNull()?.distanceSquared(prior) != 0.0) result += prior
+                    return result
+                }
+                previous = floor
             }
+            previous?.let(result::add)
         }
+        return result
     }
 
     private fun novaRoots(a: Attack, player: Player) {
-        val contactTick = novaContactTick(a)
-        if (a.age == contactTick - 10) prepareNovaTargets(a, player)
-        if (a.age == contactTick) {
-            prepareNovaTargets(a, player)
-            val at = (if (a.input.secondary) a.point else a.travelEnd).clone().add(0.0, .55, 0.0)
-            sound(a, at, true)
-            a.novaTargets.toList().forEach { target ->
-                if (hit(a, player, target, at) && current(a, player))
-                    rootTarget(player, target, a.cast, STAFF_NOVA_HOLD_TICKS)
+        val reach = minOf(settings.range, STAFF_NOVA_FAN_REACH)
+        if (a.age <= STAFF_NOVA_CONTACT_TICK) {
+            visuals.withOwner(a.casterId) {
+                visuals.particles(a.origin, staffNovaFieldParticles(a.age, a.input.secondary, reach, a.novaPaths))
             }
-            if (!current(a, player)) return
-            a.novaTargets.chunked(8).forEach { group ->
-                val scene = effects.custom(a.casterId, a.spell, a.origin, STAFF_NOVA_HOLD_TICKS + 6) { age ->
-                    val wraps = group.filter { rootActive(it.uniqueId, a.cast.attackId) }.map { target ->
-                        StaffRootWrap(target.uniqueId.toString(), localPoint(a.origin, target.location),
-                            (maxOf(target.boundingBox.widthX, target.boundingBox.widthZ) * .5 + .18).coerceIn(.45, 1.6),
-                            target.height.coerceIn(.8, 3.5))
-                    }
-                    staffNovaWrapParts(age, STAFF_NOVA_HOLD_TICKS, wraps)
+        }
+        val contact = if (a.input.secondary) a.age == STAFF_NOVA_CONTACT_TICK
+            else a.age in (STAFF_NOVA_FAN_START_TICK + 2)..STAFF_NOVA_CONTACT_TICK
+        if (!contact) return
+        val front = staffNovaFanFront(a.age, reach)
+        val previous = staffNovaFanFront(a.age - 2, reach)
+        val center = if (a.input.secondary) a.point else a.origin
+        val candidates = targeting.nearby(player, center.clone().add(0.0, .8, 0.0),
+            if (a.input.secondary) a.radius / a.cast.enchantments.radiusMultiplier else reach + 1.0, a.cast)
+            .filter { it.uniqueId !in a.attempted }
+            .filter { target ->
+                if (a.input.secondary) true else {
+                    val offset = target.location.toVector().subtract(a.origin.toVector())
+                    val z = offset.dot(a.forward)
+                    val x = offset.x * a.forward.z - offset.z * a.forward.x
+                    val body = maxOf(target.boundingBox.widthX, target.boundingBox.widthZ) * .5
+                    val distance = hypot(x, z)
+                    z > 0.0 && abs(x) <= z * tan(STAFF_NOVA_FAN_HALF_ANGLE) + body &&
+                        distance - body <= front && distance + body >= previous
+                }
+            }.sortedBy { it.location.distanceSquared(a.origin) }
+        var captured = false
+        for (target in candidates) {
+            if (!current(a, player) || a.attempted.size >= settings.maxAreaTargets.coerceIn(1, 16)) break
+            val start = if (a.input.secondary) a.point else a.origin
+            val delta = target.location.toVector().subtract(start.toVector())
+            val knots = (0..6).map { i -> start.clone().add(delta.clone().multiply(i / 6.0)) }
+            val path = rootFloorPath(knots)
+            if (path.isEmpty() || hypot(path.last().x - target.location.x, path.last().z - target.location.z) > .2 ||
+                abs(path.last().y - target.location.y) > 1.5) continue
+            val from = path.last().clone().add(0.0, .55, 0.0)
+            if (!hit(a, player, target, from) || !current(a, player) ||
+                !rootTarget(player, target, a.cast, STAFF_NOVA_HOLD_TICKS)) continue
+            a.novaCaptures += RootCapture(target, a.age)
+            captured = true
+            val group = (a.novaCaptures.size - 1) / 8
+            if (a.novaWrapGroups.add(group)) {
+                val born = a.age
+                val scene = effects.custom(a.casterId, a.spell, a.origin,
+                    STAFF_NOVA_ATTACK_TICKS - born) { sceneAge ->
+                    val wraps = a.novaCaptures.drop(group * 8).take(8)
+                        .filter { rootActive(it.target.uniqueId, a.cast.attackId) }.map { capture ->
+                            val entity = capture.target
+                            StaffRootWrap(entity.uniqueId.toString(), localPoint(a.origin, entity.location),
+                                (maxOf(entity.boundingBox.widthX, entity.boundingBox.widthZ) * .5 + .18).coerceIn(.45, 1.6),
+                                entity.height.coerceIn(.8, 3.5), capture.age - born)
+                        }
+                    staffNovaWrapParts(sceneAge, STAFF_NOVA_HOLD_TICKS, wraps)
                 }
                 a.scenes += scene
                 a.novaWrapScenes += scene
             }
         }
-        // Native accents mark growing tips and then the restrained feet, without filling each cage.
-        if (a.age < contactTick || a.age % 8 == 0) {
-            val samples = a.novaBranches.flatMap { branch ->
-                val f = ((a.age - contactTick + 10) / 10.0).coerceIn(0.0, 1.0).toFloat()
-                val p = Vector3f(branch.points.first()).lerp(branch.points.last(), f)
-                listOf(StaffParticleSample(org.bukkit.Particle.DUST_COLOR_TRANSITION,
-                    Vector(p.x.toDouble(), p.y.toDouble(), p.z.toDouble()),
-                    data = staffFade(0xb6ee75, 0x315830, 1.15f)))
-            }
-            visuals.withOwner(a.casterId) { visuals.particles(a.origin, samples) }
-        }
+        if (captured || a.input.secondary) sound(a, if (a.input.secondary) a.point else
+            a.origin.clone().add(a.forward.clone().multiply(front)), true)
     }
 
     private fun tideOrb(a: Attack, player: Player) {
@@ -454,7 +509,7 @@ internal class StaffSpellArsenal(
             val end = targeting.rayEnd(from, requestedEnd.toVector().subtract(from.toVector()),
                 from.distance(requestedEnd))
             targeting.lineTargets(player, from, end, .55, a.cast).forEach { target ->
-                if (visible(frontOrigin, center(target)))
+                if (visible(frontOrigin, target))
                     hit(a, player, target, from, if (secondary)
                         1.35 / STAFF_REQUIEM_SECONDARY_CLANG_TICKS.size else 1.0 / STAFF_REQUIEM_PRIMARY_CLANG_TICKS.size)
             }
@@ -488,7 +543,7 @@ internal class StaffSpellArsenal(
         if (a.age == 10) {
             val emitter = a.point.clone().add(0.0, 2.6, 0.0)
             val eligible = targeting.nearby(player, emitter, 12.0, a.cast)
-                .filter { visible(emitter, center(it)) }.sortedBy { center(it).distanceSquared(emitter) }.take(3)
+                .filter { visible(emitter, it) }.sortedBy { center(it).distanceSquared(emitter) }.take(3)
             if (!current(a, player)) return
             a.rays = if (a.input.secondary) {
                 // Three converging emitters focus on the aimed point, then pierce along the cast line.
@@ -498,7 +553,9 @@ internal class StaffSpellArsenal(
                     from to targeting.rayEnd(from, emitter.toVector().subtract(from.toVector()).normalize(),
                         from.distance(emitter).coerceAtMost(48.0))
                 }
-            } else if (eligible.isNotEmpty()) eligible.map { emitter.clone() to center(it) }
+            } else if (eligible.isNotEmpty()) eligible.mapNotNull { target ->
+                staffVisibleTargetPoint(emitter, target, player.eyeLocation)?.let { emitter.clone() to it }
+            }
             else (-1..1).map { lane -> emitter.clone() to targeting.rayEnd(emitter,
                 a.forward.clone().rotateAroundY(lane * .55), 9.0) }
             sound(a, emitter, true)
@@ -533,10 +590,10 @@ internal class StaffSpellArsenal(
                 .toMutableList()
             repeat(minOf(6, settings.maxAreaTargets.coerceIn(1, 16))) {
                 val from = points.last()
-                val next = remaining.filter { visible(from, center(it)) }
+                val next = remaining.filter { visible(from, it) }
                     .minByOrNull { center(it).distanceSquared(from) } ?: return@repeat
                 remaining.remove(next)
-                val aim = center(next)
+                val aim = staffVisibleTargetPoint(from, next, player.eyeLocation) ?: return@repeat
                 val direction = aim.toVector().subtract(from.toVector())
                 if (direction.lengthSquared() < .01) return@repeat
                 // A mirror just beyond each victim lets the same ray pierce the body before turning.
@@ -585,6 +642,37 @@ internal class StaffSpellArsenal(
 
     private data class GroundPathStep(val from: Location, val to: Location, val blocked: Boolean)
 
+    private fun galeTornado(a: Attack, player: Player) {
+        val previous = a.travelPoint?.clone() ?: a.point.clone()
+        val right = Vector(a.forward.z, 0.0, -a.forward.x)
+        val relative = previous.toVector().subtract(a.point.toVector())
+        val requested = staffGaleWanderStep(Vector3f(relative.dot(right).toFloat(), 0f,
+            relative.dot(a.forward).toFloat()), a.age, a.cast.visualCharge)
+        val desired = a.point.clone().add(right.multiply(requested.x.toDouble()))
+            .add(a.forward.clone().multiply(requested.z.toDouble())).apply { y = previous.y }
+        val delta = desired.toVector().subtract(previous.toVector())
+        val bodyFrom = previous.clone().add(0.0, 1.1, 0.0)
+        val clipped = if (delta.lengthSquared() > .0001)
+            targeting.rayEnd(bodyFrom, delta, delta.length()).subtract(0.0, 1.1, 0.0) else previous
+        val floor = targeting.groundBelow(clipped.clone().add(0.0, 1.0, 0.0), 3.0)
+        val at = floor?.takeIf { abs(it.y - previous.y) <= .65 &&
+            visible(bodyFrom, it.clone().add(0.0, 1.1, 0.0)) } ?: previous
+        a.travelPoint = at.clone()
+        a.scenes.firstOrNull()?.let { effects.move(it, at); effects.synchronize(it, a.age) }
+        particles(a, at, a.age, a.duration, radius = a.radius)
+        if (a.age in 6..42 && (a.age - 6) % 8 == 0) visuals.withOwner(a.casterId) {
+            visuals.cue(at.clone().add(0.0, 1.2, 0.0), Sound.ITEM_ELYTRA_FLYING,
+                .72f, .72f + (a.age % 16) * .018f)
+        }
+        if (a.age == 8) sound(a, at, true)
+        if (a.age in 8..44) {
+            val body = at.clone().add(0.0, 1.1, 0.0)
+            val radius = 2.5 + a.cast.visualCharge * .45
+            sweptContact(a, player, bodyFrom, body, radius, lift = .2)
+            area(a, player, body, radius, lift = .2)
+        }
+    }
+
     /** Samples the floor at each moved frame and clips the current step before intervening blocks. */
     private fun groundStep(a: Attack, progress: Double): GroundPathStep {
         val from = a.travelPoint?.clone() ?: a.origin.clone()
@@ -597,7 +685,7 @@ internal class StaffSpellArsenal(
         val distance = delta.length()
         if (!distance.isFinite()) return GroundPathStep(from, from, blocked = true)
         if (distance < .001) return GroundPathStep(from, floor, blocked = false)
-        val ray = staffBlockHit(rayFrom, delta, distance)
+        val ray = staffBlockHit(rayFrom, delta, distance, ignoreVegetation = true)
         if (!ray.pathLoaded) return GroundPathStep(from, from, blocked = true)
         val hit = ray.hit ?: return GroundPathStep(from, floor, blocked = false)
         val safeDistance = (hit.hitPosition.distance(rayFrom.toVector()) - .04).coerceAtLeast(0.0)
@@ -616,23 +704,26 @@ internal class StaffSpellArsenal(
         }
 
         val progress = ((a.age - 4) / GALE_RAM_TRAVEL_TICKS).coerceIn(0.0, 1.0)
-        val step = groundStep(a, progress)
+        val from = a.travelPoint?.clone() ?: a.origin.clone()
+        val requested = along(a, progress)
+        val delta = requested.toVector().subtract(from.toVector())
+        val clipped = if (delta.lengthSquared() > .0001) targeting.rayEnd(from, delta, delta.length()) else from
+        val step = GroundPathStep(from, clipped, clipped.distanceSquared(requested) > .0001)
         val at = step.to
         a.travelPoint = at.clone()
         val burstRadius = galeRamBurstRadius(a)
         particles(a, at, a.age, a.duration, radius = burstRadius)
         a.scenes.firstOrNull()?.let { id ->
-            val sceneAt = at.clone().add(0.0, 1.1, 0.0)
-            effects.move(id, sceneAt)
+            effects.move(id, at)
             effects.synchronize(id, a.age.coerceAtLeast(0))
         }
 
         if (a.age >= 6 && progress > 0.0) {
-            val fromBody = step.from.clone().add(0.0, 1.1, 0.0)
-            val toBody = at.clone().add(0.0, 1.1, 0.0)
+            val fromBody = step.from
+            val toBody = at
             val target = targeting.lineTargets(player, fromBody, toBody, GALE_RAM_HIT_WIDTH, a.cast).firstOrNull()
             if (target != null) {
-                val contact = groundContact(fromBody, toBody, target, GALE_RAM_HIT_WIDTH, a.cast) ?: at
+                val contact = airContact(fromBody, toBody, target, GALE_RAM_HIT_WIDTH, a.cast) ?: at
                 if (hit(a, player, target, fromBody))
                     target.velocity = target.velocity.apply { y = maxOf(y, .38) }
                 if (!current(a, player)) { remove(a); return }
@@ -643,7 +734,7 @@ internal class StaffSpellArsenal(
         if (step.blocked || progress >= 1.0) beginGaleRamRelease(a, player, at)
     }
 
-    private fun groundContact(from: Location, to: Location, target: LivingEntity,
+    private fun airContact(from: Location, to: Location, target: LivingEntity,
         width: Double, cast: StaffSpellCast): Location? {
         val delta = to.toVector().subtract(from.toVector())
         val distance = delta.length()
@@ -651,7 +742,7 @@ internal class StaffSpellArsenal(
         val direction = delta.multiply(1.0 / distance)
         val hit = target.boundingBox.expand(width * cast.enchantments.radiusMultiplier)
             .rayTrace(from.toVector(), direction, distance)?.hitPosition ?: return null
-        return targeting.groundBelow(hit.toLocation(from.world).add(0.0, 2.0, 0.0), 12.0)
+        return hit.toLocation(from.world)
     }
 
     private fun beginGaleRamRelease(a: Attack, player: Player, at: Location) {
@@ -671,7 +762,7 @@ internal class StaffSpellArsenal(
             secondary = true, radius = galeRamBurstRadius(a), impact = true)
         if (stageAge in 0..GALE_RAM_DAMAGE_TICKS) {
             val impactRadius = galeRamBurstRadius(a) * smooth(stageAge / 3.0)
-            if (impactRadius > .05) area(a, player, at.clone().add(0.0, .8, 0.0), impactRadius)
+            if (impactRadius > .05) area(a, player, at, impactRadius)
         }
     }
 
@@ -695,9 +786,15 @@ internal class StaffSpellArsenal(
             240 / a.nodes.size.coerceAtLeast(1) else 160
         val admitted = if (authored.size <= limit) authored else
             List(limit) { index -> authored[index * (authored.size - 1) / (limit - 1)] }
+        val airRotation = if (a.spell == StaffSpell.GALE && secondary)
+            Quaternionf().rotationTo(Vector3f(0f, 0f, 1f), Vector3f(a.forward.x.toFloat(),
+                a.forward.y.toFloat(), a.forward.z.toFloat())) else null
         val samples = admitted.map { sample ->
             val p = sample.offset
-            sample.copy(offset = right.clone().multiply(p.x).add(Vector(0.0, p.y, 0.0)).add(a.forward.clone().multiply(p.z)))
+            val offset = if (airRotation != null) airRotation.transform(Vector3f(p.x.toFloat(), p.y.toFloat(), p.z.toFloat()))
+                .let { Vector(it.x.toDouble(), it.y.toDouble(), it.z.toDouble()) }
+                else right.clone().multiply(p.x).add(Vector(0.0, p.y, 0.0)).add(a.forward.clone().multiply(p.z))
+            sample.copy(offset = offset)
         }
         visuals.withOwner(a.casterId) { visuals.particles(at, samples) }
     }
@@ -717,8 +814,8 @@ internal class StaffSpellArsenal(
         damageMultiplier: Double = 1.0): Boolean {
         if (!current(a, player) || a.attempted.size >= settings.maxAreaTargets || target.uniqueId in a.attempted ||
             !damage.eligible(player, target, a.cast) || center(target).distanceSquared(player.eyeLocation) > settings.range * settings.range ||
-            !visible(player.eyeLocation, center(target)) ||
-            !visible(from, center(target))) return false
+            !visible(player.eyeLocation, target) ||
+            !visible(from, target)) return false
         a.attempted += target.uniqueId
         return damage.hit(player, target, a.cast, a.tuning.power * damageMultiplier,
             a.tuning.vanillaDamage * damageMultiplier)
@@ -778,7 +875,6 @@ internal class StaffSpellArsenal(
         private const val GALE_RAM_BURST_RADIUS = 2.3
         private const val TIDE_ORB_HIT_WIDTH = .68
         private const val TIDE_WAVE_TRAVEL_TICKS = 30.0
-        private const val NOVA_ROOT_TRAVEL_TICKS = 30
         private const val OSSUARY_SPIKE_START_TICK = 4
         private const val OSSUARY_SPIKE_STAGGER_TICKS = 2
         private const val OSSUARY_SPIKE_SCENE_TICKS = 22

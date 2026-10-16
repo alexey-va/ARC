@@ -111,9 +111,10 @@ class StaffSpellModeledDamageTest : FreeSpec({
         every { player.eyeLocation } returns org.bukkit.Location(world, .5, 65.6, .5)
         every { target.location } returns org.bukkit.Location(world, .5, 64.0, 4.5)
         every { target.height } returns 1.8
+        every { target.boundingBox } returns org.bukkit.util.BoundingBox(.2, 64.0, 4.2, .8, 65.8, 4.8)
         every { world.isChunkLoaded(any<Int>(), any<Int>()) } returns true
-        every { world.rayTraceBlocks(any<org.bukkit.Location>(), any<org.bukkit.util.Vector>(), any<Double>(),
-            any<org.bukkit.FluidCollisionMode>(), any<Boolean>()) } returns null
+        every { world.rayTraceBlocks(any<io.papermc.paper.math.Position>(), any<org.bukkit.util.Vector>(), any<Double>(),
+            any<org.bukkit.FluidCollisionMode>(), any<Boolean>(), any<java.util.function.Predicate<org.bukkit.block.Block>>()) } returns null
         every { target.isValid } returns true
         every { target.isDead } returns false
         every { target.isInvulnerable } returns false
@@ -142,8 +143,8 @@ class StaffSpellModeledDamageTest : FreeSpec({
         val player = mockk<Player>()
         val target = mockk<LivingEntity>()
         readyEntities(player, target, world)
-        every { world.rayTraceBlocks(any<org.bukkit.Location>(), any<org.bukkit.util.Vector>(), any<Double>(),
-            any<org.bukkit.FluidCollisionMode>(), false) } returns
+        every { world.rayTraceBlocks(any<io.papermc.paper.math.Position>(), any<org.bukkit.util.Vector>(), any<Double>(),
+            any<org.bukkit.FluidCollisionMode>(), true, any<java.util.function.Predicate<org.bukkit.block.Block>>()) } returns
             org.bukkit.util.RayTraceResult(org.bukkit.util.Vector(.5, 65.0, 2.0))
         StaffSpellDamage().hit(player, target, cast(player), 1.0, 6.0) shouldBe false
         verify(exactly = 0) { target.damage(any<Double>(), player) }

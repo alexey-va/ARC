@@ -127,7 +127,13 @@ object StaffRedesignPreviewExport {
         charge: Double,
         duration: Int,
         age: Int,
+        galePitchDegrees: Double = 0.0,
     ): Map<String, Any> {
+        val galeRotation = if (spell == StaffSpell.GALE && input.secondary)
+            Quaternionf().rotationX(-Math.toRadians(galePitchDegrees).toFloat()) else null
+        val galeDirection = galeRotation?.transform(Vector3f(0f, 0f, 1f)) ?: Vector3f(0f, 0f, 1f)
+        fun airPoint(distance: Double) = Vector(galeDirection.x * distance,
+            1.62 + galeDirection.y * distance, galeDirection.z * distance)
         val radius = arsenalRadius(spell, input, charge)
         // Live TIDE/GALE Display scenes inherit Attack.radius; their particle calls may override it.
         val displayRadius = when {
@@ -149,7 +155,10 @@ object StaffRedesignPreviewExport {
             staffArsenalParts(spell, localAge, localDuration, sceneLength, localRadius,
                 impact = impact, secondary = input.secondary, input = input, charge = charge)
                 .forEachIndexed { partIndex, display ->
-                    parts += part(display, "${spell.id}:node:$index", partIndex, anchor)
+                    val oriented = if (galeRotation == null) display else display.copy(
+                        center = galeRotation.transform(Vector3f(display.center)),
+                        rotation = Quaternionf(galeRotation).mul(display.rotation))
+                    parts += part(oriented, "${spell.id}:node:$index", partIndex, anchor)
                 }
         }
 
@@ -163,7 +172,13 @@ object StaffRedesignPreviewExport {
             val admitted = if (authored.size <= limit) authored else List(limit) { index ->
                 authored[index * (authored.size - 1) / (limit - 1)]
             }
-            admitted.forEach { emissions += sample(it, anchor) }
+            admitted.forEach {
+                val oriented = if (galeRotation == null) it else galeRotation.transform(
+                    Vector3f(it.offset.x.toFloat(), it.offset.y.toFloat(), it.offset.z.toFloat())).let { offset ->
+                    it.copy(offset = Vector(offset.x.toDouble(), offset.y.toDouble(), offset.z.toDouble()))
+                }
+                emissions += sample(oriented, anchor)
+            }
         }
 
         val pathLength = when {
@@ -174,7 +189,8 @@ object StaffRedesignPreviewExport {
         }
         val launchOffset = if (spell == StaffSpell.TIDE || spell == StaffSpell.GALE && input.secondary ||
             spell == StaffSpell.OSSUARY && !input.secondary) FIXED_LAUNCH_OFFSET_BLOCKS else 0.0
-        val endpoint = Vector(0.0, 0.0, launchOffset + pathLength)
+        val endpoint = if (spell == StaffSpell.GALE && input.secondary) airPoint(launchOffset + pathLength)
+            else Vector(0.0, 0.0, launchOffset + pathLength)
         when {
             spell == StaffSpell.TIDE && !input.secondary -> {
                 val localAge = age - STAFF_TIDE_PRIMARY_ARRIVAL_TICK
@@ -199,11 +215,10 @@ object StaffRedesignPreviewExport {
                 addParticles(age, duration, radius, anchor, localReach = GALE_TIDE_PATH_BLOCKS)
             }
             spell == StaffSpell.GALE && input.secondary -> {
-                val particleAnchor = Vector(0.0, 0.0,
-                    FIXED_LAUNCH_OFFSET_BLOCKS +
-                        GALE_TIDE_PATH_BLOCKS * smooth((age - GALE_RAM_LAUNCH_TICK).toDouble() / GALE_RAM_TRAVEL_TICKS))
+                val particleAnchor = airPoint(FIXED_LAUNCH_OFFSET_BLOCKS +
+                    GALE_TIDE_PATH_BLOCKS * smooth((age - GALE_RAM_LAUNCH_TICK).toDouble() / GALE_RAM_TRAVEL_TICKS))
                 if (age < GALE_RAM_RELEASE_TICK) {
-                    addParts(age, duration, 0, particleAnchor.clone().add(Vector(0.0, 1.1, 0.0)),
+                    addParts(age, duration, 0, particleAnchor,
                         GALE_TIDE_PATH_BLOCKS, localRadius = 2.2 + charge)
                     addParticles(age, duration, radius, particleAnchor)
                 } else {
@@ -216,8 +231,11 @@ object StaffRedesignPreviewExport {
                 }
             }
             spell == StaffSpell.GALE -> {
-                addParts(age, duration, 0, endpoint)
-                addParticles(age, duration, radius, endpoint)
+                var offset = Vector3f()
+                for (tick in 0..age step FRAME_STEP_TICKS) offset = staffGaleWanderStep(offset, tick, charge)
+                val anchor = endpoint.clone().add(Vector(offset.x.toDouble(), 0.0, offset.z.toDouble()))
+                addParts(age, duration, 0, anchor)
+                addParticles(age, duration, radius, anchor)
             }
             spell == StaffSpell.NOVA && !input.secondary -> {
                 val anchor = Vector(0.0, 0.0, FIXED_LAUNCH_OFFSET_BLOCKS)
@@ -271,9 +289,10 @@ object StaffRedesignPreviewExport {
         return mapOf("tick" to age, "parts" to parts, "emissions" to emissions)
     }
 
-    private fun arsenalClip(spell: StaffSpell, input: StaffCastInput, charge: Double): Map<String, Any> {
+    private fun arsenalClip(spell: StaffSpell, input: StaffCastInput, charge: Double,
+        galePitchDegrees: Double = 0.0): Map<String, Any> {
         val duration = staffArsenalLifetime(spell, input.secondary)
-        val frames = ticks(duration).map { age -> arsenalFrame(spell, input, charge, duration, age) }
+        val frames = ticks(duration).map { age -> arsenalFrame(spell, input, charge, duration, age, galePitchDegrees) }
         val previewReach = when {
             spell == StaffSpell.TIDE || spell == StaffSpell.GALE && input.secondary ->
                 FIXED_GALE_TIDE_REACH_BLOCKS
@@ -295,8 +314,8 @@ object StaffRedesignPreviewExport {
             spell == StaffSpell.LUNAR && input.secondary ->
                 "The paired crescents converge at the selected ground point, strike at tick $LUNAR_SECONDARY_DAMAGE_START_TICK, then crumble downward over six ticks into the existing bounded shard field. Its visible ${String.format(Locale.ROOT, "%.1f", arsenalRadius(spell, input, charge) + LUNAR_SECONDARY_RADIUS_BONUS)}-block damage radius remains active through tick $LUNAR_SECONDARY_DAMAGE_END_TICK, with line-of-sight checks preserving cover and one hit per target."
             spell == StaffSpell.GALE ->
-                if (input.secondary) "Two interwoven display bands and a hollow ram head follow the source smoothstep controller from a launch point $FIXED_LAUNCH_OFFSET_BLOCKS blocks ahead to a fixed $FIXED_GALE_TIDE_REACH_BLOCKS-block caster reach ($GALE_TIDE_PATH_BLOCKS blocks of scene travel), from tick $GALE_RAM_LAUNCH_TICK over $GALE_RAM_TRAVEL_TICKS ticks. In this unobstructed flat preview, the ram releases twelve arcing wind petals at the endpoint at tick $GALE_RAM_RELEASE_TICK; its $GALE_RAM_RELEASE_TICKS-tick terminal stage matches the runtime ${GALE_RAM_BASE_BURST_RADIUS}–${GALE_RAM_BASE_BURST_RADIUS + GALE_RAM_CHARGE_BURST_RADIUS}-block damage radius. Runtime floor-samples each step and releases early at a wall, eligible victim, or endpoint."
-                else "Three translucent display ribbons spiral around an open tornado core at the attack point; the native particle accents use the same authored funnel frame."
+                if (input.secondary) "Two interwoven display bands and a hollow ram head follow the source smoothstep controller from a launch point $FIXED_LAUNCH_OFFSET_BLOCKS blocks ahead to a fixed $FIXED_GALE_TIDE_REACH_BLOCKS-block caster reach ($GALE_TIDE_PATH_BLOCKS blocks of scene travel), from tick $GALE_RAM_LAUNCH_TICK over $GALE_RAM_TRAVEL_TICKS ticks. In this unobstructed flat preview, the ram releases twelve arcing wind petals at the endpoint at tick $GALE_RAM_RELEASE_TICK; its $GALE_RAM_RELEASE_TICKS-tick terminal stage matches the runtime ${GALE_RAM_BASE_BURST_RADIUS}–${GALE_RAM_BASE_BURST_RADIUS + GALE_RAM_CHARGE_BURST_RADIUS}-block damage radius. The center follows full pitch ${galePitchDegrees} degrees upward from the caster eye, with the same orientation for displays and particles. Runtime releases early at a wall, eligible victim, or endpoint; it does not project the ram onto ground."
+                else "Three translucent ribbons twist around an open tornado core whose ground anchor wanders irregularly around the aimed point. The exported movement calls staffGaleWanderStep at the runtime two-tick cadence with its 1.05-block step cap; display and native particles share the same moving center. Flat ground and no cover are assumed; runtime clips movement and sweeps damage along this center."
             spell == StaffSpell.TIDE && input.secondary ->
                 "A five-row curled water wall and foam crest follow a yaw-only, floor-sampled path from a launch point $FIXED_LAUNCH_OFFSET_BLOCKS blocks ahead to a fixed $FIXED_GALE_TIDE_REACH_BLOCKS-block caster reach ($GALE_TIDE_PATH_BLOCKS blocks of scene travel), starting at tick $TIDE_WAVE_LAUNCH_TICK and travelling for $TIDE_WAVE_TRAVEL_TICKS ticks. Its ${staffTideWaveHalfWidth(0.0) * 2}–${staffTideWaveHalfWidth(1.0) * 2}-block width matches the runtime damage radius from tick $TIDE_WAVE_DAMAGE_START_TICK through tick $TIDE_WAVE_DAMAGE_END_TICK; walls and raised ground stop the wave. The offline preview shows the flat, unobstructed path."
             spell == StaffSpell.OSSUARY && !input.secondary ->
@@ -310,13 +329,15 @@ object StaffRedesignPreviewExport {
             else -> "Source-authored local particle and display geometry at a fixed anchor."
         }
         return mapOf(
-            "id" to "${spell.id}-${input.name.lowercase(Locale.ROOT)}-${charge.toInt()}",
+            "id" to "${spell.id}-${input.name.lowercase(Locale.ROOT)}-${charge.toInt()}${if (galePitchDegrees == 0.0) "" else "-upward"}",
             "spell" to spell.id, "input" to input.name, "quick" to false,
             "charge" to charge, "durationTicks" to duration,
             "tailTicks" to 40, "frameStepTicks" to FRAME_STEP_TICKS,
             "particleOnly" to (frames.all { (it["parts"] as List<*>).isEmpty() }),
             "anchor" to when {
-                spell == StaffSpell.TIDE || spell == StaffSpell.GALE && input.secondary ->
+                spell == StaffSpell.GALE && input.secondary ->
+                    "caster eye at y=1.62, launch 2.5 blocks along full-pitch aim; air path and impact share the same orientation"
+                spell == StaffSpell.TIDE ->
                     "cast-ground launch point 2.5 blocks ahead of caster; local +Z points to the fixed endpoint"
                 spell == StaffSpell.OSSUARY && !input.secondary ->
                     "cast-ground launch point 2.5 blocks ahead of caster; local +Z follows the fixed spike lane"
@@ -328,7 +349,7 @@ object StaffRedesignPreviewExport {
             "timelineNote" to "$notes Most single-source particle frames use a 160-sample admission limit. OSSUARY divides a 240-sample cast-frame budget across its spikes; REQUIEM source bell frames emit at most 56 samples, while PRISM beam lanes are sampled separately.",
             "sourceFunctions" to (listOf("staffArsenalParts", "staffArsenalParticles", "staffPrismBeam") +
                 if (spell == StaffSpell.GALE || spell == StaffSpell.TIDE)
-                    listOf("staffTideGaleParts", "staffTideGaleParticleSamples") else emptyList()),
+                    listOf("staffTideGaleParts", "staffTideGaleParticleSamples", "staffGaleWanderStep") else emptyList()),
             "frames" to frames,
         )
     }
@@ -528,26 +549,42 @@ object StaffRedesignPreviewExport {
     }
 
     private fun rootNetworkClip(input: StaffCastInput, charge: Double): Map<String, Any> {
-        val contact = if (input.secondary) 20 else 30
-        val duration = staffArsenalLifetime(StaffSpell.NOVA, input.secondary)
-        val trunk = (0..12).map { Vector3f(.18f * kotlin.math.sin(it.toFloat()), .06f, it.toFloat()) }
-        val feet = listOf(Vector3f(-2.5f, 0f, 11f), Vector3f(2.8f, 0f, 12f),
+        val duration = STAFF_NOVA_ATTACK_TICKS
+        val reach = STAFF_NOVA_FAN_REACH
+        val radius = 4.5 + charge * .4
+        val paths = if (input.secondary) staffNovaSnarePaths(radius).map { branch ->
+            branch.copy(points = branch.points.map { Vector3f(it).add(0f, 0f, 12f) })
+        } else staffNovaFanPaths(reach)
+        val feet = if (input.secondary) listOf(Vector3f(-2.5f, 0f, 11f), Vector3f(2.8f, 0f, 12f),
             Vector3f(.3f, 0f, 14.5f), Vector3f(-2.8f, 0f, 13.6f))
-        val branches = feet.mapIndexed { i, target -> StaffRootBranch("target-$i", listOf(
-            Vector3f(trunk.last()), Vector3f(target).lerp(trunk.last(), .5f).add(.35f, .03f, -.2f), Vector3f(target))) }
-        val wraps = feet.mapIndexed { i, target -> StaffRootWrap("target-$i", target, .48, 1.8) }
+        else listOf(Vector3f(-2.5f, 0f, 8f), Vector3f(2.8f, 0f, 12f),
+            Vector3f(.3f, 0f, 16f), Vector3f(-2.8f, 0f, 13.6f))
+        val wraps = feet.mapIndexed { i, target ->
+            val contact = if (input.secondary) STAFF_NOVA_CONTACT_TICK else
+                (4..STAFF_NOVA_CONTACT_TICK step 2).first { staffNovaFanFront(it, reach) + .3 >=
+                    kotlin.math.hypot(target.x.toDouble(), target.z.toDouble()) }
+            StaffRootWrap("target-$i", target, .48, 1.8, contact)
+        }
         return mapOf("id" to "nova-${input.name.lowercase(Locale.ROOT)}-${charge.toInt()}",
             "spell" to "nova", "input" to input.name, "charge" to charge,
             "quick" to false, "durationTicks" to duration, "tailTicks" to 0,
             "frameStepTicks" to FRAME_STEP_TICKS, "particleOnly" to false,
-            "previewReachBlocks" to 16.0,
-            "timelineNote" to "Production root network/wrap helpers with four illustrative target feet on flat ground. Roots contact at tick $contact, wrap for70ticks and wither. Target selection, damage and actual immobilization are not simulated.",
-            "sourceFunctions" to listOf("staffNovaNetworkParts", "staffNovaWrapParts"),
-            "frames" to ticks(duration).map { age -> mapOf("tick" to age,
-                "parts" to (staffNovaNetworkParts(age, duration, contact, if (input.secondary) emptyList() else trunk, branches) +
-                    if (age >= contact && age < contact + STAFF_NOVA_HOLD_TICKS) staffNovaWrapParts(age - contact, STAFF_NOVA_HOLD_TICKS, wraps) else emptyList())
-                    .mapIndexed { index, display -> part(display, "nova", index, Vector()) },
-                "emissions" to emptyList<Any>()) })
+            "previewReachBlocks" to reach,
+            "illustrativeTargets" to feet.map { point(it.x.toDouble(), it.y.toDouble(), it.z.toDouble()) },
+            "timelineNote" to (if (input.secondary)
+                "Eight perimeter claws warn through tick 8 and sweep inward until contact at tick 14 in the aimed ${radius}-block area. "
+                else "Seven thick roots fan across 18 blocks; their shared front travels from tick 2 to tick 14. ") +
+                "Four illustrative accepted victims receive individually timed 70-tick wraps. Field geometry withers by tick 26; wraps remain until each victim's own expiry. Flat-floor source geometry is shared with runtime; target selection, accepted damage, immobilization and cover are not simulated.",
+            "sourceFunctions" to listOf("staffNovaFanPaths", "staffNovaFanFront", "staffNovaFanParts",
+                "staffNovaSnarePaths", "staffNovaSnareParts", "staffNovaFieldParticles", "staffNovaWrapParts"),
+            "frames" to ticks(duration).map { age ->
+                val field = if (input.secondary) staffNovaSnareParts(age, STAFF_NOVA_FIELD_TICKS, paths)
+                    else staffNovaFanParts(age, STAFF_NOVA_FIELD_TICKS, reach, paths)
+                mapOf("tick" to age,
+                    "parts" to (field + staffNovaWrapParts(age, STAFF_NOVA_HOLD_TICKS, wraps))
+                        .mapIndexed { index, display -> part(display, "nova", index, Vector()) },
+                    "emissions" to staffNovaFieldParticles(age, input.secondary, reach, paths).map(::sample))
+            })
     }
 
     private fun prismRefractionClip(charge: Double): Map<String, Any> {
@@ -847,6 +884,7 @@ object StaffRedesignPreviewExport {
                         }) }
                     }
                 }
+                add(arsenalClip(StaffSpell.GALE, StaffCastInput.SECONDARY, 0.0, galePitchDegrees = 25.0))
                 add(meleeClip(StaffSpell.FROST))
                 add(frostRingClip())
                 add(meleeClip(StaffSpell.FAULT))

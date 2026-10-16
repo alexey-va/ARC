@@ -27,7 +27,7 @@ internal fun staffArsenalLifetime(spell: StaffSpell, secondary: Boolean) = when 
     StaffSpell.GALE -> if (secondary) 40 else 52
     StaffSpell.TIDE -> if (secondary) 44 else STAFF_TIDE_PRIMARY_ATTACK_TICKS
     StaffSpell.REQUIEM -> if (secondary) STAFF_REQUIEM_SECONDARY_DURATION_TICKS else STAFF_REQUIEM_PRIMARY_DURATION_TICKS
-    StaffSpell.NOVA -> if (secondary) 96 else 106
+    StaffSpell.NOVA -> STAFF_NOVA_ATTACK_TICKS
     StaffSpell.OSSUARY -> if (secondary) 36 else 54
     else -> 40
 }
@@ -132,47 +132,10 @@ internal fun staffArsenalParts(spell: StaffSpell, ageTicks: Int, durationTicks: 
                     .18 * rise, 1.0 * rise, .18 * rise, yaw = -a, roll = .22 * sin(a))
             }
         }
-        StaffSpell.NOVA -> {
-            if (secondary) {
-                parts += staffNovaDisplayParts(ageTicks, durationTicks, radius, q)
-            } else {
-                val grow = smooth(age / 10.0)
-                val reach = length.coerceIn(.75, 48.0)
-                val segments = (reach / 1.5).toInt().coerceIn(8, 16)
-                val routeTick = age.coerceAtMost(30)
-                repeat(2) { root -> repeat(segments) { joint ->
-                    val f = (joint + .5) / segments
-                    val birth = smooth((routeTick - f * 24.0 + 2.0) / 3.0)
-                    val phase = root * PI
-                    val bend = sin(f * PI * 4 + phase) * .22
-                    val x = (if (root == 0) -.22 else .22) + bend
-                    val yaw = kotlin.math.atan2((sin((f + .01) * PI * 4 + phase) - sin((f - .01) * PI * 4 + phase)) * .22,
-                        reach / segments)
-                    part("root:trail:$root:$joint", if (joint % 3 == 2) Material.MOSS_BLOCK else Material.DARK_OAK_WOOD,
-                        x / scale, .16, (reach * f) / scale,
-                        .22 * birth, .24 * birth, (reach / segments * 1.25) * birth,
-                        yaw = yaw, roll = .1 * kotlin.math.cos(f * PI * 4 + phase))
-                } }
-                repeat(2) { root -> repeat(2) { thorn ->
-                    val f = if (thorn == 0) .32 else .72
-                    val x = (if (root == 0) -.22 else .22) + sin(f * PI * 4 + root * PI) * .22
-                    val birth = smooth((routeTick - f * 24.0 + 2.0) / 3.0)
-                    part("root:thorn:$root:$thorn", Material.FLOWERING_AZALEA_LEAVES,
-                        x / scale, .20, (reach * f) / scale,
-                        .18 * birth, .32 * birth, .42 * birth, yaw = -kotlin.math.atan2(x, reach))
-                } }
-                // At tick 22 the ground runners reach the target; six thorn fingers close over four more ticks.
-                val grasp = smooth((age - 22.0) / 8.0)
-                repeat(6) { finger -> repeat(2) { joint ->
-                    val a = finger * PI * 2 / 6
-                    val h = (joint + 1) / 2.0
-                    val r = .88 - h * .3 * grasp
-                    part("root:grasp:$finger:$joint", if (joint == 1) Material.FLOWERING_AZALEA_LEAVES else Material.MOSS_BLOCK,
-                        cos(a) * r, .16 + h * 1.15, (reach + sin(a) * r) / scale,
-                        .2 * grasp, .48 * grasp, .22 * grasp, yaw = -a, roll = cos(a) * .28)
-                } }
-            }
-        }
+        StaffSpell.NOVA -> parts += if (secondary)
+            staffNovaDisplayParts(age, minOf(durationTicks, STAFF_NOVA_FIELD_TICKS), radius)
+        else staffNovaFanParts(age, minOf(durationTicks, STAFF_NOVA_FIELD_TICKS),
+            length.coerceIn(.75, STAFF_NOVA_FAN_REACH), staffNovaFanPaths(length.coerceIn(.75, STAFF_NOVA_FAN_REACH)))
         else -> Unit
     }
     return parts
@@ -200,7 +163,6 @@ internal fun staffArsenalParticles(spell: StaffSpell, ageTicks: Int, durationTic
     val water = staffFade(0x70eaff, 0x147eb0, 1.5f)
     val wind = staffFade(0xe8f8ff, 0x8ab8d0, 1.2f)
     val soul = staffFade(0xd0fff4, 0x6845a3, 1.5f)
-    val root = staffFade(0xb6ee75, 0x315830, 1.25f)
     val bone = staffFade(0xfff5d9, 0x9b7d59, 1.3f)
     when (spell) {
         StaffSpell.LUNAR -> {
@@ -240,62 +202,8 @@ internal fun staffArsenalParticles(spell: StaffSpell, ageTicks: Int, durationTic
                     cos(a) * r, 1.8 + sin(a * 3) * .7, sin(a) * r)
             }
         }
-        StaffSpell.NOVA -> if (secondary) {
-            val extent = radius.takeIf { it.isFinite() && it > 0.0 }?.coerceIn(0.5, 16.0) ?: 3.0
-            val close = smooth((age - 12.0) / 8.0)
-            val outer = (extent - .45).coerceAtLeast(.25) * (1.0 - close * .34) * fade
-            val angles = doubleArrayOf(-2.88, -1.45, -0.20, 1.14, 2.50)
-            repeat(25) { i ->
-                val vine = i / 5
-                val step = i % 5
-                val f = (step + .5) / 5.0
-                val angle = angles[vine]
-                val r = outer * (1.0 - f * .22 * close) + sin(f * PI + vine) * .05
-                mote(if (step == 4) Particle.HAPPY_VILLAGER else Particle.DUST_COLOR_TRANSITION,
-                    cos(angle) * r, .12 + f * 1.5 + close * f * .12, sin(angle) * r,
-                    if (step == 4) null else root, spread = .018)
-            }
-            repeat(5) { i ->
-                val mid = (angles[i] + if (i == angles.lastIndex) angles[0] + 2.0 * PI else angles[i + 1]) * .5
-                val r = outer * (.70 - close * .18)
-                mote(Particle.DUST_COLOR_TRANSITION, cos(mid) * r, .72 + (i % 3) * .09 + close * .16,
-                    sin(mid) * r, staffFade(0xffe69a, 0x61bb42, 1.2f), spread = .018)
-            }
-            repeat(5) { i ->
-                val angle = angles[i]
-                val r = outer * (.70 - close * .12)
-                mote(Particle.DUST_COLOR_TRANSITION, cos(angle) * r, 1.04 + (i % 2) * .16,
-                    sin(angle) * r, root, spread = .018)
-            }
-            if (ageTicks in 20..28) repeat(8) { i ->
-                val angle = i * 2.399963229728653
-                val r = .38 + smooth((age - 20.0) / 4.0) * .24
-                mote(if (i % 2 == 0) Particle.HAPPY_VILLAGER else Particle.DUST_COLOR_TRANSITION,
-                    cos(angle) * r, .62 + sin(angle * 2) * .42, sin(angle) * r,
-                    if (i % 2 == 0) null else root, spread = .015)
-            }
-        } else {
-            val path = reach.coerceIn(.75, 48.0)
-            val front = smooth(age / 30.0)
-            repeat(48) { i ->
-                val strand = i / 24
-                val step = (i % 24) / 23.0
-                val f = step * front
-                val x = (if (strand == 0) -.22 else .22) + sin(f * PI * 4 + strand * PI) * .22
-                val z = path * f
-                val y = .05 + .18 * abs(sin(f * PI * 4 + strand * PI))
-                mote(if (i % 8 == 0) Particle.HAPPY_VILLAGER else Particle.DUST_COLOR_TRANSITION,
-                    x, y, z, if (i % 8 == 0) null else root, spread = .01)
-            }
-            val endpoint = path * front
-            if (ageTicks >= 22) repeat(18) { i ->
-                val a = i * PI * 2 / 18
-                val r = .55 - smooth((age - 22.0) / 8.0) * .22
-                mote(if (i % 3 == 0) Particle.HAPPY_VILLAGER else Particle.DUST_COLOR_TRANSITION,
-                    cos(a) * r, .35 + sin(a * 2) * .48, endpoint + sin(a) * r,
-                    if (i % 3 == 0) null else root, spread = .014)
-            }
-        }
+        StaffSpell.NOVA -> out += staffNovaFieldParticles(ageTicks, secondary, reach,
+            if (secondary) staffNovaSnarePaths(radius) else staffNovaFanPaths(reach.coerceIn(.75, STAFF_NOVA_FAN_REACH)))
         StaffSpell.OSSUARY -> if (secondary) {
             val extent = radius.takeIf { it.isFinite() && it > 0.0 }?.coerceIn(0.5, 16.0) ?: 5.5
             val angles = doubleArrayOf(-2.90, -1.63, -0.28, 1.02, 2.43)

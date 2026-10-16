@@ -83,7 +83,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
             Vector3f(from.direction.x.toFloat(), from.direction.y.toFloat(), from.direction.z.toFloat()))
         else if (spell == StaffSpell.MARK)
             Quaternionf().rotationY(kotlin.math.atan2(caster.location.x - from.x, caster.location.z - from.z).toFloat())
-        else if (spell == StaffSpell.GALE)
+        else if (spell == StaffSpell.GALE && !secondary)
             staffYawOnlyOrientation(Vector3f(offset.x.toFloat(), offset.y.toFloat(), offset.z.toFloat()))
         else if (spell == StaffSpell.LANCE)
             staffLanceOrientation(Vector3f(offset.x.toFloat(), offset.y.toFloat(), offset.z.toFloat()))
