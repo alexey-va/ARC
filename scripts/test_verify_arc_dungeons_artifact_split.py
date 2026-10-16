@@ -31,6 +31,7 @@ ARC_CORE_ENTRIES = {
     "ru/arc/paper/api/ArcSqlSettings.class",
     "ru/arc/paper/api/ArcMetricsService.class",
     "ru/arc/paper/api/ArcMetricCounter.class",
+    "ru/arc/paper/api/ArcSchematicService.class",
     *(f"{provider}.class" for provider in PROVIDER_CLASSES),
     *(f"{prefix}.class" for prefix in ARC_CORE_RUNTIME_CLASS_PREFIXES),
     *(f"{package}CoreType.class" for package in ARC_CORE_RUNTIME_PACKAGES),
@@ -80,6 +81,7 @@ class ArtifactSplitTest(unittest.TestCase):
     def test_api_and_provider_duplicates_fail(self) -> None:
         child = DUNGEONS_ENTRIES | {
             "ru/arc/paper/api/ArcRedisService.class",
+            "ru/arc/paper/api/ArcSchematicService.class",
             "ru/arc/paper/redis/PaperRedisServiceProvider$Shared.class",
         }
         violations = verify(
@@ -91,9 +93,10 @@ class ArtifactSplitTest(unittest.TestCase):
             DUNGEONS_DESCRIPTOR,
         )
         self.assertTrue(any("ArcDungeons JAR embeds shared Paper API class" in value for value in violations))
+        self.assertTrue(any("ArcSchematicService.class" in value for value in violations))
         self.assertTrue(any("provider implementation ru/arc/paper/redis/PaperRedisServiceProvider" in value for value in violations))
 
-    def test_only_sql_redis_and_metrics_api_families_belong_to_arc_core(self) -> None:
+    def test_provider_api_families_belong_to_arc_core(self) -> None:
         self.assertIn(PAPER_API_VISUAL_CLASS, ARC_ENTRIES)
         self.assertNotIn(PAPER_API_VISUAL_CLASS, ARC_CORE_ENTRIES)
         self.assertTrue(all(
