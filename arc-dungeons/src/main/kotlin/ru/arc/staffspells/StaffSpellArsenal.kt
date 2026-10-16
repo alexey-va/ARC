@@ -301,7 +301,7 @@ internal class StaffSpellArsenal(
                             (maxOf(target.boundingBox.widthX, target.boundingBox.widthZ) * .5 + .18).coerceIn(.45, 1.6),
                             target.height.coerceIn(.8, 3.5))
                     }
-                    staffNovaWrapParts(age, STAFF_NOVA_HOLD_TICKS + 6, wraps)
+                    staffNovaWrapParts(age, STAFF_NOVA_HOLD_TICKS, wraps)
                 }
                 a.scenes += scene
                 a.novaWrapScenes += scene

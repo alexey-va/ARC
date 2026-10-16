@@ -1,8 +1,12 @@
 package ru.arc.staffspells
 
 import io.kotest.core.spec.style.FreeSpec
+import io.kotest.assertions.withClue
 import io.kotest.matchers.shouldBe
 import org.bukkit.Material
+import org.bukkit.util.BoundingBox
+import org.bukkit.util.Vector
+import org.joml.Quaternionf
 import org.joml.Vector3f
 import kotlin.math.hypot
 
@@ -78,6 +82,33 @@ class StaffOssuaryGeometryTest : FreeSpec({
             strike.count { it.identity!!.endsWith(":fork") } shouldBe 5
             strike.count { it.identity!!.endsWith(":tine") } shouldBe 5
             (strike.filter { it.identity!!.endsWith(":curve:3") }.maxOf { it.center.y + it.scale.y / 2 } > 2.0f) shouldBe true
+        }
+    }
+
+    "the nearest primary cluster leaves the standing and crouching aim window open through its rise" {
+        // Full-length runtime path: launch 2.5 blocks ahead, then eleven evenly spaced nodes to 24.
+        val firstNodeZ = (2.5 + (24.0 - 2.5) / 11).toFloat()
+        for (charge in listOf(0.0, 0.5, 1.0)) for (age in 0..20 step 2) {
+            val from = staffOssuaryRibParts(age, 22, 3.4 + charge * .35, false, charge)
+            val to = staffOssuaryRibParts(age + 2, 22, 3.4 + charge * .35, false, charge)
+                .ifEmpty { from }
+            for (blend in listOf(0f, .25f, .5f, .75f)) from.zip(to).forEach { (part, next) ->
+                val center = Vector3f(part.center).lerp(next.center, blend).add(0f, 0f, firstNodeZ)
+                val scale = Vector3f(part.scale).lerp(next.scale, blend)
+                val inverse = Quaternionf(part.rotation).slerp(next.rotation, blend).invert()
+                val bounds = BoundingBox(-scale.x / 2.0, -scale.y / 2.0, -scale.z / 2.0,
+                    scale.x / 2.0, scale.y / 2.0, scale.z / 2.0)
+                for (eyeHeight in listOf(1.27f, 1.62f)) {
+                    val origin = inverse.transform(Vector3f(0f, eyeHeight, 0f).sub(center))
+                    for (x in listOf(-.04f, 0f, .04f)) for (y in listOf(-.04f, 0f, .04f)) {
+                        val ray = inverse.transform(Vector3f(x, y, 1f).normalize())
+                        withClue("q=$charge age=$age blend=$blend eye=$eyeHeight ray=($x,$y) part=${part.identity}") {
+                            bounds.rayTrace(Vector(origin.x.toDouble(), origin.y.toDouble(), origin.z.toDouble()),
+                                Vector(ray.x.toDouble(), ray.y.toDouble(), ray.z.toDouble()), 32.0) shouldBe null
+                        }
+                    }
+                }
+            }
         }
     }
 

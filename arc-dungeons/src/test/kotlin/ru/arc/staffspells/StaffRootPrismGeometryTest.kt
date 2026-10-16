@@ -15,7 +15,7 @@ class StaffRootPrismGeometryTest : FreeSpec({
         network.size shouldBe 44
         network.all { it.center.y == .12f } shouldBe true
         val targets = branches.map { StaffRootWrap(it.key, it.points.last(), .6, 1.8) }
-        val wraps = targets.chunked(8).map { staffNovaWrapParts(8, 76, it) }
+        val wraps = targets.chunked(8).map { staffNovaWrapParts(8, STAFF_NOVA_HOLD_TICKS, it) }
         wraps.map { it.size } shouldBe listOf(48, 48)
         (network.size + wraps.sumOf { it.size } <= StaffSpellDisplayEffects.MAX_PARTS_PER_CASTER) shouldBe true
         targets.forEach { target -> wraps.flatten().count { it.identity!!.startsWith("root:wrap:${target.key}:") } shouldBe 6 }
@@ -23,7 +23,10 @@ class StaffRootPrismGeometryTest : FreeSpec({
             listOf(part.center.x, part.center.y, part.center.z, part.scale.x, part.scale.y, part.scale.z,
                 part.rotation.x, part.rotation.y, part.rotation.z, part.rotation.w).all(Float::isFinite)
         } shouldBe true
-        staffNovaWrapParts(76, 76, targets).isEmpty() shouldBe true
+        val fading = staffNovaWrapParts(68, STAFF_NOVA_HOLD_TICKS, targets.take(8))
+        fading.map { it.identity } shouldBe wraps.first().map { it.identity }
+        fading.zip(wraps.first()).all { (late, held) -> late.scale.x < held.scale.x * .3f } shouldBe true
+        staffNovaWrapParts(STAFF_NOVA_HOLD_TICKS, STAFF_NOVA_HOLD_TICKS, targets).isEmpty() shouldBe true
     }
 
     "refraction grows serially through fixed visible mirrors and keeps stable part identities" {

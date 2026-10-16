@@ -14,7 +14,8 @@ internal fun staffOssuaryRibParts(age: Int, duration: Int, radius: Double, secon
     val extent = radius.takeIf(Double::isFinite)?.coerceIn(.5, 16.0) ?: 2.75
     val q = charge.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
     val fade = ribSmooth((duration - 2.0 - age) / 6.0)
-    val angles = doubleArrayOf(-2.92, -1.71, -.36, .91, 2.26)
+    // The nearest primary rib bends beside the aim line, leaving a window through the field.
+    val angles = doubleArrayOf(-2.92, if (secondary) -1.71 else -2.18, -.36, .91, 2.26)
     return angles.flatMapIndexed { rib, angle ->
         val delay = if (secondary) OSSUARY_SECONDARY_ERUPT_TICK + rib % 3 else rib % 2
         val rise = ribSmooth((age - delay).toDouble() / if (secondary) 4.0 else 4.0)
@@ -41,7 +42,7 @@ internal fun staffOssuaryRibParts(age: Int, duration: Int, radius: Double, secon
                 if (joint == 3) Material.CALCITE else Material.BONE_BLOCK)
         }
         val anchor = point(.38 + rib % 2 * .11)
-        val sign = if (rib % 2 == 0) -1.0 else 1.0
+        val sign = if (rib % 2 == 0 || !secondary && rib == 1) -1.0 else 1.0
         val fork = Vector3f(anchor).add((-sin(angle) * sign * extent * .17).toFloat(),
             (.32 * rise).toFloat(), (cos(angle) * sign * extent * .17).toFloat())
         val tip = Vector3f(fork).add((cos(angle + .5) * extent * .10).toFloat(),
