@@ -311,10 +311,12 @@ internal open class StaffSpellConfig(private val config: Config) {
 
     fun staffHudChannel(spell: StaffSpell, secondary: Boolean): Component = staffHud("channel", spell, secondary)
 
-    fun staffHudArmy(count: Int, limit: Int): Component = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(
-        config.string("messages.staff-hud.army", "<dark_gray>Войско <#BDD8BB><count>/<limit>"),
-        Placeholder.unparsed("count", count.coerceIn(0, limit).toString()),
-        Placeholder.unparsed("limit", limit.toString()))
+    fun staffHudArmy(count: Int, limit: Int): Component = config.component(
+        "messages.staff-hud.army", "<dark_gray>Войско <#BDD8BB><count>/<limit>",
+    ) {
+        tag("count", count.coerceIn(0, limit))
+        tag("limit", limit)
+    }
 
     fun hotkeyCooldown(spell: StaffSpell, key: StaffHotkey): Long {
         val defaults = staffHotkeyDescriptions[spell] ?: return 160

@@ -8,6 +8,24 @@ import net.kyori.adventure.text.TextComponent
 import net.kyori.adventure.text.format.TextColor
 
 class StaffSpellCooldownTest : FreeSpec({
+    "army HUD preserves fallback colors, bounded counts and configured templates" {
+        val raw = StaffTestConfig()
+        val config = StaffSpellConfig(raw)
+        val plain = PlainTextComponentSerializer.plainText()
+        val fallback = config.staffHudArmy(5, 3)
+        plain.serialize(fallback) shouldBe "Войско 3/3"
+        coloredContent(fallback)["Войско "] shouldBe 0x555555
+        coloredContent(fallback).filterKeys { it != "Войско " }.values.toSet() shouldBe setOf(0xBDD8BB)
+        plain.serialize(config.staffHudArmy(-1, 3)) shouldBe "Войско 0/3"
+
+        raw["messages.staff-hud.army"] = "<gold><limit> · <count>"
+        val configured = config.staffHudArmy(2, 3)
+        plain.serialize(configured) shouldBe "3 · 2"
+        coloredContent(configured).values.toSet() shouldBe setOf(0xFFAA00)
+        raw["messages.staff-hud.army"] = ""
+        config.staffHudArmy(2, 3) shouldBe Component.empty()
+    }
+
     "HUD inputs and unstyled secondary names retain their accent inside white templates" {
         val config = StaffSpellConfig(StaffTestConfig(mapOf(
             "gravity.name" to "<#cfb8ff>Тяготение",
