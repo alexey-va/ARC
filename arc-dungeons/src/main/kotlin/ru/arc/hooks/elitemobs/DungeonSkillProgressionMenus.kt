@@ -90,7 +90,6 @@ internal class DungeonSkillProgressionMenus(
         val skills = view.skills.drop(page * PAGE_SIZE).take(PAGE_SIZE)
         val body = mutableListOf<PaperDialogBody>()
         feedback?.let { body += body(it) }
-        body += body(text("intro", "<#e8dfd2>Пассивные бонусы навыков действуют только в данжах."))
         when (view.availability) {
             DungeonProgressionAvailability.LOADING -> body += body(text("loading", "<#e8dfd2>Данные навыков загружаются. Обновите страницу через несколько секунд."))
             DungeonProgressionAvailability.DISABLED -> body += body(text("disabled", "<#e8dfd2>Боевые навыки на этом сервере недоступны."))
@@ -98,37 +97,39 @@ internal class DungeonSkillProgressionMenus(
                 if (skills.isEmpty()) body += body(text("empty", "<#e8dfd2>Список навыков пока недоступен. Попробуйте обновить страницу."))
                 else body += table(skills.map { entry ->
                     text("overview-name", "<white><name><newline><#c4abff>Уровень <level>",
-                        "name" to literal(entry.skill.name), "level" to literal(entry.skill.level)) to
+                        "name" to skillName(entry), "level" to literal(entry.skill.level).color(skillColor(entry.skill.id))) to
                         xp(entry).append(Component.newline()).append(nextGoal(entry))
-                }, DialogTables.Frame.EPIC, separators = true)
+                }, DialogTables.Frame.EPIC, separators = true, width = 400, columns = DialogTables.Columns.VALUE_WIDE)
             }
         }
         val buttons = if (view.availability == DungeonProgressionAvailability.DISABLED) emptyList() else buildList {
             if (view.availability == DungeonProgressionAvailability.READY) skills.forEach { entry ->
                 add(PaperDialogButton(
                     PaperDialogActionId.of("progression_${entry.skill.id.lowercase(Locale.ROOT)}"),
-                    text("skill-label", "<#c4abff><name> · ур. <level> ›", "name" to literal(entry.skill.name), "level" to literal(entry.skill.level)),
-                    skillTooltip(entry), width = BUTTON_WIDTH,
+                    text("skill-label", "<#c4abff><name> · ур. <level> ›", "name" to skillName(entry), "level" to literal(entry.skill.level).color(skillColor(entry.skill.id))),
+                    skillTooltip(entry), width = OVERVIEW_BUTTON_WIDTH,
                     onClick = { detail(player, entry.skill.id, page) },
                 ))
             }
+            if (pages > 1 && view.availability == DungeonProgressionAvailability.READY && skills.size % OVERVIEW_COLUMNS == OVERVIEW_COLUMNS - 1) {
+                add(refresh { open(player, page) }.copy(width = OVERVIEW_BUTTON_WIDTH))
+            }
             if (view.availability == DungeonProgressionAvailability.READY) add(action("books", "library", "<#c4a7e7>Книги прохождений · <count> ›",
                 "Личная библиотека: опыт за завершённые инстансы") { books(player, overviewPage = page) }.copy(
-                    label = text("library", "<#c4a7e7>Книги прохождений · <count> ›", "count" to literal(view.books.size))))
+                    label = text("library", "<#c4a7e7>Книги прохождений · <count> ›", "count" to literal(view.books.size)), width = OVERVIEW_BUTTON_WIDTH))
             if (pages > 1 && view.availability == DungeonProgressionAvailability.READY) {
-                if (size % 2 == 1) add(refresh { open(player, page) })
                 add(action("previous", "previous", "<#92bed8>‹ Предыдущая страница", "Предыдущие навыки") {
                     open(player, (page - 1 + pages) % pages)
-                })
+                }.copy(width = OVERVIEW_BUTTON_WIDTH))
                 add(action("next", "next", "<#92bed8>Следующая страница ›", "Следующие навыки") {
                     open(player, (page + 1) % pages)
-                })
-            } else add(refresh { open(player, page) })
+                }.copy(width = OVERVIEW_BUTTON_WIDTH))
+            } else add(refresh { open(player, page) }.copy(width = OVERVIEW_BUTTON_WIDTH))
         }
         show(player, PaperDialogScreen(
             id = "dungeon.progression", title = if (pages > 1) text("title-page", "<#c4abff>Развитие навыков · <page> / <pages>",
                 "page" to literal(page + 1), "pages" to literal(pages)) else text("title", "<#c4abff>Развитие навыков"),
-            body = body, buttons = buttons, exitButton = back { returnTo(player) }, columns = 2,
+            body = body, buttons = buttons, exitButton = back { returnTo(player) }, columns = OVERVIEW_COLUMNS,
         )) { open(player, page) }
     }
 
@@ -177,7 +178,7 @@ internal class DungeonSkillProgressionMenus(
         }
         show(player, PaperDialogScreen(
             id = "dungeon.progression.${skillId.lowercase(Locale.ROOT)}",
-            title = text("detail-title", "<#c4abff><name> · развитие", "name" to literal(entry.skill.name)),
+            title = text("detail-title", "<#c4abff><name> · развитие", "name" to skillName(entry)),
             body = body, buttons = buttons, exitButton = back { open(player, overviewPage) }, columns = 2,
         )) { detail(player, skillId, overviewPage) }
     }
@@ -340,13 +341,29 @@ internal class DungeonSkillProgressionMenus(
     else text("xp-progress", "<#e8dfd2><current> / <required> опыта",
         "current" to number(entry.skill.xp), "required" to number(entry.skill.nextXp))
 
-    private fun table(rows: List<Pair<Component, Component>>, frame: DialogTables.Frame, separators: Boolean) =
+    private fun table(rows: List<Pair<Component, Component>>, frame: DialogTables.Frame, separators: Boolean,
+        width: Int = 320, columns: DialogTables.Columns = DialogTables.Columns.BALANCED) =
         DialogTables.body(rows.map { (name, value) -> name.colorIfAbsent(BODY_COLOR) to value.colorIfAbsent(BODY_COLOR) },
-            headers = null, frame = frame, width = 320, columns = DialogTables.Columns.BALANCED,
+            headers = null, frame = frame, width = width, columns = columns,
             spec = DialogTables.Spec(rowSeparators = separators))
 
     private fun body(component: Component) = PaperDialogBody(component.colorIfAbsent(BODY_COLOR).decoration(TextDecoration.ITALIC, false), 468)
     private fun label(key: String, fallback: String) = text("fields.$key", "<#e8dfd2>$fallback")
+    private fun skillName(entry: DungeonProgressionSkill) = literal(entry.skill.name).color(skillColor(entry.skill.id))
+    private fun skillColor(skillId: String) = TextColor.color(when (skillId) {
+        "SWORDS" -> 0xffb277
+        "AXES" -> 0xff8f80
+        "ARMOR" -> 0x86dcf1
+        "BOWS" -> 0x9bd48d
+        "CROSSBOWS" -> 0xc8dc88
+        "TRIDENTS" -> 0x85dfc4
+        "HOES" -> 0xb7a0eb
+        "MACES" -> 0xe5ba73
+        "SPEARS" -> 0x92bed8
+        "STAVES" -> 0xf3a2c9
+        "WANDS" -> 0xd8adff
+        else -> 0xc4abff
+    })
     private fun literal(value: Any) = Component.text(plainDungeonQuestText(value.toString())).decoration(TextDecoration.ITALIC, false)
     private fun number(value: Long) = literal(String.format(Locale.ROOT, "%,d", value).replace(',', ' '))
     private fun percent(value: Double) = literal(BigDecimal.valueOf(value).stripTrailingZeros().toPlainString().replace('.', ','))
@@ -359,7 +376,9 @@ internal class DungeonSkillProgressionMenus(
     )
 
     companion object {
-        private const val PAGE_SIZE = 4
+        private const val PAGE_SIZE = 6
+        private const val OVERVIEW_COLUMNS = 3
+        private const val OVERVIEW_BUTTON_WIDTH = 150
         private const val BOOKS_PER_PAGE = 3
         private const val GAINS_PER_PAGE = 4
         private const val BUTTON_WIDTH = 230

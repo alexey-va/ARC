@@ -30,10 +30,21 @@ class DungeonSkillProgressionMenusTest : FreeSpec({
         val fixture = ProgressionFixture(paper.addPlayer("overview"))
         fixture.menus.open(fixture.player)
         fixture.last.id shouldBe "dungeon.progression"
-        fixture.last.buttons.count { it.id.value.startsWith("progression_") } shouldBe 4
-        fixture.bodyText().contains("Пассивные бонусы навыков действуют только в данжах") shouldBe true
+        val firstPage = fixture.last.buttons.filter { it.id.value.startsWith("progression_") }
+        firstPage.size shouldBe 6
+        val firstPageColors = firstPage.zip(fixture.view.skills).map { (button, entry) -> button.label.namedColor(entry.skill.name) }
+        firstPageColors.none { it == null } shouldBe true
+        firstPageColors.toSet().size shouldBe 6
+        val firstTable = fixture.last.body.single()
+        firstTable.width shouldBe 400
+        val firstRows = firstTable.text.plain().lines()
+        firstRows.size shouldBe 19
+        firstRows.count { '\uE577' in it } shouldBe 5
+        fixture.view.skills.take(6).forEachIndexed { index, entry ->
+            firstRows[1 + index * 3].contains(entry.skill.name) shouldBe true
+        }
         fixture.bodyText().contains("3 250 / 6 000 опыта") shouldBe true
-        fixture.bodyText().replace(Regex("[\\p{Co}\\s]+"), " ").contains("Ур. 25 · Expose Weakness") shouldBe true
+        fixture.bodyText().replace(Regex("[\\p{Co}\\s]+"), " ").contains("Ур. 25 · Раскрыть слабость") shouldBe true
         fixture.last.buttons.single { it.id.value == "books" }.label.plain().contains("1") shouldBe true
         val tooltip = fixture.last.buttons.first().tooltip.plain()
         tooltip.startsWith('\n') shouldBe true
@@ -44,20 +55,34 @@ class DungeonSkillProgressionMenusTest : FreeSpec({
         tooltip.contains("Только в данжах") shouldBe true
         tooltip.contains("бой") shouldBe true
         fixture.click("next")
+        val secondPage = fixture.last.buttons.filter { it.id.value.startsWith("progression_") }
+        secondPage.size shouldBe 5
+        (firstPage + secondPage).map { it.id.value }.toSet().size shouldBe 11
+        val secondRows = fixture.last.body.single().text.plain().lines()
+        secondRows.size shouldBe 16
+        secondRows.count { '\uE577' in it } shouldBe 4
+        fixture.view.skills.drop(6).forEachIndexed { index, entry ->
+            secondRows[1 + index * 3].contains(entry.skill.name) shouldBe true
+        }
+        fixture.last.title.plain().contains("2 / 2") shouldBe true
+        fixture.last.buttons.takeLast(3).map { it.id.value } shouldBe listOf("books", "previous", "next")
+        fixture.last.buttons.indexOfFirst { it.id.value == "books" } % fixture.last.columns shouldBe 0
         fixture.click("next")
-        fixture.last.buttons.count { it.id.value.startsWith("progression_") } shouldBe 3
-        fixture.last.buttons.indexOfFirst { it.id.value == "previous" } % 2 shouldBe 0
-        fixture.click("next")
-        fixture.last.title.plain().contains("1 / 3") shouldBe true
+        fixture.last.title.plain().contains("1 / 2") shouldBe true
     }
 
     "skill detail keeps existing perks and shows only supported passive bonuses" {
         val fixture = ProgressionFixture(paper.addPlayer("detail"))
+        fixture.menus.open(fixture.player)
+        val swordColor = fixture.last.buttons.single { it.id.value == "progression_swords" }.label.namedColor("Мечи")
         fixture.menus.detail(fixture.player, "SWORDS", 1)
+        fixture.last.title.namedColor("Мечи") shouldBe swordColor
         fixture.bodyText().contains("Скорость ближних атак") shouldBe true
         fixture.bodyText().contains("+2%") shouldBe true
         fixture.bodyText().replace(Regex("[\\p{Co}\\s]+"), " ").contains("+2% только в данжах") shouldBe true
-        fixture.bodyText().contains("Expose Weakness") shouldBe true
+        fixture.bodyText().contains("Раскрыть слабость") shouldBe true
+        fixture.bodyText().contains("Атаки имеют шанс уменьшить защиту цели") shouldBe true
+        fixture.bodyText().contains("Expose Weakness") shouldBe false
         fixture.click("perks")
         fixture.openedPerks shouldBe listOf("SWORDS" to 1)
         fixture.menus.detail(fixture.player, "BOWS")
@@ -227,6 +252,8 @@ class DungeonSkillProgressionMenusTest : FreeSpec({
         fixture.last.buttons.count { it.id.value.startsWith("book_") } shouldBe 3
         fixture.last.buttons.any { it.id.value == "all_books" } shouldBe true
         fixture.bodyText().contains("Книга уже применяется") shouldBe true
+        fixture.view = fixture.view.copy(books = listOf(progressionBook()))
+        fixture.menus.open(fixture.player, 1); selected += fixture.last
         val components = selected.flatMap { screen -> listOf(screen.title) + screen.body.map { it.text } +
             screen.buttons.flatMap { listOf(it.label, it.tooltip) } + listOfNotNull(screen.exitButton?.label) }
         val darkNeutral = setOf(0xaaaaaa, 0x555555, 0x666666, 0x808080, 0x8c8c8c, 0x969696)
@@ -294,20 +321,20 @@ private fun progressionSkills(): List<DungeonProgressionSkill> = listOf(
     )
 }
 
-/** Existing enabled tier-two definitions from the tracked EliteMobs catalog, not new abilities. */
+/** Existing tier-two definitions in the native russian.csv locale, not a second production registry. */
 private fun nativeNextUnlock(skill: String): DungeonProgressionUnlock {
     val (name, description) = when (skill) {
-        "SWORDS" -> "Expose Weakness" to "Attacks have a chance to reduce the target's defense."
-        "AXES" -> "Executioner" to "Deal massive bonus damage to enemies below 40% health."
-        "ARMOR" -> "Adrenaline Surge" to "Gain combat buffs when health drops below 30%. 45s CD."
-        "BOWS" -> "Hunter's Mark" to "Mark enemies with your arrows. Marked targets take bonus damage."
-        "CROSSBOWS" -> "Explosive Tip" to "Chance for bolts to explode on impact, damaging nearby enemies."
-        "TRIDENTS" -> "Poseidon's Favor" to "Gain aquatic buffs when hitting enemies with trident. (Best in water environments)"
-        "HOES" -> "Death Mark" to "Mark enemies for death. Marked targets take bonus damage."
-        "MACES" -> "Divine Shield" to "When taking fatal damage, become invulnerable briefly. 120s CD."
-        "SPEARS" -> "Impaling Strike" to "Chance to cause bleed, dealing damage over time."
-        "STAVES" -> "Repel" to "Staff strikes can knock enemies back."
-        else -> "Arcing Bolt" to "Missiles can arc to another nearby enemy."
+        "SWORDS" -> "Раскрыть слабость" to "Атаки имеют шанс уменьшить защиту цели."
+        "AXES" -> "Палач" to "Наносите огромный бонусный урон врагам с менее 40% здоровья."
+        "ARMOR" -> "Выброс Адреналина" to "Получайте боевые усиления при падении здоровья ниже 30%. КД 45с."
+        "BOWS" -> "Метка охотника" to "Помечайте врагов своими стрелами. Помеченные цели получают бонусный урон."
+        "CROSSBOWS" -> "Взрывной наконечник" to "Шанс взорвать болты при попадании и задеть врагов рядом."
+        "TRIDENTS" -> "Благосклонность Посейдона" to "Получай водные бонусы при попаданиях трезубцем по врагам. (Лучше всего в водных зонах)"
+        "HOES" -> "Метка смерти" to "Помечает врагов на смерть. Помеченные цели получают дополнительный урон."
+        "MACES" -> "Божественный Щит" to "При получении смертельного урона ненадолго становишься неуязвимым. КД 120с."
+        "SPEARS" -> "Пронзающий удар" to "Шанс вызвать кровотечение, которое наносит урон со временем."
+        "STAVES" -> "Отталкивание" to "Удары посохом могут отбрасывать врагов."
+        else -> "Дуговая молния" to "Снаряд может дугой перелететь к другому врагу поблизости."
     }
     return DungeonProgressionUnlock(name, 25, description)
 }
@@ -326,6 +353,9 @@ private fun allBranchesBook() = progressionBook().copy(gains = progressionSkills
 })
 
 private fun Component.plain() = PlainTextComponentSerializer.plainText().serialize(this)
+private fun Component.namedColor(name: String): Int? =
+    if ((this as? TextComponent)?.content() == name && color() != null) color()!!.value()
+    else children().firstNotNullOfOrNull { it.namedColor(name) }
 
 private fun exportProgressionScreens(screens: List<PaperDialogScreen>) {
     val legacy = LegacyComponentSerializer.builder().character('&').hexColors().useUnusualXRepeatedCharacterHexFormat().build()

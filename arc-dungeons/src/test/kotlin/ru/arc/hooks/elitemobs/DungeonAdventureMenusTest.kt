@@ -154,15 +154,15 @@ class DungeonAdventureMenusTest : FreeSpec({
         every { data.perks(player, skill.id) } returns DungeonSkillPerkView(skill, 3, listOf(perk))
         every { data.togglePerk(player, skill.id, perk.id) } returns DungeonAdventureActionResult.PERK_ACTIVATED
         menus.skills(player)
-        screens.last().buttons.count { it.id.value.startsWith("progression_") } shouldBe 4
+        screens.last().buttons.count { it.id.value.startsWith("progression_") } shouldBe 6
         screens.last().buttons.single { it.id.value == "next" }.onClick.handle(mockk())
         val lastSkillsPage = screens.last()
-        lastSkillsPage.buttons.count { it.id.value.startsWith("progression_") } shouldBe 4
-        lastSkillsPage.buttons.map { it.id.value }.takeLast(3) shouldBe listOf("refresh", "previous", "next")
+        lastSkillsPage.buttons.count { it.id.value.startsWith("progression_") } shouldBe 5
+        lastSkillsPage.buttons.map { it.id.value }.takeLast(3) shouldBe listOf("books", "previous", "next")
         lastSkillsPage.buttons.size % lastSkillsPage.columns shouldBe 0
-        lastSkillsPage.buttons.indexOfFirst { it.id.value == "previous" } % lastSkillsPage.columns shouldBe 0
+        lastSkillsPage.buttons.indexOfFirst { it.id.value == "books" } % lastSkillsPage.columns shouldBe 0
         lastSkillsPage.buttons.single { it.id.value == "refresh" }.onClick.handle(mockk())
-        screens.last().buttons.count { it.id.value.startsWith("progression_") } shouldBe 4
+        screens.last().buttons.count { it.id.value.startsWith("progression_") } shouldBe 5
         screens.last().buttons.map { it.id.value }.takeLast(2) shouldBe listOf("previous", "next")
         screens.last().buttons.single { it.id.value == "progression_skill_6" }.onClick.handle(mockk())
         screens.last().id shouldBe "dungeon.progression.skill_6"
@@ -175,7 +175,7 @@ class DungeonAdventureMenusTest : FreeSpec({
         screens.last().exitButton!!.onClick.handle(mockk())
         screens.last().id shouldBe "dungeon.progression.skill_6"
         screens.last().exitButton!!.onClick.handle(mockk())
-        screens.last().buttons.count { it.id.value.startsWith("progression_") } shouldBe 4
+        screens.last().buttons.count { it.id.value.startsWith("progression_") } shouldBe 5
     }
 
     "dynamic entry forwards the selected native level and stable difficulty id" {
