@@ -25,7 +25,9 @@ hud:
     vertical-blocks: 0.85
     horizontal-blocks: 0.0
     scale: 0.66
-  # Camera movement lead and extra clearance on the player's selected top/bottom side.
+  # Native passenger + camera billboard follow movement locally, preserving the selected side.
+  # Speed * prediction-ticks gives extra forward retreat, capped by max-lead-blocks.
+  # This is a local distance envelope, not a predicted world-space anchor.
   motion:
     prediction-ticks: 2.0
     max-lead-blocks: 4.0
@@ -82,7 +84,7 @@ mark:
       description: 'Блинк через пространство'
       cooldown-ticks: 100
   secondary-name: 'Чёрная дыра'
-  secondary: '<#efa5ff><attack-secondary> <#e8dfd2>— стягивает врагов и схлопывается'
+  secondary: '<#efa5ff><attack-secondary> <#e8dfd2>— стягивает врагов; мобы сжимаются в растущем ядре'
   name: '<#efa5ff>Разрыв'
   description: '<#e8dfd2>Разрыв следует за целью и взрывается.'
   aim: '<#efa5ff>Мягкое наведение · без цели взрыв в точке прицела'
@@ -396,9 +398,9 @@ prism:
 necromancer:
   hotkeys:
     q:
-      name: 'Приказ мёртвым'
-      description: 'Соберите лучников или укажите общую цель'
-      cooldown-ticks: 40
+      name: 'Погребальный приказ'
+      description: 'Отряд готовит залп с усиленной ведущей стрелой'
+      cooldown-ticks: 400
     f:
       name: 'Призрачный переход'
       description: 'Блинк сквозь завесу душ'

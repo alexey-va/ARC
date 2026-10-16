@@ -20,7 +20,7 @@ internal val staffHotkeyDescriptions = mapOf(
     StaffSpell.TIDE to StaffHotkeyDescription("Водяной плен", "Капсула удерживает до первого попадания", "Прибой", "Прокатитесь вперёд на волне", 200, 100),
     StaffSpell.REQUIEM to StaffHotkeyDescription("Час расплаты", "Подвесьте колокол; повторное Q — удар", "Шаг за грань", "Блинк под глухой звон", 180, 100),
     StaffSpell.PRISM to StaffHotkeyDescription("Режущие грани", "Поставьте треугольник, опасный при пересечении", "Преломление", "Управляемый разгон", 180, 80),
-    StaffSpell.NECROMANCER to StaffHotkeyDescription("Приказ мёртвым", "Соберите лучников или укажите общую цель", "Призрачный переход", "Блинк сквозь завесу душ", 40, 120),
+    StaffSpell.NECROMANCER to StaffHotkeyDescription("Погребальный приказ", "Отряд готовит залп с усиленной ведущей стрелой", "Призрачный переход", "Блинк сквозь завесу душ", 400, 120),
     StaffSpell.GRAVITY to StaffHotkeyDescription("Подвешивание", "Удержите врага; повторное Q — бросить", "Невесомый прыжок", "Баллистический прыжок с мягкой дугой", 200, 110),
     StaffSpell.OSSUARY to StaffHotkeyDescription("Костяная челюсть", "Ловушка захлопывается вокруг врага", "Костяной прорыв", "Рывок на костяном гребне", 180, 100),
 )

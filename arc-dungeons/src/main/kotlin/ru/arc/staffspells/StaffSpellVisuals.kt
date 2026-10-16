@@ -690,7 +690,7 @@ internal class StaffSpellVisuals(
 
     fun markBurst(at: Location, radius: Double, blackhole: Boolean = false) = dispatch {
         sceneryBurst(at, radius)
-        val origin = at.clone().add(0.0, if (blackhole) BLACKHOLE_CORE_HEIGHT else 0.0, 0.0)
+        val origin = at.clone()
         val reach = boundedRadius(radius, 0.5, 10.0) ?: return@dispatch
         if (blackhole) {
             blackholeCollapse(origin, reach)
@@ -824,7 +824,7 @@ internal class StaffSpellVisuals(
 
     /** Three inward-spiraling arms and a bright core; one low cast cue, no repeated sound. */
     fun gravity(at: Location, radius: Double, progress: Double) = dispatch {
-        val origin = at.clone().add(0.0, BLACKHOLE_CORE_HEIGHT, 0.0)
+        val origin = at.clone()
         if (!drawable(origin)) return@dispatch
         val reach = boundedRadius(radius, 0.5, 10.0) ?: return@dispatch
         val charge = progress.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
@@ -1543,7 +1543,6 @@ internal class StaffSpellVisuals(
         const val COMPACT_CAMERA_CLEARANCE = 1.15
         const val MARK_CAMERA_CLEARANCE = 1.6
         const val IMPACT_CAMERA_CLEARANCE = 3.2
-        const val BLACKHOLE_CORE_HEIGHT = 1.6
         const val MIN_SOUND_DISTANCE = 15.0
         const val DEFAULT_SOUND_DISTANCE = 64.0
         const val MAX_SOUND_AUDIENCE = 64.0

@@ -7,15 +7,15 @@ import org.joml.Vector3f
 import kotlin.math.abs
 
 class StaffTechniqueGeometryTest : FreeSpec({
-    "lunar boomerang keeps its twelve-block crescent while turning and returning" {
+    "lunar boomerang keeps its solid crescent and separate wake while turning and returning" {
         val frames = (0..STAFF_LUNAR_TOTAL_TICKS).map { age ->
             staffLunarBoomerangParts(if (age < 11) 0f else Math.PI.toFloat(), age)
         }
         val identities = frames.first().map { it.identity }
         frames.forEach { parts ->
-            parts.size shouldBe 12
+            parts.size shouldBe 24
             parts.map { it.identity } shouldBe identities
-            parts.mapNotNull { it.identity }.distinct().size shouldBe 12
+            parts.mapNotNull { it.identity }.distinct().size shouldBe 24
             parts.all { part ->
                 listOf(part.center.x, part.center.y, part.center.z,
                     part.scale.x, part.scale.y, part.scale.z,
@@ -24,7 +24,7 @@ class StaffTechniqueGeometryTest : FreeSpec({
             } shouldBe true
         }
         val initial = frames.first()
-        val corners = initial.flatMap { part ->
+        val corners = initial.filter { !it.identity!!.contains(":wake:") }.flatMap { part ->
             listOf(-0.5f, 0.5f).flatMap { x -> listOf(-0.5f, 0.5f).flatMap { y ->
                 listOf(-0.5f, 0.5f).map { z ->
                     part.rotation.transform(Vector3f(x * part.scale.x, y * part.scale.y, z * part.scale.z))
@@ -34,7 +34,7 @@ class StaffTechniqueGeometryTest : FreeSpec({
         }
         val minX = corners.minOf { it.x }
         val maxX = corners.maxOf { it.x }
-        ((maxX - minX) in 1.8f..2.2f) shouldBe true
+        ((maxX - minX) in 2.0f..2.5f) shouldBe true
         (initial.map { it.center }.distinctBy { (it.x * 100).toInt() to (it.y * 100).toInt() }.size > 8) shouldBe true
         frames[STAFF_LUNAR_OUTBOUND_TICKS].map { it.identity } shouldBe identities
         frames[STAFF_LUNAR_OUTBOUND_TICKS + STAFF_LUNAR_TURN_TICKS].map { it.identity } shouldBe identities
@@ -84,7 +84,7 @@ class StaffTechniqueGeometryTest : FreeSpec({
         staffIcicleRadialParts(STAFF_ICICLE_RADIAL_TICKS) shouldBe emptyList()
 
         val prism = staffPrismTripwireParts(.35f, 3)
-        assertFiniteParts(prism, 9)
+        assertFiniteParts(prism, 24)
         val origin = Location(null, 10.0, 64.0, -4.0)
         staffPrismTripwireContains(origin.clone().add(0.0, .9, 0.0), origin, 0f) shouldBe true
         staffPrismTripwireContains(origin.clone().add(4.0, .9, 0.0), origin, 0f) shouldBe false
@@ -92,12 +92,13 @@ class StaffTechniqueGeometryTest : FreeSpec({
 
         val heldGravity = staffGravityPinParts(4, thrown = false, yaw = .2f)
         val thrownGravity = staffGravityPinParts(5, thrown = true, yaw = .8f)
-        heldGravity.map { it.identity } shouldBe thrownGravity.map { it.identity }
-        assertFiniteParts(heldGravity, 8)
-        assertFiniteParts(thrownGravity, 8)
+        heldGravity.map { it.identity } shouldBe staffGravityPinParts(18, false, .2f).map { it.identity }
+        thrownGravity.map { it.identity } shouldBe staffGravityPinParts(9, true, .8f).map { it.identity }
+        assertFiniteParts(heldGravity, 24)
+        assertFiniteParts(thrownGravity, 12)
 
         val spear = staffLancePinParts(3.5, .8f, held = true)
-        assertFiniteParts(spear, 7)
+        assertFiniteParts(spear, 19)
         val spearIds = spear.map { it.identity }
         staffLancePinParts(3.5, .8f, held = false).map { it.identity } shouldBe spearIds
 
@@ -109,11 +110,44 @@ class StaffTechniqueGeometryTest : FreeSpec({
         )
         val emberIds = emberFrames.first().map { it.identity }
         emberFrames.forEach { frame ->
-            frame.size shouldBe 24
+            frame.size shouldBe 36
             frame.map { it.identity } shouldBe emberIds
-            assertFiniteParts(frame, 24)
+            assertFiniteParts(frame, 36)
         }
-        emberFrames.last().filter { it.visible }.all { it.center.x in -0.01f..15.01f } shouldBe true
+        emberFrames.last().filter { it.visible }.all { it.center.x in -0.3f..15.01f } shouldBe true
+    }
+
+    "Q silhouettes expose their targets and their climaxes differ from their preparation" {
+        val lunarWake = staffLunarBoomerangParts(0f, 10).filter { it.identity!!.contains(":wake:") }
+        lunarWake.size shouldBe 12
+        lunarWake.all { it.material.name.endsWith("STAINED_GLASS") && it.center.z < -.8f } shouldBe true
+        val prismBefore = staffPrismTripwireParts(0f, 5).filter { it.identity!!.contains(":cut:") }
+        val prismCut = staffPrismTripwireParts(0f, 5, 4).filter { it.identity!!.contains(":cut:") }
+        prismBefore.zip(prismCut).all { (a, b) ->
+            Vector3f(b.center.x, 0f, b.center.z).length() < Vector3f(a.center.x, 0f, a.center.z).length() * .65f &&
+                b.scale.z >= 2f && b.scale.z > a.scale.z * .55f && b.material != a.material
+        } shouldBe true
+        (prismCut.maxOf { it.center.y } > 2.4f) shouldBe true
+        prismCut.all { it.material.name.endsWith("STAINED_GLASS") } shouldBe true
+        val idlePylons = staffPrismTripwireParts(0f, 5).filter { !it.identity!!.contains(":cut:") }
+        val activePylons = staffPrismTripwireParts(0f, 5, 4).filter { !it.identity!!.contains(":cut:") }
+        activePylons.map { it.center } shouldBe idlePylons.map { it.center }
+        activePylons.map { it.scale } shouldBe idlePylons.map { it.scale }
+        val held = staffGravityPinParts(10, false, 0f)
+        // There is no solid block in the middle of the held victim's torso.
+        held.all { kotlin.math.abs(it.center.x) > .6f || kotlin.math.abs(it.center.y) > 1.2f } shouldBe true
+        val spear = staffLancePinParts(2.5, 0f, true, 5)
+        (spear.maxOf { it.center.x } - spear.minOf { it.center.x } > 2.5f) shouldBe true
+        val order = staffNecromancerCommandParts(12)
+        assertFiniteParts(order, 27)
+        (order.maxOf { it.center.y + it.scale.y / 2 } > 3.15f) shouldBe true
+        order.map { it.identity } shouldBe staffNecromancerCommandParts(28).map { it.identity }
+        staffNecromancerCommandParts(32) shouldBe emptyList()
+        val points = listOf(Vector3f(0f, 63f, 0f), Vector3f(0f, 63f, 1.4f))
+        val cold = staffEmberTrailParts(points, Vector3f(0f, 63f, 0f), -1, 4)
+        val burning = staffEmberTrailParts(points, Vector3f(0f, 63f, 0f), 1, 4)
+        (burning.filter { it.visible }.maxOf { it.center.y + it.scale.y / 2 } > 1.3f) shouldBe true
+        (cold.filter { it.visible }.maxOf { it.center.y + it.scale.y / 2 } < .3f) shouldBe true
     }
 
     "EMBER ash segments connect captured ground points at their actual elevations" {
@@ -183,7 +217,59 @@ class StaffTechniqueGeometryTest : FreeSpec({
         (frames.last().sumOf { it.scale.length().toDouble() } < active.sumOf { it.scale.length().toDouble() } * .1) shouldBe true
         staffGaleHurricaneParts(STAFF_GALE_HURRICANE_TICKS) shouldBe emptyList()
     }
+
+    "GALE leaves target silhouettes readable through standing and crouching eye views around the full circle" {
+        // Count even translucent glass as an obstruction: a clear cavity alone does not protect aim.
+        for (age in 0 until STAFF_GALE_HURRICANE_TICKS step 4) {
+            val parts = staffGaleHurricaneParts(age)
+            for (eyeHeight in listOf(1.27f, 1.62f)) {
+                val eye = Vector3f(0f, eyeHeight, 0f)
+                val boxes = parts.map { TechniqueSightBox(it, eye) }
+                for (distance in listOf(6f, 10f)) for (direction in 0 until 12) {
+                    val angle = direction * Math.PI / 6
+                    val forward = Vector3f(kotlin.math.sin(angle).toFloat(), 0f, kotlin.math.cos(angle).toFloat())
+                    val right = Vector3f(forward.z, 0f, -forward.x)
+                    val rays = (0 until 7).flatMap { column -> (0 until 12).map { row ->
+                        Vector3f(forward).mul(distance).fma(-.25f + column / 12f, right)
+                            .add(0f, .65f + row * (1.15f / 11), 0f).sub(eye)
+                    } }
+                    val obscured = rays.count { ray -> boxes.any { it.intersects(ray) } }
+                    (obscured.toDouble() / rays.size <= .35) shouldBe true
+                }
+            }
+        }
+        val crown = staffGaleHurricaneParts(40).filter { it.identity?.contains(":band:") == true && it.center.y > 6f }
+        (crown.size >= 18 && crown.all { it.scale.x > 1.5f }) shouldBe true
+    }
 })
+
+/** Segment/OBB intersection with the eye transformed once per box and camera height. */
+private class TechniqueSightBox(part: StaffDisplayPart, eye: Vector3f) {
+    private val inverse = org.joml.Quaternionf(part.rotation).conjugate()
+    private val start = inverse.transform(Vector3f(eye).sub(part.center))
+    private val half = Vector3f(part.scale).mul(.5f)
+
+    fun intersects(ray: Vector3f): Boolean {
+        val delta = inverse.transform(Vector3f(ray))
+        var enter = 0f
+        var exit = 1f
+        for (axis in 0..2) {
+            val origin = start.get(axis)
+            val direction = delta.get(axis)
+            val extent = half.get(axis)
+            if (abs(direction) < 1e-7f) {
+                if (abs(origin) > extent) return false
+            } else {
+                val a = (-extent - origin) / direction
+                val b = (extent - origin) / direction
+                enter = maxOf(enter, minOf(a, b))
+                exit = minOf(exit, maxOf(a, b))
+                if (enter > exit) return false
+            }
+        }
+        return true
+    }
+}
 
 private fun assertFiniteParts(parts: List<StaffDisplayPart>, maximum: Int) {
     (parts.size <= maximum) shouldBe true

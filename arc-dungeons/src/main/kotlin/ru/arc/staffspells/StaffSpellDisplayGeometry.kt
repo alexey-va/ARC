@@ -55,6 +55,7 @@ internal fun staffDisplayParts(
     animationAgeTicks: Int = ageTicks,
     input: StaffCastInput = StaffCastInput.of(secondary, false),
     charge: Double = 0.0,
+    blackHoleGrowth: Double = 1.0,
 ): List<StaffDisplayPart> {
     // Quick gestures own native particles and collision in StaffSpellGestures.
     if (input.quick) return emptyList()
@@ -63,7 +64,7 @@ internal fun staffDisplayParts(
         spell == StaffSpell.TIDE || spell == StaffSpell.REQUIEM || spell == StaffSpell.PRISM || spell == StaffSpell.OSSUARY
     val parts = when (spell) {
     StaffSpell.CHAIN -> chainDisplayParts(ageTicks, durationTicks, length, radius, impact)
-    StaffSpell.MARK -> if (secondary) singularityDisplayParts(ageTicks, durationTicks, radius, impact, animationAgeTicks)
+    StaffSpell.MARK -> if (secondary) singularityDisplayParts(ageTicks, durationTicks, radius, impact, animationAgeTicks, blackHoleGrowth)
         else markDisplayParts(ageTicks, radius, impact, animationAgeTicks)
     StaffSpell.FROST -> if (secondary) frostNovaDisplayParts(ageTicks, durationTicks, radius)
         else staffFrostDisplayParts(ageTicks, durationTicks, length, radius, impact)
@@ -337,7 +338,7 @@ private fun markDisplayParts(ageTicks: Int, radius: Double, impact: Boolean,
 }
 
 private fun singularityDisplayParts(ageTicks: Int, durationTicks: Int, radius: Double, impact: Boolean,
-    animationAgeTicks: Int): List<StaffDisplayPart> {
+    animationAgeTicks: Int, growth: Double): List<StaffDisplayPart> {
     val charge = if (impact) 1.0 else smooth(ageTicks / 8.0)
     val collapse = if (impact) smooth(ageTicks / 10.0) else 0.0
     val reach = extent(radius, 8.0, 3.5)
@@ -349,7 +350,7 @@ private fun singularityDisplayParts(ageTicks: Int, durationTicks: Int, radius: D
         val a = i * PI * 2 / 7
         val size = (0.80 + charge * 0.48) * (1.0 - collapse * 0.86)
         parts += part(if (i == 6) Material.CRYING_OBSIDIAN else Material.BLACK_CONCRETE,
-            cos(a) * 0.09, 1.6 + sin(a) * 0.09, sin(a * 2) * 0.07,
+            cos(a) * 0.09, sin(a) * 0.09, sin(a * 2) * 0.07,
             size, size * 0.94, size, yaw = a, pitch = 0.38 + i * 0.15, roll = a * 0.5)
     }
     repeat(16) { i ->
@@ -357,7 +358,7 @@ private fun singularityDisplayParts(ageTicks: Int, durationTicks: Int, radius: D
         val x = cos(a) * diskRadius
         val z = sin(a) * diskRadius
         parts += part(if (i % 4 == 0) Material.SEA_LANTERN else if (i % 2 == 0) Material.MAGENTA_STAINED_GLASS else Material.PURPLE_STAINED_GLASS,
-            x, 1.6 + z * 0.48, z,
+            x, z * 0.48, z,
             (0.58 + charge * 0.36) * (1.0 - collapse * 0.85), 0.18,
             (0.36 + charge * 0.24) * (1.0 - collapse * 0.85), yaw = -a, pitch = 0.42)
     }
@@ -366,10 +367,11 @@ private fun singularityDisplayParts(ageTicks: Int, durationTicks: Int, radius: D
         val r = diskRadius * (1.28 + 0.14 * (i % 2))
         val size = (0.24 + charge * 0.16) * (1.0 - collapse * 0.9)
         parts += part(if (i % 2 == 0) Material.CRYING_OBSIDIAN else Material.AMETHYST_BLOCK,
-            cos(a) * r, 1.6 + sin(a * 2) * 0.84, sin(a) * r,
+            cos(a) * r, sin(a * 2) * 0.84, sin(a) * r,
             size, size * 1.3, size * 1.7, yaw = a, pitch = a * 0.7, roll = spin)
     }
-    return parts
+    val fedScale = growth.takeIf(Double::isFinite)?.coerceIn(1.0, staffBlackHoleGrowth(STAFF_BLACK_HOLE_TARGETS))?.toFloat() ?: 1f
+    return parts.map { it.copy(center = Vector3f(it.center).mul(fedScale), scale = Vector3f(it.scale).mul(fedScale)) }
 }
 
 /** Visual only: lower the safe muzzle below the reticle, then join the actual ray at the head. */

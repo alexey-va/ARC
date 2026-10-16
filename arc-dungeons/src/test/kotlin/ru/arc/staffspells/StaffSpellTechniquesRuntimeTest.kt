@@ -368,7 +368,7 @@ class StaffSpellTechniquesRuntimeTest : FreeSpec({
     }
 
     "Gravity throw recast cannot damage the same target a second time" {
-        withTechniqueScenes { h, _ ->
+        withTechniqueScenes { h, activeScenes ->
             val world = h.paper.addSimpleWorld("staff-gravity-q-one-hit")
             val player = h.player("staff-gravity-q-one-hit", world, StaffSpell.GRAVITY)
             val target = h.zombie(world, .5, 4.5)
@@ -383,6 +383,80 @@ class StaffSpellTechniquesRuntimeTest : FreeSpec({
             h.hits shouldBe listOf(target)
             target.hasGravity() shouldBe true
             (target.velocity.lengthSquared() > 0.0) shouldBe true
+            activeScenes.size shouldBe 1 // The released impulse is visible for real victims too.
+            h.visualPlays.size shouldBe 2
+        }
+    }
+
+    "NECROMANCER order marker follows its target and disappears when cover cancels the order" {
+        withTechniqueScenes { h, activeScenes ->
+            val world = h.paper.addSimpleWorld("staff-necromancer-q-marker-cover")
+            val player = h.player("staff-necromancer-q-marker-cover", world, StaffSpell.NECROMANCER)
+            val target = h.zombie(world, .5, 5.5)
+            h.controller.start()
+            h.controller.hotkey(player, StaffSpell.NECROMANCER, StaffHotkey.Q)
+            activeScenes.size shouldBe 1
+            val scene = activeScenes.single()
+            target.teleport(target.location.clone().add(1.0, 0.0, 0.0))
+            h.scheduler.tick(4)
+            h.movedEffects.last { it.first == scene }.second shouldBe target.location
+            h.hits shouldBe emptyList()
+            for (x in -1..3) for (y in 64..67) world.getBlockAt(x, y, 3).type = Material.STONE
+            h.scheduler.tick(10)
+            activeScenes shouldBe emptySet<UUID>()
+            h.hits shouldBe emptyList()
+        }
+    }
+
+    "EMBER display lifetime includes the final six ticks of a maximum length late-recorded trail" {
+        withTechniqueScenes { h, activeScenes ->
+            var lifetime = 0
+            var elapsed = 0
+            every { h.effects.custom(any(), any(), any(), any(), any()) } answers {
+                lifetime = arg(3)
+                UUID.randomUUID().also(activeScenes::add)
+            }
+            fun advance(ticks: Int) = repeat(ticks) {
+                elapsed++
+                if (elapsed >= lifetime) activeScenes.clear() // The real display pool expires its scene.
+                h.scheduler.tick(1)
+            }
+            val world = h.paper.addSimpleWorld("staff-ember-q-full-afterglow")
+            for (x in -1..2) for (z in 0..15) world.getBlockAt(x, 63, z).type = Material.STONE
+            val player = h.player("staff-ember-q-full-afterglow", world, StaffSpell.EMBER)
+            h.controller.start()
+            h.controller.hotkey(player, StaffSpell.EMBER, StaffHotkey.Q)
+            activeScenes.size shouldBe 1
+            advance(29)
+            repeat(11) {
+                player.teleport(player.location.clone().add(0.0, 0.0, 1.0))
+                advance(1)
+            }
+            advance(27) // Tick67: all12nodes have ignited and the final glow must remain visible.
+            elapsed shouldBe 67
+            activeScenes.size shouldBe 1
+            h.hits shouldBe emptyList()
+            advance(3)
+            activeScenes shouldBe emptySet<UUID>()
+        }
+    }
+
+    "NECROMANCER empty order is bounded and reset closes its presentation before the volley cue" {
+        withTechniqueScenes { h, activeScenes ->
+            val world = h.paper.addSimpleWorld("staff-necromancer-q-marker-reset")
+            val player = h.player("staff-necromancer-q-marker-reset", world, StaffSpell.NECROMANCER)
+            h.controller.start()
+            h.controller.hotkey(player, StaffSpell.NECROMANCER, StaffHotkey.Q)
+            h.scheduler.tick(6)
+            activeScenes.size shouldBe 1
+            h.controller.resetPlayer(player.uniqueId)
+            activeScenes shouldBe emptySet<UUID>()
+            h.scheduler.tick(35)
+            h.hits shouldBe emptyList()
+            h.controller.hotkey(player, StaffSpell.NECROMANCER, StaffHotkey.Q)
+            activeScenes.size shouldBe 1
+            h.scheduler.tick(32)
+            activeScenes shouldBe emptySet<UUID>()
         }
     }
 

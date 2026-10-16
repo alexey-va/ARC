@@ -363,6 +363,84 @@ object StaffRedesignPreviewExport {
                 if (spell == StaffSpell.GALE || spell == StaffSpell.TIDE)
                     listOf("staffTideGaleParts", "staffTideGaleParticleSamples", "staffGaleWanderStep") else emptyList()),
             "frames" to frames,
+        ).let { clip ->
+            if (galePitchDegrees == 0.0) clip else clip + mapOf(
+                "casterEye" to point(0.0, 1.62, 0.0),
+                "casterLook" to point(0.0, kotlin.math.sin(Math.toRadians(galePitchDegrees)),
+                    kotlin.math.cos(Math.toRadians(galePitchDegrees))),
+            )
+        }
+    }
+
+    /** Cuboid actors expose the live pull/scale poses; they are not exported Minecraft mob models. */
+    private fun blackHoleClip(): Map<String, Any> {
+        val core = Vector(0.0, 1.15, 8.0)
+        val positions = listOf(Vector(-3.1, 0.0, 7.4), Vector(2.8, 0.0, 8.3), Vector(.8, 0.0, 11.1))
+        val outward = positions.map { it.clone().subtract(core).apply { y = 0.0 }.normalize() }
+        val scales = DoubleArray(positions.size) { 1.0 }
+        val releaseScales = DoubleArray(positions.size) { 1.0 }
+        val fed = mutableSetOf<Int>()
+        var growth = 1.0
+        val duration = 70
+        val frames = ticks(duration).map { age ->
+            val releasing = age >= STAFF_BLACK_HOLE_TICKS
+            if (age == STAFF_BLACK_HOLE_TICKS) scales.copyInto(releaseScales)
+            positions.forEachIndexed { i, feet ->
+                if (age in 2 until STAFF_BLACK_HOLE_TICKS) {
+                    val offset = core.clone().subtract(feet.clone().add(Vector(0.0, .9 * scales[i], 0.0)))
+                    scales[i] = staffBlackHoleScale(offset.length(), scales[i])
+                    if (offset.lengthSquared() <= STAFF_BLACK_HOLE_CORE_RADIUS * STAFF_BLACK_HOLE_CORE_RADIUS &&
+                        scales[i] <= .35) fed += i
+                    // Idealized two-tick integration removes the source's native-gravity compensation.
+                    val motion = staffBlackHoleVelocity(offset).apply { y -= .12 }.multiply(2.0)
+                    feet.add(motion)
+                } else if (age in STAFF_BLACK_HOLE_TICKS..STAFF_BLACK_HOLE_TICKS + STAFF_BLACK_HOLE_RELEASE_TICKS) {
+                    scales[i] = staffBlackHoleReleaseScale(releaseScales[i], age - STAFF_BLACK_HOLE_TICKS)
+                    feet.add(outward[i].clone().multiply(.44))
+                } else if (age > STAFF_BLACK_HOLE_TICKS + STAFF_BLACK_HOLE_RELEASE_TICKS) {
+                    feet.y = (feet.y - .12 * (age - STAFF_BLACK_HOLE_TICKS - STAFF_BLACK_HOLE_RELEASE_TICKS)).coerceAtLeast(0.0)
+                }
+            }
+            growth = minOf(staffBlackHoleGrowth(fed.size), growth + .04)
+            val parts = mutableListOf<Map<String, Any>>()
+            if (age < 60) {
+                val holeAge = if (releasing) age - STAFF_BLACK_HOLE_TICKS else age
+                staffDisplayParts(StaffSpell.MARK, holeAge, if (releasing) 20 else STAFF_BLACK_HOLE_TICKS,
+                    1.0, STAFF_BLACK_HOLE_RADIUS, impact = releasing, secondary = true,
+                    animationAgeTicks = age, blackHoleGrowth = growth).forEachIndexed { index, display ->
+                    parts += part(display, "black-hole", index, core)
+                }
+            }
+            positions.forEachIndexed { i, feet ->
+                fun actorPart(material: Material, x: Double, y: Double, z: Double,
+                    width: Double, height: Double, depth: Double): StaffDisplayPart {
+                    val scale = scales[i].toFloat()
+                    return StaffDisplayPart(material, Vector3f(x.toFloat(), y.toFloat(), z.toFloat()).mul(scale),
+                        Vector3f(width.toFloat(), height.toFloat(), depth.toFloat()).mul(scale), Quaternionf())
+                }
+                listOf(
+                    actorPart(Material.GREEN_CONCRETE, 0.0, 1.58, 0.0, .45, .44, .45),
+                    actorPart(Material.CYAN_WOOL, 0.0, .99, 0.0, .55, .72, .32),
+                    actorPart(Material.BLUE_CONCRETE, -.14, .36, 0.0, .24, .72, .28),
+                    actorPart(Material.BLUE_CONCRETE, .14, .36, 0.0, .24, .72, .28),
+                    actorPart(Material.GREEN_CONCRETE, -.37, 1.22, -.20, .18, .19, .60),
+                    actorPart(Material.GREEN_CONCRETE, .37, 1.22, -.20, .18, .19, .60),
+                ).forEachIndexed { index, display -> parts += part(display, "illustrative-mob-$i", index, feet) }
+            }
+            mapOf("tick" to age, "parts" to parts, "emissions" to emptyList<Any>(),
+                "actorScales" to scales.toList(), "fedMobs" to fed.size, "holeGrowth" to growth)
+        }
+        return mapOf(
+            "id" to "mark-secondary-0-absorption", "spell" to StaffSpell.MARK.id,
+            "input" to StaffCastInput.SECONDARY.name, "quick" to false, "charge" to 0.0,
+            "durationTicks" to duration, "tailTicks" to 0, "frameStepTicks" to FRAME_STEP_TICKS,
+            "particleOnly" to false, "casterFeet" to point(0.0, 0.0, 0.0),
+            "casterEye" to point(0.0, 1.62, 0.0), "casterLook" to point(0.0, 0.0, 1.0),
+            "anchor" to "shared visual/gameplay core 8 blocks forward, 1.15 blocks above floor",
+            "sourceFunctions" to listOf("staffDisplayParts", "staffBlackHoleScale", "staffBlackHoleVelocity",
+                "staffBlackHoleGrowth", "staffBlackHoleReleaseScale"),
+            "timelineNote" to "Три цветных кубоидных манекена — условные мобы для проверки масштаба, не нативные модели. Production-функции задают уменьшение до 18%, тягу и рост ядра на 8% за поглощённого моба (предел 48% при шести). 40 тиков поглощения, затем 10 тиков возврата размера без дополнительного урона; сфера схлопывается до тика 60. Движение манекенов — иллюстративная интеграция без AI, стен и точной физики Minecraft; урон, admission и cleanup проверяются отдельно. В runtime игроки никогда не уменьшаются.",
+            "frames" to frames,
         )
     }
 
@@ -952,6 +1030,7 @@ object StaffRedesignPreviewExport {
                     listOf(0.0, 1.0).forEach { charge -> add(requiemBellClip(input, charge)) }
                 }
                 add(chainStormNovaClip())
+                add(blackHoleClip())
                 StaffSpell.available.forEach { spell ->
                     add(quickClip(spell, StaffCastInput.QUICK))
                     add(quickClip(spell, StaffCastInput.QUICK_SECONDARY))
@@ -995,7 +1074,7 @@ object StaffRedesignPreviewExport {
                 (clip["sourceFunctions"] as? List<*>)?.contains("staffMeleeDisplayParts") == true ||
                 clip["quick"] == true || ((clip["spell"] == "tide" || clip["spell"] == "gale") &&
                     (clip["input"] == "PRIMARY" || clip["input"] == "SECONDARY")) ||
-                    ((clip["spell"] == StaffSpell.CHAIN.id && clip["input"] == StaffCastInput.SECONDARY.name) ||
+                    ((clip["spell"] in setOf(StaffSpell.CHAIN.id, StaffSpell.MARK.id) && clip["input"] == StaffCastInput.SECONDARY.name) ||
                         clip["spell"] == StaffSpell.REQUIEM.id)
             } + chargeClips + preparationClips
             focusedOutput.parent?.let { Files.createDirectories(it) }

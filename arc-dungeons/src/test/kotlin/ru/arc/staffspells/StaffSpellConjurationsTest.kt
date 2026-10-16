@@ -54,7 +54,9 @@ class StaffSpellConjurationsTest : FreeSpec({
             h.hits shouldBe emptyList()
             h.scheduler.tick(200)
             h.hits shouldBe emptyList()
-            (scenes.single().id in removed) shouldBe true
+            (scenes.first().id in removed) shouldBe true
+            scenes.size shouldBe if (spell == StaffSpell.FROST) 1 else 2
+            if (spell != StaffSpell.FROST) (scenes.last().durationTicks in 1..12) shouldBe true
         }
     }
 
@@ -128,7 +130,7 @@ class StaffSpellConjurationsTest : FreeSpec({
                 scenes.size shouldBe 2
                 scenes[1].spell shouldBe StaffSpell.REQUIEM
                 scenes[1].durationTicks shouldBe 14
-                scenes[1].geometry(7).size shouldBe 24
+                scenes[1].geometry(7).size shouldBe 32
                 (scenes[1].id in removed) shouldBe false
                 h.controller.conjurations.canRecast(player.uniqueId, StaffSpell.REQUIEM) shouldBe false
             }
@@ -211,7 +213,31 @@ class StaffSpellConjurationsTest : FreeSpec({
             ownedTarget.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
             otherTarget.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe true
             scenes.size shouldBe 1
-            scenes.single().geometry(12).size shouldBe 18
+            scenes.single().geometry(12).size shouldBe 36
+        }
+    }
+
+    "MARK and NOVA do not recreate aftermath scenes or roots after a damage callback cancels their owner" {
+        for (spell in listOf(StaffSpell.MARK, StaffSpell.NOVA)) {
+            var cancelDuringDamage: () -> Unit = {}
+            withStaffHarness(hit = { _, _ -> cancelDuringDamage(); true }) { h ->
+                val scenes = mutableListOf<CustomConjurationScene>()
+                val removed = mutableListOf<UUID?>()
+                recordConjurationScenes(h, scenes, removed)
+                val world = h.paper.addSimpleWorld("staff-q-reentrant-cancel-${spell.id}")
+                for (x in -2..2) for (z in 0..12) world.getBlockAt(x, 63, z).type = Material.STONE
+                val player = h.player("staff-q-reentrant-cancel-${spell.id}", world, spell)
+                val target = h.zombie(world, .5, 4.5)
+                cancelDuringDamage = { h.controller.conjurations.cancel(player.uniqueId) }
+                h.controller.conjurations.cast(player, spell, conjurationCast(player),
+                    staffSettings().tuning.getValue(spell)) shouldBe true
+                if (spell == StaffSpell.MARK) target.teleport(target.location.clone().add(0.0, 0.0, 4.0))
+                h.scheduler.tick(12)
+                h.hits shouldBe listOf(target)
+                scenes.size shouldBe 1
+                (scenes.single().id in removed) shouldBe true
+                target.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
+            }
         }
     }
 
@@ -281,8 +307,11 @@ class StaffSpellConjurationsTest : FreeSpec({
 
             target.getPotionEffect(PotionEffectType.SLOWNESS)?.amplifier shouldBe 0
             (target.getPotionEffect(PotionEffectType.SLOWNESS)?.duration ?: 0) shouldBe 78
-            scenes.size shouldBe 2
+            scenes.size shouldBe 3
             (scenes[1].id in removed) shouldBe true
+            scenes[2].durationTicks shouldBe 10
+            scenes[2].geometry(4).all { it.identity!!.startsWith("tide:q:release:") } shouldBe true
+            (scenes[2].id in removed) shouldBe false
         }
     }
 

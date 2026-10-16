@@ -6,6 +6,7 @@ import org.bukkit.Location
 import org.bukkit.Particle
 import org.bukkit.Sound
 import org.bukkit.entity.LivingEntity
+import org.bukkit.entity.Mob
 import org.bukkit.entity.Player
 import org.bukkit.event.Event
 import org.bukkit.event.EventHandler
@@ -15,6 +16,7 @@ import org.bukkit.event.Listener
 import org.bukkit.event.block.Action
 import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.entity.EntityDamageEvent
+import org.bukkit.event.entity.EntityDeathEvent
 import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerInteractAtEntityEvent
 import org.bukkit.event.player.PlayerInteractEntityEvent
@@ -72,9 +74,10 @@ object StaffSpellsModule : PluginModule {
                 Bukkit.getPluginManager().registerEvents(it, plugin)
             }
         }
+        val displays = PaperPacketDisplays(plugin, "staff-spells")
         controller = StaffSpellController(config, settings, StaffSpellDamage(duelAccess),
-            StaffSpellDisplayEffects(PaperPacketDisplays(plugin, "staff-spells")), cooldowns,
-            scenery = scenery, hud = StaffSpellHud(PaperPacketDisplays(plugin, "staff-hud"), config)).also {
+            StaffSpellDisplayEffects(displays), cooldowns,
+            scenery = scenery, hud = StaffSpellHud(displays, config, ownDisplays = false)).also {
             Bukkit.getPluginManager().registerEvents(it, plugin)
             Bukkit.getPluginManager().registerEvents(it.input, plugin)
             Bukkit.getPluginManager().registerEvents(it.defense, plugin)
@@ -409,7 +412,7 @@ internal class StaffSpellController(
             StaffSpell.MARK -> {
                 val selected = target(player, cast)
                 val point = selected?.let(::center) ?: aimPoint(player)
-                effects.remove(marks.remove(player.uniqueId)?.visualId)
+                cancelMark(player.uniqueId)
                 val visualId = effects.play(player.uniqueId, spell, point, radius = 1.3, durationTicks = settings.markTicks, charge = cast.visualCharge)
                 marks[player.uniqueId] = PendingStaffMark(selected, point, player.world.uid, cast, tuning, settings.markTicks, visualId)
                 visuals.withOwner(cast.casterId) { visuals.markLaunch(visualStart(player.eyeLocation, point), point) }
@@ -517,12 +520,17 @@ internal class StaffSpellController(
         when (spell) {
             StaffSpell.CHAIN -> chainStormNova(player, cast, tuning)
             StaffSpell.MARK -> {
-                val at = target(player, cast)?.let { staffVisibleTargetPoint(player.eyeLocation, it) } ?: aimPoint(player)
-                effects.remove(marks.remove(player.uniqueId)?.visualId)
-                val visualId = effects.play(player.uniqueId, spell, at, radius = 4.5,
-                    durationTicks = 40, secondary = true, charge = cast.visualCharge)
+                val at = target(player, cast)?.let { staffVisibleTargetPoint(player.eyeLocation, it) } ?: aimPoint(player).let { aimed ->
+                    // A floor aim needs an airborne core; the upward ray still respects ceilings.
+                    val floor = groundBelow(aimed.clone().add(0.0, .1, 0.0), .35)
+                    if (floor == null) aimed else rayEnd(floor, Vector(0.0, 1.0, 0.0), 1.15)
+                        .takeIf { visible(player.eyeLocation, it) } ?: aimed
+                }
+                cancelMark(player.uniqueId)
+                val visualId = effects.play(player.uniqueId, spell, at, radius = STAFF_BLACK_HOLE_RADIUS,
+                    durationTicks = STAFF_BLACK_HOLE_TICKS, secondary = true, charge = cast.visualCharge)
                 marks[player.uniqueId] = PendingStaffMark(null, at, player.world.uid,
-                    cast, tuning, 40, visualId, gravity = true)
+                    cast, tuning, STAFF_BLACK_HOLE_TICKS, visualId, blackHole = StaffBlackHole(cast.attackId))
                 visuals.withOwner(cast.casterId) { visuals.markLaunch(visualStart(player.eyeLocation, at), at) }
             }
             StaffSpell.ICICLE -> hail(player, cast, tuning, 5 + (level * 4).toInt())
@@ -1184,66 +1192,123 @@ internal class StaffSpellController(
         else horizontalDistance(wave.origin, at)
 
     private fun tickMarks() {
-        val pulses = mutableListOf<Pair<Player, PendingStaffMark>>()
-        val due = mutableListOf<Pair<Player, PendingStaffMark>>()
-        val iterator = marks.iterator()
-        while (iterator.hasNext()) {
-            val (playerId, mark) = iterator.next()
+        // Damage callbacks can synchronously cancel or replace a mark; never retain a map iterator.
+        marks.toList().forEach { (playerId, mark) ->
+            if (marks[playerId] !== mark) return@forEach
             val player = Bukkit.getPlayer(playerId)
             val origin = mark.target?.let(::center) ?: mark.point
             if (player == null || !ready(player) || player.world.uid != mark.worldId ||
                 !damage.isCurrent(player, mark.cast) ||
                 (mark.target != null && !damage.eligible(player, mark.target, mark.cast)) ||
                 player.eyeLocation.distanceSquared(origin) > (settings.range + 1) * (settings.range + 1)) {
-                iterator.remove()
-                effects.remove(mark.visualId)
-                continue
+                cancelMark(playerId)
+                return@forEach
             }
             effects.move(mark.visualId, origin)
             mark.remainingTicks -= 2
-            if (mark.gravity && mark.remainingTicks > 0 && mark.remainingTicks % 4 == 0)
-                visuals.withOwner(mark.cast.casterId) { visuals.gravity(origin, 4.5, 1.0 - mark.remainingTicks / 40.0) }
-            if (mark.gravity && mark.remainingTicks > 0 && mark.remainingTicks % 8 == 0) pulses += player to mark
+            if (mark.blackHole != null) {
+                tickBlackHole(player, mark)
+                return@forEach
+            }
             if (mark.remainingTicks <= 0) {
-                iterator.remove()
-                due += player to mark
-            } else {
-                if (!mark.gravity) visuals.withOwner(mark.cast.casterId) {
-                    visuals.markCharge(origin, 1.0 - mark.remainingTicks.toDouble() / settings.markTicks)
-                }
+                marks.remove(playerId)
+                areaDamage(player, origin, settings.markRadius, mark.cast, mark.tuning, mark.target)
+                if (!damage.isCurrent(player, mark.cast)) return@forEach
+                visuals.withOwner(mark.cast.casterId) { visuals.markBurst(origin, settings.markRadius) }
+                effects.impact(mark.visualId, origin, settings.markRadius, MARK_IMPACT_DURATION_TICKS)
+            } else visuals.withOwner(mark.cast.casterId) {
+                visuals.markCharge(origin, 1.0 - mark.remainingTicks.toDouble() / settings.markTicks)
             }
         }
-        pulses.forEach { (player, mark) ->
-            val origin = mark.point
-            val candidates = nearby(player, origin, 4.5, mark.cast).sortedBy { center(it).distanceSquared(origin) }
-                .take(MAX_WAVE_CANDIDATES)
-            var attempts = 0
-            for (victim in candidates) {
-                if (marks[player.uniqueId] !== mark || !ready(player) || player.world.uid != mark.worldId ||
-                    !damage.isCurrent(player, mark.cast)) break
-                if (attempts >= settings.maxAreaTargets) break
-                if (!damage.eligible(player, victim, mark.cast) || !visible(origin, victim) ||
-                    !visible(player.eyeLocation, victim)) continue
-                attempts++
-                if (damage.hit(player, victim, mark.cast, mark.tuning.power * 0.12, mark.tuning.vanillaDamage * 0.12) &&
-                    marks[player.uniqueId] === mark && damage.isCurrent(player, mark.cast) &&
-                    damage.eligible(player, victim, mark.cast)) {
-                    val pull = origin.toVector().subtract(center(victim).toVector())
-                    if (pull.lengthSquared() > 0.04) victim.velocity = pull.normalize().multiply(0.48).apply { y = y.coerceIn(-0.15, 0.18) }
-                }
+    }
+
+    private fun tickBlackHole(player: Player, mark: PendingStaffMark) {
+        val hole = requireNotNull(mark.blackHole)
+        if (!visible(player.eyeLocation, mark.point)) { cancelMark(player.uniqueId); return }
+        val releasing = mark.remainingTicks <= 0
+        val age = STAFF_BLACK_HOLE_TICKS - mark.remainingTicks
+        // Ten-tick spacing respects native hurt immunity; four admitted pulses retain the 0.48 budget.
+        if (mark.remainingTicks == 0 || mark.remainingTicks > 0 && (age - 2) % 10 == 0) {
+            blackHolePulse(player, mark, if (releasing) .65 else .12)
+            if (marks[player.uniqueId] !== mark) return
+            if (!ready(player) || player.world.uid != mark.worldId || !damage.isCurrent(player, mark.cast)) {
+                cancelMark(player.uniqueId)
+                return
             }
         }
-        due.forEach { (player, mark) ->
-            if (!damage.isCurrent(player, mark.cast)) return@forEach
-            val origin = mark.target?.let(::center) ?: mark.point
-            val tuning = if (mark.gravity) mark.tuning.copy(power = mark.tuning.power * 0.65,
-                vanillaDamage = mark.tuning.vanillaDamage * 0.65) else mark.tuning
-            val radius = if (mark.gravity) 4.5 else settings.markRadius
-            areaDamage(player, origin, radius, mark.cast, tuning, mark.target)
-            if (!damage.isCurrent(player, mark.cast)) return@forEach
-            visuals.withOwner(mark.cast.casterId) { visuals.markBurst(origin, radius, blackhole = mark.gravity) }
-            effects.impact(mark.visualId, origin, radius, MARK_IMPACT_DURATION_TICKS)
+        if (mark.remainingTicks == 0) {
+            hole.captives.values.forEach { it.releaseScale = it.scale }
+            visuals.withOwner(mark.cast.casterId) { visuals.markBurst(mark.point, STAFF_BLACK_HOLE_RADIUS, blackhole = true) }
+            effects.impact(mark.visualId, mark.point, STAFF_BLACK_HOLE_RADIUS, MARK_IMPACT_DURATION_TICKS)
         }
+        hole.captives.values.toList().forEach { captive ->
+            val mob = captive.mob
+            if (!damage.eligible(player, mob, mark.cast) || mob.world.uid != mark.worldId ||
+                !visible(mark.point, mob) || !visible(player.eyeLocation, mob) ||
+                center(mob).distanceSquared(mark.point) > STAFF_BLACK_HOLE_RADIUS * STAFF_BLACK_HOLE_RADIUS) {
+                hole.release(mob.uniqueId)
+                return@forEach
+            }
+            val offset = mark.point.toVector().subtract(center(mob).toVector())
+            val velocity = if (releasing) captive.outward.clone().multiply(.22).apply { y = .12 }
+                else staffBlackHoleVelocity(offset)
+            if (!captive.canMove(velocity)) { hole.release(mob.uniqueId); return@forEach }
+            val scale = if (releasing) staffBlackHoleReleaseScale(captive.releaseScale, -mark.remainingTicks)
+                else staffBlackHoleScale(offset.length(), captive.scale)
+            hole.resize(captive, scale)
+            mob.velocity = velocity
+            if (!releasing && offset.lengthSquared() <= STAFF_BLACK_HOLE_CORE_RADIUS * STAFF_BLACK_HOLE_CORE_RADIUS &&
+                scale <= .35) hole.fed += mob.uniqueId
+        }
+        hole.growth = minOf(staffBlackHoleGrowth(hole.fed.size), hole.growth + .04)
+        effects.blackHoleGrowth(mark.visualId, hole.growth)
+        if (mark.remainingTicks > 0 && mark.remainingTicks % 4 == 0)
+            visuals.withOwner(mark.cast.casterId) {
+                visuals.gravity(mark.point, STAFF_BLACK_HOLE_RADIUS, 1.0 - mark.remainingTicks.toDouble() / STAFF_BLACK_HOLE_TICKS)
+            }
+        if (mark.remainingTicks <= -STAFF_BLACK_HOLE_RELEASE_TICKS) {
+            marks.remove(player.uniqueId)
+            hole.releaseAll() // The already-running collapse display finishes on its own clock.
+        }
+    }
+
+    private fun blackHolePulse(player: Player, mark: PendingStaffMark, scale: Double) {
+        val hole = requireNotNull(mark.blackHole)
+        val limit = minOf(settings.maxAreaTargets, STAFF_BLACK_HOLE_TARGETS)
+        val candidates = nearby(player, mark.point, STAFF_BLACK_HOLE_RADIUS, mark.cast)
+            .filter { center(it).distanceSquared(mark.point) <= STAFF_BLACK_HOLE_RADIUS * STAFF_BLACK_HOLE_RADIUS }
+            .sortedBy { center(it).distanceSquared(mark.point) }.take(MAX_WAVE_CANDIDATES)
+        for (victim in candidates) {
+            if (marks[player.uniqueId] !== mark || !ready(player) || player.world.uid != mark.worldId ||
+                !damage.isCurrent(player, mark.cast)) return
+            if (victim.uniqueId !in hole.targets && hole.targets.size >= limit) continue
+            if (!damage.eligible(player, victim, mark.cast) || !visible(mark.point, victim) ||
+                !visible(player.eyeLocation, victim)) continue
+            // Existing marks are the ownership registry: two holes never stack scale or fight over one mob.
+            if (marks.values.any { it !== mark && it.blackHole?.captives?.containsKey(victim.uniqueId) == true }) continue
+            hole.targets += victim.uniqueId
+            val hit = damage.hit(player, victim, mark.cast, mark.tuning.power * scale, mark.tuning.vanillaDamage * scale)
+            if (marks[player.uniqueId] !== mark || !damage.isCurrent(player, mark.cast)) return
+            if (!hit) {
+                if (mark.remainingTicks > 0) hole.release(victim.uniqueId)
+                continue // A rejected terminal hit still gets the same harmless, gradual release.
+            }
+            if (!damage.eligible(player, victim, mark.cast) || !visible(mark.point, victim) ||
+                !visible(player.eyeLocation, victim) || mark.remainingTicks <= 0) continue
+            if (victim is Mob) hole.capture(victim, mark.point)
+            else if (victim is Player) {
+                // Duel-authorized players keep the old bounded pulse pull; only mobs are resized/held.
+                val pull = mark.point.toVector().subtract(center(victim).toVector())
+                if (pull.lengthSquared() > .04) victim.velocity = pull.normalize().multiply(.48)
+                    .apply { y = y.coerceIn(-.15, .18) }
+            }
+        }
+    }
+
+    private fun cancelMark(playerId: UUID) {
+        val mark = marks.remove(playerId) ?: return
+        mark.blackHole?.releaseAll()
+        effects.remove(mark.visualId)
     }
 
     private fun tickEmbers(launching: PendingStaffEmber? = null) {
@@ -1346,7 +1411,7 @@ internal class StaffSpellController(
         StaffMagicBarriers.cancel(playerId)
         chargeScenes.remove(playerId)?.forEach(effects::remove)
         lances.removeAll { it.cast.casterId == playerId }
-        marks.remove(playerId)
+        cancelMark(playerId)
         embers.removeAll { it.cast.casterId == playerId }
         waves.removeAll { it.casterId == playerId }
         bolts.removeAll { it.cast.casterId == playerId }
@@ -1361,6 +1426,10 @@ internal class StaffSpellController(
     }
     @EventHandler fun onWorldChange(event: PlayerChangedWorldEvent) = cancel(event.player.uniqueId)
     @EventHandler fun onDeath(event: PlayerDeathEvent) = cancel(event.entity.uniqueId)
+
+    @EventHandler fun onMarkedMobDeath(event: EntityDeathEvent) {
+        marks.values.toList().forEach { it.blackHole?.release(event.entity.uniqueId) }
+    }
 
     override fun close() {
         input.close()
@@ -1383,7 +1452,7 @@ internal class StaffSpellController(
         chargeScenes.clear()
         lances.clear()
         tasks.close()
-        marks.clear()
+        marks.keys.toList().forEach(::cancelMark)
         embers.clear()
         waves.clear()
         bolts.clear()
@@ -1428,7 +1497,8 @@ private data class PendingStaffLance(val from: Location, val end: Location, val 
     var age: Int = 0, var previousFront: Double = 0.0)
 
 private data class PendingStaffMark(val target: LivingEntity?, val point: Location, val worldId: UUID,
-    val cast: StaffSpellCast, val tuning: StaffSpellTuning, var remainingTicks: Int, val visualId: UUID?, val gravity: Boolean = false)
+    val cast: StaffSpellCast, val tuning: StaffSpellTuning, var remainingTicks: Int, val visualId: UUID?,
+    val blackHole: StaffBlackHole? = null)
 
 private data class PendingStaffEmber(var position: Location, val direction: Vector,
     val cast: StaffSpellCast, val tuning: StaffSpellTuning, var remainingDistance: Double, val visualId: UUID?,

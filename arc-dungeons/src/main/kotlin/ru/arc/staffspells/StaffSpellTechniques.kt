@@ -88,6 +88,16 @@ internal class StaffSpellTechniques(
         var ageTicks: Int = 0,
         val alreadyHit: MutableSet<UUID> = mutableSetOf(),
         val crossing: MutableSet<UUID> = mutableSetOf(),
+        var lastCutTick: Int? = null,
+    )
+
+    private data class NecromancerOrder(
+        val casterId: UUID,
+        val cast: StaffSpellCast,
+        val anchor: Location,
+        val target: LivingEntity?,
+        val sceneId: UUID,
+        var ageTicks: Int = 0,
     )
 
     private data class GravityHold(
@@ -134,6 +144,7 @@ internal class StaffSpellTechniques(
     private val galeHurricanes = linkedMapOf<UUID, GaleHurricane>()
     private val icicleBursts = linkedMapOf<UUID, IcicleBurst>()
     private val prismWards = linkedMapOf<UUID, PrismWard>()
+    private val necromancerOrders = linkedMapOf<UUID, NecromancerOrder>()
     private val gravityHolds = linkedMapOf<UUID, GravityHold>()
     /** Holds in-flight reservations too, so a synchronous damage callback cannot start a second hold. */
     private val gravityTargetOwners = mutableMapOf<UUID, UUID>()
@@ -523,7 +534,7 @@ internal class StaffSpellTechniques(
             }
             ward.ageTicks++
             effects.updateCustom(ward.sceneId, ward.origin,
-                staffPrismTripwireParts(ward.yaw, ward.ageTicks / 2))
+                staffPrismTripwireParts(ward.yaw, ward.ageTicks / 2, ward.lastCutTick?.let { ward.ageTicks - it }))
             val present = mutableSetOf<UUID>()
             targeting.nearby(player, ward.origin, PRISM_DETECTION_RADIUS, ward.cast).forEach targetLoop@{ target ->
                 if (prismWards[ward.casterId] !== ward || !damage.isCurrent(player, ward.cast)) return@targetLoop
@@ -536,8 +547,10 @@ internal class StaffSpellTechniques(
                 if (target.uniqueId !in ward.crossing && target.uniqueId !in ward.alreadyHit) {
                     ward.alreadyHit += target.uniqueId
                     if (damage.hit(player, target, ward.cast, ward.tuning.power, ward.tuning.vanillaDamage)) {
+                        ward.lastCutTick = ward.ageTicks
                         visuals.withOwner(ward.casterId) {
                             visuals.cue(center(target), Sound.BLOCK_AMETHYST_BLOCK_HIT, .46f, 1.55f)
+                            visuals.cue(center(target), Sound.ENTITY_PLAYER_ATTACK_SWEEP, .32f, 1.65f)
                             visuals.particles(center(target), prismTripSamples(), clearance = 0.0)
                         }
                     }
@@ -585,17 +598,23 @@ internal class StaffSpellTechniques(
     )
 
     private fun commandNecromancer(player: Player, cast: StaffSpellCast): Boolean {
+        if (player.uniqueId in necromancerOrders || !admitNewScenes(1)) return false
         val eye = player.eyeLocation
         val target = targeting.aimed(player, min(settings.range, NECROMANCER_COMMAND_RANGE), settings.aimDegrees, cast)
             .firstOrNull()
         if (target != null) {
             if (!visible(eye, target) || !damage.isCurrent(player, cast) ||
                 !damage.eligible(player, target, cast)) return false
-            effects.custom(player.uniqueId, StaffSpell.NECROMANCER, target.location, 24,
+            val scene = effects.custom(player.uniqueId, StaffSpell.NECROMANCER, target.location, 32,
                 ::staffNecromancerCommandParts) ?: return false
-            summons.commandFocus(player, target, cast)
+            val order = NecromancerOrder(player.uniqueId, cast, target.location.clone(), target, scene)
+            necromancerOrders[player.uniqueId] = order
+            summons.commandVolley(player, target, cast) {
+                necromancerOrders[player.uniqueId] === order && effects.isActive(scene)
+            }
             visuals.withOwner(player.uniqueId) {
-                visuals.cue(center(target), Sound.ENTITY_WITHER_SKELETON_AMBIENT, .42f, 1.55f)
+                visuals.cue(center(target), Sound.ENTITY_WITHER_SKELETON_AMBIENT, .42f, .72f)
+                visuals.cue(center(target), Sound.BLOCK_BONE_BLOCK_PLACE, .5f, .65f)
                 visuals.particles(center(target), necromancerFocusSamples(), clearance = 0.0)
             }
             return true
@@ -606,13 +625,42 @@ internal class StaffSpellTechniques(
             ?: emptyAimPoint(player)?.subtract(0.0, .8, 0.0) ?: return false
         if (rally.world !== player.world || !visible(eye, rally.clone().add(0.0, .8, 0.0)) ||
             !damage.isCurrent(player, cast)) return false
-        effects.custom(player.uniqueId, StaffSpell.NECROMANCER, rally, 24, ::staffNecromancerCommandParts) ?: return false
+        val scene = effects.custom(player.uniqueId, StaffSpell.NECROMANCER, rally, 32, ::staffNecromancerCommandParts)
+            ?: return false
+        necromancerOrders[player.uniqueId] = NecromancerOrder(player.uniqueId, cast, rally.clone(), null, scene)
         summons.commandRally(player, rally, cast)
         visuals.withOwner(player.uniqueId) {
             visuals.cue(rally, Sound.BLOCK_SOUL_SAND_STEP, .46f, 1.28f)
             visuals.particles(rally, necromancerRallySamples(), clearance = .45)
         }
         return true
+    }
+
+    private fun tickNecromancerOrders() {
+        necromancerOrders.values.toList().forEach { order ->
+            val player = Bukkit.getPlayer(order.casterId)
+            if (player == null || !ready(player, order.cast) || player.world !== order.anchor.world ||
+                !effects.isActive(order.sceneId) || order.target?.let {
+                    !validTechniqueTarget(player, it, order.cast, player.world.uid)
+                } == true) {
+                removeNecromancerOrder(order)
+                return@forEach
+            }
+            order.ageTicks++
+            val at = order.target?.location ?: order.anchor
+            effects.updateCustom(order.sceneId, at, staffNecromancerCommandParts(order.ageTicks))
+            if (order.ageTicks == 12) visuals.withOwner(order.casterId) {
+                visuals.cue(at, Sound.ENTITY_WITHER_SHOOT, .44f, .72f)
+                visuals.cue(at, Sound.BLOCK_BONE_BLOCK_BREAK, .55f, .7f)
+                visuals.particles(at.clone().add(0.0, 1.5, 0.0), necromancerFocusSamples(), clearance = 0.0)
+            }
+            if (order.ageTicks >= 32) removeNecromancerOrder(order)
+        }
+    }
+
+    private fun removeNecromancerOrder(order: NecromancerOrder) {
+        necromancerOrders.remove(order.casterId, order)
+        effects.remove(order.sceneId)
     }
 
     private fun necromancerFocusSamples() = listOf(
@@ -749,8 +797,9 @@ internal class StaffSpellTechniques(
         direction.normalize()
         releaseGravity(hold)
         if (hold.target != null) {
-            hold.target.velocity = direction.multiply(GRAVITY_THROW_SPEED).add(Vector(0.0, GRAVITY_THROW_LIFT, 0.0))
-        } else {
+            hold.target.velocity = direction.clone().multiply(GRAVITY_THROW_SPEED).add(Vector(0.0, GRAVITY_THROW_LIFT, 0.0))
+        }
+        run {
             val motion = direction.clone().multiply(min(5.0, from.distance(clipped)))
             val yaw = atan2(-direction.x, direction.z).toFloat()
             effects.custom(player.uniqueId, StaffSpell.GRAVITY, from, 12) { age ->
@@ -805,7 +854,7 @@ internal class StaffSpellTechniques(
             val direction = at.toVector().subtract(eye.toVector()).normalize()
             val yaw = atan2(-direction.x, direction.z).toFloat()
             val scene = effects.custom(player.uniqueId, StaffSpell.LANCE, at, LANCE_OPEN_TICKS) { age ->
-                staffLancePinParts(1.8, yaw, held = false).map { part ->
+                staffLancePinParts(1.8, yaw, held = false, ageTicks = age).map { part ->
                     part.copy(scale = Vector3f(part.scale).mul((1f - age.toFloat() / LANCE_OPEN_TICKS).coerceAtLeast(.02f)))
                 }
             } ?: return false
@@ -837,7 +886,7 @@ internal class StaffSpellTechniques(
         val length = if (pinned) (LANCE_WALL_START_OFFSET + wallDistance!!).coerceIn(.8, 4.0) else 1.3
         val pin = LancePin(player.uniqueId, cast, player.world.uid, target, pinned, null)
         val sceneId = effects.custom(player.uniqueId, StaffSpell.LANCE, at, holdTicks) { age ->
-            staffLancePinParts(length, yaw, pinned).map { part ->
+            staffLancePinParts(length, yaw, pinned, ageTicks = age).map { part ->
                 if (!pinned) part.copy(scale = Vector3f(part.scale).mul((1.0 - age.toDouble() / holdTicks).toFloat()
                     .coerceAtLeast(.08f))) else part
             }
@@ -917,7 +966,7 @@ internal class StaffSpellTechniques(
         val trail = EmberTrail(player.uniqueId, cast, tuning, player.world.uid, ground.clone(), mutableListOf(ground.clone()), null)
         trail.sceneId = effects.custom(player.uniqueId, StaffSpell.EMBER, ground, EMBER_SCENE_LIFETIME_TICKS) { _ ->
             staffEmberTrailParts(trail.points.map(::locationVector), locationVector(trail.origin), -1)
-        }
+        } ?: return false
         emberTrails[player.uniqueId] = trail
         visuals.withOwner(player.uniqueId) {
             visuals.cue(ground, Sound.BLOCK_CAMPFIRE_CRACKLE, .42f, .78f)
@@ -930,7 +979,8 @@ internal class StaffSpellTechniques(
         emberTrails.values.toList().forEach { trail ->
             if (emberTrails[trail.casterId] !== trail) return@forEach
             val player = Bukkit.getPlayer(trail.casterId)
-            if (player == null || !ready(player, trail.cast) || player.world.uid != trail.worldId) {
+            if (player == null || !ready(player, trail.cast) || player.world.uid != trail.worldId ||
+                !effects.isActive(trail.sceneId)) {
                 removeEmber(trail)
                 return@forEach
             }
@@ -941,7 +991,7 @@ internal class StaffSpellTechniques(
             }
             if (emberTrails[trail.casterId] !== trail) return@forEach
             val origin = locationVector(trail.origin)
-            val parts = staffEmberTrailParts(trail.points.map(::locationVector), origin, trail.igniteIndex - 1)
+            val parts = staffEmberTrailParts(trail.points.map(::locationVector), origin, trail.igniteIndex - 1, trail.ageTicks)
             effects.updateCustom(trail.sceneId, trail.origin, parts)
             if (trail.ageTicks >= EMBER_TRAIL_LIFETIME_TICKS && trail.stage == EmberStage.RECORDING) {
                 trail.stage = EmberStage.IGNITING
@@ -984,7 +1034,7 @@ internal class StaffSpellTechniques(
         }
         val lit = (trail.points.size - 1).coerceAtLeast(-1)
         effects.updateCustom(trail.sceneId, trail.origin,
-            staffEmberTrailParts(trail.points.map(::locationVector), locationVector(trail.origin), lit))
+            staffEmberTrailParts(trail.points.map(::locationVector), locationVector(trail.origin), lit, trail.ageTicks))
         if (trail.ageTicks % 6 == 0) visuals.withOwner(trail.casterId) {
             visuals.particles(lastLocation, emberTrailSamples(), clearance = .2)
         }
@@ -992,6 +1042,7 @@ internal class StaffSpellTechniques(
 
     private fun igniteEmberStep(player: Player, trail: EmberTrail) {
         if (trail.igniteIndex >= trail.points.size) {
+            if (trail.ageTicks < trail.points.size * EMBER_IGNITE_INTERVAL_TICKS + EMBER_AFTERGLOW_TICKS) return
             visuals.withOwner(trail.casterId) {
                 visuals.cue(trail.points.last(), Sound.BLOCK_FIRE_EXTINGUISH, .28f, 1.3f)
             }
@@ -1094,6 +1145,7 @@ internal class StaffSpellTechniques(
         galeHurricanes.remove(casterId)?.let(::removeGaleHurricane)
         icicleBursts.remove(casterId)?.let(::removeIcicleBurst)
         prismWards.remove(casterId)?.let(::removePrism)
+        necromancerOrders.remove(casterId)?.let(::removeNecromancerOrder)
         gravityHolds.remove(casterId)?.let(::releaseGravity)
         lancePins.remove(casterId)?.let(::removeLancePin)
         emberTrails.remove(casterId)?.let(::removeEmber)
@@ -1108,6 +1160,7 @@ internal class StaffSpellTechniques(
         lunarFlights.values.toList().forEach(::removeLunar)
         icicleBursts.values.toList().forEach(::removeIcicleBurst)
         prismWards.values.toList().forEach(::removePrism)
+        necromancerOrders.values.toList().forEach(::removeNecromancerOrder)
         gravityHolds.values.toList().forEach(::releaseGravity)
         lancePins.values.toList().forEach(::removeLancePin)
         emberTrails.values.toList().forEach(::removeEmber)
@@ -1116,6 +1169,7 @@ internal class StaffSpellTechniques(
         galeHurricanes.clear()
         icicleBursts.clear()
         prismWards.clear()
+        necromancerOrders.clear()
         gravityHolds.clear()
         gravityTargetOwners.clear()
         lancePins.clear()
@@ -1128,6 +1182,7 @@ internal class StaffSpellTechniques(
         tickGaleHurricanes()
         tickIcicleBursts()
         tickPrismWards()
+        tickNecromancerOrders()
         tickGravityHolds()
         tickLancePins()
         tickEmberTrails()
@@ -1276,10 +1331,10 @@ internal class StaffSpellTechniques(
             damage.isCurrent(player, cast)
 
     private fun activeSessionCount(): Int = lunarFlights.size + chainOrbs.size + icicleBursts.size +
-        prismWards.size + gravityHolds.size + lancePins.size + emberTrails.size + galeHurricanes.size
+        prismWards.size + gravityHolds.size + lancePins.size + emberTrails.size + galeHurricanes.size + necromancerOrders.size
 
     private fun activeDisplaySceneCount(): Int = lunarFlights.size + chainOrbs.size + icicleBursts.size + prismWards.size +
-        gravityHolds.size + lancePins.size + emberTrails.size + galeHurricanes.size
+        gravityHolds.size + lancePins.size + emberTrails.size + galeHurricanes.size + necromancerOrders.size
 
     private fun admitNewScenes(requested: Int): Boolean = requested > 0 &&
         activeSessionCount() < MAX_TECHNIQUE_SESSIONS && activeDisplaySceneCount() + requested <= MAX_TECHNIQUE_SCENES
@@ -1403,13 +1458,15 @@ internal class StaffSpellTechniques(
         const val LANCE_OPEN_KNOCKBACK = .38
         const val LANCE_PIN_AMPLIFIER = 3
 
-        const val EMBER_SCENE_LIFETIME_TICKS = 66
         const val EMBER_TRAIL_LIFETIME_TICKS = 40
+        const val EMBER_AFTERGLOW_TICKS = 6
         const val EMBER_GROUND_SEARCH = 6.0
         const val EMBER_MIN_POINT_GAP = .85
         const val EMBER_TRAIL_MAX_LENGTH = 16.0
         const val EMBER_TELEPORT_CUTOFF = 7.0
         const val EMBER_IGNITE_INTERVAL_TICKS = 2
+        const val EMBER_SCENE_LIFETIME_TICKS = EMBER_TRAIL_LIFETIME_TICKS +
+            STAFF_EMBER_TRAIL_MAX_POINTS * EMBER_IGNITE_INTERVAL_TICKS + EMBER_AFTERGLOW_TICKS + 2
         const val EMBER_IGNITE_RADIUS = 1.65
         const val EMBER_NODE_DAMAGE_SCALE = .34
 

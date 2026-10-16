@@ -280,7 +280,7 @@ internal class StaffSpellConjurations(
             forward, forward, atan2(forward.x, forward.z), FROST_THAW_TICKS,
             FrostPulsePayload(consumed), scene)
         visuals.withOwner(player.uniqueId) {
-            visuals.cue(focus, Sound.BLOCK_GLASS_BREAK, 0.8f, 1.65f)
+            visuals.cue(focus, Sound.BLOCK_GLASS_HIT, 0.55f, 0.68f)
             visuals.cue(focus, Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.28f, 1.48f)
             visuals.particles(focus, listOf(
                 StaffParticleSample(Particle.SNOWFLAKE, Vector(), 14, Vector(0.55, 0.45, 0.55), 0.015),
@@ -492,10 +492,7 @@ internal class StaffSpellConjurations(
             clearRoot(root)
             val session = sessions[root.ownerId]
             if (session?.payload is TidePayload && session.payload.targetId == target.uniqueId) {
-                visuals.withOwner(session.ownerId) {
-                    visuals.cue(center(target), Sound.ENTITY_PLAYER_SPLASH, 0.42f, 1.5f)
-                }
-                endSession(session)
+                releaseTideCapsule(session, target.location)
             }
         }
     }
@@ -525,13 +522,31 @@ internal class StaffSpellConjurations(
                 is RequiemPayload -> if (session.age == REQUIEM_RECAST_START) visuals.withOwner(session.ownerId) {
                     visuals.cue(session.anchor.clone().add(0.0, 1.4, 0.0), Sound.BLOCK_BELL_USE, 0.025f, 1.55f)
                 }
-                is FaultPayload, is FrostPulsePayload -> Unit
+                is FrostPulsePayload -> if (session.age == 5) visuals.withOwner(session.ownerId) {
+                    visuals.cue(session.anchor, Sound.BLOCK_GLASS_BREAK, .8f, 1.4f)
+                    visuals.particles(session.anchor, staffFrostThawParts(7).filterIndexed { index, _ -> index % 3 == 0 }
+                        .map { part -> StaffParticleSample(Particle.SNOWFLAKE,
+                            Vector(part.center.x.toDouble(), part.center.y.toDouble(), part.center.z.toDouble()),
+                            2, Vector(.10, .12, .10), .035) })
+                }
+                is FaultPayload -> Unit
             }
             if (sessions[session.ownerId] === session && session.age >= session.durationTicks) {
+                if (session.payload is TidePayload) {
+                    val target = session.payload.targetId?.let(Bukkit::getEntity) as? LivingEntity
+                    releaseTideCapsule(session, target?.location ?: session.anchor)
+                    return@forEach
+                }
+                if (session.payload is MarkPayload) {
+                    releaseMarkTether(session, session.payload.targetOffset)
+                    return@forEach
+                }
+                if (session.payload is TrapPayload && session.payload.kind == TrapKind.NOVA && !session.payload.triggered) {
+                    releaseNovaSeed(session)
+                    return@forEach
+                }
                 visuals.withOwner(session.ownerId) {
                     when (val payload = session.payload) {
-                        is TidePayload -> visuals.cue((payload.targetId?.let(Bukkit::getEntity) as? LivingEntity)
-                            ?.let(::center) ?: session.anchor, Sound.ENTITY_PLAYER_SWIM, 0.46f, 1.3f)
                         is TrapPayload -> if (!payload.triggered) visuals.cue(session.anchor,
                             if (payload.kind == TrapKind.NOVA) Sound.BLOCK_AZALEA_LEAVES_BREAK else Sound.BLOCK_BONE_BLOCK_FALL,
                             0.28f, 0.86f)
@@ -574,7 +589,44 @@ internal class StaffSpellConjurations(
             }
         }
         // Radius break is single-use even when protection rejects the punishment.
+        if (current(player, session)) releaseMarkTether(session, payload.targetOffset) else endSession(session)
+    }
+
+    private fun releaseMarkTether(session: Session, offset: Vector) {
+        val targetOffset = offset.clone()
         endSession(session)
+        effects.custom(session.ownerId, StaffSpell.MARK, session.anchor, 12) { age ->
+            staffMarkTetherBreakParts(age, targetOffset)
+        }
+        visuals.withOwner(session.ownerId) {
+            visuals.cue(session.anchor, Sound.BLOCK_CHAIN_BREAK, .5f, .72f)
+        }
+    }
+
+    private fun releaseNovaSeed(session: Session) {
+        endSession(session)
+        effects.custom(session.ownerId, StaffSpell.NOVA, session.anchor, 14, ::staffNovaSeedBloomParts)
+        visuals.withOwner(session.ownerId) {
+            visuals.cue(session.anchor, Sound.BLOCK_AZALEA_PLACE, .55f, .65f)
+            visuals.cue(session.anchor, Sound.BLOCK_GRASS_BREAK, .6f, .8f)
+            visuals.particles(session.anchor.clone().add(0.0, 1.4, 0.0), listOf(
+                StaffParticleSample(Particle.HAPPY_VILLAGER, Vector(), 10, Vector(.9, .55, .9), .025),
+                StaffParticleSample(Particle.CHERRY_LEAVES, Vector(0.0, .7, 0.0), 6, Vector(.9, .25, .9), .015),
+            ))
+        }
+    }
+
+    private fun releaseTideCapsule(session: Session, at: Location) {
+        endSession(session)
+        effects.custom(session.ownerId, StaffSpell.TIDE, at, 10, ::staffTideCapsuleReleaseParts)
+        visuals.withOwner(session.ownerId) {
+            visuals.cue(at, Sound.ENTITY_PLAYER_SPLASH_HIGH_SPEED, .65f, .85f)
+            visuals.cue(at, Sound.BLOCK_BUBBLE_COLUMN_WHIRLPOOL_INSIDE, .24f, 1.3f)
+            visuals.particles(at.clone().add(0.0, 1.0, 0.0), listOf(
+                StaffParticleSample(Particle.SPLASH, Vector(), 20, Vector(1.1, .65, 1.1), .06),
+                StaffParticleSample(Particle.FALLING_WATER, Vector(0.0, .7, 0.0), 10, Vector(.8, .4, .8), .015),
+            ))
+        }
     }
 
     private fun tickTrap(player: Player, session: Session, payload: TrapPayload) {
@@ -598,6 +650,10 @@ internal class StaffSpellConjurations(
         }
         val hit = damage.hit(player, target, session.cast,
             session.tuning.power * payload.damageMultiplier, session.tuning.vanillaDamage * payload.damageMultiplier)
+        if (!current(player, session)) {
+            endSession(session)
+            return
+        }
         if (hit && current(player, session) && damage.eligible(player, target, session.cast) &&
             visible(player.eyeLocation, target) && visible(session.anchor.clone().add(0.0, 0.45, 0.0), target)) {
             if (payload.kind == TrapKind.NOVA) applyRoot(player, target, session.cast, payload.rootTicks, breakOnDamage = false)
@@ -617,7 +673,7 @@ internal class StaffSpellConjurations(
             session.durationTicks = session.age + OSSUARY_CLOSE_SCENE_TICKS
             return
         }
-        endSession(session)
+        if (current(player, session)) releaseNovaSeed(session) else endSession(session)
     }
 
     private fun tickTideCapsule(player: Player, session: Session, payload: TidePayload) {
@@ -630,6 +686,10 @@ internal class StaffSpellConjurations(
             return
         }
         effects.updateCustom(session.sceneId, target.location, staffTideCapsuleParts(session.age))
+        if (session.age % 6 == 0) visuals.withOwner(session.ownerId) {
+            visuals.particles(target.location, listOf(StaffParticleSample(Particle.BUBBLE,
+                Vector(0.0, 1.0, 0.0), 6, Vector(.6, .5, .6), .012)))
+        }
     }
 
     private fun tickRoots() {
@@ -769,8 +829,8 @@ internal class StaffSpellConjurations(
         effects.remove(session.sceneId)
     }
 
-    private fun current(player: Player, session: Session) = ready(player) && player.world == session.anchor.world &&
-        damage.isCurrent(player, session.cast)
+    private fun current(player: Player, session: Session) = !closed && sessions[session.ownerId] === session &&
+        ready(player) && player.world == session.anchor.world && damage.isCurrent(player, session.cast)
 
     private fun current(player: Player, cast: StaffSpellCast) = ready(player) && damage.isCurrent(player, cast)
 

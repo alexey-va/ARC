@@ -70,12 +70,13 @@ internal class StaffSpellHud(
     private val config: StaffSpellConfig,
     private val tasks: LifecycleTaskScope = LifecycleTaskScope(),
     private val preferences: StaffSpellHudPreferencesReader = CachedStaffSpellHudPreferences,
+    private val ownDisplays: Boolean = true,
 ) : AutoCloseable {
     private data class Card(
         val display: PacketTextDisplay,
         var state: StaffSpellHudState,
-        var location: Location,
-        var scale: Float,
+        var placement: StaffSpellHudPlacement,
+        var preference: StaffHudPlacement,
         var playerLocation: Location,
         var sampledTick: Long,
         var motion: StaffSpellHudMotion = StaffSpellHudMotion(),
@@ -167,7 +168,7 @@ internal class StaffSpellHud(
         }
         card?.display?.remove()
         val placement = placement(player, placementChoice, StaffSpellHudMotion(), bounds)
-        val at = placement.location
+        val at = player.location
         if (at.world?.isChunkLoaded(at.blockX shr 4, at.blockZ shr 4) == false) {
             removeCard(player.uniqueId)
             return
@@ -186,11 +187,12 @@ internal class StaffSpellHud(
             displayHeight = visual.displayHeight
             viewRange = visual.viewRange
             interpolationDuration = visual.interpolationTicks
-            teleportDuration = visual.interpolationTicks
-            transformation = transformation(placement.scale)
+            teleportDuration = 0
+            transformation = placement.transformation
+            attachTo(player)
             showTo(player)
         }
-        cards[player.uniqueId] = Card(display, state, at, placement.scale,
+        cards[player.uniqueId] = Card(display, state, placement, placementChoice,
             player.location, followTick, bounds = bounds)
     }
 
@@ -234,23 +236,18 @@ internal class StaffSpellHud(
             card.sampledTick = followTick
         }
         val placement = placement(player, placementChoice, card.motion, card.bounds)
-        val at = placement.location
-        if (at.world?.isChunkLoaded(at.blockX shr 4, at.blockZ shr 4) == false) return
-        // Never tween an old card through the reticle after a sharp turn, stop or wall pull-in.
-        val smooth = card.location.world == at.world && staffHudInterpolationClear(
-            player.eyeLocation, card.location.toVector(), at.toVector(), card.scale, placement.scale,
-            card.motion.velocity, card.bounds, placementChoice,
-        )
-        card.display.teleportDuration = if (smooth) visual.interpolationTicks else 0
+        // Mounted movement and CENTER billboard orientation run on the local client. Only this
+        // small local pose is interpolated; changing sides or pulling in from a wall must snap.
+        val smooth = card.preference == placementChoice &&
+            placement.clipFraction >= card.placement.clipFraction - 1.0e-6
         card.display.interpolationDuration = if (smooth) visual.interpolationTicks else 0
-        if (card.location.world != at.world || card.location.distanceSquared(at) >= POSITION_EPSILON_SQUARED) {
-            card.display.teleport(at)
-            card.location = at
+        if (card.placement.transformation.translation.distanceSquared(placement.transformation.translation) >=
+                POSITION_EPSILON_SQUARED ||
+            abs(card.placement.pose.textScale - placement.pose.textScale) >= SCALE_EPSILON) {
+            card.display.transformation = placement.transformation
         }
-        if (abs(card.scale - placement.scale) >= SCALE_EPSILON) {
-            card.display.transformation = transformation(placement.scale)
-            card.scale = placement.scale
-        }
+        card.placement = placement
+        card.preference = placementChoice
     }
 
     private fun removeCard(playerId: UUID) { cards.remove(playerId)?.display?.remove() }
@@ -318,7 +315,7 @@ internal class StaffSpellHud(
     private fun eligible(player: Player) = player.isOnline && player.isValid && !player.isDead &&
         player.gameMode != GameMode.SPECTATOR
 
-    /** Lead the moving eye, retain the chosen side, and clip the whole card against nearby blocks. */
+    /** Client-owned movement, a camera-local card, and full-card block clipping from the eye. */
     private fun placement(
         player: Player,
         preference: StaffHudPlacement,
@@ -328,10 +325,11 @@ internal class StaffSpellHud(
         val eye = player.eyeLocation
         val direction = eye.direction.normalize()
         val yaw = Math.toRadians(eye.yaw.toDouble())
-        val cameraRight = Vector(cos(yaw), 0.0, sin(yaw))
-        val cameraDown = cameraRight.clone().crossProduct(direction).normalize()
+        val cameraRight = Vector(-cos(yaw), 0.0, -sin(yaw))
+        val cameraDown = direction.clone().crossProduct(cameraRight).normalize()
+        val passengerGap = player.height - player.eyeHeight
         val position = staffHudMovingPosition(config.hudPosition, config.hudMotion, motion,
-            direction, cameraDown, cameraRight, preference, bounds)
+            preference, bounds, passengerGap)
         val basePose = staffSpellHudPose(position)
         val baseOffset = direction.clone().multiply(basePose.forwardOffset)
             .add(cameraDown.clone().multiply(basePose.cameraDownOffset))
@@ -345,11 +343,8 @@ internal class StaffSpellHud(
             }
         val safeDistance = (basePose.distance * fraction).coerceAtLeast(STAFF_HUD_MIN_VISIBLE_DISTANCE)
         val pose = staffSpellHudPose(safeDistance, position)
-        val at = eye.clone()
-            .add(direction.clone().multiply(pose.forwardOffset))
-            .add(cameraDown.clone().multiply(pose.cameraDownOffset))
-            .add(cameraRight.clone().multiply(pose.horizontalOffset))
-        return StaffSpellHudPlacement(at, pose.textScale)
+        return StaffSpellHudPlacement(pose,
+            staffHudBillboardTransformation(pose, bounds, eye, passengerGap), fraction)
     }
 
     override fun close() {
@@ -357,7 +352,7 @@ internal class StaffSpellHud(
         closed = true
         tasks.close()
         (states.keys + cards.keys + bossBars.keys).toSet().forEach(::clear)
-        displays.close()
+        if (ownDisplays) displays.close()
     }
 
     private companion object {
@@ -367,7 +362,11 @@ internal class StaffSpellHud(
     }
 }
 
-private data class StaffSpellHudPlacement(val location: Location, val scale: Float)
+private data class StaffSpellHudPlacement(
+    val pose: StaffSpellHudPose,
+    val transformation: Transformation,
+    val clipFraction: Double,
+)
 
 internal data class StaffSpellHudPose(
     val forwardOffset: Double,
@@ -392,8 +391,10 @@ internal data class StaffSpellHudVisualSpec(
 
 internal fun staffSpellHudVisualSpec() = StaffSpellHudVisualSpec(
     lineWidth = 220,
-    displayWidth = 3.0f,
-    displayHeight = 1.0f,
+    // The visible card is translated away from its passenger anchor. A box at that anchor would
+    // incorrectly frustum-cull it when looking up/down; zero disables display frustum culling.
+    displayWidth = 0.0f,
+    displayHeight = 0.0f,
     viewRange = 2.0f,
     followPeriodTicks = 1L,
     interpolationTicks = 1,
@@ -415,15 +416,20 @@ internal data class StaffSpellHudMotion(
 )
 
 /** Conservative native font bounds, including background and wrapping; not the entity culling box. */
-internal data class StaffSpellHudBounds(val halfWidth: Double, val verticalRadius: Double)
+internal data class StaffSpellHudBounds(
+    val halfWidth: Double,
+    val verticalRadius: Double,
+    val originUp: Double,
+)
 
 internal fun staffSpellHudBounds(text: String, lineWidth: Int): StaffSpellHudBounds {
-    // Vanilla staff labels fit a nine-pixel glyph advance. A full line-height on either side also
-    // covers TextDisplay's baseline-origin offset, rather than assuming a centered text rectangle.
+    // Vanilla staff labels fit a nine-pixel glyph advance. Native TextDisplay text grows upward
+    // from its origin (10 pixels/line); centering this upper bound also covers shorter wrapped text.
     val lines = text.lines().sumOf { line ->
         max(1, ceil(line.codePointCount(0, line.length) * 9.0 / lineWidth).toInt())
     }
-    return StaffSpellHudBounds((lineWidth + 2) * 0.025 / 2, (lines * 10 + 2) * 0.025)
+    return StaffSpellHudBounds((lineWidth + 2) * 0.025 / 2,
+        (lines * 10 + 2) * 0.025 / 2, (lines * 10 - 1) * 0.025 / 2)
 }
 
 internal fun staffSpellHudMotion(
@@ -466,29 +472,40 @@ internal fun staffHudMovingPosition(
     position: StaffSpellHudPositionSettings,
     settings: StaffSpellHudMotionSettings,
     motion: StaffSpellHudMotion,
-    forward: Vector,
-    down: Vector,
-    right: Vector,
     preference: StaffHudPlacement,
     bounds: StaffSpellHudBounds,
+    passengerGap: Double = 0.18,
 ): StaffSpellHudPositionSettings {
-    val lead = motion.lead
     val side = if (preference == StaffHudPlacement.BOTTOM) 1.0 else -1.0
-    // Keep the current and predicted eye clear. Predicting a backwards/opposite-side component
-    // without this envelope would pull the card through the current reticle at takeoff or reversal.
-    val travel = motion.velocity.clone().multiply(settings.predictionTicks)
-    val distance = max(position.forwardBlocks + settings.forwardBlocks * motion.retreat + max(0.0, lead.dot(forward)),
-        travel.dot(forward) + position.forwardBlocks)
+    // Prediction is now a bounded speed-based retreat, never an extrapolated world anchor.
+    // Native passenger prediction already supplies camera translation without server-frame lag.
+    val distance = position.forwardBlocks + settings.forwardBlocks * motion.retreat + motion.lead.length()
     val radius = bounds.verticalRadius * position.scale
-    // A local camera can rotate before a world display's next packet arrives. Leave angular room
-    // for that sampled turn as well as translation; a snap alone still has one transport tick of lag.
-    val slope = kotlin.math.tan(kotlin.math.atan(STAFF_HUD_AIM_SLOPE) +
-        (motion.turnRadiansPerTick * settings.predictionTicks).coerceAtMost(0.75))
-    val vertical = maxOf(abs(position.verticalBlocks) + settings.verticalBlocks * motion.retreat +
-        max(0.0, side * lead.dot(down)), radius + distance * slope,
-        side * travel.dot(down) + radius + (distance - travel.dot(forward)) * slope)
-    return position.copy(forwardBlocks = distance, verticalBlocks = side * vertical,
-        horizontalBlocks = position.horizontalBlocks + lead.dot(right))
+    // The only delayed world correction is the small head-to-eye gap. Reserve its full possible
+    // reversal (plus ordinary pose changes), not a yaw-dependent vertical offset for the whole card.
+    val anchorError = max(0.5, 2 * abs(passengerGap))
+    val vertical = max(abs(position.verticalBlocks) + settings.verticalBlocks * motion.retreat,
+        radius + anchorError + distance * STAFF_HUD_AIM_SLOPE)
+    return position.copy(forwardBlocks = distance, verticalBlocks = side * vertical)
+}
+
+/** CENTER billboard rotates this local translation with the client camera before rendering. */
+internal fun staffHudBillboardTransformation(
+    pose: StaffSpellHudPose,
+    bounds: StaffSpellHudBounds,
+    eye: Location,
+    passengerGap: Double,
+): Transformation {
+    val forward = eye.direction.normalize()
+    val yaw = Math.toRadians(eye.yaw.toDouble())
+    val right = Vector(-cos(yaw), 0.0, -sin(yaw))
+    val down = forward.clone().crossProduct(right).normalize()
+    val correction = Vector(0.0, -passengerGap, 0.0)
+    return Transformation(Vector3f(
+        (pose.horizontalOffset + correction.dot(right)).toFloat(),
+        (-pose.cameraDownOffset - correction.dot(down) - bounds.originUp * pose.textScale).toFloat(),
+        (-pose.forwardOffset - correction.dot(forward)).toFloat(),
+    ), Quaternionf(), Vector3f(pose.textScale), Quaternionf())
 }
 
 internal fun staffHudCardOffsets(
@@ -501,30 +518,6 @@ internal fun staffHudCardOffsets(
     listOf(-1.0, 1.0).map { y -> center.clone()
         .add(right.clone().multiply(x * bounds.halfWidth * scale))
         .add(down.clone().multiply(y * bounds.verticalRadius * scale)) }
-}
-
-internal fun staffHudInterpolationClear(
-    eye: Location,
-    from: Vector,
-    to: Vector,
-    fromScale: Float,
-    toScale: Float,
-    velocity: Vector,
-    bounds: StaffSpellHudBounds,
-    preference: StaffHudPlacement,
-): Boolean {
-    val forward = eye.direction.normalize()
-    val yaw = Math.toRadians(eye.yaw.toDouble())
-    val down = Vector(cos(yaw), 0.0, sin(yaw)).crossProduct(forward).normalize()
-    val side = if (preference == StaffHudPlacement.BOTTOM) 1.0 else -1.0
-    return (0..4).all { sample ->
-        val t = sample / 4.0
-        val offset = from.clone().multiply(1.0 - t).add(to.clone().multiply(t))
-            .subtract(eye.toVector()).subtract(velocity.clone().multiply(t))
-        val depth = offset.dot(forward)
-        val radius = bounds.verticalRadius * (fromScale + (toScale - fromScale) * t)
-        depth > 0.05 && side * offset.dot(down) - radius >= depth * STAFF_HUD_AIM_SLOPE - 1.0e-6
-    }
 }
 
 internal fun staffHudBaseDistance(position: StaffSpellHudPositionSettings = StaffSpellHudPositionSettings()): Double =
@@ -560,9 +553,6 @@ internal fun staffSpellHudPose(
         textScale = (position.scale * ratio).toFloat(),
     )
 }
-
-private fun transformation(scale: Float) =
-    Transformation(Vector3f(), Quaternionf(), Vector3f(scale), Quaternionf())
 
 internal fun staffSpellHudBar(progress: Double, segments: Int = 10): String {
     val bounded = progress.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0

@@ -74,7 +74,9 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
                         val parts = staffDisplayParts(spell, ageTicks = age, durationTicks = duration,
                             length = 32.0, radius = 8.0, impact = impact, secondary = secondary)
 
-                        (parts.size <= StaffSpellDisplayEffects.MAX_PARTS) shouldBe true
+                        // NOVA's controller splits its root network across two 48-part scenes.
+                        val scenes = if (spell == StaffSpell.NOVA) 2 else 1
+                        (parts.size <= StaffSpellDisplayEffects.MAX_PARTS * scenes) shouldBe true
                         // Expired geometry may be empty; an active pose must remain visible.
                         if (age < duration) parts.isNotEmpty() shouldBe true
                         parts.all { part ->
@@ -191,7 +193,7 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
     }
 
     "transient spells grow in and dissolve before removal with stable part identities" {
-        StaffSpell.entries.filterNot { it in setOf(StaffSpell.NECROMANCER, StaffSpell.INFERNO, StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM) }.forEach { spell ->
+        StaffSpell.entries.filterNot { it in setOf(StaffSpell.NOVA, StaffSpell.NECROMANCER, StaffSpell.INFERNO, StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM) }.forEach { spell ->
             listOf(false, true).forEach { secondary ->
                 fun parts(age: Int) = staffDisplayParts(spell, age, 30, 8.0, 3.0, true, secondary)
                 val first = parts(0)
@@ -203,12 +205,7 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
                 fun volume(parts: List<StaffDisplayPart>) = parts.sumOf {
                     (it.scale.x * it.scale.y * it.scale.z).toDouble()
                 }
-                if (spell == StaffSpell.NOVA && secondary) {
-                    fun outerRadius(parts: List<StaffDisplayPart>) = parts.maxOf {
-                        kotlin.math.hypot(it.center.x.toDouble(), it.center.z.toDouble())
-                    }
-                    (outerRadius(parts(20)) < outerRadius(body)) shouldBe true
-                } else if (spell in ARSENAL_SPELLS) {
+                if (spell in ARSENAL_SPELLS) {
                     (volume(first) < volume(body)) shouldBe true
                 } else if (spell in setOf(StaffSpell.CHAIN, StaffSpell.LANCE, StaffSpell.MARK, StaffSpell.EMBER, StaffSpell.ICICLE)) {
                     (volume(first) > volume(body) * 0.01) shouldBe true
@@ -217,6 +214,21 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
                 }
                 (volume(last) < volume(body) * 0.01) shouldBe true
             }
+        }
+    }
+
+    "root field parts retain their identity while growing and clear on the field clock" {
+        for (secondary in listOf(false, true)) {
+            fun parts(age: Int) = staffDisplayParts(StaffSpell.NOVA, age, 30, 8.0, 3.0, true, secondary)
+            val body = parts(8).associateBy { requireNotNull(it.identity) }
+            body.isNotEmpty() shouldBe true
+            for (age in listOf(0, 14, 24)) {
+                val frame = parts(age)
+                frame.map { it.identity }.distinct().size shouldBe frame.size
+                frame.forEach { part -> body[part.identity]?.material?.let { it shouldBe part.material } }
+                (frame.size <= StaffSpellDisplayEffects.MAX_PARTS * 2) shouldBe true
+            }
+            parts(STAFF_NOVA_FIELD_TICKS).isEmpty() shouldBe true
         }
     }
 
@@ -256,7 +268,7 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         val collapsed = parts(18)
         closed.size shouldBe 29
         (closed[0].scale.x > 0.8f) shouldBe true
-        open.take(7).all { it.center.y in 1.45f..1.75f } shouldBe true
+        open.take(7).all { it.center.y in -0.15f..0.15f } shouldBe true
         (closed.drop(7).maxOf { it.center.y } - closed.drop(7).minOf { it.center.y } > 0.8f) shouldBe true
         (cloudRadius(open) <= cloudRadius(closed) + 0.001) shouldBe true
         (cloudRadius(collapsed) < cloudRadius(closed) * 0.15) shouldBe true
@@ -487,6 +499,7 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
                 radius = 6.0, durationTicks = 28, impact = true)!!
             val nova = h.recorder.records.drop(mark.size).toList()
             nova.size shouldBe staffDisplayParts(StaffSpell.NOVA, 0, 28, 4.0, 6.0, true).size
+                .coerceAtMost(StaffSpellDisplayEffects.MAX_PARTS)
             (nova.size <= StaffSpellDisplayEffects.MAX_PARTS) shouldBe true
             h.scheduler.tick(4)
             nova.all { it.poses.size > 1 && it.poses.all(DisplayPose::isFinite) } shouldBe true
@@ -919,6 +932,9 @@ private fun withDisplayHarness(block: (DisplayHarness) -> Unit) = failOnUnsuppor
         every { anyConstructed<WorldMock>().isChunkLoaded(any<Int>(), any<Int>()) } returns true
         every { anyConstructed<WorldMock>().rayTraceBlocks(any<Location>(), any<org.bukkit.util.Vector>(),
             any<Double>(), any<org.bukkit.FluidCollisionMode>(), any<Boolean>()) } returns null
+        every { anyConstructed<WorldMock>().rayTraceBlocks(any<Location>(), any<org.bukkit.util.Vector>(),
+            any<Double>(), any<org.bukkit.FluidCollisionMode>(), any<Boolean>(),
+            any<java.util.function.Predicate<org.bukkit.block.Block>>()) } returns null
         MockBukkitTestRuntime.open().use { paper ->
         Tasks.withScheduler(scheduler) {
             val world = paper.addSimpleWorld("staff-display-effects")

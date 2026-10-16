@@ -60,7 +60,23 @@ internal class StaffSpellSummons(
         val direction: Vector,
         var position: Location,
         var remaining: Double,
+        val volley: Volley? = null,
+        val powerMultiplier: Double = 1.0,
         var elapsedTicks: Int = 0,
+    )
+
+    /** Shared by the existing army's one-shot order and its projectiles; never grants fresh ammunition. */
+    private data class Volley(
+        val cast: StaffSpellCast,
+        val worldId: UUID,
+        val targetId: UUID,
+        val actorIds: Set<UUID>,
+        val leadingArcherId: UUID?,
+        val releaseTick: Long,
+        val presentationActive: () -> Boolean,
+        val hitsByVictim: MutableMap<UUID, Int> = mutableMapOf(),
+        val pvpDamageByVictim: MutableMap<UUID, Double> = mutableMapOf(),
+        var successfulHits: Int = 0,
     )
 
     private data class Session(
@@ -80,6 +96,7 @@ internal class StaffSpellSummons(
 
     private val tasks = LifecycleTaskScope()
     private val sessions = mutableListOf<Session>()
+    private val volleys = mutableMapOf<UUID, Volley>()
     private var currentTick = 0L
     private var started = false
     private var closed = false
@@ -184,6 +201,44 @@ internal class StaffSpellSummons(
         return true
     }
 
+    /** Prepares exactly one existing attack per surviving actor, with one designated leading arrow. */
+    fun commandVolley(player: Player, target: LivingEntity, cast: StaffSpellCast,
+        presentationActive: () -> Boolean = { true }): Boolean {
+        if (closed || !started || cast.casterId != player.uniqueId || !ready(player, cast) ||
+            !validCommandTarget(player, target, cast) || !presentationActive()) return false
+        val army = sessions.filter { session ->
+            session.casterId == player.uniqueId && session.worldId == player.world.uid && ready(player, session.cast)
+        }
+        val actors = army.flatMap { it.actors }.filter {
+            it.mob.isValid && !it.mob.isDead && it.mob.world === player.world && loaded(it.mob.location)
+        }
+        if (actors.isEmpty()) return false
+        army.forEach { session ->
+            session.focusTargetId = target.uniqueId
+            session.rallyPoint = null
+        }
+        volleys[player.uniqueId] = Volley(cast, player.world.uid, target.uniqueId,
+            actors.mapTo(mutableSetOf()) { it.mob.uniqueId }, actors.firstOrNull { !it.commander }?.mob?.uniqueId,
+            currentTick + VOLLEY_WINDUP_TICKS, presentationActive)
+        actors.forEach(::resetWindup)
+        return true
+    }
+
+    private fun validCommandTarget(player: Player, target: LivingEntity, cast: StaffSpellCast): Boolean =
+        target.uniqueId != player.uniqueId && !isCasterActor(player.uniqueId, target) &&
+            target.isValid && !target.isDead && !target.isInvulnerable && target.world === player.world &&
+            loaded(target.location) && player.eyeLocation.distanceSquared(center(target)) <=
+            FOCUS_COMMAND_RANGE * FOCUS_COMMAND_RANGE && visible(player.eyeLocation, target) &&
+            damage.eligible(player, target, cast)
+
+    private fun currentVolleyTarget(owner: Player, volley: Volley): LivingEntity? {
+        if (volleys[owner.uniqueId] !== volley || owner.world.uid != volley.worldId || !ready(owner, volley.cast)) return null
+        if (currentTick <= volley.releaseTick && !volley.presentationActive()) return null
+        return (Bukkit.getEntity(volley.targetId) as? LivingEntity)?.takeIf {
+            validCommandTarget(owner, it, volley.cast)
+        }
+    }
+
     /** Rallying only changes the squad's idle destination; attack windups and cooldown ticks remain intact. */
     fun commandRally(player: Player, point: Location, cast: StaffSpellCast): Boolean {
         if (closed || !started || cast.casterId != player.uniqueId || !ready(player, cast) ||
@@ -203,6 +258,7 @@ internal class StaffSpellSummons(
     }
 
     fun cancel(casterId: UUID) {
+        volleys.remove(casterId)
         sessions.filter { it.casterId == casterId }.forEach(::remove)
     }
 
@@ -212,6 +268,7 @@ internal class StaffSpellSummons(
         try {
             tasks.close()
         } finally {
+            volleys.clear()
             sessions.toList().forEach(::remove)
             HandlerList.unregisterAll(this)
         }
@@ -219,6 +276,11 @@ internal class StaffSpellSummons(
 
     private fun tick() {
         currentTick++
+        volleys.entries.removeIf { (ownerId, volley) ->
+            val owner = Bukkit.getPlayer(ownerId)
+            owner == null || currentTick > volley.releaseTick + VOLLEY_MAX_FLIGHT_TICKS ||
+                currentVolleyTarget(owner, volley) == null
+        }
         sessions.toList().forEach sessionLoop@{ session ->
             val player = Bukkit.getPlayer(session.casterId)
             if (player == null || !ready(player, session.cast) || player.world.uid != session.worldId) {
@@ -233,7 +295,8 @@ internal class StaffSpellSummons(
 
             session.actors.toList().forEach actorLoop@{ actor ->
                 if (sessions.none { it === session }) return@actorLoop
-                if (!actor.mob.isValid || actor.mob.isDead || !loaded(actor.mob.location)) {
+                if (!actor.mob.isValid || actor.mob.isDead || actor.mob.world.uid != session.worldId ||
+                    !loaded(actor.mob.location)) {
                     actor.mob.remove()
                     session.actors.remove(actor)
                     return@actorLoop
@@ -253,6 +316,13 @@ internal class StaffSpellSummons(
 
     private fun updateActor(session: Session, actor: Actor, owner: Player) {
         val mob = actor.mob
+        val volley = volleys[session.casterId]?.takeIf {
+            currentTick <= it.releaseTick && mob.uniqueId in it.actorIds
+        }
+        if (volley != null) {
+            updateVolleyActor(session, actor, owner, volley)
+            return
+        }
         val target = selectTarget(owner, session, actor)
         if (target == null) {
             val rally = session.rallyPoint
@@ -312,6 +382,31 @@ internal class StaffSpellSummons(
         if (!attacked) resetWindup(actor)
     }
 
+    private fun updateVolleyActor(session: Session, actor: Actor, owner: Player, volley: Volley) {
+        val target = currentVolleyTarget(owner, volley) ?: return
+        val mob = actor.mob
+        resetWindup(actor)
+        mob.velocity = Vector(0.0, mob.velocity.y, 0.0)
+        val direction = center(target).subtract(mob.eyeLocation).toVector()
+        mob.setRotation(Math.toDegrees(atan2(-direction.x, direction.z)).toFloat(), 0.0f)
+        if (currentTick < volley.releaseTick) {
+            if (currentTick % 2L == 0L) windupCue(session, mob, starting = false)
+            return
+        }
+        // A Q advances one remaining ordinary attack, then restores its ordinary cooldown.
+        actor.nextAttackTick = session.ageTicks + ATTACK_COOLDOWN_TICKS
+        if (session.successfulHits >= MAX_SESSION_HITS || actor.attacksMade >=
+            (if (actor.commander) COMMANDER_SWINGS else SOLDIER_SHOTS) ||
+            !validFocusTarget(owner, mob, target, session)) return
+        val attacked = if (actor.commander) attack(session, actor, owner, target, volley) > 0
+            else shootArrow(session, actor, owner, target, volley,
+                if (mob.uniqueId == volley.leadingArcherId) VOLLEY_LEADING_POWER else 1.0)
+        if (attacked) {
+            actor.attacksMade++
+            mob.swingMainHand()
+        }
+    }
+
     private fun selectTarget(owner: Player, session: Session, actor: Actor): LivingEntity? {
         val commanded = session.focusTargetId?.let { Bukkit.getEntity(it) as? LivingEntity }
         if (commanded != null && validFocusTarget(owner, actor.mob, commanded, session)) return commanded
@@ -330,12 +425,13 @@ internal class StaffSpellSummons(
         target: LivingEntity,
         session: Session,
     ): Boolean = target !== mob && !isCasterActor(session.casterId, target) && target.isValid && !target.isDead &&
-        !target.isInvulnerable && target.world.uid == session.worldId && loaded(target.location) &&
+        !target.isInvulnerable && target.world.uid == session.worldId && mob.world.uid == session.worldId && loaded(target.location) &&
         center(target).distanceSquared(center(mob)) <= FOCUS_COMMAND_RANGE * FOCUS_COMMAND_RANGE &&
         visible(mob.eyeLocation, target) && damage.isCurrent(owner, session.cast) &&
         damage.eligible(owner, target, session.cast)
 
-    private fun attack(session: Session, actor: Actor, owner: Player, target: org.bukkit.entity.LivingEntity): Int {
+    private fun attack(session: Session, actor: Actor, owner: Player, target: org.bukkit.entity.LivingEntity,
+        volley: Volley? = null): Int {
         if (!ready(owner, session.cast) || !validTarget(owner, actor.mob, target, session)) return 0
         val candidates = if (actor.commander) {
             targeting.nearby(owner, actor.mob.location, COMMANDER_CLEAVE_REACH, session.cast)
@@ -354,19 +450,40 @@ internal class StaffSpellSummons(
             if (session.successfulHits >= MAX_SESSION_HITS || !ready(owner, session.cast)) break
             if (!validTarget(owner, actor.mob, victim, session)) continue
             val powerScale = if (actor.commander) COMMANDER_POWER_SCALE else SOLDIER_POWER_SCALE
-            if (damage.hit(
-                    owner,
-                    victim,
-                    session.cast,
-                    session.tuning.power * powerScale,
-                    session.tuning.vanillaDamage * VANILLA_DAMAGE_SCALE,
-                )) {
-                session.successfulHits++
+            if (hit(session, owner, victim, session.cast, powerScale, volley = volley)) {
                 applied++
             }
         }
         if (applied > 0) impactCue(session, actor.mob, actor.commander)
         return applied
+    }
+
+    private fun hit(session: Session, owner: Player, victim: LivingEntity, cast: StaffSpellCast,
+        powerScale: Double, multiplier: Double = 1.0, volley: Volley? = null): Boolean {
+        var power = session.tuning.power * powerScale * multiplier
+        var vanillaDamage = session.tuning.vanillaDamage * VANILLA_DAMAGE_SCALE * multiplier
+        var pvpDamage = 0.0
+        if (volley != null) {
+            if (currentVolleyTarget(owner, volley) == null || volley.successfulHits >= VOLLEY_MAX_HITS ||
+                volley.hitsByVictim.getOrDefault(victim.uniqueId, 0) >= VOLLEY_MAX_HITS_PER_VICTIM) return false
+            if (victim is Player) {
+                val duelMultiplier = cast.duelAuthorization?.context?.damageMultiplier() ?: return false
+                val remaining = VOLLEY_PVP_DAMAGE_LIMIT - volley.pvpDamageByVictim.getOrDefault(victim.uniqueId, 0.0)
+                if (remaining <= 0.0) return false
+                pvpDamage = minOf(vanillaDamage * duelMultiplier, remaining)
+                val clamp = pvpDamage / (vanillaDamage * duelMultiplier)
+                vanillaDamage *= clamp
+                power *= clamp
+            }
+        }
+        if (!damage.hit(owner, victim, cast, power, vanillaDamage)) return false
+        session.successfulHits++
+        if (volley != null) {
+            volley.successfulHits++
+            volley.hitsByVictim.merge(victim.uniqueId, 1, Int::plus)
+            if (pvpDamage > 0.0) volley.pvpDamageByVictim.merge(victim.uniqueId, pvpDamage, Double::plus)
+        }
+        return true
     }
 
     private fun validTarget(owner: Player, mob: AbstractSkeleton, target: org.bukkit.entity.LivingEntity, session: Session): Boolean =
@@ -636,13 +753,17 @@ internal class StaffSpellSummons(
         actor.windupTicks = 0
     }
 
-    private fun shootArrow(session: Session, actor: Actor, owner: Player, target: LivingEntity): Boolean {
+    private fun shootArrow(session: Session, actor: Actor, owner: Player, target: LivingEntity,
+        volley: Volley? = null, powerMultiplier: Double = 1.0): Boolean {
         if (session.successfulHits >= MAX_SESSION_HITS || activeFlightCount() >= MAX_PROJECTILES ||
-            !ready(owner, session.cast) || !validTarget(owner, actor.mob, target, session)) return false
+            !ready(owner, session.cast) ||
+            !(if (volley == null) validTarget(owner, actor.mob, target, session)
+                else validFocusTarget(owner, actor.mob, target, session) && currentVolleyTarget(owner, volley) != null)) return false
         val origin = actor.mob.eyeLocation
         val aim = center(target).toVector().subtract(origin.toVector())
         val distance = aim.length()
-        if (!distance.isFinite() || distance <= MIN_ARROW_DISTANCE || distance > MAX_ARROW_RANGE) return false
+        if (!distance.isFinite() || distance <= MIN_ARROW_DISTANCE ||
+            distance > (if (volley == null) MAX_ARROW_RANGE else FOCUS_COMMAND_RANGE)) return false
         val direction = aim.multiply(1.0 / distance)
         val arrow = actor.mob.world.spawnArrow(origin, direction, 0.0f, 0.0f)
         arrow.shooter = actor.mob
@@ -660,7 +781,8 @@ internal class StaffSpellSummons(
             arrow.remove()
             return false
         }
-        session.flights += ArrowFlight(arrow, session.cast, session.worldId, direction, origin.clone(), distance)
+        session.flights += ArrowFlight(arrow, session.cast, session.worldId, direction, origin.clone(), distance,
+            volley, powerMultiplier)
         visuals.withOwner(session.casterId) {
             visuals.cue(origin, Sound.ENTITY_SKELETON_SHOOT, 0.3f, 1.0f)
         }
@@ -673,12 +795,14 @@ internal class StaffSpellSummons(
             val arrow = flight.arrow
             if (session.successfulHits >= MAX_SESSION_HITS || !arrow.isValid || arrow.isDead ||
                 arrow.world.uid != flight.worldId ||
-                flight.worldId != session.worldId || !ready(owner, flight.cast) || owner.world.uid != session.worldId) {
+                flight.worldId != session.worldId || !ready(owner, flight.cast) || owner.world.uid != session.worldId ||
+                flight.volley?.let { currentVolleyTarget(owner, it) == null } == true) {
                 retireFlight(session, flight)
                 return@flightLoop
             }
             flight.elapsedTicks++
-            if (flight.elapsedTicks > MAX_ARROW_FLIGHT_TICKS || !loaded(flight.position)) {
+            if (flight.elapsedTicks > (if (flight.volley == null) MAX_ARROW_FLIGHT_TICKS else VOLLEY_MAX_FLIGHT_TICKS) ||
+                !loaded(flight.position)) {
                 retireFlight(session, flight)
                 return@flightLoop
             }
@@ -707,14 +831,9 @@ internal class StaffSpellSummons(
                     !isCasterActor(session.casterId, victim) &&
                     !victim.isInvulnerable && victim.world.uid == flight.worldId && loaded(victim.location) &&
                     visible(from, victim) && damage.eligible(owner, victim, flight.cast)
-                if (currentTarget && damage.hit(
-                        owner,
-                        victim,
-                        flight.cast,
-                        session.tuning.power * SOLDIER_POWER_SCALE,
-                        session.tuning.vanillaDamage * VANILLA_DAMAGE_SCALE,
-                    )) session.successfulHits++
-                arrowImpactCue(session, hitPosition, hit = currentTarget)
+                val applied = currentTarget && hit(session, owner, victim, flight.cast,
+                    SOLDIER_POWER_SCALE, flight.powerMultiplier, flight.volley)
+                arrowImpactCue(session, hitPosition, hit = applied)
                 retireFlight(session, flight)
                 return@flightLoop
             }
@@ -732,7 +851,10 @@ internal class StaffSpellSummons(
             orientArrow(arrow, flight.direction)
             if (flight.elapsedTicks % ARROW_TRAIL_INTERVAL_TICKS == 0) {
                 visuals.withOwner(session.casterId) {
-                    visuals.particles(end, listOf(StaffParticleSample(Particle.CRIT, Vector(), count = 1)), clearance = 0.0)
+                    visuals.particles(end, buildList {
+                        add(StaffParticleSample(Particle.CRIT, Vector(), count = 1))
+                        if (flight.powerMultiplier > 1.0) add(StaffParticleSample(Particle.SOUL_FIRE_FLAME, Vector(), count = 1))
+                    }, clearance = 0.0)
                 }
             }
             if (flight.remaining <= MIN_ARROW_DISTANCE) retireFlight(session, flight)
@@ -802,6 +924,12 @@ internal class StaffSpellSummons(
         const val MAX_ACTORS = 32
         const val LIFETIME_TICKS = 900L
         const val WINDUP_TICKS = 10
+        const val VOLLEY_WINDUP_TICKS = 12L
+        const val VOLLEY_MAX_FLIGHT_TICKS = 64
+        const val VOLLEY_LEADING_POWER = 2.5
+        const val VOLLEY_MAX_HITS = 8
+        const val VOLLEY_MAX_HITS_PER_VICTIM = 4
+        const val VOLLEY_PVP_DAMAGE_LIMIT = 8.0
         const val ATTACK_COOLDOWN_TICKS = 60
         const val SOLDIER_SHOTS = 16
         const val COMMANDER_SWINGS = 16

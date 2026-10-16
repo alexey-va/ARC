@@ -43,11 +43,21 @@ independent defense capacity bar retains its own lifecycle.
 The server controls the base hologram pose through `hud.position`
 settings: forward, horizontal and vertical displacement and scale. Top/bottom
 uses the same vertical magnitude above/below the sightline. These settings
-are read on module reload. `hud.motion` controls bounded movement prediction,
-extra forward/vertical clearance, and settling. The card follows every tick,
-keeps the player's top/bottom preference during flight, and avoids interpolating
-through the reticle on unsafe turns. Whole-card wall clipping uses the center and
-corners rather than the anchor alone.
+are read on module reload. The private card is a native passenger of its player;
+its centered text and offsets use the client camera's CENTER billboard frame.
+Movement and camera turns therefore do not wait for a server-follow teleport.
+HUD and defensive display passengers share one `PaperPacketDisplays` owner.
+
+`hud.motion.prediction-ticks` converts sampled speed to extra camera-local forward
+retreat, bounded by `max-lead-blocks`; it does not extrapolate a world anchor.
+`forward-blocks` and `vertical-blocks` add clearance during movement, and
+`settle-ticks` returns the card smoothly after stopping. Both chosen sides retain
+full-text reticle clearance, including the small native head-to-eye attachment
+offset. Whole-card wall clipping samples the center and corners from the player
+eye; wall pull-in and an explicit side change snap the local transform. Native
+text depth testing remains enabled. Offline first-person and F5 models do not
+establish native attachment offsets, third-person camera collision, or client
+acceptance.
 
 Gravity's primary uses held right-click: press to grab, release to throw. Shift + right-click instead creates a caster-centered gravity pulse.
 Inferno is temporarily retired from issuance and casting. Existing EliteMobs
@@ -107,7 +117,7 @@ are denied during duel preparation, countdown, spectator and locked states.
 | Tide | Water capsule breaks on accepted damage | Forward surf |
 | Requiem | Timed bell; Q strikes during its active window | Bell blink |
 | Prism | Triangle damages enemies crossing its edges | Steerable speed burst |
-| Necromancer | Focus existing archers or rally them | Soul blink |
+| Necromancer | Prepare an existing-army volley with one empowered leading arrow; empty aim rallies the army | Soul blink |
 | Gravity | Hold one enemy; Q throws it | Ballistic leap |
 | Ossuary | Closing bone-jaw trap | Bone-ridge rush |
 
@@ -116,6 +126,12 @@ changing staves or reconnecting. A four-tick GCD prevents same-tick bursts; roun
 reset clears the round's cooldowns. Per-staff defaults live at
 `<staff>.hotkeys.q.cooldown-ticks` and `f.cooldown-ticks` in `staff-spells.yml`.
 The existing HUD and item lore expose Q/F availability and continuation state.
+Necromancer's Q has a separate 20-second cooldown. After a 12-tick preparation,
+each existing archer can spend one remaining ordinary shot; a designated leading
+arrow has 2.5 times the normal power. The order grants no new actors, ammunition
+or lifetime. Its arrows can travel 32 blocks; accepted hits are bounded to four
+per victim and eight per order, with at most eight pre-armor PvP damage per victim.
+Native hurt immunity and the normal post-shot cooldown remain active.
 Target-dependent Q techniques also play their authored visual in a bounded aim
 point when no eligible enemy is present; combat still requires real eligible
 targets. Icicle charge starts with no visible shards and grows up to eleven;
@@ -133,16 +149,19 @@ Focused checks: `:arc-dungeons:test --tests ru.arc.staffspells.StaffSpellInputTe
 `StaffSpellMobilityTest`, `StaffSpellConjurationsTest`,
 `StaffSpellTechniquesRuntimeTest`, `StaffMagicBarriersTest` and
 `StaffHotkeyCooldownsTest`; ArcDuels' `KitRegistryMagicTest` covers the policy
-adapter. `:arc-dungeons:exportStaffHotkeyPreview` exports 32 Q/F geometry clips
-from production helpers with explicitly synthetic sample paths. It does not
-prove native movement, collisions, sound, damage or client appearance.
+adapter. `:arc-dungeons:exportStaffHotkeyPreview` exports 33 clips: 17 Q
+controller captures (including CHAIN proximity) and 16 F helper clips on
+explicitly synthetic paths. Q captures production display, particle and sound
+cue calls plus fixture actors/projectiles; actor models and scripted paths are
+illustrative. The export does not establish native movement, collision, audio,
+damage or Minecraft-client acceptance.
 
 ## Catalog
 
 | ID · staff | Primary attack | Shift attack | Frontal guard | Absorption shield | Existing ItemsAdder skin |
 | --- | --- | --- | --- | --- | --- |
 | `chain` · Грозовая ветвь | Lightning jumps between up to four enemies | Грозовой круг expands a jagged lightning front eight blocks around the caster, blocked by cover | Грозовой заслон | Круговой покров | `3dfantasyweaponscit:divine_staff` |
-| `mark` · Разрыв | A targeted void rupture follows the enemy, then explodes | Чёрная дыра pulls eligible enemies, then collapses | Покров пустоты | Круговой покров | `3dfantasyweaponscit:night_staff` |
+| `mark` · Разрыв | A targeted void rupture follows the enemy, then explodes | Чёрная дыра shrinks and draws mobs into a growing core, then releases survivors | Покров пустоты | Круговой покров | `3dfantasyweaponscit:night_staff` |
 | `frost` · Ледяной хлопок | A broad field of clustered ice teeth rises in front, reaches seven blocks and briefly slows enemies | Полярный круг expands an ice front eight blocks from the caster | Ледяной щит | Круговой покров | `3dfantasyweaponscit:northgate_guardian_staff` |
 | `lance` · Солнечное копьё | A ranged solar spear pierces up to three enemies, applying damage when its light front arrives | Three diverging solar beams | Солнечный щит | Круговой покров | `3dfantasyweaponscit:sagrada_winged_staff` |
 | `ember` · Пепельная комета | Fireball grows below the reticle with four-tick interpolation, then launches immediately with forward speed and accelerates | Three ground circles lock on cast; the first meteor launches after a 15-tick warning | Огненный заслон | Круговой покров | `3dfantasyweaponscit:bermunde_hermit_staff` |
@@ -280,6 +299,26 @@ budget and lifetime still apply. These are initial balancing limits, not
 evidence of equal duel win rates.
 
 ## Preview and evidence limits
+
+MARK secondary keeps a fixed 4.5-block radius for 40 ticks and admits at most
+`min(max-area-targets, 6)` unique victims per cast. Four pulses at ticks 2, 12, 22
+and 32 use 0.12 tuning each; the terminal hit at tick 40 uses 0.65, preserving
+the 1.13 upper damage budget before native hurt immunity. Cooldowns are unchanged.
+Only a successfully damaged mob can be pulled continuously and resized down to
+18% through a cast-owned transient `Attribute.SCALE` multiplier. The controller
+reserves its original full-size body along the next movement step, respects both
+caster/core line of sight, and never teleports it. Each first entry into the core
+adds 8% visual growth, capped at 48%; growth adds no radius, targets or damage.
+Survivors regain their current underlying scale over ten harmless release ticks.
+Cancellation, replacement, invalid context, death, quit, world change and module
+close remove only the owned multiplier immediately. Overlapping holes cannot
+claim the same mob. Duel-authorized players retain pulse damage/pull and never
+receive the mob scale modifier.
+
+The `mark-secondary-0-absorption` preview uses production sphere, pull, shrink,
+growth and restoration functions with three explicitly illustrative cuboid mobs.
+Its unobstructed motion approximation does not establish native AI, collision,
+mob rendering, damage or client acceptance.
 
 The source-driven redesign is documented in
 [`staff-effects-redesign.md`](staff-effects-redesign.md). The

@@ -6,8 +6,10 @@ import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockkConstructor
 import io.mockk.mockk
+import io.mockk.mockkStatic
 import io.mockk.spyk
 import io.mockk.unmockkConstructor
+import io.mockk.unmockkStatic
 import io.mockk.verify
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.key.Key
@@ -36,6 +38,7 @@ import org.bukkit.potion.PotionEffectType
 import org.bukkit.block.BlockFace
 import org.bukkit.util.Vector
 import org.mockbukkit.mockbukkit.world.WorldMock
+import org.mockbukkit.mockbukkit.attribute.AttributesMock
 import ru.arc.core.Tasks
 import ru.arc.core.TestTaskScheduler
 import ru.arc.paper.display.PacketTextDisplay
@@ -1110,7 +1113,7 @@ class StaffSpellsTest : FreeSpec({
             settings = staffSettings(range = 12.0),
             hit = { _, target -> target.uniqueId != deniedId },
         ) { h ->
-            val world = h.paper.addSimpleWorld("staff-mark-secondary")
+            val world = h.solidCollisionWorld("staff-mark-secondary")
             val player = h.player("staff-mark-secondary", world, StaffSpell.MARK).apply { isSneaking = true }
             val original = h.zombie(world, x = 0.5, z = 5.0)
             h.controller.start()
@@ -1121,7 +1124,7 @@ class StaffSpellsTest : FreeSpec({
             val denied = h.zombie(world, x = 1.3, z = 5.0)
             deniedId = denied.uniqueId
 
-            h.scheduler.tick(7)
+            h.scheduler.tick(1)
             h.hits shouldBe emptyList()
             h.scheduler.tick(1)
             h.hits.map { it.uniqueId }.toSet() shouldBe setOf(pulled.uniqueId, denied.uniqueId)
@@ -1129,7 +1132,7 @@ class StaffSpellsTest : FreeSpec({
             denied.velocity.lengthSquared() shouldBe 0.0
             h.damageScales.map { it.first }.distinct() shouldBe listOf(0.12)
 
-            h.scheduler.tick(24)
+            h.scheduler.tick(30)
             h.hits.count { it.uniqueId == pulled.uniqueId } shouldBe 4
             h.hits.count { it.uniqueId == denied.uniqueId } shouldBe 4
             h.hits.any { it.uniqueId == original.uniqueId } shouldBe false
@@ -1410,6 +1413,35 @@ internal data class StaffHarness(
     val hitLocations: MutableList<Location>,
     val damageScales: MutableList<Pair<Double, Double>>,
 ) {
+    /** Pinned MockBukkit lacks this Paper query; these tests use full solid cubes only. */
+    fun solidCollisionWorld(name: String, rayStep: Double = .1): WorldMock = object : WorldMock() {
+        override fun isChunkLoaded(x: Int, z: Int) = true
+
+        override fun rayTraceBlocks(start: Location, direction: Vector, maxDistance: Double,
+            fluidCollisionMode: FluidCollisionMode, ignorePassableBlocks: Boolean): RayTraceResult? =
+            staffTestBlockRay(start, direction, maxDistance, ignorePassableBlocks, rayStep) { true }
+
+        override fun rayTraceBlocks(start: io.papermc.paper.math.Position, direction: Vector, maxDistance: Double,
+            fluidCollisionMode: FluidCollisionMode, ignorePassableBlocks: Boolean,
+            canCollide: java.util.function.Predicate<in org.bukkit.block.Block>?): RayTraceResult? =
+            staffTestBlockRay(start.toLocation(this), direction, maxDistance, ignorePassableBlocks, rayStep) {
+                canCollide?.test(it) ?: true
+            }
+
+        override fun hasCollisionsIn(box: BoundingBox): Boolean =
+            (kotlin.math.floor(box.minX).toInt()..kotlin.math.floor(box.maxX).toInt()).any { x ->
+                (kotlin.math.floor(box.minY).toInt()..kotlin.math.floor(box.maxY).toInt()).any { y ->
+                    (kotlin.math.floor(box.minZ).toInt()..kotlin.math.floor(box.maxZ).toInt()).any { z ->
+                        getBlockAt(x, y, z).type.isSolid && box.overlaps(BoundingBox(
+                            x.toDouble(), y.toDouble(), z.toDouble(), x + 1.0, y + 1.0, z + 1.0))
+                    }
+                }
+            }
+    }.apply {
+        setName(name)
+        paper.server.addWorld(this)
+    }
+
     fun player(name: String, world: World, spell: StaffSpell): Player = paper.addPlayer(name).apply {
         val spawn = Location(world, 0.5, 64.0, 0.5).apply { setDirection(Vector(0.0, 0.0, 1.0)) }
         teleport(spawn)
@@ -1417,7 +1449,28 @@ internal data class StaffHarness(
     }
 
     fun zombie(world: World, x: Double, z: Double): Zombie =
-        world.spawn(Location(world, x, 64.0, z), Zombie::class.java)
+        world.spawn(Location(world, x, 64.0, z), Zombie::class.java).apply {
+            // Native zombies have SCALE; MockBukkit 4.116.3 omits it from its default attributes.
+            if (getAttribute(org.bukkit.attribute.Attribute.SCALE) == null)
+                registerAttribute(org.bukkit.attribute.Attribute.SCALE)
+        }
+}
+
+/** One full-cube ray model shared by the standard and collision-aware fixture worlds. */
+private fun staffTestBlockRay(start: Location, directionInput: Vector, distance: Double,
+    ignorePassable: Boolean, rayStep: Double, canCollide: (org.bukkit.block.Block) -> Boolean): RayTraceResult? {
+    val direction = directionInput.clone().normalize()
+    val world = requireNotNull(start.world)
+    val steps = (distance / rayStep).toInt().coerceAtLeast(1)
+    return (1..steps).firstNotNullOfOrNull { step ->
+        val hitPosition = start.toVector().add(direction.clone().multiply(distance * step / steps))
+        val block = world.getBlockAt(hitPosition.blockX, hitPosition.blockY, hitPosition.blockZ)
+        if (block.type.isAir || ignorePassable && block.isPassable || !canCollide(block)) null else BoundingBox(
+            block.x.toDouble(), block.y.toDouble(), block.z.toDouble(),
+            block.x + 1.0, block.y + 1.0, block.z + 1.0,
+        ).rayTrace(start.toVector(), direction, distance)
+            ?.let { hit -> RayTraceResult(hit.hitPosition, block, hit.hitBlockFace ?: BlockFace.NORTH) }
+    }
 }
 
 internal data class StaffTrailMove(val id: UUID?, val points: List<Location>)
@@ -1474,6 +1527,7 @@ internal fun withStaffHarness(
     config: StaffSpellConfig = StaffSpellConfig(StaffTestConfig()),
     summonActorFactory: ((World, Location, Boolean) -> org.bukkit.entity.AbstractSkeleton)? = null,
     hudFactory: (() -> StaffSpellHud)? = null,
+    targetEligible: (Player, LivingEntity) -> Boolean = { _, target -> target !is Player },
     block: (StaffHarness) -> Unit,
 ) {
     failOnUnsupportedMockBukkitOperation {
@@ -1487,105 +1541,99 @@ internal fun withStaffHarness(
                     every { isEffect } returns true
                 }
             }
-            fun ray(start: Location, directionInput: Vector, distance: Double,
-                ignorePassable: Boolean, canCollide: (org.bukkit.block.Block) -> Boolean): RayTraceResult? {
-                val direction = directionInput.clone().normalize()
-                val world = requireNotNull(start.world)
-                val steps = (distance / rayStep).toInt().coerceAtLeast(1)
-                return (1..steps).firstNotNullOfOrNull { step ->
-                    val hitPosition = start.toVector().add(direction.clone().multiply(distance * step / steps))
-                    val block = world.getBlockAt(hitPosition.blockX, hitPosition.blockY, hitPosition.blockZ)
-                    if (block.type.isAir || ignorePassable && block.isPassable || !canCollide(block)) null else BoundingBox(
-                        block.x.toDouble(), block.y.toDouble(), block.z.toDouble(),
-                        block.x + 1.0, block.y + 1.0, block.z + 1.0,
-                    ).rayTrace(start.toVector(), direction, distance)
-                        ?.let { hit -> RayTraceResult(hit.hitPosition, block, hit.hitBlockFace ?: BlockFace.NORTH) }
-                }
-            }
             every {
                 anyConstructed<WorldMock>().rayTraceBlocks(
                     any<Location>(), any<Vector>(), any<Double>(), any<FluidCollisionMode>(), any<Boolean>(),
                 )
-            } answers { ray(firstArg(), secondArg(), thirdArg(), arg(4)) { true } }
+            } answers { staffTestBlockRay(firstArg(), secondArg(), thirdArg(), arg(4), rayStep) { true } }
             every {
                 anyConstructed<WorldMock>().rayTraceBlocks(
                     any<io.papermc.paper.math.Position>(), any<Vector>(), any<Double>(), any<FluidCollisionMode>(),
                     any<Boolean>(), any<java.util.function.Predicate<org.bukkit.block.Block>>(),
                 )
             } answers {
-                ray(firstArg<io.papermc.paper.math.Position>() as Location, secondArg(), thirdArg(), arg(4)) {
+                staffTestBlockRay(firstArg<io.papermc.paper.math.Position>() as Location, secondArg(), thirdArg(), arg(4), rayStep) {
                     arg<java.util.function.Predicate<org.bukkit.block.Block>>(5).test(it)
                 }
             }
             MockBukkitTestRuntime.open().use { paper ->
-                Tasks.withScheduler(scheduler) {
-                    val cooldowns = StaffTestCooldowns(scheduler)
-                    val damage = mockk<StaffSpellDamage>()
-                    every { damage.summonCast = any() } returns Unit
-                    every { damage.inputAllowed(any()) } returns true
-                    val captures = mutableListOf<Player>()
-                    val hits = mutableListOf<LivingEntity>()
-                    val hitLocations = mutableListOf<Location>()
-                    val damageScales = mutableListOf<Pair<Double, Double>>()
-                    every { damage.eligible(any(), any(), any()) } answers {
-                        val target = secondArg<LivingEntity>()
-        target !is Player && target.isValid && !target.isDead && !target.isInvulnerable && target.health > 0.0
+                // 4.116.3 implements AttributeInstanceMock fully, but its default-value table omits SCALE.
+                // Supply only that native default; registerAttribute and modifier bookkeeping stay real.
+                mockkStatic(AttributesMock::class)
+                every { AttributesMock.getDefaultValue(org.bukkit.attribute.Attribute.SCALE) } returns 1.0
+                try {
+                    Tasks.withScheduler(scheduler) {
+                        val cooldowns = StaffTestCooldowns(scheduler)
+                        val damage = mockk<StaffSpellDamage>()
+                        every { damage.summonCast = any() } returns Unit
+                        every { damage.inputAllowed(any()) } returns true
+                        val captures = mutableListOf<Player>()
+                        val hits = mutableListOf<LivingEntity>()
+                        val hitLocations = mutableListOf<Location>()
+                        val damageScales = mutableListOf<Pair<Double, Double>>()
+                        every { damage.eligible(any(), any(), any()) } answers {
+                            val target = secondArg<LivingEntity>()
+                            targetEligible(firstArg(), target) && target.isValid && !target.isDead &&
+                                !target.isInvulnerable && target.health > 0.0
+                        }
+                        every { damage.capture(any(), any()) } answers {
+                            val player = firstArg<Player>()
+                            captures += player
+                            StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false)
+                        }
+                        every { damage.isCurrent(any(), any()) } answers { currentCast(firstArg(), secondArg()) }
+                        every { damage.hit(any(), any(), any(), any(), any()) } answers {
+                            val player = firstArg<Player>()
+                            val target = secondArg<LivingEntity>()
+                            hits += target
+                            hitLocations += target.location.clone()
+                            damageScales += arg<Double>(3) to arg<Double>(4)
+                            hit(player, target)
+                        }
+                        val effects = mockk<StaffSpellDisplayEffects>(relaxed = true)
+                        val visualPlays = mutableListOf<StaffVisualPlay>()
+                        every { effects.play(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } answers {
+                            val id = UUID.randomUUID()
+                            if (!arg<Boolean>(13)) visualPlays += StaffVisualPlay(id, arg<StaffSpell>(1), arg<Location>(2).clone(),
+                                arg<Location>(3).clone(), arg<Boolean>(7), arg<Boolean>(6), arg<Boolean>(9), arg<Int?>(12))
+                            id
+                        }
+                        every { effects.chargeOrigin(any()) } returns null
+                        every { effects.releaseCharge(any(), any(), any()) } returns null
+                        val movedEffects = mutableListOf<Pair<UUID, Location>>()
+                        val trailMoves = mutableListOf<StaffTrailMove>()
+                        val projectileMoves = mutableListOf<StaffProjectileMove>()
+                        val finishedTrails = mutableListOf<UUID?>()
+                        val removedEffects = mutableListOf<UUID?>()
+                        every { effects.move(any(), any()) } answers {
+                            movedEffects += firstArg<UUID>() to secondArg<Location>().clone()
+                        }
+                        every { effects.moveTrail(any(), any()) } answers {
+                            trailMoves += StaffTrailMove(arg<UUID?>(0), arg<List<Location>>(1).map { it.clone() })
+                        }
+                        every { effects.moveProjectile(any(), any(), any()) } answers {
+                            projectileMoves += StaffProjectileMove(firstArg<UUID?>(), secondArg<Location>().clone(),
+                                thirdArg<Vector>().clone())
+                        }
+                        every { effects.finishTrail(any()) } answers { finishedTrails += arg<UUID?>(0) }
+                        every { effects.remove(any()) } answers { removedEffects += firstArg<UUID?>() }
+                        var hotkeyTick = 0L
+                        val hotkeyClock = scheduler.runTimer(1, 1) { hotkeyTick++ }
+                        val controller = StaffSpellController(config, settings, damage, effects, cooldowns,
+                            summonActorFactory, hud = hudFactory?.invoke(), hotkeys = StaffHotkeyCooldowns { hotkeyTick })
+                        val harness = StaffHarness(paper, scheduler, config, controller, cooldowns, effects,
+                            movedEffects, trailMoves, projectileMoves, finishedTrails, visualPlays, removedEffects,
+                            captures, hits, hitLocations, damageScales)
+                        try {
+                            block(harness)
+                        } finally {
+                            controller.close()
+                            hotkeyClock.cancel()
+                            cooldowns.close()
+                        }
                     }
-                    every { damage.capture(any(), any()) } answers {
-                        val player = firstArg<Player>()
-                        captures += player
-                        StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false)
-                    }
-                    every { damage.isCurrent(any(), any()) } answers { currentCast(firstArg(), secondArg()) }
-                    every { damage.hit(any(), any(), any(), any(), any()) } answers {
-                        val player = firstArg<Player>()
-                        val target = secondArg<LivingEntity>()
-                        hits += target
-                        hitLocations += target.location.clone()
-                        damageScales += arg<Double>(3) to arg<Double>(4)
-                        hit(player, target)
-                    }
-                    val effects = mockk<StaffSpellDisplayEffects>(relaxed = true)
-                    val visualPlays = mutableListOf<StaffVisualPlay>()
-                    every { effects.play(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } answers {
-                        val id = UUID.randomUUID()
-                        if (!arg<Boolean>(13)) visualPlays += StaffVisualPlay(id, arg<StaffSpell>(1), arg<Location>(2).clone(),
-                            arg<Location>(3).clone(), arg<Boolean>(7), arg<Boolean>(6), arg<Boolean>(9), arg<Int?>(12))
-                        id
-                    }
-                    every { effects.chargeOrigin(any()) } returns null
-                    every { effects.releaseCharge(any(), any(), any()) } returns null
-                    val movedEffects = mutableListOf<Pair<UUID, Location>>()
-                    val trailMoves = mutableListOf<StaffTrailMove>()
-                    val projectileMoves = mutableListOf<StaffProjectileMove>()
-                    val finishedTrails = mutableListOf<UUID?>()
-                    val removedEffects = mutableListOf<UUID?>()
-                    every { effects.move(any(), any()) } answers {
-                        movedEffects += firstArg<UUID>() to secondArg<Location>().clone()
-                    }
-                    every { effects.moveTrail(any(), any()) } answers {
-                        trailMoves += StaffTrailMove(arg<UUID?>(0), arg<List<Location>>(1).map { it.clone() })
-                    }
-                    every { effects.moveProjectile(any(), any(), any()) } answers {
-                        projectileMoves += StaffProjectileMove(firstArg<UUID?>(), secondArg<Location>().clone(),
-                            thirdArg<Vector>().clone())
-                    }
-                    every { effects.finishTrail(any()) } answers { finishedTrails += arg<UUID?>(0) }
-                    every { effects.remove(any()) } answers { removedEffects += firstArg<UUID?>() }
-                    var hotkeyTick = 0L
-                    val hotkeyClock = scheduler.runTimer(1, 1) { hotkeyTick++ }
-                    val controller = StaffSpellController(config, settings, damage, effects, cooldowns,
-                        summonActorFactory, hud = hudFactory?.invoke(), hotkeys = StaffHotkeyCooldowns { hotkeyTick })
-                    val harness = StaffHarness(paper, scheduler, config, controller, cooldowns, effects,
-                        movedEffects, trailMoves, projectileMoves, finishedTrails, visualPlays, removedEffects,
-                        captures, hits, hitLocations, damageScales)
-                    try {
-                        block(harness)
-                    } finally {
-                        controller.close()
-                        hotkeyClock.cancel()
-                        cooldowns.close()
-                    }
+                } finally {
+                    unmockkStatic(AttributesMock::class)
                 }
             }
         } finally {

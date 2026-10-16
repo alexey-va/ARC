@@ -53,9 +53,9 @@ class StaffConjurationGeometryTest : FreeSpec({
         val target = org.bukkit.util.Vector(1.0, 0.2, -3.0)
         staffMarkTetherParts(0, target).filter { it.identity!!.startsWith("mark:q:ring:") }
             .forEachIndexed { index, part ->
-                val anchor = if (index % 2 == 1) Vector3f(1f, 0.2f, -3f) else Vector3f()
+                val anchor = if (index >= 8) Vector3f(1f, 0.2f, -3f) else Vector3f()
                 val delta = Vector3f(part.center).sub(anchor)
-                (kotlin.math.sqrt(delta.x * delta.x + delta.z * delta.z) in 0.66f..0.78f) shouldBe true
+                (kotlin.math.sqrt(delta.x * delta.x + delta.z * delta.z) in 0.9f..1.01f) shouldBe true
             }
     }
 
@@ -76,6 +76,37 @@ class StaffConjurationGeometryTest : FreeSpec({
             } shouldBe true
             parts.all { kotlin.math.sqrt(it.center.x * it.center.x + it.center.z * it.center.z) > 0.68f } shouldBe true
         }
+    }
+
+    "Q aftermaths remain bounded and retain their authored identities while opening or recoiling" {
+        val sequences = listOf(
+            (0 until 12).map { staffMarkTetherBreakParts(it, org.bukkit.util.Vector(4.5, .2, 0.0)) },
+            (0 until 18).map(::staffFrostThawParts),
+            (0 until 14).map(::staffNovaSeedBloomParts),
+            (0 until 10).map(::staffTideCapsuleReleaseParts),
+            (0 until 14).map { staffRequiemImpactParts(it, 4.1) },
+        )
+        sequences.forEach { frames ->
+            frames.forEach { parts ->
+                (parts.size in 1..48) shouldBe true
+                parts.map { it.identity } shouldBe frames.first().map { it.identity }
+                parts.mapNotNull { it.identity }.distinct().size shouldBe parts.size
+                parts.all { listOf(it.center.x, it.center.y, it.center.z, it.scale.x, it.scale.y, it.scale.z,
+                    it.rotation.x, it.rotation.y, it.rotation.z, it.rotation.w).all(Float::isFinite) &&
+                    it.scale.x > 0f && it.scale.y > 0f && it.scale.z > 0f } shouldBe true
+            }
+        }
+        val flower = staffNovaSeedBloomParts(6)
+        (flower.maxOf { it.center.y } > 2.3f) shouldBe true
+        (flower.maxOf { it.center.x } - flower.minOf { it.center.x } > 3f) shouldBe true
+        val bell = staffRequiemBellParts(18)
+        bell.none { it.material == org.bukkit.Material.BELL } shouldBe true
+        (bell.maxOf { it.center.x } - bell.minOf { it.center.x } > 3.4f) shouldBe true
+        (bell.minOf { it.center.y - it.scale.y / 2 } > 2.4f) shouldBe true
+        bell.any { it.identity!!.contains(":clapper:") } shouldBe true
+        staffRequiemBellParts(64).map { it.center } shouldBe bell.map { it.center }
+        val water = staffTideCapsuleReleaseParts(5)
+        (water.maxOf { it.center.x } > staffTideCapsuleParts(12).maxOf { it.center.x } * 1.5f) shouldBe true
     }
 
     "OSSUARY jaw holds open from admission then hinges inward with its original stable parts" {

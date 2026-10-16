@@ -16,6 +16,10 @@ import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 import org.bukkit.util.RayTraceResult
 import org.bukkit.util.Vector
+import org.joml.Quaternionf
+import org.joml.Vector3f
+import kotlin.math.abs
+import kotlin.math.atan2
 import org.mockbukkit.mockbukkit.world.WorldMock
 import ru.arc.core.Tasks
 import ru.arc.core.TestTaskScheduler
@@ -69,17 +73,19 @@ class StaffSpellHudTest : FreeSpec({
             text(record.text) shouldBe "ПКМ · Комета\n55% ■■■■■□□□□□"
 
             harness.scheduler.tick(2)
-            // Sneaking changes the eye height, so both camera-follow updates above are real.
-            record.teleports.size shouldBe 2
-            val afterSneak = record.teleports.size
+            record.attachedPlayerId shouldBe player.uniqueId
+            record.teleports.size shouldBe 0
+            val initialTranslation = Vector3f(record.translation)
+            val initialWrites = record.transformWrites
             harness.scheduler.tick(2)
-            record.teleports.size shouldBe afterSneak
-            val initial = record.spawn.clone()
+            record.transformWrites shouldBe initialWrites
             player.teleport(Location(harness.world, 1.5, 64.0, 0.5))
             harness.scheduler.tick(2)
-            (record.teleports.size > afterSneak) shouldBe true
+            (record.transformWrites > initialWrites) shouldBe true
+            // Only the local retreat changes; native passenger movement carries the card.
+            record.teleports.size shouldBe 0
             harness.scheduler.tick(12)
-            record.teleports.last().distance(initial) shouldBe 1.0
+            (record.translation.distance(initialTranslation) < 1.0e-6) shouldBe true
             record.textWrites.size shouldBe 3
 
             player.inventory.setItemInMainHand(ItemStack(Material.STONE))
@@ -142,11 +148,27 @@ class StaffSpellHudTest : FreeSpec({
             harness.hud.ready(player, StaffSpell.EMBER, secondary = false)
 
             val record = harness.recorder.records.single()
-            val distance = record.spawn.distance(player.eyeLocation)
+            val bounds = staffSpellHudBounds(text(record.text), 220)
+            val center = hudRenderedCenter(player.eyeLocation, record.translation, record.scale, bounds,
+                player.height - player.eyeHeight)
+            val distance = center.distance(player.eyeLocation.toVector())
             // The outer corners may meet a wall before the origin; the entire card must fit.
-            (distance <= staffHudSafeDistance(staffSpellHudPose().distance, 1.6)) shouldBe true
-            (kotlin.math.abs(record.scale - staffSpellHudPose(distance).textScale) < 1.0e-6) shouldBe true
+            val moving = staffHudMovingPosition(StaffSpellHudPositionSettings(), StaffSpellHudMotionSettings(),
+                StaffSpellHudMotion(), StaffHudPlacement.BOTTOM, bounds, player.height - player.eyeHeight)
+            (distance <= staffHudSafeDistance(staffSpellHudPose(moving).distance, 1.6) + 1.0e-6) shouldBe true
+            (kotlin.math.abs(record.scale - staffSpellHudPose(distance, moving).textScale) < 1.0e-6) shouldBe true
             record.visibleByDefault shouldBe false
+
+            harness.rayHitDistance[0] = 0.7
+            harness.scheduler.tick(1)
+            record.transformTicks shouldBe 0
+            val pulledIn = hudRenderedCenter(player.eyeLocation, record.translation, record.scale, bounds,
+                player.height - player.eyeHeight).subtract(player.eyeLocation.toVector())
+            (pulledIn.length() < distance) shouldBe true
+            // The mock obstructs every sampled ray at 0.7 blocks, so all corners retain 0.18 clearance.
+            staffHudCardOffsets(pulledIn, Vector(-1.0, 0.0, 0.0), Vector(0.0, -1.0, 0.0),
+                bounds, record.scale).all { it.length() <= 0.7 - STAFF_HUD_BLOCK_CLEARANCE + 1.0e-6 }
+                .shouldBe(true)
         }
     }
 
@@ -200,7 +222,7 @@ class StaffSpellHudTest : FreeSpec({
             val player = harness.player("staff-hud-mode", StaffSpell.EMBER)
             harness.hud.ready(player, StaffSpell.EMBER, secondary = false)
             val bottom = harness.recorder.records.single()
-            val bottomY = bottom.spawn.y
+            val bottomY = bottom.translation.y
 
             harness.preferences.value = StaffSpellHudPreferences(StaffHudMode.BOSSBAR, StaffHudPlacement.TOP)
             harness.scheduler.tick(2)
@@ -222,7 +244,8 @@ class StaffSpellHudTest : FreeSpec({
             harness.preferences.value = StaffSpellHudPreferences(StaffHudMode.HOLOGRAM, StaffHudPlacement.TOP)
             harness.scheduler.tick(2)
             harness.recorder.records.size shouldBe 2
-            (kotlin.math.abs(harness.recorder.records.last().spawn.y - bottomY - 1.7) < 1.0e-8) shouldBe true
+            (harness.recorder.records.last().translation.y > bottomY + 1.7) shouldBe true
+            harness.recorder.records.last().attachedPlayerId shouldBe player.uniqueId
         }
     }
 
@@ -241,35 +264,71 @@ class StaffSpellHudTest : FreeSpec({
         }
     }
 
-    "flight leads forward upward downward and strafing cameras with full card clearance on both chosen sides" {
-        val settings = StaffSpellHudMotionSettings()
-        val position = StaffSpellHudPositionSettings()
+    "mounted camera keeps the full card clear through delayed ascent reversal yaw pitch and pose transitions" {
+        val config = StaffSpellConfig(StaffTestConfig(emptyMap()))
         val bounds = staffSpellHudBounds("Shift + ПКМ · Метеоры\n55% ■■■■■□□□□□\nQ готово   F готово", 220)
         for (preference in listOf(StaffHudPlacement.TOP, StaffHudPlacement.BOTTOM)) {
-            for (pitch in listOf(-80f, 0f, 80f)) {
-                val eye = Location(null, 0.0, 64.0, 0.0, 35f, pitch)
-                val forward = eye.direction.normalize()
-                val yaw = Math.toRadians(eye.yaw.toDouble())
-                val right = Vector(kotlin.math.cos(yaw), 0.0, kotlin.math.sin(yaw))
-                val down = right.clone().crossProduct(forward).normalize()
-                for (velocity in listOf(forward.clone().multiply(1.5), Vector(0.0, 1.5, 0.0),
-                        Vector(0.0, -1.5, 0.0), right.clone().multiply(1.5))) {
-                    var motion = StaffSpellHudMotion()
-                    repeat(3) { motion = staffSpellHudMotion(motion, velocity, 1.0, true, settings) }
-                    val moving = staffHudMovingPosition(position, settings, motion,
-                        forward, down, right, preference, bounds)
-                    val offset = forward.clone().multiply(moving.forwardBlocks)
-                        .add(down.clone().multiply(moving.verticalBlocks))
-                        .add(right.clone().multiply(moving.horizontalBlocks))
-                    val side = if (preference == StaffHudPlacement.BOTTOM) 1 else -1
-                    for (latency in listOf(0.0, 1.0, 2.0)) {
-                        val relative = offset.clone().subtract(velocity.clone().multiply(latency))
-                        (relative.dot(forward) > 0.0) shouldBe true
-                        (side * relative.dot(down) - bounds.verticalRadius * position.scale >
-                            relative.dot(forward) * 0.13) shouldBe true
-                    }
-                    (moving.forwardBlocks >= position.forwardBlocks + settings.forwardBlocks) shouldBe true
+            val frames = staffHudMotionPreviewFrames(config, bounds, preference)
+            val side = if (preference == StaffHudPlacement.BOTTOM) 1 else -1
+            // Sample the whole route, including the old failures 40.5, 75, 91 and their next frames.
+            for (sample in 0 until frames.lastIndex * 4) {
+                val time = sample / 4.0
+                val i = time.toInt()
+                val partial = (time - i).toFloat()
+                val eye = frames[i].eye.clone().apply {
+                    x += (frames[i + 1].eye.x - x) * partial
+                    y += (frames[i + 1].eye.y - y) * partial
+                    z += (frames[i + 1].eye.z - z) * partial
+                    yaw += (frames[i + 1].eye.yaw - yaw) * partial
+                    pitch += (frames[i + 1].eye.pitch - pitch) * partial
                 }
+                val gap = frames[i].passengerGap +
+                    (frames[i + 1].passengerGap - frames[i].passengerGap) * partial
+                // One tick until the owner's metadata flush, then one tick of native interpolation.
+                // Player passenger position and billboard orientation use the CURRENT client frame.
+                val from = frames[(i - 2).coerceAtLeast(0)]
+                val to = frames[(i - 1).coerceAtLeast(0)]
+                val translation = Vector3f(from.transform.translation).lerp(to.transform.translation, partial)
+                val scale = from.pose.textScale + (to.pose.textScale - from.pose.textScale) * partial
+                for (view in listOf("first", "back", "front")) {
+                    val camera = eye.clone()
+                    if (view != "first") camera.add(eye.direction.multiply(if (view == "back") -4.0 else 4.0))
+                    if (view == "front") { camera.yaw += 180f; camera.pitch = -camera.pitch }
+                    val center = hudRenderedCenter(eye, translation, scale, bounds, gap, camera)
+                    val relative = center.subtract(camera.toVector())
+                    val forward = camera.direction
+                    val right = Vector(-kotlin.math.cos(Math.toRadians(camera.yaw.toDouble())), 0.0,
+                        -kotlin.math.sin(Math.toRadians(camera.yaw.toDouble())))
+                    val down = forward.clone().crossProduct(right).normalize()
+                    val depth = relative.dot(forward)
+                    val near = atan2(side * relative.dot(down) - bounds.verticalRadius * scale, depth)
+                    val far = atan2(side * relative.dot(down) + bounds.verticalRadius * scale, depth)
+                    check(depth > 0 && near > Math.toRadians(if (view == "first") 7.9 else 0.0) &&
+                        far < Math.toRadians(35.0)) {
+                        "$preference $view t=$time depth=$depth near=${Math.toDegrees(near)} far=${Math.toDegrees(far)}"
+                    }
+                    (abs(relative.dot(right)) + bounds.halfWidth * scale < depth * 1.12) shouldBe true
+                }
+            }
+        }
+    }
+
+    "billboard local translation follows a fresh camera turn without a new server pose" {
+        val bounds = staffSpellHudBounds("ПКМ · Комета\n55% ■■■■■□□□□□\nQ готово   F готово", 220)
+        val eye = Location(null, 0.0, 64.0, 0.0)
+        for (preference in listOf(StaffHudPlacement.TOP, StaffHudPlacement.BOTTOM)) {
+            val position = staffHudMovingPosition(StaffSpellHudPositionSettings(), StaffSpellHudMotionSettings(),
+                StaffSpellHudMotion(), preference, bounds)
+            val transform = staffHudBillboardTransformation(staffSpellHudPose(position), bounds, eye, 0.18)
+            for (yaw in listOf(0f, 90f, 180f)) for (pitch in listOf(-85f, 0f, 85f)) {
+                val camera = eye.clone().apply { this.yaw = yaw; this.pitch = pitch }
+                val local = hudRenderedCenter(eye, transform.translation, transform.scale.x, bounds, 0.18, camera)
+                    .subtract(camera.toVector())
+                val down = camera.direction.clone().crossProduct(Vector(-kotlin.math.cos(Math.toRadians(yaw.toDouble())),
+                    0.0, -kotlin.math.sin(Math.toRadians(yaw.toDouble())))).normalize()
+                val side = if (preference == StaffHudPlacement.BOTTOM) 1 else -1
+                (side * local.dot(down) - bounds.verticalRadius * transform.scale.x > local.dot(camera.direction) * 0.13)
+                    .shouldBe(true)
             }
         }
     }
@@ -310,25 +369,33 @@ class StaffSpellHudTest : FreeSpec({
         staffSpellHudMotion(motion, Vector(0.0, 0.0, 80.0), 1.0, true, settings) shouldBe StaffSpellHudMotion()
     }
 
-    "unsafe turn and top-bottom change snap both interpolation channels rather than cross the reticle" {
+    "camera turns reuse the mounted card and top-bottom changes snap only the local pose" {
         withHudHarness { harness ->
             val player = harness.player("staff-hud-turn", StaffSpell.EMBER)
             harness.hud.ready(player, StaffSpell.EMBER, secondary = false)
             val record = harness.recorder.records.single()
-            val turned = player.location.apply { pitch = 55f }
-            player.teleport(turned)
+            player.teleport(player.location.apply { pitch = 55f })
             harness.scheduler.tick(1)
             record.teleportTicks shouldBe 0
-            record.transformTicks shouldBe 0
-            harness.scheduler.tick(12)
-            record.teleportTicks shouldBe 1
+            record.transformTicks shouldBe 1
+            record.teleports.size shouldBe 0
             harness.preferences.value = StaffSpellHudPreferences(StaffHudMode.HOLOGRAM, StaffHudPlacement.TOP)
             harness.scheduler.tick(1)
-            record.teleportTicks shouldBe 0
             record.transformTicks shouldBe 0
             harness.recorder.records.size shouldBe 1
         }
     }
+
+    "closing HUD with a shared passenger owner removes only its card" {
+        withHudHarness(ownDisplays = false) { harness ->
+            val player = harness.player("staff-hud-shared", StaffSpell.EMBER)
+            harness.hud.ready(player, StaffSpell.EMBER, secondary = false)
+            harness.hud.close()
+            harness.recorder.records.single().removals shouldBe 1
+            harness.recorder.closes shouldBe 0
+        }
+    }
+
 })
 
 private fun text(component: Component) = PlainTextComponentSerializer.plainText().serialize(component)
@@ -346,6 +413,9 @@ private data class HudDisplayRecord(
     val visibleViewers: MutableSet<UUID> = mutableSetOf(),
     var visibleByDefault: Boolean = true,
     var scale: Float = 0.0f,
+    var translation: Vector3f = Vector3f(),
+    var transformWrites: Int = 0,
+    var attachedPlayerId: UUID? = null,
     var teleportTicks: Int = 0,
     var transformTicks: Int = 0,
     var removals: Int = 0,
@@ -370,8 +440,11 @@ private class HudDisplayRecorder {
             }
             every { handle.transformation = any() } answers {
                 record.scale = firstArg<org.bukkit.util.Transformation>().scale.x
+                record.translation = Vector3f(firstArg<org.bukkit.util.Transformation>().translation)
+                record.transformWrites++
                 Unit
             }
+            every { handle.attachTo(any()) } answers { record.attachedPlayerId = firstArg<Player>().uniqueId }
             every { handle.teleportDuration = any() } answers { record.teleportTicks = firstArg<Int>() }
             every { handle.interpolationDuration = any() } answers { record.transformTicks = firstArg<Int>() }
             every { handle.text(any()) } answers {
@@ -411,7 +484,7 @@ private data class HudHarness(
 
 private data class HudPreferenceBox(var value: StaffSpellHudPreferences = StaffSpellHudPreferences())
 
-private fun withHudHarness(block: (HudHarness) -> Unit) = failOnUnsupportedMockBukkitOperation {
+private fun withHudHarness(ownDisplays: Boolean = true, block: (HudHarness) -> Unit) = failOnUnsupportedMockBukkitOperation {
     val scheduler = TestTaskScheduler()
     val rayHitDistance = mutableListOf<Double?>(null)
     mockkConstructor(WorldMock::class)
@@ -452,16 +525,32 @@ private fun withHudHarness(block: (HudHarness) -> Unit) = failOnUnsupportedMockB
                     "messages.staff-hud.bossbar-channel" to "<input> · <ability> · Глыба готова",
                 )))
                 val hud = StaffSpellHud(recorder.displays, config,
-                    preferences = StaffSpellHudPreferencesReader { preferences.value }).also(StaffSpellHud::start)
+                    preferences = StaffSpellHudPreferencesReader { preferences.value }, ownDisplays = ownDisplays).also(StaffSpellHud::start)
                 try {
                     block(HudHarness(scheduler, world, recorder, hud, paper, rayHitDistance, preferences))
                 } finally {
                     hud.close()
-                    recorder.closes shouldBe 1
+                    recorder.closes shouldBe if (ownDisplays) 1 else 0
                 }
             }
         }
     } finally {
         unmockkConstructor(WorldMock::class)
     }
+}
+
+/** Native DisplayRenderer applies camera billboard rotation BEFORE the transformation matrix. */
+private fun hudRenderedCenter(
+    playerEye: Location,
+    translation: Vector3f,
+    scale: Float,
+    bounds: StaffSpellHudBounds,
+    passengerGap: Double,
+    camera: Location = playerEye,
+): Vector {
+    val local = Vector3f(translation).add(0f, (bounds.originUp * scale).toFloat(), 0f)
+    Quaternionf().rotationYXZ(Math.toRadians(180.0 - camera.yaw).toFloat(),
+        Math.toRadians(-camera.pitch.toDouble()).toFloat(), 0f).transform(local)
+    return playerEye.toVector().add(Vector(0.0, passengerGap, 0.0))
+        .add(Vector(local.x.toDouble(), local.y.toDouble(), local.z.toDouble()))
 }

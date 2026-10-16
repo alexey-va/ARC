@@ -123,6 +123,219 @@ class StaffSpellSummonsTest : FreeSpec({
         }
     }
 
+    "funeral order synchronizes the existing army and bounds one designated leading arrow" {
+        withSummonHarness { h ->
+            val world = h.paper.addSimpleWorld("summon-volley-army")
+            loadSummonChunks(world)
+            val owner = h.player("summon-volley-owner", world, StaffSpell.NECROMANCER)
+            val target = h.zombie(world, .5, 6.0)
+            val summons = h.controller.summons
+            val base = staffSettings().tuning.getValue(StaffSpell.NECROMANCER)
+            val tuning = base.copy(power = base.power * 1.75, vanillaDamage = base.vanillaDamage * 1.75)
+            fun cast() = StaffSpellCast(owner.uniqueId, UUID.randomUUID(), 1, null, null, false)
+            h.controller.start()
+            repeat(5) { summons.cast(owner, cast(), tuning, StaffCastInput.PRIMARY, 1.0) shouldBe true }
+            val actors = world.entities.filterIsInstance<AbstractSkeleton>().toSet()
+            actors.size shouldBe 10
+
+            summons.commandVolley(owner, target, cast()) shouldBe true
+            h.scheduler.tick(11)
+            world.entities.filterIsInstance<Arrow>() shouldBe emptyList()
+            h.scheduler.tick(1)
+            world.entities.filterIsInstance<Arrow>().count { it.isValid } shouldBe 10
+            world.entities.filterIsInstance<AbstractSkeleton>().toSet() shouldBe actors
+            h.scheduler.tick(16)
+            h.hits.size shouldBe 4
+            h.hits.all { it === target } shouldBe true
+            h.damageScales.map { it.second }.sorted() shouldBe listOf(2.1, 2.1, 2.1, 5.25)
+
+            // The order spends normal ammunition and prevents an immediate ordinary follow-up.
+            h.scheduler.tick(44)
+            world.entities.filterIsInstance<Arrow>().count { it.isValid } shouldBe 0
+            h.hits.size shouldBe 4
+            actors.all { it.isValid } shouldBe true
+        }
+    }
+
+    "funeral arrows reach the marked distant target and still stop at late cover" {
+        for (covered in listOf(false, true)) withSummonHarness { h ->
+            val world = h.paper.addSimpleWorld("summon-volley-range-$covered")
+            loadSummonChunks(world)
+            world.loadChunk(0, 1)
+            world.loadChunk(-1, 1)
+            val owner = h.player("summon-volley-range-owner", world, StaffSpell.NECROMANCER)
+            val target = h.zombie(world, .5, 24.0)
+            val cast = StaffSpellCast(owner.uniqueId, UUID.randomUUID(), 1, null, null, false)
+            val summons = h.controller.summons
+            h.controller.start()
+            summons.cast(owner, cast, staffSettings().tuning.getValue(StaffSpell.NECROMANCER),
+                StaffCastInput.PRIMARY, 0.0) shouldBe true
+            summons.commandVolley(owner, target, cast) shouldBe true
+            h.scheduler.tick(28)
+            world.entities.filterIsInstance<Arrow>().count { it.isValid } shouldBe 2
+            h.hits shouldBe emptyList()
+            if (covered) for (x in -2..2) for (y in 64..67) world.getBlockAt(x, y, 16).type = Material.STONE
+            h.scheduler.tick(32)
+            h.hits.size shouldBe if (covered) 0 else 2
+            world.entities.filterIsInstance<Arrow>().count { it.isValid } shouldBe 0
+        }
+    }
+
+    "funeral order cannot transfer a dead leading archer's bonus or include later summons" {
+        val spawned = mutableListOf<AbstractSkeleton>()
+        withSummonHarness(summonActorFactory = { world, at, commander ->
+            spawnPickupSafeActor(world, at, commander).also(spawned::add)
+        }) { h ->
+            val world = h.paper.addSimpleWorld("summon-volley-membership")
+            loadSummonChunks(world)
+            val owner = h.player("summon-volley-membership-owner", world, StaffSpell.NECROMANCER)
+            val target = h.zombie(world, .5, 6.0)
+            val cast = StaffSpellCast(owner.uniqueId, UUID.randomUUID(), 1, null, null, false)
+            val summons = h.controller.summons
+            val tuning = staffSettings().tuning.getValue(StaffSpell.NECROMANCER)
+            h.controller.start()
+            summons.cast(owner, cast, tuning, StaffCastInput.PRIMARY, 0.0) shouldBe true
+            // The order designates the first spawned archer; world.entities has no ordering contract.
+            val leader = spawned.first()
+            summons.commandVolley(owner, target, cast) shouldBe true
+            leader.remove()
+            h.scheduler.tick(5)
+            summons.cast(owner, cast.copy(attackId = UUID.randomUUID()), tuning, StaffCastInput.PRIMARY, 0.0) shouldBe true
+            h.scheduler.tick(7)
+            world.entities.filterIsInstance<Arrow>().count { it.isValid } shouldBe 1
+            h.scheduler.tick(10)
+            h.hits.size shouldBe 1
+            kotlin.math.abs(h.damageScales.single().second - 1.2).let { it < 1.0e-9 } shouldBe true
+        }
+    }
+
+    "funeral order rechecks presentation target world and authority before its delayed release" {
+        for (invalidation in listOf("scene", "target-death", "target-world", "owner-world", "q-context",
+            "summon-context", "cover", "cancel", "close")) {
+            val invalidCasts = mutableSetOf<UUID>()
+            withSummonHarness(currentCast = { _, cast -> cast.attackId !in invalidCasts }) { h ->
+                val world = h.paper.addSimpleWorld("summon-volley-cancel-$invalidation")
+                loadSummonChunks(world)
+                val owner = h.player("summon-volley-cancel-owner", world, StaffSpell.NECROMANCER)
+                val target = h.zombie(world, .5, 6.0)
+                val actorCast = StaffSpellCast(owner.uniqueId, UUID.randomUUID(), 1, null, null, false)
+                val orderCast = actorCast.copy(attackId = UUID.randomUUID())
+                val summons = h.controller.summons
+                var visible = true
+                h.controller.start()
+                summons.cast(owner, actorCast, staffSettings().tuning.getValue(StaffSpell.NECROMANCER),
+                    StaffCastInput.PRIMARY, 0.0) shouldBe true
+                summons.commandVolley(owner, target, orderCast) { visible } shouldBe true
+                h.scheduler.tick(11)
+                when (invalidation) {
+                    "scene" -> visible = false
+                    "target-death" -> target.health = 0.0
+                    "target-world" -> target.teleport(Location(h.paper.addSimpleWorld("target-away"), .5, 64.0, 6.0))
+                    "owner-world" -> owner.teleport(Location(h.paper.addSimpleWorld("owner-away"), .5, 64.0, .5))
+                    "q-context" -> invalidCasts += orderCast.attackId
+                    "summon-context" -> invalidCasts += actorCast.attackId
+                    "cover" -> for (x in -2..2) for (y in 64..67) world.getBlockAt(x, y, 3).type = Material.STONE
+                    "cancel" -> summons.cancel(owner.uniqueId)
+                    "close" -> summons.close()
+                }
+                h.scheduler.tick(1)
+                world.entities.filterIsInstance<Arrow>().count { it.isValid } shouldBe 0
+                h.hits shouldBe emptyList()
+            }
+        }
+    }
+
+    "replacing an order cancels its old release and preserves the actor ammunition and lifetime limits" {
+        withSummonHarness { h ->
+            val world = h.paper.addSimpleWorld("summon-volley-budgets")
+            loadSummonChunks(world)
+            val owner = h.player("summon-volley-budgets-owner", world, StaffSpell.NECROMANCER)
+            val target = h.zombie(world, .5, 6.0)
+            val cast = StaffSpellCast(owner.uniqueId, UUID.randomUUID(), 1, null, null, false)
+            val summons = h.controller.summons
+            h.controller.start()
+            summons.cast(owner, cast, staffSettings().tuning.getValue(StaffSpell.NECROMANCER),
+                StaffCastInput.PRIMARY, 0.0) shouldBe true
+            val actors = world.entities.filterIsInstance<AbstractSkeleton>()
+            summons.commandVolley(owner, target, cast) shouldBe true
+            h.scheduler.tick(6)
+            summons.commandVolley(owner, target, cast.copy(attackId = UUID.randomUUID())) shouldBe true
+            h.scheduler.tick(6)
+            world.entities.filterIsInstance<Arrow>().count { it.isValid } shouldBe 0
+            h.scheduler.tick(18)
+            h.hits.size shouldBe 2
+            repeat(15) {
+                summons.commandVolley(owner, target, cast.copy(attackId = UUID.randomUUID())) shouldBe true
+                h.scheduler.tick(24)
+            }
+            h.hits.size shouldBe 32
+            summons.commandVolley(owner, target, cast.copy(attackId = UUID.randomUUID())) shouldBe true
+            h.scheduler.tick(24)
+            h.hits.size shouldBe 32
+            world.entities.filterIsInstance<Arrow>().count { it.isValid } shouldBe 0
+            h.scheduler.tick(486)
+            actors.all { !it.isValid } shouldBe true
+        }
+    }
+
+    "funeral commanders retain melee reach and the shared eight-hit ceiling" {
+        for (near in listOf(false, true)) withSummonHarness { h ->
+            val world = h.paper.addSimpleWorld("summon-volley-commanders-$near")
+            loadSummonChunks(world)
+            val owner = h.player("summon-volley-commanders-owner", world, StaffSpell.NECROMANCER)
+            val targets = listOf(.5, 1.5, -.5).map { h.zombie(world, it, if (near) 2.5 else 6.0) }
+            val cast = StaffSpellCast(owner.uniqueId, UUID.randomUUID(), 1, null, null, false)
+            val summons = h.controller.summons
+            h.controller.start()
+            repeat(10) {
+                summons.cast(owner, cast.copy(attackId = UUID.randomUUID()),
+                    staffSettings().tuning.getValue(StaffSpell.NECROMANCER), StaffCastInput.SECONDARY, 0.0) shouldBe true
+            }
+            summons.commandVolley(owner, targets.first(), cast) shouldBe true
+            h.scheduler.tick(12)
+            h.hits.size shouldBe if (near) 8 else 0
+            h.hits.groupingBy { it.uniqueId }.eachCount().values.all { it <= 4 } shouldBe true
+            world.entities.filterIsInstance<Arrow>() shouldBe emptyList()
+        }
+    }
+
+    "funeral PvP damage is clamped before the damage gate and rejected hits do not consume the budget" {
+        for (duelMultiplier in listOf(.4, 10.0)) withSummonHarness(targetEligible = { _, _ -> true }) { h ->
+            val world = h.paper.addSimpleWorld("summon-volley-pvp-$duelMultiplier")
+            loadSummonChunks(world)
+            val owner = h.player("summon-volley-pvp-owner", world, StaffSpell.NECROMANCER)
+            val target = h.player("summon-volley-pvp-target", world, StaffSpell.NECROMANCER)
+            target.teleport(Location(world, .5, 64.0, 6.0))
+            val authorization = DuelSpellAuthorization(UUID.randomUUID(), StaffSpellDuelContext(UUID.randomUUID(), 1, duelMultiplier))
+            val cast = StaffSpellCast(owner.uniqueId, UUID.randomUUID(), 1, null, null, false, authorization,
+                mockk<StaffSpellDuelAccess>(relaxed = true))
+            val summons = h.controller.summons
+            val tuning = StaffSpellTuning(1.75, 17.5, 160)
+            h.controller.start()
+            repeat(5) { summons.cast(owner, cast.copy(attackId = UUID.randomUUID()), tuning, StaffCastInput.PRIMARY, 1.0) shouldBe true }
+            summons.commandVolley(owner, target, cast) shouldBe true
+            h.scheduler.tick(28)
+            h.hits.size shouldBe if (duelMultiplier == .4) 4 else 1
+            (h.damageScales.sumOf { it.second * duelMultiplier } <= 8.0) shouldBe true
+        }
+        var attempts = 0
+        withSummonHarness(hit = { _, _ -> ++attempts != 1 }) { h ->
+            val world = h.paper.addSimpleWorld("summon-volley-rejected-leader")
+            loadSummonChunks(world)
+            val owner = h.player("summon-volley-rejected-leader-owner", world, StaffSpell.NECROMANCER)
+            val target = h.zombie(world, .5, 6.0)
+            val cast = StaffSpellCast(owner.uniqueId, UUID.randomUUID(), 1, null, null, false)
+            val summons = h.controller.summons
+            h.controller.start()
+            repeat(5) { summons.cast(owner, cast.copy(attackId = UUID.randomUUID()),
+                staffSettings().tuning.getValue(StaffSpell.NECROMANCER), StaffCastInput.PRIMARY, 0.0) shouldBe true }
+            summons.commandVolley(owner, target, cast) shouldBe true
+            h.scheduler.tick(28)
+            h.hits.size shouldBe 5 // One rejected leading hit, then four ordinary accepted hits.
+            h.damageScales.count { kotlin.math.abs(it.second - 3.0) < 1.0e-9 } shouldBe 1
+        }
+    }
+
     "archers keep dealing damage after their old shot and session hit budgets" {
         withSummonHarness { h ->
             val world = h.paper.addSimpleWorld("summon-sustained-attacks")
@@ -671,13 +884,16 @@ class StaffSpellSummonsTest : FreeSpec({
     }
 })
 
-private fun withSummonHarness(
+internal fun withSummonHarness(
     currentCast: (org.bukkit.entity.Player, StaffSpellCast) -> Boolean = { _, _ -> true },
     summonActorFactory: ((World, Location, Boolean) -> AbstractSkeleton)? = ::spawnPickupSafeActor,
     verifyGoals: (MobGoals) -> Unit = {},
+    hit: (Player, org.bukkit.entity.LivingEntity) -> Boolean = { _, _ -> true },
+    targetEligible: (Player, org.bukkit.entity.LivingEntity) -> Boolean = { _, target -> target !is Player },
     block: (StaffHarness) -> Unit,
 ) {
-    withStaffHarness(currentCast = currentCast, summonActorFactory = summonActorFactory) { harness ->
+    withStaffHarness(currentCast = currentCast, summonActorFactory = summonActorFactory,
+        hit = hit, targetEligible = targetEligible) { harness ->
         every { anyConstructed<WorldMock>().isChunkLoaded(any<Int>(), any<Int>()) } answers { callOriginal() }
         every { anyConstructed<WorldMock>().getBlockAt(any<Int>(), any<Int>(), any<Int>()) } answers {
             CollisionShapeBlock(callOriginal())
@@ -753,7 +969,7 @@ private fun loadSummonChunks(world: World) {
     for (x in -4..4) for (z in -4..4) world.getBlockAt(x, 63, z).type = Material.STONE
 }
 
-private fun spawnPickupSafeActor(world: World, at: Location, commander: Boolean): AbstractSkeleton {
+internal fun spawnPickupSafeActor(world: World, at: Location, commander: Boolean): AbstractSkeleton {
     val server = Bukkit.getServer() as ServerMock
     val actor = if (commander) PickupSafeWitherSkeletonMock(server, UUID.randomUUID())
         else PickupSafeSkeletonMock(server, UUID.randomUUID())

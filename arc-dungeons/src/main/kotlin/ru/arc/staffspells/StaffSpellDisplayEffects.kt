@@ -42,6 +42,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         var controllerDriven: Boolean = false,
         var controllerDirty: Boolean = false,
         var chargeProgress: Double = 0.0,
+        var blackHoleGrowth: Double = 1.0,
         var age: Int = 0,
         var priorStageTicks: Int = 0,
         var transitionFrom: List<StaffDisplayPart>? = null,
@@ -239,6 +240,12 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         if (scene.spell == StaffSpell.EMBER && !scene.impact && !scene.controllerDriven) render(scene)
     }
 
+    fun blackHoleGrowth(sceneId: UUID?, growth: Double) {
+        val scene = scenes[sceneId] ?: return
+        if (scene.spell == StaffSpell.MARK && scene.secondary && growth.isFinite())
+            scene.blackHoleGrowth = growth.coerceIn(1.0, staffBlackHoleGrowth(STAFF_BLACK_HOLE_TARGETS))
+    }
+
     fun moveProjectile(sceneId: UUID?, at: Location, direction: org.bukkit.util.Vector) {
         val scene = scenes[sceneId] ?: return
         move(sceneId, at)
@@ -349,7 +356,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         }
             ?: staffDisplayParts(scene.spell, scene.age, scene.duration, scene.length, scene.radius, scene.impact,
                 scene.secondary, animationAgeTicks = scene.priorStageTicks + scene.age, input = scene.input,
-                charge = scene.chargeProgress)).take(MAX_PARTS)
+                charge = scene.chargeProgress, blackHoleGrowth = scene.blackHoleGrowth)).take(MAX_PARTS)
         scene.transitionFrom?.let { previous ->
             parts = blendStaffParts(parts, previous, scene.age)
             if (scene.age >= (if (scene.spell == StaffSpell.EMBER) 4 else 2)) scene.transitionFrom = null

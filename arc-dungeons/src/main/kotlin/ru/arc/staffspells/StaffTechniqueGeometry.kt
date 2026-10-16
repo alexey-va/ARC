@@ -74,10 +74,9 @@ internal fun staffLunarBoomerangPose(
     return StaffLunarBoomerangPose(position, facingYaw, age >= STAFF_LUNAR_TOTAL_TICKS)
 }
 
-/** Twelve stable blocks form one broad crescent; the open side turns with the return. */
-@Suppress("UNUSED_PARAMETER")
+/** A solid lunar blade leads a translucent wake; both turn together at the return apex. */
 internal fun staffLunarBoomerangParts(facingYaw: Float, ageTicks: Int): List<StaffDisplayPart> {
-    return List(12) { index ->
+    val blade = List(12) { index ->
         val angle = Math.toRadians(65.0 + index * (230.0 / 11.0))
         val taper = when (index) {
             0, 11 -> 0.58f
@@ -98,10 +97,18 @@ internal fun staffLunarBoomerangParts(facingYaw: Float, ageTicks: Int): List<Sta
         StaffDisplayPart(
             material,
             local,
-            Vector3f(0.42f * taper, 0.46f * taper, 0.26f),
+            Vector3f(0.48f * taper, 0.52f * taper, 0.34f),
             Quaternionf().rotateY(facingYaw).rotateZ(spin),
             identity = "lunar:boomerang:$index",
         )
+    }
+    val turn = ageTicks in STAFF_LUNAR_OUTBOUND_TICKS..(STAFF_LUNAR_OUTBOUND_TICKS + STAFF_LUNAR_TURN_TICKS + 2)
+    val behind = Quaternionf().rotateY(facingYaw).transform(Vector3f(0f, 0f, if (turn) -1.05f else -.68f))
+    return blade + blade.mapIndexed { index, part ->
+        part.copy(material = if (index % 3 == 0) Material.MAGENTA_STAINED_GLASS else Material.PURPLE_STAINED_GLASS,
+            center = Vector3f(part.center).mul(if (turn) 1.2f else 1.08f).add(behind),
+            scale = Vector3f(part.scale).mul(1.08f, 1.08f, if (turn) 1.6f else 1.2f),
+            identity = "lunar:boomerang:wake:$index")
     }
 }
 
@@ -174,7 +181,7 @@ internal const val STAFF_GALE_HURRICANE_PULSE_TICKS = 10
 internal const val STAFF_GALE_HURRICANE_MAX_TARGET_HITS = 8
 internal const val STAFF_GALE_HURRICANE_PULSE_SCALE = .25
 
-/** The same three turbulent funnel ribbons, enlarged around a deliberately hollow caster eye. */
+/** Three turbulent ribbons keep a broad crown and narrow to wind filaments across the caster's view. */
 internal fun staffGaleHurricaneParts(ageTicks: Int): List<StaffDisplayPart> {
     if (ageTicks !in 0 until STAFF_GALE_HURRICANE_TICKS) return emptyList()
     val grow = smoothTechnique((ageTicks.toFloat() / STAFF_GALE_HURRICANE_BUILD_TICKS).coerceIn(0f, 1f))
@@ -197,14 +204,21 @@ internal fun staffGaleHurricaneParts(ageTicks: Int): List<StaffDisplayPart> {
             val to = expand(Vector3f(part.center).fma(halfLength, oldTangent))
             val tangent = Vector3f(to).sub(from)
             val length = tangent.length().coerceAtLeast(.001f)
+            // A hollow center still looks through the surrounding sheets. Keep the eye-height
+            // circulation thin, then restore the full storm ribbons above the combat silhouettes.
+            val broad = smoothTechnique(((minOf(from.y, to.y) - 2.8f) / 2.4f).coerceIn(0f, 1f))
+            val center = if (band) Vector3f(from).add(to).mul(.5f) else expand(part.center).apply {
+                y = .12f + 3f * grow + (y - .12f) * .76f
+            }
             add(part.copy(
                 material = when (part.material) {
                     Material.WHITE_STAINED_GLASS -> Material.LIGHT_GRAY_STAINED_GLASS
                     Material.LIGHT_GRAY_STAINED_GLASS -> Material.LIGHT_BLUE_STAINED_GLASS
                     else -> part.material
                 },
-                center = if (band) Vector3f(from).add(to).mul(.5f) else expand(part.center),
-                scale = (if (band) Vector3f(part.scale.x * 1.28f, part.scale.y * 1.48f, length * 1.16f * fade)
+                center = center,
+                scale = (if (band) Vector3f(part.scale.x * 1.28f * (.05f + .95f * broad),
+                    part.scale.y * 1.48f * (.12f + .88f * broad), length * 1.16f * fade)
                     else Vector3f(part.scale).mul(1.28f, 1.48f, 1.28f)).mul(.12f + .88f * grow),
                 rotation = if (band) Quaternionf().rotationTo(oldTangent, tangent.mul(1f / length)).mul(part.rotation)
                     else part.rotation,
@@ -253,13 +267,13 @@ internal fun staffIcicleRadialParts(ageTicks: Int): List<StaffDisplayPart> {
         val facet = index % 3
         val angle = cluster * PI / 6.0 + (facet - 1) * .11
         val direction = Vector3f(cos(angle).toFloat(), 0f, sin(angle).toFloat())
-        val length = (if (facet == 0) 1.25f else .78f) * (.35f + .65f * expansion)
+        val length = (if (facet == 0) 1.8f else 1.0f) * (.35f + .65f * expansion)
         val front = 1.4f + (STAFF_ICICLE_RADIAL_RADIUS.toFloat() - 1.4f) * expansion
         val center = Vector3f(direction).mul(front - length * .5f - facet * .14f)
-            .add(0f, .22f + facet * .24f + fracture * (.2f + facet * .08f), 0f)
+            .add(0f, .22f + facet * .18f + fracture * (.14f + facet * .05f), 0f)
         StaffDisplayPart(
             when (facet) { 0 -> Material.PACKED_ICE; 1 -> Material.BLUE_ICE; else -> Material.LIGHT_BLUE_STAINED_GLASS },
-            center, Vector3f(if (facet == 0) .32f else .22f, .25f, length).mul(fade),
+            center, Vector3f(if (facet == 0) .50f else .34f, if (facet == 2) .58f else .32f, length).mul(fade),
             Quaternionf().rotationTo(Vector3f(0f, 0f, 1f), direction)
                 .rotateZ((facet - 1) * .38f).rotateX(fracture * (if (cluster % 2 == 0) .34f else -.28f)),
             identity = "icicle:q:burst:$cluster:$facet",
@@ -267,23 +281,43 @@ internal fun staffIcicleRadialParts(ageTicks: Int): List<StaffDisplayPart> {
     }
 }
 
-/** A short bone-chevron command marker; it depicts an order, never a substitute summoned actor. */
+/** A funeral standard assembles for twelve ticks, then its six bone arrows fan toward the army. */
 internal fun staffNecromancerCommandParts(ageTicks: Int): List<StaffDisplayPart> {
-    val fade = (1f - smoothTechnique(((ageTicks - 10) / 12f).coerceIn(0f, 1f)))
-    if (ageTicks < 0 || fade <= 0f) return emptyList()
-    return List(8) { index ->
-        val arm = index / 2
-        val angle = arm * PI / 2.0
-        val bend = if (index % 2 == 0) -.45 else .45
-        StaffDisplayPart(if (index % 2 == 0) Material.BONE_BLOCK else Material.CYAN_STAINED_GLASS,
-            Vector3f((cos(angle) * .7).toFloat(), .10f, (sin(angle) * .7).toFloat()),
-            Vector3f(.14f, .14f, .68f).mul(fade),
-            Quaternionf().rotateY((-angle + bend).toFloat()), identity = "necromancer:q:order:$index")
+    if (ageTicks !in 0 until 32) return emptyList()
+    val form = smoothTechnique((ageTicks / 12f).coerceIn(0f, 1f))
+    val release = smoothTechnique(((ageTicks - 12) / 8f).coerceIn(0f, 1f))
+    val fade = 1f - smoothTechnique(((ageTicks - 22) / 10f).coerceIn(0f, 1f))
+    return buildList(27) {
+        add(StaffDisplayPart(Material.BONE_BLOCK, Vector3f(0f, 2.15f + (1f - form), 0f),
+            Vector3f(.18f, 2.2f, .18f).mul(fade), Quaternionf(), identity = "necromancer:q:standard:spine"))
+        repeat(2) { side ->
+            val sign = if (side == 0) -1f else 1f
+            add(techniqueLink(Material.CALCITE, Vector3f(0f, 3.05f, 0f), Vector3f(sign * 1.28f * form, 2.72f, 0f),
+                .2 * fade, .24 * fade, Quaternionf(), "necromancer:q:standard:wing:$side"))
+        }
+        repeat(6) { arm ->
+            val angle = arm * PI / 3.0
+            val axis = Vector3f(cos(angle).toFloat(), 0f, sin(angle).toFloat())
+            val side = Vector3f(-axis.z, 0f, axis.x)
+            val end = Vector3f(axis).mul(1.5f + release * 1.4f).add(0f, .16f + .2f * form, 0f)
+            val tail = Vector3f(axis).mul(.42f + release * 1.4f).add(0f, .16f, 0f)
+            add(techniqueLink(Material.BONE_BLOCK, tail, end, .17 * fade, .15 * fade, Quaternionf(),
+                "necromancer:q:order:$arm:shaft"))
+            repeat(2) { wing ->
+                val tip = Vector3f(end).fma(-.55f, axis).fma(if (wing == 0) -.34f else .34f, side)
+                add(techniqueLink(Material.CALCITE, end, tip, .17 * fade, .17 * fade, Quaternionf(),
+                    "necromancer:q:order:$arm:barb:$wing"))
+            }
+            add(StaffDisplayPart(Material.CYAN_STAINED_GLASS,
+                Vector3f(axis).mul(.8f + release * 1.5f).add(0f, 1.0f + form * .45f, 0f),
+                Vector3f(.12f, 1.3f, .38f).mul(fade), Quaternionf().rotateY(-angle.toFloat()).rotateZ(.28f),
+                identity = "necromancer:q:order:$arm:soul"))
+        }
     }
 }
 
 /** A fixed three-sided cutting prism; its open center is a deliberate crossing lane. */
-internal fun staffPrismTripwireParts(yaw: Float, pulse: Int): List<StaffDisplayPart> {
+internal fun staffPrismTripwireParts(yaw: Float, pulse: Int, cutAge: Int? = null): List<StaffDisplayPart> {
     val vertices = listOf(
         Vector3f(-2.05f, .12f, -1.55f),
         Vector3f(2.05f, .12f, -1.55f),
@@ -291,17 +325,38 @@ internal fun staffPrismTripwireParts(yaw: Float, pulse: Int): List<StaffDisplayP
     )
     val baseRotation = Quaternionf().rotateY(yaw)
     val swell = (1.0 + .055 * sin(pulse * .36)).toFloat()
-    return buildList(9) {
+    val cut = cutAge?.takeIf { it in 0..8 }?.let { sin(PI * (it + 1) / 10.0).toFloat() } ?: 0f
+    return buildList(24) {
         repeat(3) { index ->
             val from = vertices[index]
             val to = vertices[(index + 1) % vertices.size]
             add(techniqueLink(Material.AMETHYST_BLOCK, from, to, .13 * swell, .16,
                 baseRotation, "prism:q:edge:$index"))
-            val peak = Vector3f((from.x + to.x) * .28f, 1.35f, (from.z + to.z) * .28f)
+            val peak = Vector3f((from.x + to.x) * .28f, 1.55f, (from.z + to.z) * .28f)
             add(techniqueLink(Material.PURPUR_BLOCK, from, peak, .105, .13,
                 baseRotation, "prism:q:facet:$index:a"))
             add(techniqueLink(Material.BUDDING_AMETHYST, peak, to, .105, .13,
                 baseRotation, "prism:q:facet:$index:b"))
+            repeat(2) { prism ->
+                val local = Vector3f(from).add(0f, .55f + prism * .75f, 0f)
+                add(StaffDisplayPart(if (prism == 0) Material.AMETHYST_BLOCK else Material.BUDDING_AMETHYST,
+                    baseRotation.transform(local), Vector3f(.34f, .76f, .34f),
+                    Quaternionf(baseRotation).rotateY((PI / 4).toFloat()).rotateZ(if (prism == 0) .18f else -.18f),
+                    identity = "prism:q:pylon:$index:$prism"))
+            }
+            repeat(3) { blade ->
+                // Retain a broad cutting chord: collapsing to a tiny triangle hides the strike
+                // inside its victim. The upper blade opens above the head while the eye line stays clear.
+                val height = .38f + blade * .48f + when (blade) { 0 -> -.15f * cut; 2 -> .95f * cut; else -> 0f }
+                val inset = .07f + cut * .38f
+                val cutFrom = Vector3f(from).lerp(Vector3f(0f, from.y, 0f), inset).add(0f, height, 0f)
+                val cutTo = Vector3f(to).lerp(Vector3f(0f, to.y, 0f), inset).add(0f, height, 0f)
+                val material = if (cut > .15f) {
+                    if (blade == 1) Material.WHITE_STAINED_GLASS else Material.LIGHT_BLUE_STAINED_GLASS
+                } else if (blade == 1) Material.MAGENTA_STAINED_GLASS else Material.PURPLE_STAINED_GLASS
+                add(techniqueLink(material, cutFrom, cutTo, .035 + cut * .15, .07 + cut * .18, baseRotation,
+                    "prism:q:cut:$index:$blade"))
+            }
         }
     }
 }
@@ -323,54 +378,74 @@ internal fun staffPrismTripwireContains(point: org.bukkit.Location, origin: org.
 
 internal fun staffGravityPinParts(ageTicks: Int, thrown: Boolean, yaw: Float): List<StaffDisplayPart> {
     val rotation = Quaternionf().rotateY(yaw)
-    if (thrown) return List(8) { index ->
-        val angle = index * PI / 4.0
-        val offset = Vector3f((cos(angle) * .25).toFloat(), (sin(angle) * .25).toFloat(),
-            ((index % 3 - 1) * .19).toFloat())
-        StaffDisplayPart(if (index % 2 == 0) Material.CRYING_OBSIDIAN else Material.AMETHYST_BLOCK,
-            rotation.transform(offset), Vector3f(.22f, .22f, .72f),
-            Quaternionf(rotation).rotateY(angle.toFloat()).rotateX(.72f),
+    if (thrown) return List(12) { index ->
+        val angle = index * PI / 6.0
+        val spread = .45 + .09 * ageTicks.coerceIn(0, 8)
+        val offset = Vector3f((cos(angle) * spread).toFloat(), (sin(angle) * spread).toFloat(),
+            -.8f - (index % 3) * .45f)
+        StaffDisplayPart(if (index % 3 == 0) Material.CRYING_OBSIDIAN else Material.PURPLE_STAINED_GLASS,
+            rotation.transform(offset), Vector3f(.22f, .26f, 1.55f),
+            Quaternionf(rotation).rotateY((cos(angle) * -.22).toFloat()).rotateX((sin(angle) * .22).toFloat()),
             identity = "gravity:q:piece:$index")
     }
-    val pulse = 1f + .04f * sin(ageTicks.coerceAtLeast(0) * .38f)
-    return List(8) { index ->
-        val corner = index / 2
-        val x = if (corner % 2 == 0) -1f else 1f
-        val y = if (corner < 2) -1f else 1f
-        val vertical = index % 2 == 0
-        val offset = Vector3f(x * (if (vertical) .68f else .49f) * pulse,
-            y * (if (vertical) .49f else .68f) * pulse, if (vertical) -.12f else .12f)
-        StaffDisplayPart(if (vertical) Material.CRYING_OBSIDIAN else Material.AMETHYST_BLOCK,
-            rotation.transform(offset), if (vertical) Vector3f(.16f, .48f, .18f) else Vector3f(.48f, .16f, .18f),
-            Quaternionf(rotation),
-            identity = "gravity:q:piece:$index")
+    val assemble = smoothTechnique((ageTicks.coerceAtLeast(0) / 6f).coerceIn(0f, 1f))
+    val pulse = 1f + .035f * sin(ageTicks * .38f) + (1f - assemble) * .4f
+    return buildList(24) {
+        repeat(16) { index ->
+            val corner = index / 2
+            val x = if (corner % 2 == 0) -1f else 1f
+            val y = if ((corner / 2) % 2 == 0) -1f else 1f
+            val z = if (corner < 4) -.58f else .58f
+            val vertical = index % 2 == 0
+            val offset = Vector3f(x * (if (vertical) .96f else .72f) * pulse,
+                y * (if (vertical) .78f else 1.03f) * pulse, z)
+            add(StaffDisplayPart(if (vertical) Material.CRYING_OBSIDIAN else Material.AMETHYST_BLOCK,
+                rotation.transform(offset), if (vertical) Vector3f(.23f, .69f, .26f) else Vector3f(.69f, .23f, .26f),
+                Quaternionf(rotation), identity = "gravity:q:piece:$index"))
+        }
+        repeat(8) { index ->
+            val angle = index * PI / 4 + ageTicks * .055
+            add(StaffDisplayPart(Material.PURPLE_STAINED_GLASS,
+                rotation.transform(Vector3f((cos(angle) * 1.3).toFloat(), if (index % 2 == 0) -1.36f else 1.36f,
+                    (sin(angle) * .82).toFloat())), Vector3f(.13f, .38f, .68f),
+                Quaternionf(rotation).rotateY(-angle.toFloat()).rotateZ(.4f), identity = "gravity:q:orbit:$index"))
+        }
     }
 }
 
-internal fun staffLancePinParts(length: Double, yaw: Float, held: Boolean): List<StaffDisplayPart> {
+internal fun staffLancePinParts(length: Double, yaw: Float, held: Boolean, ageTicks: Int = 8): List<StaffDisplayPart> {
     val reach = length.takeIf(Double::isFinite)?.coerceIn(1.0, 4.0) ?: 2.0
     val rotation = Quaternionf().rotateY(yaw)
     val y = if (held) .18f else .10f
-    return buildList(7) {
+    val opening = .35f + .65f * smoothTechnique((ageTicks / 3f).coerceIn(0f, 1f))
+    val flare = opening * (1f + .16f * sin(ageTicks.coerceAtMost(12) * PI / 12).toFloat())
+    return buildList(19) {
         add(techniqueLink(Material.IRON_BLOCK, Vector3f(0f, y, -.35f), Vector3f(0f, y, reach.toFloat()),
-            .12, .12, rotation, "lance:q:spear:shaft"))
+            .21, .21, rotation, "lance:q:spear:shaft"))
         add(StaffDisplayPart(Material.GOLD_BLOCK, rotation.transform(Vector3f(0f, y, .02f)),
-            Vector3f(.24f, .24f, .26f), Quaternionf(rotation).rotateZ((PI / 4.0).toFloat()),
+            Vector3f(.40f, .40f, .42f), Quaternionf(rotation).rotateZ((PI / 4.0).toFloat()),
             identity = "lance:q:spear:collar"))
         add(StaffDisplayPart(Material.QUARTZ_BLOCK, rotation.transform(Vector3f(0f, y, reach.toFloat() + .20f)),
-            Vector3f(.16f, .16f, .44f), Quaternionf(rotation).rotateZ((PI / 4.0).toFloat()),
+            Vector3f(.28f, .28f, .68f), Quaternionf(rotation).rotateZ((PI / 4.0).toFloat()),
             identity = "lance:q:spear:tip"))
         repeat(4) { index ->
             val angle = index * PI / 2.0
+            val rim = Vector3f((cos(angle) * 1.18 * flare).toFloat(), y + (sin(angle) * 1.18 * flare).toFloat(), -.22f)
+            val tip = Vector3f((cos(angle) * .56 * flare).toFloat(), y + (sin(angle) * .56 * flare).toFloat(), -1.1f)
             add(techniqueLink(if (index % 2 == 0) Material.GOLD_BLOCK else Material.QUARTZ_BLOCK,
-                Vector3f(0f, y, .32f), Vector3f((cos(angle) * .32).toFloat(), y + (sin(angle) * .32).toFloat(), -.24f),
-                .10, .10, rotation, "lance:q:spear:barb:$index"))
+                Vector3f(0f, y, .5f), rim, .16, .16, rotation, "lance:q:spear:barb:$index"))
+            add(techniqueLink(Material.GOLD_BLOCK, rim, tip, .12, .12, rotation, "lance:q:spear:feather:$index"))
+            add(techniqueLink(Material.WHITE_STAINED_GLASS, Vector3f(0f, y, -.55f), rim,
+                .09, .32, rotation, "lance:q:spear:light:$index"))
+            add(StaffDisplayPart(Material.YELLOW_STAINED_GLASS, rotation.transform(Vector3f(rim).mul(1.15f)),
+                Vector3f(.14f, .14f, 1.25f), Quaternionf(rotation), identity = "lance:q:spear:wake:$index"))
         }
     }
 }
 
 /** Up to twelve persistent ground embers; fixed identities survive capture and sequential ignition. */
-internal fun staffEmberTrailParts(points: List<Vector3f>, origin: Vector3f, burningThrough: Int): List<StaffDisplayPart> {
+internal fun staffEmberTrailParts(points: List<Vector3f>, origin: Vector3f, burningThrough: Int,
+    ageTicks: Int = 0): List<StaffDisplayPart> {
     val slots = points.take(STAFF_EMBER_TRAIL_MAX_POINTS)
     val bySlot = slots.mapIndexed { index, point -> index to point }
     val local = bySlot.flatMap { (index, point) ->
@@ -378,18 +453,22 @@ internal fun staffEmberTrailParts(points: List<Vector3f>, origin: Vector3f, burn
         val previous = Vector3f(slots.getOrElse(index - 1) { point }).sub(origin)
         val segment = Vector3f(delta).sub(previous)
         val lit = index <= burningThrough
-        val scale = if (lit) 1.0f else .55f
+        val flicker = 1f + .12f * sin(ageTicks * .7f + index * 2.1f)
         listOf(
             StaffDisplayPart(if (lit) Material.MAGMA_BLOCK else Material.COAL_BLOCK,
                 Vector3f(delta).add(previous).mul(.5f).add(0f, .06f, 0f),
-                Vector3f(.22f, .09f, segment.length().coerceAtLeast(.28f)),
+                Vector3f(if (lit) .66f else .42f, .12f, segment.length().coerceAtLeast(.4f)),
                 if (segment.lengthSquared() > .001f) Quaternionf().rotationTo(Vector3f(0f, 0f, 1f), segment.normalize())
                     else Quaternionf(), identity = "ember:q:ground:$index"),
             StaffDisplayPart(if (lit) Material.FIRE_CORAL_BLOCK else Material.NETHER_WART_BLOCK,
-                Vector3f(delta.x, delta.y + if (lit) .29f else .13f, delta.z),
-                Vector3f(.16f * scale, if (lit) .50f else .13f, .16f * scale),
-                Quaternionf().rotateXYZ(.25f * index, .17f * index, .31f * index),
+                Vector3f(delta.x - if (lit) .17f else .0f, delta.y + if (lit) .61f * flicker else .13f, delta.z),
+                Vector3f(if (lit) .30f else .20f, if (lit) 1.12f * flicker else .17f, if (lit) .34f else .20f),
+                Quaternionf().rotateXYZ(.12f, .17f * index, -.26f),
                 identity = "ember:q:flame:$index"),
+            StaffDisplayPart(if (lit) Material.ORANGE_STAINED_GLASS else Material.RED_STAINED_GLASS,
+                Vector3f(delta.x + .22f, delta.y + if (lit) .76f * flicker else .11f, delta.z),
+                Vector3f(if (lit) .27f else .12f, if (lit) 1.40f * flicker else .12f, if (lit) .35f else .12f),
+                Quaternionf().rotateXYZ(-.17f, -.2f * index, .3f), identity = "ember:q:tongue:$index"),
         )
     }
     val padding = (slots.size until STAFF_EMBER_TRAIL_MAX_POINTS).flatMap { index ->
@@ -398,6 +477,7 @@ internal fun staffEmberTrailParts(points: List<Vector3f>, origin: Vector3f, burn
         listOf(
             hiddenTechniquePart("ember:q:ground:$index", delta, Material.MAGMA_BLOCK),
             hiddenTechniquePart("ember:q:flame:$index", delta, Material.NETHER_WART_BLOCK),
+            hiddenTechniquePart("ember:q:tongue:$index", delta, Material.ORANGE_STAINED_GLASS),
         )
     }
     return local + padding
