@@ -110,38 +110,40 @@ class StaffSpellTimelineTest : FreeSpec({
         (radii.last() < radii.first() * 0.30) shouldBe true
     }
 
-    "grove root cage grows before the brambles and pollen rim close" {
-        fun cage(age: Int) = staffArsenalParts(StaffSpell.NOVA, age, 48, 0.0, 3.0,
-            false, true, StaffCastInput.SECONDARY, 1.0)
-        fun volume(age: Int) = cage(age).sumOf { (it.scale.x * it.scale.y * it.scale.z).toDouble() }
-        fun outerRadius(age: Int) = cage(age).maxOf { hypot(it.center.x.toDouble(), it.center.z.toDouble()) }
-        fun transformedRadius(age: Int) = cage(age).maxOf { part ->
-            listOf(-0.5f, 0.5f).maxOf { x -> listOf(-0.5f, 0.5f).maxOf { y ->
-                listOf(-0.5f, 0.5f).maxOf { z ->
-                    val corner = part.rotation.transform(Vector3f(x * part.scale.x, y * part.scale.y, z * part.scale.z))
-                        .add(part.center)
-                    hypot(corner.x.toDouble(), corner.z.toDouble())
-                }
-            } }
+    "grove fields close at contact and wither on their own ground-field clock" {
+        val radius = 4.5
+        fun field(age: Int, secondary: Boolean) = staffArsenalParts(StaffSpell.NOVA, age, 90, 18.0, radius,
+            false, secondary, StaffCastInput.of(secondary, false), 1.0)
+        fun volume(parts: List<StaffDisplayPart>) = parts.sumOf { (it.scale.x * it.scale.y * it.scale.z).toDouble() }
+
+        // The attack controller outlives the 26-tick ground field to retain accepted victim wraps.
+        listOf(false, true).forEach { secondary ->
+            val contact = field(14, secondary)
+            val ids = contact.map { it.identity }
+            (contact.size in 1..StaffSpellDisplayEffects.MAX_PARTS * 2) shouldBe true
+            contact.mapNotNull { it.identity }.distinct().size shouldBe contact.size
+            contact.count { it.identity?.endsWith(":hook:1") == true } shouldBe if (secondary) 8 else 7
+            contact.none { it.identity?.startsWith("root:wrap:") == true } shouldBe true
+            listOf(0, 8, 20, 24, 25).forEach { age -> field(age, secondary).map { it.identity } shouldBe ids }
+            (volume(field(0, secondary)) < volume(field(8, secondary))) shouldBe true
+            (volume(field(8, secondary)) < volume(contact)) shouldBe true
+            field(20, secondary) shouldBe contact
+            field(24, secondary).zip(contact).all { (fading, grown) -> fading.scale.x < grown.scale.x } shouldBe true
+            (field(25, secondary).maxOf { it.scale.x } < contact.maxOf { it.scale.x } * .1f) shouldBe true
+            field(26, secondary) shouldBe emptyList()
+            field(44, secondary) shouldBe emptyList()
         }
-        val start = cage(0)
-        val rise = cage(8)
-        val closed = cage(20)
-        start.map { it.identity } shouldBe rise.map { it.identity }
-        rise.map { it.identity } shouldBe closed.map { it.identity }
-        rise.size shouldBe 36
-        rise.mapNotNull { it.identity }.distinct().size shouldBe 36
-        rise.count { it.identity?.startsWith("garden:root:") == true } shouldBe 20
-        rise.count { it.identity?.startsWith("garden:hook:") == true } shouldBe 5
-        rise.count { it.identity?.startsWith("garden:tie:") == true } shouldBe 5
-        (volume(0) < volume(8)) shouldBe true
-        (outerRadius(20) < outerRadius(8)) shouldBe true
-        (transformedRadius(8) <= 3.0) shouldBe true
-        (volume(44) < volume(20)) shouldBe true
-        fun pollenRadius(age: Int) = staffArsenalParticles(StaffSpell.NOVA, age, 48, 3.0, true, 1.0)
-            .maxOf { hypot(it.offset.x, it.offset.z) }
-        (pollenRadius(20) < pollenRadius(8)) shouldBe true
-        (staffArsenalParticles(StaffSpell.NOVA, 20, 48, 3.0, true, 1.0).size in 32..48) shouldBe true
+
+        fun tips(age: Int) = field(age, true).filter { it.identity?.endsWith(":hook:1") == true }
+        // Eight ticks of perimeter warning precede the inward close and contact at tick fourteen.
+        tips(8).all { hypot(it.center.x.toDouble(), it.center.z.toDouble()) > radius * .5 } shouldBe true
+        tips(14).all { hypot(it.center.x.toDouble(), it.center.z.toDouble()) < radius * .25 } shouldBe true
+        fun pollen(age: Int) = staffArsenalParticles(StaffSpell.NOVA, age, 90, radius, true, 1.0)
+        listOf(2, 8, 14).forEach { age -> pollen(age).size shouldBe 8 }
+        pollen(1) shouldBe emptyList()
+        pollen(15) shouldBe emptyList()
+        (pollen(14).maxOf { hypot(it.offset.x, it.offset.z) } <
+            pollen(8).maxOf { hypot(it.offset.x, it.offset.z) }) shouldBe true
     }
 
     "lunar crescents leave a stable afterimage and shatter inside the tick sixteen damage footprint" {
@@ -199,8 +201,8 @@ class StaffSpellTimelineTest : FreeSpec({
         }
     }
 
-    "physical arsenal sequences retain identities and shrink before cleanup" {
-        listOf(StaffSpell.NOVA, StaffSpell.LUNAR, StaffSpell.PRISM).forEach { spell ->
+    "lunar and prism sequences retain identities and shrink before cleanup" {
+        listOf(StaffSpell.LUNAR, StaffSpell.PRISM).forEach { spell ->
             fun frame(age: Int) = staffArsenalParts(spell, age, 40, 8.0, 3.0,
                 false, false, StaffCastInput.PRIMARY)
             val steady = frame(20)
