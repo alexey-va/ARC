@@ -19,6 +19,9 @@ import org.bukkit.plugin.Plugin
 import org.bukkit.util.BoundingBox
 import org.bukkit.util.Vector
 import ru.arc.config.ConfigManager
+import ru.arc.core.BudgetedTaskQueue
+import ru.arc.core.LifecycleTaskScope
+import ru.arc.core.TestTaskScheduler
 import ru.arc.paper.display.PaperPacketDisplays
 import ru.arc.paper.scene.PaperSpatialControls
 import ru.arc.paper.scene.SceneAudience
@@ -33,6 +36,7 @@ import ru.arc.paper.testing.MockBukkitTestRuntime
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 import java.util.function.Consumer
 import kotlin.math.cos
 import kotlin.math.sin
@@ -130,6 +134,7 @@ class HomeMarkerSceneTest : StringSpec({
                         frames[key] = frame
                         controls.apply(key, frame)
                     }
+                    controls.captureNativeForTest(player)
                 }
                 fun target(x: Double, y: Double, yaw: Float = 0f, eyeHeight: Double = 1.27,
                     distance: Double = 2.0, depth: Double = 0.0): String? {
@@ -226,3 +231,28 @@ class HomeMarkerSceneTest : StringSpec({
         shouldThrow<IllegalArgumentException> { settings.copy(viewDistance = 0.0) }
     }
 })
+
+/** A relaxed display mock has no capture pump; execute Core's real native participant. */
+private fun PaperSpatialControls<*, *>.captureNativeForTest(player: Player) {
+    val participant = javaClass.getDeclaredField("participant").apply { isAccessible = true }.get(this)
+    val capture = participant.javaClass.getDeclaredMethod("captureSteps", List::class.java).apply { isAccessible = true }
+    // Preserve the visibility oracle too: a native capture includes its exact online audience.
+    val viewerType = Class.forName("ru.arc.paper.display.PacketDisplayViewer")
+    val viewerConstructor = viewerType.getDeclaredConstructor(Player::class.java, UUID::class.java,
+        UUID::class.java, Int::class.javaPrimitiveType, Set::class.java, Double::class.javaPrimitiveType,
+        Double::class.javaPrimitiveType, Double::class.javaPrimitiveType, Set::class.java, List::class.java)
+    val eye = player.eyeLocation
+    val viewer = viewerConstructor.newInstance(player, player.uniqueId, player.world.uid, player.entityId,
+        emptySet<UUID>(), eye.x, eye.y - player.eyeHeight, eye.z, emptySet<Long>(), emptyList<Int>())
+    val steps = capture.invoke(participant, listOf(viewer)) as Iterator<*>
+    val clock = TestTaskScheduler()
+    LifecycleTaskScope(clock).use { scope ->
+        BudgetedTaskQueue(scope, maximumSteps = 2, nanoTime = { 0 }).use { work ->
+            val completed = work.submit({ true }) {
+                if (steps.hasNext()) { steps.next(); false } else true
+            }
+            repeat(200) { if (!completed.isDone) clock.tick() }
+            completed.get(1, TimeUnit.SECONDS)
+        }
+    }
+}

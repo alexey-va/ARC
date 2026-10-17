@@ -20,12 +20,14 @@ import org.mockito.Mockito.mock
 import ru.arc.ARC
 import ru.arc.TestBase
 import ru.arc.commands.arc.ArcCommand
+import ru.arc.commands.arc.CommandConfig
 import ru.arc.commands.arc.subcommands.RespawnOnRtpSubCommand
 import ru.arc.dungeons.api.ArcDungeonsService
 import ru.arc.gui.ArcMenus
 import ru.arc.helpcenter.HelpCenterModule
 import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.rtp.RtpCompletionRequest
+import java.util.concurrent.TimeUnit
 import org.bukkit.command.Command as BukkitCommand
 
 /**
@@ -290,12 +292,21 @@ class ArcCommandTest : TestBase() {
         @DisplayName("Clearall clears all audit and confirms")
         fun testClearAll() {
             player.addAttachment(plugin, "arc.audit", true)
+            val plain = PlainTextComponentSerializer.plainText()
+            val expected = plain.serialize(CommandConfig.auditCleared())
 
             val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("audit", "clearall"))
 
             assertTrue(result)
-            val message = player.nextMessage()
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            var message = player.nextComponentMessage()
+            while ((message == null || plain.serialize(message) != expected) && System.nanoTime() < deadline) {
+                server.scheduler.performOneTick()
+                Thread.sleep(1)
+                message = player.nextComponentMessage()
+            }
             assertNotNull(message, "Should confirm audit cleared")
+            assertEquals(expected, plain.serialize(requireNotNull(message)))
         }
     }
 

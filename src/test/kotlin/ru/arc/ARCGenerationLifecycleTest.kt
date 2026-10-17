@@ -4,10 +4,33 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import ru.arc.core.Tasks
 import ru.arc.dungeons.api.ArcDungeonConfiguration
+import ru.arc.mounts.api.ArcMountConfiguration
+import ru.arc.origin.api.ArcOriginConfiguration
+import ru.arc.contracts.api.ArcContractsHostConfiguration
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 class ARCGenerationLifecycleTest : TestBase() {
+    @Test
+    fun `successful predecessor publishes stable providers before dependent enable`() {
+        server.pluginManager.disablePlugin(plugin)
+        awaitMainThreadFuture(server, plugin.closeCompletion())
+        assertNull(server.servicesManager.load(ArcDungeonConfiguration::class.java))
+
+        server.pluginManager.enablePlugin(plugin)
+
+        val dungeons = requireNotNull(server.servicesManager.load(ArcDungeonConfiguration::class.java))
+        val mounts = requireNotNull(server.servicesManager.load(ArcMountConfiguration::class.java))
+        val origin = requireNotNull(server.servicesManager.load(ArcOriginConfiguration::class.java))
+        val contracts = requireNotNull(server.servicesManager.load(ArcContractsHostConfiguration::class.java))
+        assertFalse(plugin.readiness().isDone)
+        assertFalse(dungeons.ready().isDone)
+        assertFalse(mounts.ready().isDone)
+        assertFalse(origin.ready().isDone)
+        assertFalse(contracts.ready().isDone)
+        awaitMainThreadFuture(server, plugin.readiness())
+    }
+
     @Test
     fun `replacement and superseded waiting generation retain actual accepted worker fence`() {
         val entered = CountDownLatch(1)

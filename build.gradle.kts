@@ -76,7 +76,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.421"
+version = "1.4.422"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.39"
@@ -614,11 +614,11 @@ val prepareE2ePaper = e2ePaperPin?.let { (name, sha256) ->
 // These immutable artifacts were built and tested in their owning repositories.
 val extractedArtifactVersions = mapOf(
     "ArcCore" to arcCorePluginVersion,
-    "ArcMounts" to "0.1.11",
+    "ArcMounts" to "0.1.12",
     "ArcOrigin" to "0.1.36",
     "ArcContracts" to "0.1.11",
-    "ArcContractsContractTestFixture" to "0.1.2",
-    "ArcContractsContractCrashFixture" to "0.1.2",
+    "ArcContractsContractTestFixture" to "0.1.3",
+    "ArcContractsContractCrashFixture" to "0.1.3",
 )
 val extractedArtifacts = extractedArtifactVersions.mapValues { (name, version) ->
     configurations.detachedConfiguration(dependencies.create("ru.ruscrafting:$name:$version")).apply { isTransitive = false }

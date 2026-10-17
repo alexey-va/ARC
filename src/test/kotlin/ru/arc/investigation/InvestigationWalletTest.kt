@@ -10,9 +10,37 @@ import io.mockk.verify
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
 import net.milkbowl.vault.economy.EconomyResponse
+import org.bukkit.Bukkit
+import org.bukkit.plugin.PluginManager
 import java.util.UUID
 
 class InvestigationWalletTest : StringSpec({
+    "an unavailable wallet never resolves the absent optional RedisEconomy API" {
+        val loader = RedisEconomyAbsentClassLoader(InvestigationWalletTest::class.java.classLoader)
+        val manager = mockk<PluginManager>()
+        every { manager.isPluginEnabled("RedisEconomy") } returns false
+        mockkStatic(Bukkit::class)
+        try {
+            every { Bukkit.getPluginManager() } returns manager
+            val type = Class.forName("ru.arc.investigation.RedisEconomyInvestigationWallet", true, loader)
+            val wallet = type.getDeclaredConstructor().newInstance() as InvestigationWallet
+            wallet.javaClass.classLoader shouldBe loader
+            verify(exactly = 0) { manager.isPluginEnabled(any<String>()) }
+
+            val playerId = UUID.randomUUID()
+            val reason = "arc-investigation:11111111-1111-1111-1111-111111111111"
+            wallet.available shouldBe false
+            wallet.balanceMinor(playerId) shouldBe null
+            wallet.withdraw(playerId, 100, reason, 1_000) shouldBe
+                InvestigationMoneyEvidence(false, false, null, "provider_unavailable")
+            wallet.deposit(playerId, 100, reason, 1_000) shouldBe
+                InvestigationMoneyEvidence(false, false, null, "provider_unavailable")
+            wallet.findTransaction(playerId, -100, reason, 0).getNow(null) shouldBe
+                InvestigationProviderEvidence(null, false)
+            loader.optionalClassLoads shouldBe emptyList()
+        } finally { unmockkStatic(Bukkit::class) }
+    }
+
     "normalizes a provider subcent remainder and proves the exact fee delta" {
         val playerId = UUID.randomUUID()
         val reason = "arc-investigation:11111111-1111-1111-1111-111111111111"
@@ -68,3 +96,26 @@ class InvestigationWalletTest : StringSpec({
         } finally { unmockkStatic(org.bukkit.Bukkit::class) }
     }
 })
+
+/** Loads the production facade/adapter in isolation while sharing its public domain port. */
+private class RedisEconomyAbsentClassLoader(private val source: ClassLoader) : ClassLoader(source) {
+    val optionalClassLoads = mutableListOf<String>()
+
+    override fun loadClass(name: String, resolve: Boolean): Class<*> {
+        if (name.startsWith("dev.unnm3d.rediseconomy.")) {
+            optionalClassLoads += name
+            throw ClassNotFoundException("RedisEconomy is intentionally absent")
+        }
+        if (!name.startsWith("ru.arc.investigation.RedisEconomyInvestigation") &&
+            name != "ru.arc.investigation.InvestigationWalletKt") return super.loadClass(name, resolve)
+        synchronized(getClassLoadingLock(name)) {
+            findLoadedClass(name)?.let { loaded ->
+                if (resolve) resolveClass(loaded)
+                return loaded
+            }
+            val bytes = source.getResourceAsStream(name.replace('.', '/') + ".class")?.use { it.readBytes() }
+                ?: throw ClassNotFoundException(name)
+            return defineClass(name, bytes, 0, bytes.size).also { if (resolve) resolveClass(it) }
+        }
+    }
+}

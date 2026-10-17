@@ -285,8 +285,8 @@ open class ARC : JavaPlugin() {
         val owner = checkNotNull(storageGeneration)
         completionTasks = LifecycleTaskScope(ru.arc.core.BukkitTaskScheduler(this))
         nativeWork = BudgetedTaskQueue(requireNotNull(completionTasks))
-        owner.previous.whenCompleteSync(requireNotNull(completionTasks)) { _, failure ->
-            if (storageGeneration !== owner || stopped) return@whenCompleteSync
+        fun attachGeneration(failure: Throwable?) {
+            if (storageGeneration !== owner || stopped) return
             if (failure != null) {
                 ready.completeExceptionally(failure)
                 logger.log(java.util.logging.Level.SEVERE, "Previous ARC generation did not drain", failure)
@@ -298,6 +298,13 @@ open class ARC : JavaPlugin() {
                 logger.log(java.util.logging.Level.SEVERE, "ARC host bindings failed", startupFailure)
                 server.pluginManager.disablePlugin(this)
             }
+        }
+        // Dependents resolve stable providers during their own onEnable. Only a
+        // pending predecessor needs a scheduler hop; readiness still gates work.
+        if (owner.previous.isDone && !owner.previous.isCompletedExceptionally) {
+            attachGeneration(null)
+        } else {
+            owner.previous.whenCompleteSync(requireNotNull(completionTasks)) { _, failure -> attachGeneration(failure) }
         }
     }
 

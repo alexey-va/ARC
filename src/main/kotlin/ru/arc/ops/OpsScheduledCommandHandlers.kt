@@ -51,8 +51,8 @@ object OpsScheduledCommandHandlers {
     }
 
     fun delete(id: String): Map<String, Any?> {
-        requireWorker()
         val normalized = validateIdentifier(id)
+        requireWorker()
         if (!ScheduledCommandsManager.deleteEntryAsync(normalized).join())
             throw NoSuchElementException("Scheduled command not found: $normalized")
         return mapOf("source" to "arc-scheduled-commands", "deleted" to true, "id" to normalized)

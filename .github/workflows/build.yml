@@ -71,7 +71,7 @@ jobs:
           javap -c -p -classpath "${dungeons_jars[0]}" ru.arc.hooks.elitemobs.DungeonScoreboard > build/dungeons-scoreboard-bytecode.txt
           grep -F 'ArcSidebarFrame."<init>":(Lnet/kyori/adventure/text/Component;Ljava/util/List;Ljava/util/Set;)V' build/dungeons-scoreboard-bytecode.txt
           if grep -E 'ArcSidebarFrame\."<init>".*DefaultConstructorMarker' build/dungeons-scoreboard-bytecode.txt; then exit 1; fi
-          python3 scripts/verify_arc_domain_artifact_split.py --name ArcMounts --arc-jar "${arc_jars[0]}" --arc-core-jar "${arc_core_jars[0]}" --child-jar build/extracted-plugins/ArcMounts-0.1.11.jar
+          python3 scripts/verify_arc_domain_artifact_split.py --name ArcMounts --arc-jar "${arc_jars[0]}" --arc-core-jar "${arc_core_jars[0]}" --child-jar build/extracted-plugins/ArcMounts-0.1.12.jar
           python3 scripts/verify_arc_domain_artifact_split.py --name ArcOrigin --arc-jar "${arc_jars[0]}" --arc-core-jar "${arc_core_jars[0]}" --child-jar build/extracted-plugins/ArcOrigin-0.1.36.jar
           python3 scripts/verify_arc_domain_artifact_split.py --name ArcContracts --arc-jar "${arc_jars[0]}" --arc-core-jar "${arc_core_jars[0]}" --child-jar build/extracted-plugins/ArcContracts-0.1.11.jar
       - name: Preserve tested production JARs

@@ -24,8 +24,8 @@ object OpsLocationPoolHandlers {
 
     /** HTTP-worker entry: native capture is memory-only; full snapshots/sort run on workers. */
     fun list(id: String? = null): Map<String, Any?> {
-        check(!Bukkit.isPrimaryThread()) { "Location pool reports must run on an HTTP worker" }
         val normalizedId = id?.takeIf { it.isNotBlank() }?.let(LocationPool::normalizePersistentId)
+        check(!Bukkit.isPrimaryThread()) { "Location pool reports must run on an HTTP worker" }
         val capture = OpsBukkitSync.call {
             val config = checkNotNull(ARC.instance.locationPoolConfig) { "Location pools are unavailable" }
             val selected = if (normalizedId == null) LocationPoolManager.getAll()
@@ -64,8 +64,8 @@ object OpsLocationPoolHandlers {
     }
 
     fun delete(id: String): Map<String, Any?> {
-        check(!Bukkit.isPrimaryThread()) { "Location pool writes must run on an HTTP worker" }
         val normalizedId = LocationPool.normalizePersistentId(id)
+        check(!Bukkit.isPrimaryThread()) { "Location pool writes must run on an HTTP worker" }
         val deleted = OpsBukkitSync.call { LocationPoolManager.delete(normalizedId) }
             .get(15, java.util.concurrent.TimeUnit.SECONDS)
         if (!deleted) throw NoSuchElementException("Location pool not found: $normalizedId")

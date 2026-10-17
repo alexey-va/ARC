@@ -41,11 +41,73 @@ interface InvestigationWallet {
         CompletableFuture.completedFuture(InvestigationProviderEvidence(null, false))
 }
 
-/** Exact RedisEconomy adapter. A provider mutation is attempted at most once. */
+/** Optional provider facade. Constructing it never resolves RedisEconomy's classes. */
 class RedisEconomyInvestigationWallet(
     private val playerName: (UUID) -> String? = { id -> Bukkit.getPlayer(id)?.name ?: Bukkit.getOfflinePlayer(id).playerProfile.name },
-    private val apiProvider: () -> RedisEconomyAPI? = RedisEconomyAPI::getAPI,
+    private val apiProvider: (() -> RedisEconomyAPI?)? = null,
 ) : InvestigationWallet {
+    private var adapter: RedisEconomyInvestigationAdapter? = null
+
+    override val available: Boolean get() = activeAdapter()?.available == true
+
+    override fun balanceMinor(playerId: UUID): Long? = activeAdapter()?.balanceMinor(playerId)
+
+    override fun withdraw(
+        playerId: UUID,
+        amountMinor: Long,
+        reason: String,
+        expectedBalanceBeforeMinor: Long,
+    ): InvestigationMoneyEvidence {
+        requireMutation(amountMinor, reason)
+        return activeAdapter()?.withdraw(playerId, amountMinor, reason, expectedBalanceBeforeMinor)
+            ?: InvestigationMoneyEvidence(false, false, null, "provider_unavailable")
+    }
+
+    override fun deposit(
+        playerId: UUID,
+        amountMinor: Long,
+        reason: String,
+        expectedBalanceBeforeMinor: Long,
+    ): InvestigationMoneyEvidence {
+        requireMutation(amountMinor, reason)
+        return activeAdapter()?.deposit(playerId, amountMinor, reason, expectedBalanceBeforeMinor)
+            ?: InvestigationMoneyEvidence(false, false, null, "provider_unavailable")
+    }
+
+    override fun findTransaction(
+        playerId: UUID,
+        amountMinor: Long,
+        reason: String,
+        notBeforeMillis: Long,
+    ): CompletableFuture<InvestigationProviderEvidence> = prepareHistory(playerId, amountMinor, reason, notBeforeMillis)()
+
+    /** Resolve the optional adapter on Paper before handing its detached history query to a worker. */
+    internal fun prepareHistory(
+        playerId: UUID,
+        amountMinor: Long,
+        reason: String,
+        notBeforeMillis: Long,
+    ): () -> CompletableFuture<InvestigationProviderEvidence> {
+        requireHistory(amountMinor, reason)
+        return activeAdapter()?.prepareHistory(playerId, amountMinor, reason, notBeforeMillis)
+            ?: { CompletableFuture.completedFuture(InvestigationProviderEvidence(null, false)) }
+    }
+
+    private fun activeAdapter(): RedisEconomyInvestigationAdapter? {
+        // The injected provider is an explicit test/integration binding. Normal startup must
+        // cross the plugin-presence fence before loading any exact third-party implementation.
+        if (apiProvider == null && !Bukkit.getPluginManager().isPluginEnabled("RedisEconomy")) return null
+        return adapter ?: RedisEconomyInvestigationAdapter(playerName, apiProvider).also { adapter = it }
+    }
+}
+
+/** Exact RedisEconomy adapter, loaded only after provider presence. A mutation is attempted at most once. */
+private class RedisEconomyInvestigationAdapter(
+    private val playerName: (UUID) -> String?,
+    apiProvider: (() -> RedisEconomyAPI?)?,
+) : InvestigationWallet {
+    private val apiProvider: () -> RedisEconomyAPI? = apiProvider ?: RedisEconomyAPI::getAPI
+
     override val available: Boolean get() = apiProvider()?.defaultCurrency != null
 
     override fun balanceMinor(playerId: UUID): Long? =
@@ -79,8 +141,7 @@ class RedisEconomyInvestigationWallet(
         reason: String,
         notBeforeMillis: Long,
     ): () -> CompletableFuture<InvestigationProviderEvidence> {
-        require(amountMinor != 0L) { "Investigation provider history amount cannot be zero" }
-        require(REASON_PATTERN.matches(reason)) { "Invalid investigation provider history reason" }
+        requireHistory(amountMinor, reason)
         val api = apiProvider()
             ?: return { CompletableFuture.completedFuture(InvestigationProviderEvidence(null, false)) }
         val currency = api.defaultCurrency
@@ -112,8 +173,7 @@ class RedisEconomyInvestigationWallet(
         expectedBalanceBeforeMinor: Long,
         deposit: Boolean,
     ): InvestigationMoneyEvidence {
-        require(amountMinor > 0L) { "Investigation money mutation must be positive" }
-        require(REASON_PATTERN.matches(reason)) { "Invalid investigation money reason" }
+        requireMutation(amountMinor, reason)
         val currency = apiProvider()?.defaultCurrency
             ?: return InvestigationMoneyEvidence(false, false, null, "provider_unavailable")
         val before = currency.getBalance(playerId).toMinorOrNull()
@@ -152,8 +212,19 @@ class RedisEconomyInvestigationWallet(
 
     companion object {
         private const val HISTORY_LIMIT = 512
-        private val REASON_PATTERN = Regex("arc-investigation(?:-reward)?:[0-9a-f-]{36}")
     }
+}
+
+private val REASON_PATTERN = Regex("arc-investigation(?:-reward)?:[0-9a-f-]{36}")
+
+private fun requireMutation(amountMinor: Long, reason: String) {
+    require(amountMinor > 0L) { "Investigation money mutation must be positive" }
+    require(REASON_PATTERN.matches(reason)) { "Invalid investigation money reason" }
+}
+
+private fun requireHistory(amountMinor: Long, reason: String) {
+    require(amountMinor != 0L) { "Investigation provider history amount cannot be zero" }
+    require(REASON_PATTERN.matches(reason)) { "Invalid investigation provider history reason" }
 }
 
 private fun Double.toMinorOrNull(): Long? {
