@@ -14,6 +14,10 @@ class TreasureHuntModuleConfigLoadTest :
         afterEach { ConfigManager.clear() }
 
         describe("bundled treasure hunt settings") {
+            it("keeps native automatic starts opt-in with an explicit migration seed") {
+                loadConfig().autoStartSettings shouldBe HuntAutoStartSettings()
+            }
+
             it("exposes the configured hunt presets") {
                 val types = loadConfig().loadHuntTypes()
 

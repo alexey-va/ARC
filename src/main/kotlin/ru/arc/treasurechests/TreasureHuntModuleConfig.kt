@@ -38,6 +38,9 @@ internal data class TreasureHuntHighlightSettings(
 class TreasureHuntModuleConfig(
     private val config: Config,
 ) {
+    internal val autoStartSettings: HuntAutoStartSettings
+        get() = HuntAutoStartSettings.load(config.section("auto-start"))
+
     internal val highlightSettings: TreasureHuntHighlightSettings
         get() = TreasureHuntHighlightSettings.load(config.section("highlight"))
 

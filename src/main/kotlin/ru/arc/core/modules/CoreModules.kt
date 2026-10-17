@@ -45,6 +45,9 @@ import ru.arc.treasurechests.HuntFurnitureRegistry
 import ru.arc.treasurechests.TreasureHuntManager
 import ru.arc.treasurechests.TreasureHuntGrapple
 import ru.arc.treasurechests.TreasureHuntRegistry
+import ru.arc.treasurechests.TreasureHuntAutoStart
+import ru.arc.treasurechests.PaperHuntAutoStartWorld
+import ru.arc.treasurechests.FileHuntAutoStartStore
 import ru.arc.util.CooldownManager
 import ru.arc.util.HeadTextureCache
 import ru.arc.util.Logging.info
@@ -407,6 +410,7 @@ object TreasureModule : PluginModule {
     override val name = "Treasures"
     override val priority = 77
     private var grapple: TreasureHuntGrapple? = null
+    private var autoStart: TreasureHuntAutoStart? = null
 
     override fun init() {
         grapple?.close()
@@ -422,15 +426,24 @@ object TreasureModule : PluginModule {
         }
         HuntFurnitureRegistry.init()
         HuntFurnitureJanitor.init(Tasks.scheduler)
+        if (ARC.plugin != null) {
+            val controller = autoStart ?: TreasureHuntAutoStart(
+                Tasks.scheduler, PaperHuntAutoStartWorld(), FileHuntAutoStartStore(ARC.instance.dataPath),
+            ).also { autoStart = it }
+            controller.reload(TreasureHuntRegistry.getAutoStartSettings())
+        }
     }
 
     override fun reload() {
         Treasures.reload()
         Pouches.reload()
         TreasureHuntManager.loadTreasureHuntTypes()
+        autoStart?.reload(TreasureHuntRegistry.getAutoStartSettings())
     }
 
     override fun shutdown() {
+        autoStart?.close()
+        autoStart = null
         HuntFurnitureJanitor.shutdown()
         grapple?.close()
         grapple = null

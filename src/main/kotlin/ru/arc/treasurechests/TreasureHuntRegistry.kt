@@ -107,6 +107,8 @@ object TreasureHuntRegistry {
      */
     fun getAliases(): Map<String, String> = service?.getAliases() ?: emptyMap()
 
+    internal fun getAutoStartSettings(): HuntAutoStartSettings = moduleConfig?.autoStartSettings ?: HuntAutoStartSettings()
+
     /**
      * Получает сообщение о начале охоты по умолчанию.
      */

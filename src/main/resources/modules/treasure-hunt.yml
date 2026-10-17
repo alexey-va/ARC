@@ -3,6 +3,13 @@
 # /arc hunt start locations=<pool> chests=6 chest=halloween rewards=spawn_hunt
 # aliases — доступные ItemsAdder-модели для chest=; vanilla встроен.
 # Пул локаций, награды и внешний вид задаются независимо. Подсветка через стены выключена.
+auto-start:
+  enabled: false
+  world: rc_origin_spawn
+  preset: spawn
+  # Legacy cooldown expiry in epoch milliseconds, imported only if native state is absent.
+  # Zero uses one conservative 3-hour pause on first initialization.
+  initial-not-before: 0
 highlight:
   enabled: false
   color: '#ffc242'
