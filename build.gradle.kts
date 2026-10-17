@@ -76,7 +76,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.417"
+version = "1.4.418"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.34"
@@ -163,7 +163,7 @@ dependencies {
     implementation(project(":arc-staff-spells-api"))
     implementation(project(":arc-dungeons-api"))
     implementation("ru.ruscrafting.arc:arc-mounts-api:0.1.0")
-    implementation("ru.ruscrafting.arc:arc-origin-api:0.1.0")
+    implementation("ru.ruscrafting.arc:arc-origin-api:0.1.1")
     implementation("ru.ruscrafting.arc:arc-contracts-api:0.1.0")
 
     // snakeyaml-engine comes transitively from arc-core
