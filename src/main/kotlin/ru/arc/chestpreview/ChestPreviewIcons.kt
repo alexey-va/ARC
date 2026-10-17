@@ -5,106 +5,72 @@ import org.bukkit.Color
 import org.bukkit.Location
 import org.bukkit.entity.Display
 import org.bukkit.entity.ItemDisplay
-import org.bukkit.entity.Player
-import org.bukkit.entity.TextDisplay
 import org.bukkit.inventory.ItemStack
+import org.bukkit.entity.Player
 import org.bukkit.util.Transformation
 import org.joml.Quaternionf
 import org.joml.Vector3f
 import ru.arc.paper.api.InspectionHologramAnchor
-import ru.arc.paper.display.PacketDisplay
-import ru.arc.paper.display.PacketItemDisplay
-import ru.arc.paper.display.PacketTextDisplay
 import ru.arc.paper.display.PaperPacketDisplays
+import ru.arc.paper.scene.PacketDisplayScene
+import ru.arc.paper.scene.SceneAudience
+import ru.arc.paper.scene.SceneDisplayStyle
+import ru.arc.paper.scene.SceneFrame
+import ru.arc.paper.scene.ScenePart
+import ru.arc.paper.scene.ScenePose
+import ru.arc.paper.scene.SceneTextStyle
 import java.util.UUID
 import kotlin.math.ceil
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/** Private, packet-only icon grids for chest inspection; closes its dedicated display owner on module shutdown. */
+/** Chest content and lid placement stay local; Core owns keyed parts, motion and packet lifecycle. */
 internal class ChestPreviewIcons(
     private val displays: PaperPacketDisplays,
     private val settings: ChestPreviewSettings,
 ) : AutoCloseable {
-    private data class IconHandle(
-        val display: PacketItemDisplay,
-        var item: ItemStack,
-        val label: PacketTextDisplay? = null,
-        var count: Int = 0,
-    )
-
-    private data class ViewerState(
+    private class ViewerState(
         var anchor: InspectionHologramAnchor,
-        var sourceAnchor: InspectionHologramAnchor,
+        val sourceAnchor: InspectionHologramAnchor,
         var scale: Float,
         var itemCount: Int,
         val options: ChestPreviewSettings,
-        val icons: MutableList<IconHandle> = mutableListOf(),
-        var backdrop: PacketTextDisplay? = null,
+        val scene: PacketDisplayScene<String>,
+        val audience: SceneAudience.Private,
     )
 
     private val viewers = mutableMapOf<UUID, ViewerState>()
     private var closed = false
 
-    /** Renders the selected chest frame, or removes any old frame when selection moves elsewhere. */
     fun update(player: Player, frame: ChestPreviewFrame?, scale: Float, options: ChestPreviewSettings = settings) {
         if (closed) return
-        val target = frame ?: run {
-            clear(player)
-            return
-        }
+        val target = frame ?: run { clear(player); return }
         if (!options.enabled || target.anchor.worldId != player.world.uid) {
             clear(player)
             return
         }
-
         val selected = target.items.indices.filter { !target.items[it].type.isAir && target.items[it].amount > 0 }
             .take(options.maxItems)
-        val items = selected.map { iconStack(target.items[it]) }
+        val items = selected.map { target.items[it].clone().apply { amount = 1 } }
         val counts = selected.map { (target.counts.getOrNull(it) ?: target.items[it].amount).coerceAtLeast(1) }
-        if (items.isEmpty()) {
-            clear(player)
-            return
-        }
+        if (items.isEmpty()) { clear(player); return }
 
         try {
             val effectiveScale = ChestPreviewIconGeometry.normalizeScale(scale)
             val previous = viewers[player.uniqueId]?.takeIf {
-                it.sourceAnchor == target.anchor && it.options == options && it.itemCount == items.size && it.scale == effectiveScale
+                it.sourceAnchor == target.anchor && it.options == options &&
+                    it.itemCount == items.size && it.scale == effectiveScale
             }?.anchor
             val anchor = ChestPreviewPlacement.place(player, target, items.size, effectiveScale, options, previous)
             if (anchor == null) clear(player)
             else render(player, anchor, target.anchor, items, counts, effectiveScale, options)
         } catch (failure: Exception) {
-            try {
-                clear(player)
-            } catch (cleanupFailure: Exception) {
-                failure.addSuppressed(cleanupFailure)
-            }
+            try { clear(player) } catch (cleanup: Exception) { failure.addSuppressed(cleanup) }
             throw failure
         }
     }
 
     fun clear(player: Player) = clear(player.uniqueId)
-
-    override fun close() {
-        if (closed) return
-        var failure: Exception? = null
-        viewers.keys.toList().forEach { playerId ->
-            try {
-                clear(playerId)
-            } catch (cleanupFailure: Exception) {
-                failure = appendFailure(failure, cleanupFailure)
-            }
-        }
-        try {
-            displays.close()
-        } catch (cleanupFailure: Exception) {
-            failure = appendFailure(failure, cleanupFailure)
-        }
-        closed = failure == null
-        failure?.let { throw it }
-    }
 
     private fun render(
         player: Player,
@@ -115,222 +81,101 @@ internal class ChestPreviewIcons(
         scale: Float,
         options: ChestPreviewSettings,
     ) {
-        val playerId = player.uniqueId
-        if (viewers[playerId]?.let { it.sourceAnchor != sourceAnchor || it.options != options } == true) {
-            // A different target has no authored travel path between the two containers.
-            clear(playerId)
+        val id = player.uniqueId
+        if (viewers[id]?.let { it.sourceAnchor != sourceAnchor || it.options != options } == true) {
+            // A different container has no authored travel path from the old one.
+            clear(id)
         }
-        val oldState = viewers[playerId]
-        val created = oldState == null
-        val state = if (created) {
-            ViewerState(anchor = anchor, sourceAnchor = sourceAnchor, scale = scale, itemCount = 0, options = options)
-                .also { viewers[playerId] = it }
-        } else {
-            requireNotNull(oldState)
+        val state = viewers.getOrPut(id) {
+            ViewerState(anchor, sourceAnchor, scale, 0, options, PacketDisplayScene(displays), SceneAudience.Private(id))
         }
-
-        val anchorChanged = state.anchor != anchor
-        val layoutChanged = state.itemCount != items.size || state.scale != scale
-        if (anchorChanged) {
-            val location = anchor.toLocation(player)
-            // Every part receives the same destination and native interpolation duration.
-            // Unsafe paths snap rather than sweep the private panel through a solid block.
-            val ticks = if (ChestPreviewPlacement.clearPath(player, state.anchor, anchor, items.size, scale, options)) options.teleportTicks else 0
-            handles(state).forEach { it.teleportDuration = ticks; it.teleport(location) }
-            state.anchor = anchor
-        }
-
-        while (state.icons.size > items.size) {
-            val removed = mutableListOf<PacketDisplay>()
-            while (state.icons.size > items.size) {
-                val icon = state.icons.removeAt(state.icons.lastIndex)
-                removed += icon.display
-                icon.label?.let(removed::add)
-            }
-            removeAll(removed)
-        }
-
+        val ticks = if (state.anchor != anchor &&
+            !ChestPreviewPlacement.clearPath(player, state.anchor, anchor, items.size, scale, options)) 0
+            else options.teleportTicks
+        val at = Location(player.world, anchor.x, anchor.y, anchor.z)
+        val style = SceneDisplayStyle(
+            billboard = Display.Billboard.CENTER,
+            brightness = Display.Brightness(options.brightness, options.brightness),
+            viewRange = DISPLAY_VIEW_RANGE,
+            // A camera-pitched assembly cannot use an upright culling box.
+            displayWidth = 0f, displayHeight = 0f,
+        )
+        val countStyle = SceneTextStyle(
+            lineWidth = TEXT_DISPLAY_LINE_WIDTH,
+            background = Color.fromARGB(0, 0, 0, 0),
+            shadowed = true,
+        )
+        val parts = mutableListOf<ScenePart<String>>()
         val offsets = ChestPreviewIconGeometry.offsets(items.size, scale, options)
         items.forEachIndexed { index, item ->
             val offset = offsets[index]
-            val handle = state.icons.getOrNull(index)
-            if (handle == null) {
-                val display = displays.spawnItem(anchor.toLocation(player), item.clone())
-                val label = if (options.showCounts) displays.spawnText(anchor.toLocation(player), countText(counts[index])) else null
-                val newHandle = IconHandle(display, item.clone(), label, counts[index])
-                state.icons += newHandle
-                configureItemDisplay(display, player, item, offset, scale, options)
-                label?.let { configureCount(it, player, offset, scale, options) }
-            } else {
-                val itemChanged = !handle.item.isSimilar(item)
-                if (itemChanged) {
-                    handle.item = item.clone()
-                    handle.display.itemStack = item.clone()
-                }
-                if (layoutChanged || itemChanged) configureItemTransform(handle.display, item, offset, scale, options)
-                if (handle.count != counts[index]) {
-                    handle.label?.text(countText(counts[index]))
-                    handle.count = counts[index]
-                }
-                if (layoutChanged) handle.label?.let { configureCountTransform(it, offset, scale, options) }
+            val transform = Transformation(
+                Vector3f(offset.x, offset.y, 0f), Quaternionf(),
+                Vector3f(options.iconScale * scale, options.iconScale * scale, options.iconScale * scale * options.depthScale),
+                ChestPreviewIconGeometry.guiFacingRotation(
+                    options.itemTransform == ItemDisplay.ItemDisplayTransform.GUI && ChestPreviewIconGeometry.isBlockIcon(item),
+                    options.blockPitch, options.blockYaw,
+                ),
+            )
+            parts += ScenePart.Item("icon-" + index, ScenePose(at, transform), style, item, options.itemTransform)
+            if (options.showCounts) {
+                val countTransform = Transformation(
+                    Vector3f(offset.x, offset.y + options.countOffsetY * scale, ChestPreviewIconGeometry.depth(scale, options) + .01f),
+                    Quaternionf(), Vector3f(options.countScale * scale / .25f), Quaternionf(),
+                )
+                parts += ScenePart.Text(
+                    "count-" + index, ScenePose(at, countTransform), style, Component.text("× " + counts[index]), countStyle,
+                )
             }
         }
-
         if (options.backgroundOpacity > 0) {
-            val backdrop = state.backdrop ?: run {
-                // A single invisible space gives the native TextDisplay a measurable quad;
-                // its transform scales that quad to the grid bounds without visible text.
-                val display = displays.spawnText(anchor.toLocation(player), Component.text(" "))
-                state.backdrop = display
-                configureBackdrop(display, player, items.size, scale, options)
-                display
-            }
-            if (state.backdrop === backdrop && !created && layoutChanged) {
-                configureBackdropTransform(backdrop, items.size, scale, options)
-            }
+            val bounds = ChestPreviewIconGeometry.panelBounds(items.size, scale, options)
+            val scaleX = bounds.width / (ChestPreviewIconGeometry.BACKGROUND_WIDTH_PIXELS * ChestPreviewIconGeometry.BACKGROUND_PIXEL_SIZE)
+            val scaleY = bounds.height / (ChestPreviewIconGeometry.BACKGROUND_HEIGHT_PIXELS * ChestPreviewIconGeometry.BACKGROUND_PIXEL_SIZE)
+            val transform = Transformation(
+                Vector3f(
+                    -ChestPreviewIconGeometry.BACKGROUND_CENTER_X_PIXELS * ChestPreviewIconGeometry.BACKGROUND_PIXEL_SIZE * scaleX,
+                    0f, -ChestPreviewIconGeometry.depth(scale, options),
+                ),
+                Quaternionf(), Vector3f(scaleX, scaleY, 1f), Quaternionf(),
+            )
+            parts += ScenePart.Text(
+                "backdrop", ScenePose(at, transform), style, Component.text(" "),
+                SceneTextStyle(
+                    lineWidth = TEXT_DISPLAY_LINE_WIDTH,
+                    background = Color.fromARGB((options.backgroundOpacity.coerceIn(0, 100) * 255 / 100.0).roundToInt(), 15, 23, 30),
+                    opacity = 0.toByte(),
+                ),
+            )
         }
-
+        state.scene.apply(SceneFrame(parts, state.audience, ticks))
+        state.anchor = anchor
         state.itemCount = items.size
         state.scale = scale
-        state.sourceAnchor = sourceAnchor
     }
-
-    private fun configureItemDisplay(
-        display: PacketItemDisplay,
-        player: Player,
-        item: ItemStack,
-        offset: ChestPreviewIconOffset,
-        scale: Float,
-        options: ChestPreviewSettings,
-    ) {
-        configureDisplay(display, options)
-        display.itemDisplayTransform = options.itemTransform
-        configureItemTransform(display, item, offset, scale, options)
-        display.showTo(player)
-    }
-
-    private fun configureItemTransform(display: PacketItemDisplay, item: ItemStack, offset: ChestPreviewIconOffset, scale: Float, options: ChestPreviewSettings) {
-        display.transformation = Transformation(
-            Vector3f(offset.x, offset.y, ICON_DEPTH),
-            Quaternionf(),
-            Vector3f(options.iconScale * scale, options.iconScale * scale, options.iconScale * scale * options.depthScale),
-            ChestPreviewIconGeometry.guiFacingRotation(
-                options.itemTransform == ItemDisplay.ItemDisplayTransform.GUI && ChestPreviewIconGeometry.isBlockIcon(item),
-                options.blockPitch, options.blockYaw,
-            ),
-        )
-    }
-
-    private fun configureBackdrop(
-        display: PacketTextDisplay,
-        player: Player,
-        itemCount: Int,
-        scale: Float,
-        options: ChestPreviewSettings,
-    ) {
-        configureDisplay(display, options)
-        display.textOpacity = 0.toByte()
-        display.isShadowed = false
-        display.isSeeThrough = false
-        display.isDefaultBackground = false
-        display.backgroundColor = backgroundColor(options.backgroundOpacity)
-        display.alignment = TextDisplay.TextAlignment.CENTER
-        display.lineWidth = TEXT_DISPLAY_LINE_WIDTH
-        configureBackdropTransform(display, itemCount, scale, options)
-        display.showTo(player)
-    }
-
-    private fun configureBackdropTransform(display: PacketTextDisplay, itemCount: Int, scale: Float, options: ChestPreviewSettings) {
-        val bounds = ChestPreviewIconGeometry.panelBounds(itemCount, scale, options)
-        val scaleX = bounds.width / (ChestPreviewIconGeometry.BACKGROUND_WIDTH_PIXELS * ChestPreviewIconGeometry.BACKGROUND_PIXEL_SIZE)
-        val scaleY = bounds.height / (ChestPreviewIconGeometry.BACKGROUND_HEIGHT_PIXELS * ChestPreviewIconGeometry.BACKGROUND_PIXEL_SIZE)
-        display.transformation = Transformation(
-            Vector3f(
-                -ChestPreviewIconGeometry.BACKGROUND_CENTER_X_PIXELS * ChestPreviewIconGeometry.BACKGROUND_PIXEL_SIZE * scaleX,
-                // The native whitespace quad begins at the entity baseline, so y=0 makes its bottom edge align with the chest anchor.
-                0f,
-                -ChestPreviewIconGeometry.depth(scale, options),
-            ),
-            Quaternionf(),
-            Vector3f(scaleX, scaleY, 1f),
-            Quaternionf(),
-        )
-    }
-
-    private fun configureDisplay(display: PacketDisplay, options: ChestPreviewSettings) {
-        display.isVisibleByDefault = false
-        display.billboard = Display.Billboard.CENTER
-        // Upright culling boxes cannot enclose a camera-pitched grid.
-        display.displayWidth = 0f
-        display.displayHeight = 0f
-        display.viewRange = DISPLAY_VIEW_RANGE
-        display.shadowRadius = 0f
-        display.shadowStrength = 0f
-        display.brightness = Display.Brightness(options.brightness, options.brightness)
-        display.teleportDuration = options.teleportTicks
-    }
-
-    private fun countText(count: Int): Component = Component.text("× $count")
-
-    private fun configureCount(display: PacketTextDisplay, player: Player, offset: ChestPreviewIconOffset, scale: Float, options: ChestPreviewSettings) {
-        configureDisplay(display, options)
-        display.isSeeThrough = false
-        display.isShadowed = true
-        display.isDefaultBackground = false
-        display.backgroundColor = Color.fromARGB(0, 0, 0, 0)
-        display.alignment = TextDisplay.TextAlignment.CENTER
-        display.lineWidth = TEXT_DISPLAY_LINE_WIDTH
-        configureCountTransform(display, offset, scale, options)
-        display.showTo(player)
-    }
-
-    private fun configureCountTransform(display: PacketTextDisplay, offset: ChestPreviewIconOffset, scale: Float, options: ChestPreviewSettings) {
-        display.transformation = Transformation(
-            Vector3f(offset.x, offset.y + options.countOffsetY * scale, ChestPreviewIconGeometry.depth(scale, options) + 0.01f),
-            Quaternionf(), Vector3f(options.countScale * scale / 0.25f), Quaternionf(),
-        )
-    }
-
-    private fun handles(state: ViewerState): List<PacketDisplay> =
-        state.icons.flatMap { listOfNotNull(it.display, it.label) } + listOfNotNull(state.backdrop)
-
-    private fun InspectionHologramAnchor.toLocation(player: Player): Location =
-        Location(player.world, x, y, z)
 
     private fun clear(playerId: UUID) {
-        val state = viewers.remove(playerId) ?: return
-        removeAll(handles(state))
+        viewers.remove(playerId)?.scene?.close()
     }
 
-    private fun removeAll(displays: List<PacketDisplay>) {
+    override fun close() {
+        if (closed) return
         var failure: Exception? = null
-        displays.forEach { display ->
-            try {
-                display.remove()
-            } catch (cleanupFailure: Exception) {
-                failure = appendFailure(failure, cleanupFailure)
+        viewers.keys.toList().forEach {
+            try { clear(it) } catch (cleanup: Exception) {
+                if (failure == null) failure = cleanup else failure.addSuppressed(cleanup)
             }
         }
+        try { displays.close() } catch (cleanup: Exception) {
+            if (failure == null) failure = cleanup else failure.addSuppressed(cleanup)
+        }
+        closed = failure == null
         failure?.let { throw it }
-    }
-
-    private fun appendFailure(current: Exception?, next: Exception): Exception =
-        current?.also { it.addSuppressed(next) } ?: next
-
-    private fun iconStack(stack: ItemStack): ItemStack = stack.clone().apply { amount = 1 }
-
-    private fun backgroundColor(opacityPercent: Int): Color {
-        val alpha = (opacityPercent.coerceIn(0, 100) * 255 / 100.0).roundToInt()
-        return Color.fromARGB(alpha, BACKGROUND_RED, BACKGROUND_GREEN, BACKGROUND_BLUE)
     }
 
     private companion object {
         const val TEXT_DISPLAY_LINE_WIDTH = 16_384
         const val DISPLAY_VIEW_RANGE = 0.5f
-        const val ICON_DEPTH = 0f
-        const val BACKGROUND_RED = 15
-        const val BACKGROUND_GREEN = 23
-        const val BACKGROUND_BLUE = 30
     }
 }
 

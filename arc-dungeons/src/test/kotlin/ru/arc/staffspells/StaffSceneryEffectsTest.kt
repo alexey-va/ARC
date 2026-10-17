@@ -471,10 +471,10 @@ private class SceneryDisplayRecorder {
             every { record.handle.teleportDuration = any() } answers {
                 record.teleportDuration = firstArg()
             }
-            every { record.handle.showTo(any()) } answers {
+            every { record.handle.showTo(any<Player>()) } answers {
                 record.shownTo += firstArg<Player>().uniqueId
             }
-            every { record.handle.hideFrom(any()) } answers {
+            every { record.handle.hideFrom(any<Player>()) } answers {
                 record.hiddenFrom += firstArg<Player>().uniqueId
             }
             every { record.handle.teleport(any()) } answers {

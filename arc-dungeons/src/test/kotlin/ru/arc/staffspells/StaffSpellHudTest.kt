@@ -452,7 +452,7 @@ private class HudDisplayRecorder {
                 record.textWrites += record.text
                 Unit
             }
-            every { handle.showTo(any()) } answers {
+            every { handle.showTo(any<Player>()) } answers {
                 record.visibleViewers += firstArg<Player>().uniqueId
                 Unit
             }

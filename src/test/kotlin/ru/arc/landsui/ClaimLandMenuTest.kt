@@ -15,9 +15,13 @@ import org.bukkit.plugin.Plugin
 import org.bukkit.util.VoxelShape
 import ru.arc.paper.display.PacketTextDisplay
 import ru.arc.paper.display.PaperPacketDisplays
+import ru.arc.paper.testing.MockBukkitTestRuntime
 import java.util.UUID
 
 class ClaimLandMenuTest : FunSpec({
+    aroundTest { (test, execute) ->
+        MockBukkitTestRuntime.open().use { execute(test) }
+    }
     test("six localized controls keep the Lands footprint and interpolation contract") {
         val labels = LandsUiPanelAction.entries.associateWith { Component.text(it.name) }
         val layout = claimLandMenuLayout(Component.text("Дом"), labels)
@@ -58,9 +62,10 @@ class ClaimLandMenuTest : FunSpec({
             made.size shouldBe 7
             positions shouldBe initial
             texts.last() shouldBe Component.text("Новый дом")
+            val viewerId = player.uniqueId
             made.forEach { display ->
                 verify { display.isVisibleByDefault = false }
-                verify { display.showTo(player) }
+                verify { display.showTo(viewerId) }
             }
             menu.contains(player.uniqueId) shouldBe true
             menu.landId(player.uniqueId) shouldBe "home"

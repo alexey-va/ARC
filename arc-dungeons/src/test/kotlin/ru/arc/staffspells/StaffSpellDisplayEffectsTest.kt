@@ -891,7 +891,7 @@ private class PacketDisplayRecorder {
                     pose.rightRotation.x, pose.rightRotation.y, pose.rightRotation.z, pose.rightRotation.w,
                 ))
             }
-            every { handle.showTo(any()) } answers {
+            every { handle.showTo(any<Player>()) } answers {
                 val viewer = firstArg<Player>().uniqueId
                 if (record.visibleViewers.add(viewer)) {
                     shownTo += viewer
@@ -899,7 +899,7 @@ private class PacketDisplayRecorder {
                 }
                 Unit
             }
-            every { handle.hideFrom(any()) } answers {
+            every { handle.hideFrom(any<Player>()) } answers {
                 val viewer = firstArg<Player>().uniqueId
                 if (record.visibleViewers.remove(viewer)) hiddenFrom += viewer
                 Unit

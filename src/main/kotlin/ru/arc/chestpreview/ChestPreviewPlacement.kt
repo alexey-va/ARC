@@ -1,7 +1,5 @@
 package ru.arc.chestpreview
 
-import org.bukkit.Chunk
-import org.bukkit.FluidCollisionMode
 import org.bukkit.Location
 import org.bukkit.entity.Player
 import org.bukkit.util.BoundingBox
@@ -9,14 +7,15 @@ import org.bukkit.util.Vector
 import org.joml.Vector3d
 import ru.arc.paper.api.InspectionHologramAnchor
 import ru.arc.paper.display.DisplayOrientedVolume
+import ru.arc.paper.scene.PaperSpatialSpace
 import kotlin.math.abs
 import kotlin.math.cos
-import kotlin.math.floor
 import kotlin.math.sin
 
 /** Places the whole camera-facing grid, including its depth, in already loaded free space. */
 internal object ChestPreviewPlacement {
     private const val MOTION_CLEARANCE = 0.08
+    private val space = PaperSpatialSpace()
 
     fun place(
         player: Player,
@@ -171,37 +170,11 @@ internal object ChestPreviewPlacement {
         return Vector(-sin(yaw) * sin(pitch), cos(pitch), cos(yaw) * sin(pitch))
     }
 
-    private fun loaded(player: Player, bounds: BoundingBox): Boolean {
-        for (x in (floor(bounds.minX).toInt() shr 4)..(floor(bounds.maxX).toInt() shr 4)) {
-            for (z in (floor(bounds.minZ).toInt() shr 4)..(floor(bounds.maxZ).toInt() shr 4)) {
-                if (!player.world.isChunkLoaded(x, z) || !player.isChunkSent(Chunk.getChunkKey(x, z))) return false
-            }
-        }
-        return true
-    }
-
-    private fun clear(player: Player, volume: DisplayOrientedVolume): Boolean {
-        val bounds = volume.bounds
-        val world = player.world
-        if (bounds.minY < world.minHeight || bounds.maxY >= world.maxHeight || !loaded(player, bounds)) return false
-        for (x in floor(bounds.minX).toInt()..floor(bounds.maxX).toInt()) {
-            for (y in floor(bounds.minY).toInt()..floor(bounds.maxY).toInt()) {
-                for (z in floor(bounds.minZ).toInt()..floor(bounds.maxZ).toInt()) {
-                    val block = world.getBlockAt(x, y, z)
-                    if (!block.isPassable && volume.overlaps(block.boundingBox)) return false
-                }
-            }
-        }
-        return true
-    }
+    private fun clear(player: Player, volume: DisplayOrientedVolume): Boolean =
+        space.clear(player.world, volume, player)
 
     private fun visible(player: Player, eye: Location, anchor: InspectionHologramAnchor, panel: ChestPreviewPanelBounds): Boolean {
         val center = Vector(anchor.x, anchor.y, anchor.z).add(up(eye).multiply(panel.height / 2.0))
-        val corridor = BoundingBox.of(eye.toVector(), center)
-        if (!loaded(player, corridor)) return false
-        val direction = center.subtract(eye.toVector())
-        val distance = direction.length()
-        return distance > 0.1 && player.world.rayTraceBlocks(eye, direction.normalize(), distance,
-            FluidCollisionMode.NEVER, true) == null
+        return eye.toVector().distance(center) > 0.1 && space.rayClear(player, eye.toVector(), center)
     }
 }

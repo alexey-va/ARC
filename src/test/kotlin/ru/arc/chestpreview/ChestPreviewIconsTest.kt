@@ -20,19 +20,21 @@ import org.bukkit.util.Transformation
 import org.joml.Matrix4f
 import org.joml.Quaternionf
 import org.joml.Vector3f
-import org.mockbukkit.mockbukkit.MockBukkit
 import ru.arc.paper.api.InspectionHologramAnchor
 import ru.arc.paper.display.PacketItemDisplay
 import ru.arc.paper.display.PacketTextDisplay
 import ru.arc.paper.display.PaperPacketDisplays
+import ru.arc.paper.testing.MockBukkitTestRuntime
 import java.util.UUID
 
 class ChestPreviewIconsTest : StringSpec({
-    beforeSpec { MockBukkit.mock() }
-    afterSpec { MockBukkit.unmock() }
+    aroundTest { (test, execute) ->
+        MockBukkitTestRuntime.open().use { execute(test) }
+    }
     "renders only bounded private item icons and blank background, reusing unchanged handles" {
         val worldId = UUID.randomUUID()
         val player = player(worldId)
+        val playerId = player.uniqueId
         val harness = DisplayHarness()
         val renderer = ChestPreviewIcons(
             harness.owner,
@@ -57,7 +59,7 @@ class ChestPreviewIconsTest : StringSpec({
         PlainTextComponentSerializer.plainText().serialize(harness.textContents.single()).isBlank() shouldBe true
         harness.itemDisplays.forEach { display ->
             verify(exactly = 1) { display.isVisibleByDefault = false }
-            verify(exactly = 1) { display.showTo(player) }
+            verify(exactly = 1) { display.showTo(playerId) }
             verify { display.billboard = Display.Billboard.CENTER }
             verify { display.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.GUI }
             verify { display.brightness = Display.Brightness(15, 15) }
@@ -66,7 +68,7 @@ class ChestPreviewIconsTest : StringSpec({
         }
         val backdrop = harness.textDisplays.single()
         verify(exactly = 1) { backdrop.isVisibleByDefault = false }
-        verify(exactly = 1) { backdrop.showTo(player) }
+        verify(exactly = 1) { backdrop.showTo(playerId) }
         verify { backdrop.textOpacity = 0.toByte() }
         verify { backdrop.backgroundColor = Color.fromARGB(102, 15, 23, 30) }
         verify { backdrop.brightness = Display.Brightness(15, 15) }
@@ -93,6 +95,10 @@ class ChestPreviewIconsTest : StringSpec({
             val z = thirdArg<Int>()
             val block = mockk<org.bukkit.block.Block>(relaxed = true)
             every { block.isPassable } returns (Triple(x, y, z) !in solids)
+            every { block.collisionShape } returns mockk {
+                every { boundingBoxes } returns if (Triple(x, y, z) in solids)
+                    listOf(org.bukkit.util.BoundingBox(0.0, 0.0, 0.0, 1.0, 1.0, 1.0)) else emptyList()
+            }
             every { block.boundingBox } returns org.bukkit.util.BoundingBox(
                 x.toDouble(), y.toDouble(), z.toDouble(),
                 x + 1.0, y + 1.0, z + 1.0,
@@ -125,6 +131,48 @@ class ChestPreviewIconsTest : StringSpec({
             verify(exactly = 0) { display.teleportDuration = 0 }
             verify(atLeast = 2) { display.teleportDuration = options.teleportTicks }
         }
+        renderer.close()
+    }
+
+    "exact stair collision pieces admit its empty upper half and a new full block hides the scene" {
+        val worldId = UUID.randomUUID()
+        val viewer = player(worldId)
+        val harness = DisplayHarness()
+        val options = ChestPreviewSettings(showCounts = false, backgroundOpacity = 0)
+        val renderer = ChestPreviewIcons(harness.owner, options)
+        val world = viewer.world
+        var pieces = listOf(
+            org.bukkit.util.BoundingBox(0.0, 0.0, 0.0, 1.0, 0.5, 1.0),
+            org.bukkit.util.BoundingBox(0.0, 0.5, 0.0, 0.5, 1.0, 1.0),
+        )
+        every { world.getBlockAt(2, 70, -4) } returns mockk {
+            every { isPassable } returns false
+            // The aggregate box intersects the grid; its real collision piece does not.
+            every { boundingBox } returns org.bukkit.util.BoundingBox(2.0, 70.0, -4.0, 3.0, 71.0, -3.0)
+            every { collisionShape } returns mockk { every { boundingBoxes } answers { pieces } }
+        }
+        val selected = frame(worldId, listOf(ItemStack(Material.DIAMOND))).copy(
+            anchor = InspectionHologramAnchor(worldId, 2.85, 70.6, -3.5),
+        )
+        val volumes = mutableListOf<ru.arc.paper.display.DisplayOrientedVolume>()
+        ChestPreviewPlacement.choose(viewer.eyeLocation, selected.anchor, null,
+            ChestPreviewIconGeometry.panelBounds(1, 1f, options), 1f, options) { _, volume ->
+            volumes += volume
+            true
+        }
+        val volume = volumes.single()
+        volume.overlaps(org.bukkit.util.BoundingBox(2.0, 70.0, -4.0, 3.0, 71.0, -3.0)) shouldBe true
+        volume.overlaps(org.bukkit.util.BoundingBox(2.0, 70.5, -4.0, 2.5, 71.0, -3.0)) shouldBe false
+        ru.arc.paper.scene.PaperSpatialSpace().clear(world, volume, viewer) shouldBe true
+
+        renderer.update(viewer, selected, 1f)
+        harness.itemDisplays.size shouldBe 1
+        pieces = listOf(org.bukkit.util.BoundingBox(0.0, 0.0, 0.0, 1.0, 1.0, 1.0))
+        renderer.update(viewer, selected, 1f)
+        verify(exactly = 1) { harness.itemDisplays.single().remove() }
+        pieces = emptyList()
+        renderer.update(viewer, selected, 1f)
+        harness.itemDisplays.size shouldBe 2
         renderer.close()
     }
 
@@ -220,6 +268,8 @@ class ChestPreviewIconsTest : StringSpec({
         val worldId = UUID.randomUUID()
         val first = player(worldId)
         val second = player(worldId)
+        val firstId = first.uniqueId
+        val secondId = second.uniqueId
         val harness = DisplayHarness()
         val renderer = ChestPreviewIcons(harness.owner, ChestPreviewSettings(showCounts = false, ))
 
@@ -227,14 +277,14 @@ class ChestPreviewIconsTest : StringSpec({
         renderer.update(second, frame(worldId, listOf(ItemStack(Material.BOOK))), 1f)
 
         harness.itemPayloads.map(ItemStack::getType) shouldBe listOf(Material.PAPER, Material.BOOK)
-        verify(exactly = 1) { harness.itemDisplays[0].showTo(first) }
-        verify(exactly = 0) { harness.itemDisplays[0].showTo(second) }
-        verify(exactly = 1) { harness.itemDisplays[1].showTo(second) }
-        verify(exactly = 0) { harness.itemDisplays[1].showTo(first) }
-        verify(exactly = 1) { harness.textDisplays[0].showTo(first) }
-        verify(exactly = 0) { harness.textDisplays[0].showTo(second) }
-        verify(exactly = 1) { harness.textDisplays[1].showTo(second) }
-        verify(exactly = 0) { harness.textDisplays[1].showTo(first) }
+        verify(exactly = 1) { harness.itemDisplays[0].showTo(firstId) }
+        verify(exactly = 0) { harness.itemDisplays[0].showTo(secondId) }
+        verify(exactly = 1) { harness.itemDisplays[1].showTo(secondId) }
+        verify(exactly = 0) { harness.itemDisplays[1].showTo(firstId) }
+        verify(exactly = 1) { harness.textDisplays[0].showTo(firstId) }
+        verify(exactly = 0) { harness.textDisplays[0].showTo(secondId) }
+        verify(exactly = 1) { harness.textDisplays[1].showTo(secondId) }
+        verify(exactly = 0) { harness.textDisplays[1].showTo(firstId) }
 
         renderer.close()
     }
@@ -343,6 +393,7 @@ private class DisplayHarness {
             itemPayloads += secondArg<ItemStack>().clone()
             mockk<PacketItemDisplay>(relaxed = true).also { display ->
                 itemDisplays += display
+                every { display.isValid } returns true
                 every { display.transformation = any() } answers {
                     itemTransforms += firstArg<Transformation>()
                 }
@@ -350,7 +401,10 @@ private class DisplayHarness {
         }
         every { owner.spawnText(any(), any()) } answers {
             textContents += secondArg<Component>()
-            mockk<PacketTextDisplay>(relaxed = true).also(textDisplays::add)
+            mockk<PacketTextDisplay>(relaxed = true).also { display ->
+                every { display.isValid } returns true
+                textDisplays += display
+            }
         }
     }
 }
@@ -363,8 +417,9 @@ private fun player(worldId: UUID): Player {
     every { world.isChunkLoaded(any<Int>(), any<Int>()) } returns true
     every { world.getBlockAt(any<Int>(), any<Int>(), any<Int>()) } returns mockk {
         every { isPassable } returns true
+        every { collisionShape } returns mockk { every { boundingBoxes } returns emptyList() }
     }
-    every { world.rayTraceBlocks(any(), any(), any(), any(), any<Boolean>()) } returns null
+    every { world.rayTraceBlocks(any(), any(), any(), any(), any<Boolean>(), any()) } returns null
     return mockk<Player>(relaxed = true).also { player ->
         every { player.uniqueId } returns UUID.randomUUID()
         every { player.world } returns world
