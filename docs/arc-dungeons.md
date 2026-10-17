@@ -97,3 +97,20 @@ are covered by the moved tests plus boundary tests; operational acceptance must
 still check the activated plugin combination. EconomyShopGUI SELL and the
 planned SELL-to-contract transition are unchanged and are not counted as a new
 income stream here.
+
+## Publishing the consumer API
+
+`arc-dungeons-api` is an immutable library coordinate, separate from the runtime
+plugin. Stage the Java API, sources, POM and Gradle metadata with JDK25:
+
+```sh
+./gradlew :arc-dungeons-api:publishMavenJavaPublicationToApiStagingRepository
+./scripts/publish-staged-dungeons-api.sh --dry-run build/api-release-repository \
+  ru/ruscrafting/arc/arc-dungeons-api/0.1.1/arc-dungeons-api-0.1.1.{jar,pom,module} \
+  ru/ruscrafting/arc/arc-dungeons-api/0.1.1/arc-dungeons-api-0.1.1-sources.jar
+```
+
+After checking the exact committed API, repeat the helper without `--dry-run`.
+It checks every immutable file before uploading and verifies anonymous download
+hashes. It reads the existing publisher credential from the environment or
+macOS Keychain without printing it. It does not publish runtime plugins.
