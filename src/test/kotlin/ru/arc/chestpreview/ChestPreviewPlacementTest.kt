@@ -5,6 +5,7 @@ import io.kotest.matchers.shouldBe
 import org.bukkit.Location
 import org.bukkit.util.BoundingBox
 import org.joml.Vector3d
+import ru.arc.paper.display.DisplayOrientedVolume
 import ru.arc.paper.api.InspectionHologramAnchor
 import java.util.UUID
 import kotlin.math.abs
@@ -116,7 +117,7 @@ class ChestPreviewPlacementTest : StringSpec({
 
     "empty corners of the rotated scan envelope do not count as panel collisions" {
         val diagonal = kotlin.math.sqrt(0.5)
-        val volume = ChestPreviewVolume(Vector3d(), Vector3d(diagonal, 0.0, diagonal),
+        val volume = DisplayOrientedVolume(Vector3d(), Vector3d(diagonal, 0.0, diagonal),
             Vector3d(0.0, 1.0, 0.0), Vector3d(-diagonal, 0.0, diagonal), Vector3d(1.0, 0.1, 0.1))
         val emptyCorner = BoundingBox(-0.75, -0.05, 0.65, -0.65, 0.05, 0.75)
         volume.bounds.overlaps(emptyCorner) shouldBe true
@@ -125,7 +126,7 @@ class ChestPreviewPlacementTest : StringSpec({
     }
 
     "swept clearance includes a thin obstacle between the endpoint poses" {
-        val panel = ChestPreviewVolume(Vector3d(), Vector3d(1.0, 0.0, 0.0),
+        val panel = DisplayOrientedVolume(Vector3d(), Vector3d(1.0, 0.0, 0.0),
             Vector3d(0.0, 1.0, 0.0), Vector3d(0.0, 0.0, 1.0), Vector3d(0.1, 0.1, 0.01))
         val thin = BoundingBox(-0.05, -0.05, 0.055, 0.05, 0.05, 0.065)
         panel.overlaps(thin) shouldBe false

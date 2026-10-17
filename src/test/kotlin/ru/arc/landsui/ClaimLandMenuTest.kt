@@ -1,185 +1,161 @@
 package ru.arc.landsui
 
-import io.kotest.core.spec.style.FreeSpec
+import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.doubles.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import net.kyori.adventure.text.Component
-import org.bukkit.FluidCollisionMode
 import org.bukkit.Location
 import org.bukkit.World
 import org.bukkit.block.Block
 import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
 import org.bukkit.util.VoxelShape
-import org.bukkit.util.Vector
 import ru.arc.paper.display.PacketTextDisplay
 import ru.arc.paper.display.PaperPacketDisplays
 import java.util.UUID
 
-class ClaimLandMenuTest : FreeSpec({
-    "keeps a fixed head-turn plane, escapes and retains an obstacle offset, targets its cell, and cleans packets" {
-        val world = mockk<World>(relaxed = true)
-        val worldId = UUID.randomUUID()
-        every { world.uid } returns worldId
+class ClaimLandMenuTest : FunSpec({
+    test("six localized controls keep the Lands footprint and interpolation contract") {
+        val labels = LandsUiPanelAction.entries.associateWith { Component.text(it.name) }
+        val layout = claimLandMenuLayout(Component.text("Дом"), labels)
+        layout.buttons.map { it.action } shouldBe LandsUiPanelAction.entries.toList()
+        layout.buttons.forEach {
+            it.text shouldBe labels.getValue(it.action)
+            it.rect.width shouldBe 1.5
+            kotlin.math.abs(it.rect.height - 0.23) shouldBeLessThanOrEqual 1e-8
+            it.style.scale shouldBe 0.8f
+            it.style.lineWidth shouldBe 190
+            it.style.baselineInset shouldBe 0.025
+            it.style.interpolationDelay shouldBe -1
+            it.style.interpolationDuration shouldBe 2
+        }
+        layout.buttons.first().rect.center.x shouldBe -0.775
+        layout.buttons.last().rect.center.y shouldBe -0.26
+        layout.labels.single().let {
+            kotlin.math.abs(it.rect.center.y - 0.535) shouldBeLessThanOrEqual 1e-8
+            it.rect.width shouldBe 3.0
+            it.rect.height shouldBe 0.24
+            it.style.scale shouldBe 0.48f
+            it.style.displayHeight shouldBe 0.55f
+            it.style.lineWidth shouldBe 240
+            it.style.baselineInset shouldBe 0.025
+        }
+        claimLandMenuLayout(Component.empty(), labels).labels.single().visible shouldBe true
+    }
+
+    test("shared runtime keeps identities through head turns, tiny body movement and title changes") {
+        val fixture = ClaimMenuFixture()
+        with(fixture) {
+            menu.show(player, "home", "Дом")
+            made.size shouldBe 7
+            val initial = positions.map { it.clone() }
+            eye = eye.clone().apply { yaw = 130f }
+            body = body.clone().add(0.02, 0.0, 0.0)
+            menu.show(player, "home", "Новый дом")
+            made.size shouldBe 7
+            positions shouldBe initial
+            texts.last() shouldBe Component.text("Новый дом")
+            made.forEach { display ->
+                verify { display.isVisibleByDefault = false }
+                verify { display.showTo(player) }
+            }
+            menu.contains(player.uniqueId) shouldBe true
+            menu.landId(player.uniqueId) shouldBe "home"
+            menu.close()
+            made.forEach { verify(exactly = 1) { it.remove() } }
+            verify(exactly = 1) { packetOwner.close() }
+        }
+    }
+
+    test("whole-panel gaze keeps its entry and restoration margins while clicks use the actual eye") {
+        val fixture = ClaimMenuFixture()
+        with(fixture) {
+            menu.show(player, "home", "Дом")
+            menu.isLookingAt(player) shouldBe true
+            eye = eye.clone().apply { yaw = -40f }
+            menu.show(player, "home", "Дом")
+            menu.isLookingAt(player) shouldBe true
+            eye = eye.clone().apply { yaw = -45f }
+            menu.show(player, "home", "Дом")
+            menu.isLookingAt(player) shouldBe false
+            eye = eye.clone().apply { yaw = -40f }
+            menu.show(player, "home", "Дом")
+            menu.isLookingAt(player) shouldBe false
+            val button = positions.first().clone().add(0.0, 0.23 / 2.0 - 0.025, 0.0)
+            eye = eye.clone().setDirection(button.toVector().subtract(eye.toVector()))
+            menu.target(player) shouldBe LandsUiPanelAction.ADD_MEMBER
+            menu.landId(player.uniqueId) shouldBe "home"
+            menu.hide(player.uniqueId)
+            menu.target(player) shouldBe null
+            menu.landId(player.uniqueId) shouldBe null
+            menu.isLookingAt(player) shouldBe false
+            menu.close()
+        }
+    }
+
+    test("an unloaded or unsent placement produces no panel and never loads chunks") {
+        val fixture = ClaimMenuFixture()
+        with(fixture) {
+            every { player.isChunkSent(any<Long>()) } returns false
+            menu.show(player, "home", "Дом")
+            made.size shouldBe 0
+            menu.contains(player.uniqueId) shouldBe false
+            menu.landId(player.uniqueId) shouldBe null
+            verify(exactly = 0) { world.getChunkAt(any<Int>(), any<Int>()) }
+            menu.close()
+        }
+    }
+})
+
+private class ClaimMenuFixture {
+    val world = mockk<World>(relaxed = true)
+    val player = mockk<Player>(relaxed = true)
+    val plugin = mockk<Plugin>(relaxed = true)
+    val packetOwner = mockk<PaperPacketDisplays>(relaxed = true)
+    val made = mutableListOf<PacketTextDisplay>()
+    val positions = mutableListOf<Location>()
+    val texts = mutableListOf<Component>()
+    var body = Location(world, 0.0, 64.0, 0.0)
+    var eye = Location(world, 0.0, 65.62, 0.0)
+    val menu: ClaimLandMenu
+
+    init {
+        val playerId = UUID.randomUUID()
+        every { world.uid } returns UUID.randomUUID()
         every { world.minHeight } returns 0
         every { world.maxHeight } returns 256
         every { world.isChunkLoaded(any<Int>(), any<Int>()) } returns true
-        val shape = mockk<VoxelShape>(relaxed = true)
+        val shape = mockk<VoxelShape>()
         every { shape.boundingBoxes } returns emptyList()
         val block = mockk<Block>(relaxed = true)
         every { block.collisionShape } returns shape
         every { world.getBlockAt(any<Int>(), any<Int>(), any<Int>()) } returns block
-        every {
-            world.rayTraceBlocks(
-                any<Location>(), any<Vector>(), any<Double>(), any<FluidCollisionMode>(), any<Boolean>(),
-            )
-        } returns null
-
-        val playerId = UUID.randomUUID()
-        val eye = Location(world, 0.0, 65.62, 0.0, 0f, 0f)
-        var liveEye = eye
-        val body = Location(world, 0.0, 64.0, 0.0, 0f, 0f)
-        val player = mockk<Player>(relaxed = true)
+        every { world.rayTraceBlocks(any(), any(), any(), any(), any(), any()) } returns null
         every { player.uniqueId } returns playerId
         every { player.world } returns world
-        every { player.eyeLocation } answers { liveEye }
-        every { player.location } returns body
+        every { player.location } answers { body.clone() }
+        every { player.eyeLocation } answers { eye.clone() }
+        every { player.isOnline } returns true
+        every { player.isDead } returns false
         every { player.isChunkSent(any<Long>()) } returns true
-
-        val packetOwner = mockk<PaperPacketDisplays>(relaxed = true)
-        val packetDisplays = List(7) { mockk<PacketTextDisplay>(relaxed = true) }
-        var created = 0
-        every { packetOwner.spawnText(any<Location>(), any<Component>()) } answers { packetDisplays[created++] }
-        val menu = ClaimLandMenu(
-            mockk<Plugin>(relaxed = true),
-            title = { Component.text(it) },
-            labels = LandsUiPanelAction.entries.associateWith { Component.text(it.name) },
-            displays = packetOwner,
-        )
-
-        ClaimLandMenuGeometry.BUTTON_WIDTH shouldBe 1.50
-        ClaimLandMenuGeometry.BUTTON_HEIGHT shouldBe 0.23
-        ClaimLandMenuGeometry.BUTTON_SCALE shouldBe 0.80f
-        ClaimLandMenuGeometry.COLUMN_SPACING shouldBe 1.55
-        ClaimLandMenuGeometry.ROW_SPACING shouldBe 0.26
-        ClaimLandMenuGeometry.TITLE_WIDTH shouldBe 3.0
-        ClaimLandMenuGeometry.TITLE_SCALE shouldBe 0.48f
-        kotlin.math.abs(ClaimLandMenuGeometry.headingRect.centerY - 0.535) shouldBeLessThanOrEqual 1e-9
-        ClaimLandMenuGeometry.rects.getValue(LandsUiPanelAction.ADD_MEMBER).centerX shouldBe -0.775
-        ClaimLandMenuGeometry.rects.getValue(LandsUiPanelAction.OVERVIEW).centerY shouldBe -0.26
-        val nearSafeDistance = ClaimLandMenuGeometry.firstSafeCenterDistance(2.4) { it <= 0.75 }
-        (nearSafeDistance != null && nearSafeDistance in 0.65..0.75) shouldBe true
-        kotlin.math.abs(
-            ClaimLandMenuGeometry.stableDistance(2.4, 1.2) { it <= 1.5 }!! - 1.26,
-        ) shouldBeLessThanOrEqual 1e-9
-        ClaimLandMenuGeometry.stableDistance(2.4, 1.2) { it <= 1.3 } shouldBe 1.2
-
-        val turnedHead = body.clone().apply { yaw = 130f }
-        ClaimLandMenuGeometry.bodyMoved(body, turnedHead) shouldBe false
-        ClaimLandMenuGeometry.bodyMoved(body, body.clone().add(0.1, 0.0, 0.0)) shouldBe true
-        val fixedYaw = ClaimLandMenuGeometry.panelYaw(eye.yaw)
-        val turnedPanelYaw = if (ClaimLandMenuGeometry.bodyMoved(body, turnedHead)) {
-            ClaimLandMenuGeometry.panelYaw(turnedHead.yaw)
-        } else {
-            fixedYaw
-        }
-        val center = ClaimLandMenuGeometry.center(eye, fixedYaw, 2.4, ClaimLandMenuShift())
-        ClaimLandMenuGeometry.center(eye.clone().apply { yaw = turnedHead.yaw }, turnedPanelYaw, 2.4, ClaimLandMenuShift()) shouldBe center
-        (center.z > eye.z) shouldBe true // camera yaw 0 looks toward +Z
-        val leftRect = ClaimLandMenuGeometry.rects.getValue(LandsUiPanelAction.ADD_MEMBER)
-        val leftLabel = ClaimLandMenuGeometry.textLocation(center, fixedYaw, leftRect.centerX, leftRect.centerY)
-        (leftLabel.x > center.x) shouldBe true // Builder's screen-left points toward +X at camera yaw 0
-        leftLabel.yaw shouldBe 180f
-
-        val buttonRect = ClaimLandMenuGeometry.rects.getValue(LandsUiPanelAction.ADD_MEMBER)
-        val labelLocation = ClaimLandMenuGeometry.labelLocation(center, 90f, buttonRect)
-        (kotlin.math.abs(labelLocation.y - (center.y + buttonRect.centerY - buttonRect.height / 2.0 + 0.025)) < 1e-9) shouldBe true
-        (kotlin.math.abs(labelLocation.x - (center.x + kotlin.math.cos(Math.toRadians(90.0)) * buttonRect.centerX)) < 1e-9) shouldBe true
-        (kotlin.math.abs(labelLocation.z - (center.z + kotlin.math.sin(Math.toRadians(90.0)) * buttonRect.centerX)) < 1e-9) shouldBe true
-        val buttonCenter = ClaimLandMenuGeometry.textLocation(center, fixedYaw, -0.8, buttonRect.centerY)
-        val hit = ClaimLandMenuGeometry.rayPlaneHit(
-            eye,
-            buttonCenter.toVector().subtract(eye.toVector()),
-            center,
-            fixedYaw,
-        )
-        (kotlin.math.abs(hit!!.x + 0.8) < 1e-9) shouldBe true
-        (kotlin.math.abs(hit.y - buttonRect.centerY) < 1e-9) shouldBe true
-        ClaimLandMenuGeometry.actionAt(hit.x, hit.y) shouldBe LandsUiPanelAction.ADD_MEMBER
-
-        val titleRect = ClaimLandMenuGeometry.headingRect
-        val titleTop = ClaimLandMenuGeometry.textLocation(
-            center, fixedYaw, titleRect.centerX, titleRect.centerY + titleRect.height / 2.0,
-        )
-        val titleHit = ClaimLandMenuGeometry.rayPlaneHit(
-            eye, titleTop.toVector().subtract(eye.toVector()), center, fixedYaw,
-        )
-        (kotlin.math.abs(titleHit!!.y - (titleRect.centerY + titleRect.height / 2.0)) < 1e-9) shouldBe true
-
-        listOf(0f, 45f, 90f, 180f, 270f, 315f).forEach { cameraYaw ->
-            val panelYaw = ClaimLandMenuGeometry.panelYaw(cameraYaw)
-            val panelCenter = ClaimLandMenuGeometry.center(
-                eye, panelYaw, 2.4, ClaimLandMenuShift(side = 0.25, up = 0.25),
-            )
-            val bounds = ClaimLandMenuGeometry.bounds(panelCenter, panelYaw)
-            ClaimLandMenuGeometry.fullPanelRects.forEach { rect ->
-                listOf(-rect.width / 2.0, rect.width / 2.0).forEach { x ->
-                    listOf(-rect.height / 2.0, rect.height / 2.0).forEach { y ->
-                        val corner = ClaimLandMenuGeometry.textLocation(
-                            panelCenter, panelYaw, rect.centerX + x, rect.centerY + y,
-                        )
-                        val contained = corner.x >= bounds.minX - 1e-8 && corner.x <= bounds.maxX + 1e-8 &&
-                            corner.y >= bounds.minY - 1e-8 && corner.y <= bounds.maxY + 1e-8 &&
-                            corner.z >= bounds.minZ - 1e-8 && corner.z <= bounds.maxZ + 1e-8
-                        contained shouldBe true
-                    }
-                }
+        every { plugin.server.getPlayer(playerId) } returns player
+        every { packetOwner.spawnText(any<Location>(), any<Component>()) } answers {
+            val index = made.size
+            positions += firstArg<Location>().clone()
+            texts += secondArg<Component>()
+            mockk<PacketTextDisplay>(relaxed = true).also { display ->
+                made += display
+                every { display.isValid } returns true
+                every { display.location } answers { positions[index].clone() }
+                every { display.text() } answers { texts[index] }
+                every { display.text(any<Component>()) } answers { texts[index] = firstArg(); Unit }
+                every { display.teleport(any<Location>()) } answers { positions[index] = firstArg<Location>().clone(); Unit }
             }
         }
-
-        val centerBounds = ClaimLandMenuGeometry.bounds(center, fixedYaw)
-        val centerShiftObstacle = ClaimLandMenuBounds(
-            center.x - 0.1, centerBounds.minY - 0.1, center.z - 0.05,
-            center.x + 0.1, centerBounds.minY + 0.05, center.z + 0.05,
-        )
-        ClaimLandMenuGeometry.overlapsPanel(center, fixedYaw, centerShiftObstacle) shouldBe true
-        val safeOffset = ClaimLandMenuGeometry.chooseShift(null) { shift, clearance ->
-            clearance shouldBe 0.0
-            val shiftedCenter = ClaimLandMenuGeometry.center(eye, fixedYaw, 2.4, shift)
-            !ClaimLandMenuGeometry.overlapsPanel(shiftedCenter, fixedYaw, centerShiftObstacle)
-        }
-        safeOffset shouldBe ClaimLandMenuShift(up = 0.25)
-        ClaimLandMenuGeometry.chooseShift(ClaimLandMenuShift(up = 0.5)) {
-            shift, clearance -> shift == ClaimLandMenuShift(up = 0.5) && clearance == 0.0
-        } shouldBe ClaimLandMenuShift(up = 0.5)
-        ClaimLandMenuGeometry.chooseShift(ClaimLandMenuShift(side = 0.5)) { shift, clearance ->
-            clearance > 0.0 || shift == ClaimLandMenuShift(side = 0.5) || shift == ClaimLandMenuShift(side = 0.44)
-        } shouldBe ClaimLandMenuShift(side = 0.44)
-
-        menu.show(player, "home", "Дом")
-        created shouldBe 7
-        menu.contains(playerId) shouldBe true
-        menu.landId(playerId) shouldBe "home"
-        menu.isLookingAt(player) shouldBe true
-        liveEye = Location(world, 0.0, eye.y, 0.0, -40f, 0f)
-        menu.show(player, "home", "Дом")
-        menu.isLookingAt(player) shouldBe true
-        liveEye = Location(world, 0.0, eye.y, 0.0, -45f, 0f)
-        menu.show(player, "home", "Дом")
-        menu.isLookingAt(player) shouldBe false
-        liveEye = Location(world, 0.0, eye.y, 0.0, -40f, 0f)
-        menu.show(player, "home", "Дом")
-        menu.isLookingAt(player) shouldBe false
-        liveEye = eye
-        menu.show(player, "home", "Дом")
-        menu.isLookingAt(player) shouldBe true
-        menu.hide(playerId)
-        menu.contains(playerId) shouldBe false
-        menu.landId(playerId) shouldBe null
-        menu.isLookingAt(player) shouldBe false
-        packetDisplays.forEach { verify(exactly = 1) { it.remove() } }
+        menu = ClaimLandMenu(plugin, Component::text,
+            LandsUiPanelAction.entries.associateWith { Component.text(it.name) }, packetOwner)
     }
-})
+}

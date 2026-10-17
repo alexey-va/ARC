@@ -15,6 +15,7 @@ import org.bukkit.util.Vector
 import org.joml.Quaternionf
 import org.joml.Vector3f
 import ru.arc.core.LifecycleTaskScope
+import ru.arc.paper.display.DisplayGeometry
 import ru.arc.paper.display.PacketTextDisplay
 import ru.arc.paper.display.PaperPacketDisplays
 import net.luckperms.api.LuckPermsProvider
@@ -514,11 +515,9 @@ internal fun staffHudCardOffsets(
     down: Vector,
     bounds: StaffSpellHudBounds,
     scale: Float,
-): List<Vector> = listOf(center) + listOf(-1.0, 1.0).flatMap { x ->
-    listOf(-1.0, 1.0).map { y -> center.clone()
-        .add(right.clone().multiply(x * bounds.halfWidth * scale))
-        .add(down.clone().multiply(y * bounds.verticalRadius * scale)) }
-}
+): List<Vector> = DisplayGeometry.rectangleSamples(
+    center, right, down, bounds.halfWidth * scale, bounds.verticalRadius * scale,
+)
 
 internal fun staffHudBaseDistance(position: StaffSpellHudPositionSettings = StaffSpellHudPositionSettings()): Double =
     kotlin.math.sqrt(position.forwardBlocks * position.forwardBlocks +
@@ -527,7 +526,7 @@ internal fun staffHudBaseDistance(position: StaffSpellHudPositionSettings = Staf
 internal fun staffHudSafeDistance(desiredDistance: Double, obstructionDistance: Double?): Double {
     val desired = desiredDistance.takeIf { it.isFinite() && it > 0.0 } ?: staffHudBaseDistance()
     val obstruction = obstructionDistance?.takeIf { it.isFinite() && it >= 0.0 } ?: return desired
-    return (obstruction - STAFF_HUD_BLOCK_CLEARANCE).coerceAtLeast(STAFF_HUD_MIN_VISIBLE_DISTANCE).coerceAtMost(desired)
+    return DisplayGeometry.clipDistance(desired, obstruction, STAFF_HUD_BLOCK_CLEARANCE, STAFF_HUD_MIN_VISIBLE_DISTANCE)
 }
 
 /** Source-owned camera-plane offsets and scale for the unclipped or nearer occlusion pose. */
@@ -550,7 +549,7 @@ internal fun staffSpellHudPose(
         cameraDownOffset = position.verticalBlocks * ratio,
         horizontalOffset = position.horizontalBlocks * ratio,
         distance = safeDistance,
-        textScale = (position.scale * ratio).toFloat(),
+        textScale = DisplayGeometry.distanceCompensatedScale(position.scale, baseDistance, safeDistance),
     )
 }
 

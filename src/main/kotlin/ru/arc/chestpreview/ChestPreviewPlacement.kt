@@ -6,9 +6,9 @@ import org.bukkit.Location
 import org.bukkit.entity.Player
 import org.bukkit.util.BoundingBox
 import org.bukkit.util.Vector
-import org.joml.Intersectiond
 import org.joml.Vector3d
 import ru.arc.paper.api.InspectionHologramAnchor
+import ru.arc.paper.display.DisplayOrientedVolume
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.floor
@@ -41,7 +41,7 @@ internal object ChestPreviewPlacement {
         scale: Float,
         options: ChestPreviewSettings = ChestPreviewSettings(),
         previous: InspectionHologramAnchor? = null,
-        available: (InspectionHologramAnchor, ChestPreviewVolume) -> Boolean,
+        available: (InspectionHologramAnchor, DisplayOrientedVolume) -> Boolean,
     ): InspectionHologramAnchor? {
         fun fits(anchor: InspectionHologramAnchor, clearance: Double = 0.0) =
             available(anchor, volume(eye, anchor, panel, scale, options, clearance))
@@ -133,11 +133,11 @@ internal object ChestPreviewPlacement {
         scale: Float,
         options: ChestPreviewSettings,
         clearance: Double = 0.0,
-    ): ChestPreviewVolume {
+    ): DisplayOrientedVolume {
         val yaw = Math.toRadians(eye.yaw.toDouble())
         val up = up(eye)
         val normal = eye.direction.multiply(-1)
-        return ChestPreviewVolume(
+        return DisplayOrientedVolume(
             Vector3d(anchor.x + up.x * panel.height / 2, anchor.y + up.y * panel.height / 2, anchor.z + up.z * panel.height / 2),
             Vector3d(-cos(yaw), 0.0, -sin(yaw)), Vector3d(up.x, up.y, up.z), Vector3d(normal.x, normal.y, normal.z),
             Vector3d(panel.width / 2.0 + 0.02 + clearance, panel.height / 2.0 + 0.02 + clearance,
@@ -180,7 +180,7 @@ internal object ChestPreviewPlacement {
         return true
     }
 
-    private fun clear(player: Player, volume: ChestPreviewVolume): Boolean {
+    private fun clear(player: Player, volume: DisplayOrientedVolume): Boolean {
         val bounds = volume.bounds
         val world = player.world
         if (bounds.minY < world.minHeight || bounds.maxY >= world.maxHeight || !loaded(player, bounds)) return false
@@ -203,38 +203,5 @@ internal object ChestPreviewPlacement {
         val distance = direction.length()
         return distance > 0.1 && player.world.rayTraceBlocks(eye, direction.normalize(), distance,
             FluidCollisionMode.NEVER, true) == null
-    }
-}
-
-/** The AABB is only the block-scan envelope; collisions use the actual oriented panel. */
-internal class ChestPreviewVolume(
-    private val center: Vector3d,
-    private val right: Vector3d,
-    private val up: Vector3d,
-    private val normal: Vector3d,
-    private val halfSize: Vector3d,
-) {
-    fun swept(delta: Vector3d): ChestPreviewVolume = ChestPreviewVolume(
-        Vector3d(center).add(Vector3d(delta).mul(0.5)), right, up, normal,
-        Vector3d(halfSize).add(abs(right.dot(delta)) / 2, abs(up.dot(delta)) / 2, abs(normal.dot(delta)) / 2),
-    )
-
-    val bounds: BoundingBox = run {
-        val x = abs(right.x) * halfSize.x + abs(up.x) * halfSize.y + abs(normal.x) * halfSize.z
-        val y = abs(right.y) * halfSize.x + abs(up.y) * halfSize.y + abs(normal.y) * halfSize.z
-        val z = abs(right.z) * halfSize.x + abs(up.z) * halfSize.y + abs(normal.z) * halfSize.z
-        BoundingBox(center.x - x, center.y - y, center.z - z, center.x + x, center.y + y, center.z + z)
-    }
-
-    fun overlaps(block: BoundingBox): Boolean = bounds.overlaps(block) && Intersectiond.testObOb(
-        center, right, up, normal, halfSize,
-        Vector3d(block.centerX, block.centerY, block.centerZ), X, Y, Z,
-        Vector3d(block.widthX / 2, block.height / 2, block.widthZ / 2),
-    )
-
-    private companion object {
-        val X = Vector3d(1.0, 0.0, 0.0)
-        val Y = Vector3d(0.0, 1.0, 0.0)
-        val Z = Vector3d(0.0, 0.0, 1.0)
     }
 }

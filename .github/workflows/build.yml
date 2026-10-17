@@ -34,7 +34,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: alexey-va/arc-core
-          ref: 8b100a8db152ef7bc25e401fb46fd551f839cbe8
+          ref: cd6968209a40ad80841b14cf434a234edc08922d
           path: .tmp/arc-core-verifier
           persist-credentials: false
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4

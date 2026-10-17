@@ -66,6 +66,7 @@ import ru.arc.gui.ArcMenus
 import ru.arc.hooks.HookRegistry
 import ru.arc.network.NetworkPlayerName
 import ru.arc.ops.OpsItemHandlers
+import ru.arc.paper.display.DisplayGeometry
 import ru.arc.paper.display.PacketBlockDisplay
 import ru.arc.paper.display.PacketItemDisplay
 import ru.arc.paper.display.PacketTextDisplay
@@ -277,11 +278,11 @@ internal fun travelAnchorDisplayDistance(actualDistance: Double, proxyDistance: 
     min(actualDistance, proxyDistance)
 
 internal fun travelAnchorOccludedProxyDistance(actualDistance: Double, hitDistance: Double): Double =
-    (hitDistance - OCCLUDED_PROXY_CLEARANCE).coerceIn(OCCLUDED_PROXY_CLEARANCE, actualDistance)
+    DisplayGeometry.clipDistance(actualDistance, hitDistance, OCCLUDED_PROXY_CLEARANCE, OCCLUDED_PROXY_CLEARANCE)
 
 internal fun travelAnchorOccludedProxyScale(scale: Float, actualDistance: Double, displayDistance: Double): Float =
     if (actualDistance <= 0.0 || displayDistance >= actualDistance) scale
-    else scale * (displayDistance / actualDistance).toFloat()
+    else DisplayGeometry.distanceCompensatedScale(scale, actualDistance, displayDistance)
 
 internal fun travelAnchorSupportColumns(x: Double, z: Double): List<Pair<Int, Int>> =
     buildList {
