@@ -3,9 +3,12 @@ package ru.arc.hooks.elitemobs
 import com.google.gson.GsonBuilder
 import com.magmaguy.elitemobs.advancedcombat.challenges.ClassChallengeInstance
 import com.magmaguy.elitemobs.advancedcombat.content.BuiltInClassContent
+import com.magmaguy.elitemobs.config.EconomySettingsConfig
 import com.magmaguy.elitemobs.economy.EconomyHandler
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.text.minimessage.MiniMessage
@@ -85,7 +88,13 @@ object DungeonClassesPreviewExport {
                 val trials = mockk<DungeonClassTrials>()
                 if (atTrainer) {
                     val form = catalog.require(id)
-                    val fee = ClassChallengeInstance.fee(form)
+                    // Native configuration is not initialized by this isolated UI exporter.
+                    // Use the source default explicitly while retaining the real native fee function.
+                    mockkStatic(EconomySettingsConfig::class)
+                    val fee = try {
+                        every { EconomySettingsConfig.getCurrencyShowerMultiplier() } returns 1.0
+                        ClassChallengeInstance.fee(form)
+                    } finally { unmockkStatic(EconomySettingsConfig::class) }
                     every { trials.quote(player, id) } returns DungeonClassTrialQuote(id, fee, EconomyHandler.formatCurrency(fee),
                         form.band().skillUnlockLevel())
                 }
@@ -128,13 +137,13 @@ object DungeonClassesPreviewExport {
             "resource-pack" to mapOf("url" to "https://storage.yandexcloud.net/ruscraftinresources/RusCraftingResource.zip",
                 "sha256-url" to "https://storage.yandexcloud.net/ruscraftinresources/RusCraftingResource.zip.sha256"),
             "glyphs" to content.values.flatMap { it.values }.flatMap { it.codePoints().toArray().toList() }
-                .filter { Character.getType(it) == Character.PRIVATE_USE.toInt() }.distinct().map {
+                .filter { Character.getType(it) == Character.PRIVATE_USE.toInt() || it == 0x1F48E }.distinct().map {
                     mapOf("character" to String(Character.toChars(it)), "provider" to "minecraft:default")
                 },
             "sources" to captures.keys.associateWith { mapOf("path" to "content.json", "root" to it, "include" to listOf("*")) },
             "surfaces" to mapOf("dialogs" to dialogs),
             "limitations" to listOf("Production components with representative profiles; native client and input are unverified.",
-                "Trainer quote uses the stock native fee function with its default config; live server economy is not observed here."),
+                "Trainer quote uses the native fee function with the source-default currency multiplier 1.0; live server economy is not observed here."),
         )))
         configPath.toFile().deleteRecursively()
         println("CLASS_PREVIEW ${captures.keys} $output")
