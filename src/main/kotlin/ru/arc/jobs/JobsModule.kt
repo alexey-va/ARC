@@ -6,6 +6,7 @@ import com.gamingmesh.jobs.container.Job
 import com.google.common.cache.Cache
 import com.google.common.cache.CacheBuilder
 import kotlinx.coroutines.*
+import kotlinx.coroutines.future.future
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
@@ -321,6 +322,7 @@ object JobsModule {
 
     @Volatile
     private var runtime: JobsRuntime? = null
+    private var prepared: JobsRuntime? = null
     private var listenerRegistered = false
 
     private fun JobsRuntime.launchOperation(
@@ -341,20 +343,15 @@ object JobsModule {
     private fun <T> JobsRuntime.submitOperation(
         operation: String,
         block: suspend JobsRuntime.() -> T,
-    ): CompletableFuture<T> {
-        val result = CompletableFuture<T>()
-        scope.launch {
+    ): CompletableFuture<T> = scope.future {
             try {
-                result.complete(this@submitOperation.block())
+                this@submitOperation.block()
             } catch (cancelled: CancellationException) {
-                result.completeExceptionally(cancelled)
                 throw cancelled
             } catch (failure: Exception) {
                 error("Jobs operation '$operation' failed", failure)
-                result.completeExceptionally(failure)
+                throw failure
             }
-        }
-        return result
     }
 
     @JvmStatic
@@ -362,10 +359,21 @@ object JobsModule {
     fun init(): Boolean {
         if (runtime != null) return true
         if (ru.arc.ARC.redisManager == null) return false
-
+        val candidate = checkNotNull(prepared) { "Jobs repository preparation is not ready" }
+        if (!listenerRegistered) {
+            Bukkit.getPluginManager().registerEvents(JobsModuleListener, ARC.instance)
+            listenerRegistered = true
+        }
+        Bukkit.getOnlinePlayers().forEach { player -> candidate.repo.addContext(player.uniqueId.toString()) }
+        prepared = null
+        runtime = candidate
         info("Jobs hook enabled")
+        return true
+    }
 
-        val newConfig = ConfigManager.of(ARC.instance.dataFolder.toPath(), "modules/jobs.yml")
+    internal fun prepareOnWorker(redis: ru.arc.redis.RedisOperations, root: java.nio.file.Path) {
+        if (runtime != null || prepared != null) return
+        val newConfig = ConfigManager.of(root, "modules/jobs.yml")
         val newScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         val newRepo =
             try {
@@ -374,6 +382,7 @@ object JobsModule {
                     storageKey = "arc.jobs_boosts",
                     updateChannel = "arc.jobs_boosts_update",
                     scope = newScope,
+                    redis = redis,
                 ) {
                     loadAllOnStart(true)
                     // Jobs rewards use synchronous hot-path reads. Keep the full
@@ -386,27 +395,14 @@ object JobsModule {
                 throw failure
             }
 
-        try {
-            if (!listenerRegistered) {
-                Bukkit.getPluginManager().registerEvents(JobsModuleListener, ARC.instance)
-                listenerRegistered = true
-            }
-        } catch (failure: Throwable) {
-            try {
-                runBlocking { newRepo.shutdown() }
-            } catch (cleanupFailure: Throwable) {
-                failure.addSuppressed(cleanupFailure)
-            } finally {
-                newScope.cancel()
-            }
-            throw failure
-        }
+        prepared = JobsRuntime(newRepo, newConfig, newScope)
+    }
 
-        Bukkit.getOnlinePlayers().forEach { player ->
-            newRepo.addContext(player.uniqueId.toString())
-        }
-        runtime = JobsRuntime(newRepo, newConfig, newScope)
-        return true
+    internal fun discardPreparedOnWorker() {
+        val candidate = prepared ?: return
+        prepared = null
+        ru.arc.repository.sealRepositoryOperations(candidate.scope)
+        ru.arc.repository.drainRepository(candidate.repo, candidate.scope)
     }
 
     @JvmStatic
@@ -414,11 +410,9 @@ object JobsModule {
     fun shutdown() {
         val current = runtime ?: return
         runtime = null
-        try {
-            runBlocking { current.repo.shutdown() }
-        } finally {
-            current.scope.cancel()
-        }
+        ru.arc.repository.sealRepositoryOperations(current.scope)
+        ARC.instance.retireInBackground { ru.arc.repository.drainRepository(current.repo, current.scope) }
+            .whenComplete { _, failure -> if (failure != null) error("Could not drain Jobs repository", failure) }
     }
 
     @JvmStatic

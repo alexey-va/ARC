@@ -45,7 +45,12 @@ object LocationPoolRepository {
      * @param id идентификатор пула
      * @return существующий или новый пул
      */
-    fun getOrCreate(id: String): LocationPool = pools.getOrPut(id) { LocationPool(id) }
+    fun getOrCreate(id: String): LocationPool {
+        LocationPoolManager.requireWritable(id)
+        return pools.getOrPut(id) {
+            LocationPool(id).also { ru.arc.ARC.plugin?.locationPoolConfig?.register(it) }
+        }
+    }
 
     /**
      * Добавляет пул в репозиторий.
@@ -53,7 +58,8 @@ object LocationPoolRepository {
      * @param pool пул для добавления
      */
     fun add(pool: LocationPool) {
-        pools[pool.id] = pool
+        ru.arc.ARC.plugin?.locationPoolConfig?.register(pool)
+        pools.put(pool.id, pool)?.takeIf { it !== pool }?.setWritable(false)
     }
 
     /**

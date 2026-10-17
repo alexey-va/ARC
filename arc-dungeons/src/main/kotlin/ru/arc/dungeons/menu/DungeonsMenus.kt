@@ -33,11 +33,11 @@ object DungeonsMenus {
     private var dialogRuntime: PaperDialogRuntime? = null
 
     /** [legacyDataRoot] is the plugin data folder containing `guis/menus.yml`. */
-    fun initialize(plugin: Plugin, legacyDataRoot: Path) {
+    fun initialize(plugin: Plugin, legacyDataRoot: Path, prepared: ru.arc.config.Config) {
         requirePrimaryThread()
         check(runtime == null && dialogRuntime == null) { "ArcDungeons menu runtime is already initialized" }
 
-        val configuration = DungeonsMenuSchema.load(legacyDataRoot)
+        val configuration = DungeonsMenuSchema.bind(prepared)
         val menuCandidate = PaperMenuRuntime(plugin, Tasks.scheduler, configuration)
         val dialogCandidate = try {
             PaperDialogRuntime(plugin)
@@ -52,11 +52,10 @@ object DungeonsMenus {
     }
 
     /** Parse a complete candidate first, then atomically replace the active menu generation. */
-    fun reload() {
+    fun reload(prepared: ru.arc.config.Config) {
         requirePrimaryThread()
         val active = requireNotNull(runtime) { "ArcDungeons menu runtime is not initialized" }
-        val root = requireNotNull(dataRoot) { "ArcDungeons menu runtime is not initialized" }
-        active.replace(DungeonsMenuSchema.load(root))
+        active.replace(DungeonsMenuSchema.bind(prepared))
     }
 
     fun current() = requireNotNull(runtime) { "ArcDungeons menu runtime is not initialized" }.current()

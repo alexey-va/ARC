@@ -144,105 +144,94 @@ class ScheduledCommandsService(
 }
 
 object ScheduledCommandsManager {
-    private var service: ScheduledCommandsService? = null
-    private lateinit var config: ScheduledCommandsConfig
+    private var owner: ScheduledCommandsOwner? = null
+    private var predecessor = java.util.concurrent.CompletableFuture.completedFuture<Void>(null)
+    private var testService: ScheduledCommandsService? = null
 
     @JvmStatic
-    fun init(
-        dataPath: java.nio.file.Path,
-        taskScheduler: TaskScheduler,
-    ) {
-        config = ScheduledCommandsConfig.load(dataPath)
-        service =
-            ScheduledCommandsService(
-                settingsProvider = { config },
-                dispatcher = CommandDispatcher { command -> ARC.trySeverCommand(command) },
-                serverNameProvider = { ARC.serverName?.lowercase() },
-                taskScheduler = taskScheduler,
-            )
-        service?.start()
+    fun init(dataPath: java.nio.file.Path, taskScheduler: TaskScheduler) {
+        shutdown()
+        check(predecessor.isDone && !predecessor.isCompletedExceptionally) { "Previous schedule generation is still draining" }
+        val plugin = ARC.instance
+        owner = ScheduledCommandsOwner(dataPath, plugin.backgroundOwner(), plugin.nativeWork,
+            taskScheduler, { ARC.serverName?.lowercase() }, CommandDispatcher(ARC::trySeverCommand),
+            reportFailure = { failure -> plugin.logger.log(java.util.logging.Level.SEVERE, "Scheduled command operation failed", failure) })
     }
 
-    /** Visible for tests. */
+    /** Pure service seam; runtime persistence and native dispatch use the asynchronous owner. */
     internal fun initForTests(
         settings: ScheduledCommandsSettings,
         dispatcher: CommandDispatcher,
         serverName: String?,
         clock: ScheduleClock,
         taskScheduler: TaskScheduler,
-    ): ScheduledCommandsService {
-        val created =
-            ScheduledCommandsService(
-                settingsProvider = { settings },
-                dispatcher = dispatcher,
-                serverNameProvider = { serverName?.lowercase() },
-                clock = clock,
-                taskScheduler = taskScheduler,
-            )
-        service = created
-        return created
-    }
+    ): ScheduledCommandsService = ScheduledCommandsService(
+        settingsProvider = { settings }, dispatcher = dispatcher,
+        serverNameProvider = { serverName?.lowercase() }, clock = clock, taskScheduler = taskScheduler,
+    ).also { testService?.stop(); testService = it }
+
+    fun readiness(): java.util.concurrent.CompletableFuture<Void> =
+        owner?.ready() ?: java.util.concurrent.CompletableFuture.completedFuture(null)
+
+    fun drained(): java.util.concurrent.CompletableFuture<Void> = predecessor.copy()
+
+    @JvmStatic
+    fun reloadAsync(): java.util.concurrent.CompletableFuture<Void> = requireOwner().reloadAsync()
 
     @JvmStatic
     fun reload() {
-        if (service == null) return
-        config = ScheduledCommandsConfig.load(ARC.instance.dataPath)
-        service?.reload()
+        val logger = ARC.instance.logger
+        reloadAsync().whenComplete { _, failure ->
+            if (failure != null) logger.log(java.util.logging.Level.SEVERE, "Scheduled command reload failed; previous settings remain active", failure)
+        }
     }
 
     @JvmStatic
     fun shutdown() {
-        service?.stop()
-        service = null
+        val previous = owner
+        owner = null
+        if (previous != null) predecessor = previous.close()
+        testService?.stop()
+        testService = null
     }
 
     @JvmStatic
-    fun settings(): ScheduledCommandsSettings {
-        check(::config.isInitialized) { "Scheduled commands manager is not initialized" }
-        return config
-    }
+    fun settings(): ScheduledCommandsSettings = requireOwner().snapshot()
 
     @JvmStatic
     fun entries(): List<ScheduledCommandEntry> = settings().entries()
+
+    @JvmStatic
+    fun commandIds(prefix: String): List<String> = owner?.commandIds(prefix) ?: emptyList()
 
     @JvmStatic
     fun entry(id: String): ScheduledCommandEntry? = settings().entry(id.trim().lowercase())
 
     @JvmStatic
     fun openGui(player: org.bukkit.entity.Player) {
-        ru.arc.scheduled.guis.ScheduledCommandsGuiFactory
-            .openList(player)
+        ru.arc.scheduled.guis.ScheduledCommandsGuiFactory.openList(player)
     }
 
-    @JvmStatic
-    fun runNow(id: String): Boolean = service?.runNow(id) == true
+    fun runNowAsync(id: String): java.util.concurrent.CompletableFuture<Boolean> = requireOwner().runNowAsync(id)
+    fun toggleEnabledAsync(id: String): java.util.concurrent.CompletableFuture<Boolean?> = requireOwner().toggleEnabledAsync(id)
+    fun saveEntryAsync(draft: ScheduledCommandDraft): java.util.concurrent.CompletableFuture<ValidationResult> = requireOwner().saveEntryAsync(draft)
+    fun saveSnapshotAsync(draft: ScheduledCommandDraft): java.util.concurrent.CompletableFuture<ScheduledEntrySaveResult> = requireOwner().saveSnapshotAsync(draft)
+    fun deleteEntryAsync(id: String): java.util.concurrent.CompletableFuture<Boolean> = requireOwner().deleteEntryAsync(id)
 
-    @JvmStatic
-    fun toggleEnabled(id: String): Boolean? = service?.toggleEnabled(id)
+    // Compatibility for non-native callers while UI/HTTP callers migrate to explicit future APIs.
+    @Deprecated("Use runNowAsync and acknowledge the native completion")
+    fun runNow(id: String): Boolean = offThreadAwait { runNowAsync(id) }
+    @Deprecated("Use toggleEnabledAsync")
+    fun toggleEnabled(id: String): Boolean? = offThreadAwait { toggleEnabledAsync(id) }
+    @Deprecated("Use saveEntryAsync and acknowledge strict persistence")
+    fun saveEntry(draft: ScheduledCommandDraft): ValidationResult = offThreadAwait { saveEntryAsync(draft) }
+    @Deprecated("Use deleteEntryAsync and acknowledge strict persistence")
+    fun deleteEntry(id: String): Boolean = offThreadAwait { deleteEntryAsync(id) }
 
-    @JvmStatic
-    fun saveEntry(draft: ScheduledCommandDraft): ValidationResult {
-        check(::config.isInitialized) { "Scheduled commands manager is not initialized" }
-        val existingIds = config.commandIds().toSet()
-        val result = ScheduledCommandInputValidator.validateDraft(draft, existingIds)
-        if (result is ValidationResult.Error) return result
-
-        val oldId = draft.originalId
-        config.saveEntry(draft)
-        config.reloadConfig()
-        service?.clearEntryState(oldId)
-        service?.clearEntryState(draft.id)
-        return ValidationResult.Ok
+    private fun <T> offThreadAwait(operation: () -> java.util.concurrent.CompletableFuture<T>): T {
+        check(!org.bukkit.Bukkit.isPrimaryThread()) { "Scheduled command completion must never block the server thread" }
+        return operation().join()
     }
 
-    @JvmStatic
-    fun deleteEntry(id: String): Boolean {
-        check(::config.isInitialized) { "Scheduled commands manager is not initialized" }
-        val normalizedId = id.trim().lowercase()
-        val deleted = config.deleteEntry(normalizedId)
-        if (!deleted) return false
-        config.reloadConfig()
-        service?.clearEntryState(normalizedId)
-        return true
-    }
+    private fun requireOwner(): ScheduledCommandsOwner = checkNotNull(owner) { "Scheduled commands are not initialized" }
 }

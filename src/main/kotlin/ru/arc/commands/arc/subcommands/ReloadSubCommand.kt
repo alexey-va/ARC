@@ -4,7 +4,6 @@ import org.bukkit.command.CommandSender
 import ru.arc.ARC
 import ru.arc.commands.arc.CommandConfig
 import ru.arc.commands.arc.SubCommand
-import kotlin.system.measureTimeMillis
 
 /**
  * /arc reload - Reloads plugin configuration.
@@ -22,17 +21,21 @@ object ReloadSubCommand : SubCommand {
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
         sender.sendMessage(CommandConfig.get("reload.starting", "<gray>Перезагрузка конфигурации..."))
 
-        val timeMs = measureTimeMillis {
-            ARC.instance.reload()
-        }
-
-        sender.sendMessage(
+        val started = System.nanoTime()
+        ARC.instance.whenCompleteOnMain(ARC.instance.reload()) { _, failure ->
+            if (failure != null) {
+                sender.sendMessage(CommandConfig.get("reload.failed", "<red>Не удалось перезагрузить конфигурацию. Проверьте журнал ARC."))
+                return@whenCompleteOnMain
+            }
+            val timeMs = (System.nanoTime() - started) / 1_000_000L
+            sender.sendMessage(
             CommandConfig.get(
                 "reload.success-detailed",
                 "<gold>✔ <gray>Перезагружено за <white>%time%мс<gray>: конфиги, модули, хуки",
                 "%time%", timeMs.toString()
             )
         )
+        }
 
         return true
     }

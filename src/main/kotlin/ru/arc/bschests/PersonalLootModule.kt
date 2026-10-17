@@ -219,6 +219,7 @@ object PersonalLootModule {
 
     private var repo: CachedRepository<CustomLootData>? = null
     private var repositoryScope: CoroutineScope? = null
+    private var prepared: Pair<CachedRepository<CustomLootData>, CoroutineScope>? = null
     private lateinit var chestGenerator: ChestGenerator
     private val previewReadLock = Any()
     private val previewGeneration = AtomicLong()
@@ -239,7 +240,6 @@ object PersonalLootModule {
     fun init() {
         if (repo != null) return
         if (ARC.redisManager == null) return
-        val serverName = checkNotNull(ARC.serverName) { "ARC server name is not initialized" }
 
         key = NamespacedKey(ARC.instance, "ploot")
         uuidKey = NamespacedKey(ARC.instance, "ploot_uuid")
@@ -247,6 +247,16 @@ object PersonalLootModule {
         breakKey = NamespacedKey(ARC.instance, "ploot_break")
 
         reload()
+
+        val candidate = checkNotNull(prepared) { "Personal loot repository preparation is not ready" }
+        prepared = null
+        clearPreviewReads()
+        repo = candidate.first
+        repositoryScope = candidate.second
+    }
+
+    internal fun prepareOnWorker(redis: ru.arc.redis.RedisOperations, serverName: String) {
+        if (repo != null || prepared != null) return
 
         val storageKey = "arc.$serverName-ploot"
         val updateChannel = "arc.$serverName-ploot-update"
@@ -259,6 +269,7 @@ object PersonalLootModule {
                     storageKey = storageKey,
                     updateChannel = updateChannel,
                     scope = newScope,
+                    redis = redis,
                 ) {
                     loadAllOnStart(true)
                     saveInterval(1.seconds)
@@ -267,9 +278,14 @@ object PersonalLootModule {
                 newScope.cancel()
                 throw failure
             }
-        clearPreviewReads()
-        repo = newRepository
-        repositoryScope = newScope
+        prepared = newRepository to newScope
+    }
+
+    internal fun discardPreparedOnWorker() {
+        val candidate = prepared ?: return
+        prepared = null
+        ru.arc.repository.sealRepositoryOperations(candidate.second)
+        ru.arc.repository.drainRepository(candidate.first, candidate.second)
     }
 
     @JvmStatic
@@ -279,11 +295,11 @@ object PersonalLootModule {
         clearPreviewReads()
         repo = null
         repositoryScope = null
-        try {
-            if (currentRepository != null) {
-                runBlocking { currentRepository.shutdown() }
-            }
-        } finally {
+        if (currentRepository != null && currentScope != null) {
+            ru.arc.repository.sealRepositoryOperations(currentScope)
+            ARC.instance.retireInBackground { ru.arc.repository.drainRepository(currentRepository, currentScope) }
+                .whenComplete { _, failure -> if (failure != null) error("Could not drain personal loot", failure) }
+        } else {
             currentScope?.cancel()
         }
     }

@@ -47,7 +47,7 @@ open class ScheduledCommandsConfig(
         enabled: Boolean,
     ) {
         config.setBoolean("commands.$id.enabled", enabled)
-        config.save()
+        config.saveStrict()
     }
 
     fun isEnabled(id: String): Boolean = config.bool("commands.$id.enabled", true)
@@ -86,7 +86,7 @@ open class ScheduledCommandsConfig(
                 config.setString("$sched.expression", draft.scheduleValue.trim())
             }
         }
-        config.save()
+        config.saveStrict()
     }
 
     fun deleteEntry(id: String): Boolean {
@@ -94,12 +94,19 @@ open class ScheduledCommandsConfig(
         val path = "commands.$normalizedId"
         if (!config.exists(path)) return false
         config.removeKey(path)
-        config.save()
+        config.saveStrict()
         return true
     }
 
     fun reloadConfig() {
         config.reload()
+    }
+
+    /** Worker-only parse. Published readers never share a mutable YAML tree or its locks. */
+    internal fun snapshot(): ScheduledCommandsSnapshot {
+        val parsed = entries()
+        return ScheduledCommandsSnapshot(enabled, checkIntervalTicks, timezone, guiTitle,
+            detailGuiTitle, permissionRunNow, parsed, parsed.associateBy { it.id })
     }
 
     private fun splitList(raw: String): List<String> =
@@ -110,7 +117,7 @@ open class ScheduledCommandsConfig(
 
     companion object {
         fun load(dataPath: Path): ScheduledCommandsConfig =
-            ScheduledCommandsConfig(ConfigManager.ofModule(dataPath, "scheduled-commands.yml"))
+            ScheduledCommandsConfig(Config(dataPath, ConfigManager.moduleYamlRelative(dataPath, "scheduled-commands.yml")))
 
         internal fun loadEntry(
             id: String,
@@ -178,4 +185,39 @@ class MutableScheduledCommandsSettings(
     fun put(entry: ScheduledCommandEntry) {
         entriesById[entry.id] = entry
     }
+}
+
+/** Fully parsed immutable view; mutation belongs to the worker-owned configuration candidate. */
+internal data class ScheduledCommandsSnapshot(
+    override val enabled: Boolean,
+    override val checkIntervalTicks: Long,
+    override val timezone: ZoneId,
+    override val guiTitle: String,
+    override val detailGuiTitle: String,
+    override val permissionRunNow: String,
+    private val ordered: List<ScheduledCommandEntry>,
+    private val byId: Map<String, ScheduledCommandEntry>,
+) : ScheduledCommandsSettings {
+    private val ids = java.util.List.copyOf(ordered.map { it.id }.sortedWith(String.CASE_INSENSITIVE_ORDER))
+
+    /** Worker-prepared index; native tab completion only finds two bounds and returns a view. */
+    fun commandIds(prefix: String): List<String> {
+        fun bound(upper: Boolean): Int {
+            var low = 0
+            var high = ids.size
+            while (low < high) {
+                val middle = (low + high).ushr(1)
+                val id = ids[middle]
+                val comparison = if (id.startsWith(prefix, ignoreCase = true)) 0 else id.compareTo(prefix, ignoreCase = true)
+                if (comparison < 0 || (upper && comparison == 0)) low = middle + 1 else high = middle
+            }
+            return low
+        }
+        return ids.subList(bound(false), bound(true))
+    }
+
+    override fun entries(): List<ScheduledCommandEntry> = ordered
+    override fun entry(id: String): ScheduledCommandEntry? = byId[id]
+    override fun setEnabled(id: String, enabled: Boolean): Unit =
+        error("Use the asynchronous schedule mutation API")
 }

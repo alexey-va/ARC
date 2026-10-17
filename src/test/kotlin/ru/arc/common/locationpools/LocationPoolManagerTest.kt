@@ -11,6 +11,7 @@ import org.bukkit.inventory.ItemStack
 import org.mockbukkit.mockbukkit.entity.PlayerMock
 import org.mockbukkit.mockbukkit.world.WorldMock
 import ru.arc.KotestTestBase
+import ru.arc.awaitMainThreadFuture
 
 class LocationPoolManagerTest :
     KotestTestBase({
@@ -197,14 +198,14 @@ class LocationPoolManagerTest :
         describe("Pool deletion") {
             it("should delete pool") {
                 LocationPoolManager.createPool("test-pool-delete")
-                val deleted = LocationPoolManager.delete("test-pool-delete")
+                val deleted = awaitMainThreadFuture(server, LocationPoolManager.delete("test-pool-delete"))
 
                 deleted shouldBe true
                 LocationPoolManager.getPool("test-pool-delete").shouldBeNull()
             }
 
             it("should return false when deleting non-existent pool") {
-                val deleted = LocationPoolManager.delete("non-existent-delete")
+                val deleted = awaitMainThreadFuture(server, LocationPoolManager.delete("non-existent-delete"))
 
                 deleted shouldBe false
             }

@@ -18,12 +18,17 @@ class LocationPool(
 ) {
     @SerializedName("locations")
     private val _locations = WeightedRandom<ServerLocation>()
-    private var _dirty = false
+    // Only coordinates/weights are persisted. A worker-owned mirror receives immutable
+    // deltas before the native facade accepts an edit; serialization never reads this TreeMap.
+    @Transient @Volatile private var revision = 0L
+    @Transient @Volatile private var persistedRevision = 0L
+    @Transient private var mutationSink: ((LocationPoolMutation) -> Unit)? = null
+    @Transient private var writable = true
 
     /**
      * Флаг изменений - true если пул был изменён и требует сохранения.
      */
-    val isDirty: Boolean get() = _dirty
+    val isDirty: Boolean get() = revision != persistedRevision
 
     /**
      * Количество локаций в пуле.
@@ -58,8 +63,11 @@ class LocationPool(
         location: ServerLocation,
         weight: Double = 1.0,
     ) {
+        check(writable) { "Location pool is being saved or has been replaced" }
+        val next = revision + 1
+        mutationSink?.invoke(LocationPoolMutation.Add(location, weight, next))
         _locations.add(location, weight)
-        _dirty = true
+        revision = next
     }
 
     /**
@@ -77,8 +85,12 @@ class LocationPool(
      * @return true если локация была найдена и удалена
      */
     fun removeLocation(location: ServerLocation): Boolean {
+        check(writable) { "Location pool is being saved or has been replaced" }
+        if (!_locations.values().contains(location)) return false
+        val next = revision + 1
+        mutationSink?.invoke(LocationPoolMutation.Remove(location, next))
         val removed = _locations.remove(location)
-        if (removed) _dirty = true
+        revision = next
         return removed
     }
 
@@ -130,9 +142,14 @@ class LocationPool(
     /**
      * Сбрасывает флаг dirty после сохранения.
      */
-    fun markClean() {
-        _dirty = false
-    }
+    fun markClean() { persistedRevision = revision }
+
+    internal fun markPersisted(savedRevision: Long) { persistedRevision = savedRevision }
+    internal fun currentRevision(): Long = revision
+    internal fun bindPersistence(sink: (LocationPoolMutation) -> Unit) { mutationSink = sink }
+    internal fun isPersistenceBound(): Boolean = mutationSink != null
+    internal fun setWritable(value: Boolean) { writable = value }
+
 
     override fun toString(): String = "LocationPool(id='$id', size=$size)"
 
@@ -156,4 +173,11 @@ class LocationPool(
             return normalized
         }
     }
+}
+
+/** Immutable, platform-independent edits admitted before changing the live pool. */
+internal sealed interface LocationPoolMutation {
+    val revision: Long
+    data class Add(val location: ServerLocation, val weight: Double, override val revision: Long) : LocationPoolMutation
+    data class Remove(val location: ServerLocation, override val revision: Long) : LocationPoolMutation
 }

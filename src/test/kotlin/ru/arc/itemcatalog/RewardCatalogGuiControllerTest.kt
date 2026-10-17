@@ -41,7 +41,7 @@ class RewardCatalogGuiControllerTest : StringSpec({
                 listOf(entry, entry.copy(id = "other", source = RewardCatalogSource.Planned("other"), weight = 9800)), rolls = 1)
             val settings = RewardCatalogSettings(true, "Rewards", listOf(category), RewardCatalogMessages.DEFAULT)
             val root = Files.createTempDirectory("native-key-preview")
-            ArcMenus.initialize(plugin, root)
+            ArcMenus.initialize(plugin, root, ru.arc.gui.ArcMenuConfiguration.prepare(root))
             try {
                 val controller = RewardCatalogGuiController(settings, "arc.test")
                 controller.prepareCaseReward("case_test", "furniture_key") shouldBe null
@@ -235,7 +235,7 @@ class RewardCatalogGuiControllerTest : StringSpec({
             val root = Files.createTempDirectory("retired-reward-menu")
             mockkObject(Treasures)
             every { Treasures.getPool(poolId) } returns TreasurePool(poolId, listOf(retiredTreasure, activeTreasure))
-            ArcMenus.initialize(plugin, root)
+            ArcMenus.initialize(plugin, root, ru.arc.gui.ArcMenuConfiguration.prepare(root))
             try {
                 val controller = RewardCatalogGuiController(settings, "arc.test")
                 controller.openRoot(player)

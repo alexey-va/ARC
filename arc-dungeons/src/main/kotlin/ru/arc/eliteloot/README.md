@@ -15,8 +15,11 @@ fork limited to persistence and database work.
 The dungeon panel, global help center and `/loot` (`/добыча`) open the same SQL
 mailbox. The configured `lost-elite-loot` chest menu pages through 45 items.
 Left click delivers the original complete stack into one empty storage slot;
-right click sells it for the displayed native EM resale price. The preview adds
-click instructions to a clone; original lore, models, attributes and PDC survive.
+right click sells it for the displayed native EM resale price. Payload hash/Base64 preparation runs on the outbox worker, then one native item
+is deserialized and decorated per shared queue step. The final inventory page
+contains at most 45 cards. Superseded, closed or stopped preparations cannot open
+a menu. The preview adds click instructions to a clone; original lore, models,
+attributes and PDC survive.
 No deposits, new rolls, partial extraction or additional price multiplier.
 
 Eligibility uses native EliteMobs 10.1.1 PDC: canonical `elitemobs:soulbind`, a mob
@@ -27,15 +30,50 @@ marker. ARC case rewards and any entity with a player thrower or persistent
 ## Physical capture and SQL ownership
 
 Collection starts when the owner disconnects, changes worlds or moves more than
-64 blocks from the item. Distance is checked once per second against tracked
-spawned/loaded items, not by scanning every world. Natural despawn is also
-cancelled. The entity is frozen against pickup, aging, damage and movement; one
-queued entity per tick crosses a synchronous durable local journal barrier before
-removal. Entity chunk unload captures synchronously before entity serialization.
-World unload captures remaining eligible items before instance deletion; a failed
-capture cancels world unload. Chunk unload is not cancellable: a failed capture
-retains the frozen item and its persistent capture marker for retry on load.
-Lava/void destruction, consumption and administrator deletion are not undone.
+64 blocks from the item. The periodic tracked-item sweep, loaded-chunk scan,
+owner departure and mailbox settlement share the runtime's native queue
+(128 steps / 2 ms per tick across features). A step inspects one entity or binds
+one item; the clock cannot interrupt an individual native call.
+
+The native step freezes eligible loot and captures its exact serialized bytes.
+The single outbox worker loads the journal, encodes Base64, commits/readbacks
+records, publishes SQL and writes export acknowledgements. The entity is removed
+only after the UUID index reports a verified durable record. A failed or rejected
+write retains the frozen physical item and logs the retained retry. An old
+completion cannot mutate a replacement entity or a stopped generation.
+
+Early tickets retain only already-loaded chunks containing eligible tracked
+loot. Paper's ticket API may force-load a chunk, so the loaded check and ticket
+acquisition occur together on the native thread. Tickets are released after
+capture, pickup or other disappearance. LostLoot never adds a ticket from a late
+entity unload event. `EntitiesUnloadEvent` only invalidates that chunk's native
+capture epoch: vanilla keeps the physical copy and later load reconciliation uses
+the journal UUID/tombstone to suppress duplicates. No unloaded entity object is
+serialized or revisited asynchronously. A cancellable world unload is refused
+until a sliced scan, durable capture and native removal have completed; the caller
+may retry it before deleting an instance. Lava/void destruction, consumption and
+administrator deletion are not undone.
+
+The `LostLootProtection` listener is registered to the existing ArcCore host and
+retains only the memory UUID index. Known outbox/tombstone IDs and capture markers
+cannot enter inventory, hoppers, merges or despawn during consumer disable and
+reload. Before the next journal cache is ready, canonical bound EliteMobs-source
+drops are protected as well; ordinary vanilla loot, case rewards and deliberate
+manual drops remain outside that startup hold. The next successful journal load
+swaps the index after the previous generation's actual drain. This intentional
+continuity listener owns no worker, SQL lease, chunk ticket or entity references.
+
+`LostLootModule.ready()` includes local cache attachment, SQL preparation and
+mailbox attachment. Cold configuration and SQL acquisition run on the captured
+parent worker, independently of local journal captures. Shutdown seals admission
+without waiting on Paper, drains accepted local work and SQL publications, then
+closes accepted JDBC work before returning its SQL lease. Direct leases are
+retained through provider shutdown as soon as acquisition succeeds; failed
+retention closes the candidate before any JDBC work is admitted. Host-owned native
+cleanup retires chunk tickets in slices; `drained()` observes both storage and
+native completion. A host stop cannot promise future native ticks and fails that
+cleanup observation; the journal and persistent physical marker remain recovery
+authority on a full restart.
 
 Capture moves an already generated stack: direct mint/burn is zero in vault,
 tokens, EliteMobs crystals and XP. Drop rolls, quantities and resale prices are
@@ -97,16 +135,23 @@ receipt, currency snapshot and SQL state. Terminal records retain operation IDs.
 
 Purpur 1.21.11 (server JAR SHA-256
 `34ad0d95aa1210df89def3b344bd57d09a2fe497156876772103baea96d8df21`,
-inspected 2026-09-11) calls `EntitiesUnloadEvent` from `LevelChunk.unloadCallback`
+inspected 2026-10-17) calls `EntitiesUnloadEvent` from `LevelChunk.unloadCallback`
 before entity NBT serialization in `NewChunkHolder.unloadStage2`. The entity
 section is already inaccessible at the event; `isValid` can be false for a
-living item. Use `isDead` to reject removed items and consume the
-[event's entity list](https://jd.papermc.io/paper/1.21.11/org/bukkit/event/world/EntitiesUnloadEvent.html)
-without loading a chunk or waiting for another tick.
+living item. `ChunkUnloadEvent` follows it and is not cancellable. This is why
+capture must acquire a loaded chunk ticket earlier: moving the old event's
+serialization to a worker would read stale native state and could duplicate the
+saved physical copy. The late callback performs only an epoch change.
+`World.loadedChunks`, `Chunk.entities`, native item serialization/deserialization,
+and `Player.saveData()` remain indivisible native operations. Iteration after a
+chunk snapshot is sliced; `saveData()` is still the required item/receipt durability
+barrier before SQL acknowledgement and is not claimed to be asynchronous.
 
-`./gradlew test --tests ru.arc.eliteloot.LostEliteLootTest` covers event
-registration, exact-stack durability, failed writes/reload, ownership filters,
-distance, disconnect, world change and stale-copy suppression. The tests model
+`./gradlew :arc-dungeons:test --tests 'ru.arc.eliteloot.*'` covers blocked cold
+journal/write admission, FIFO persistence, explicit overload, terminal SQL ACK
+ordering, host guard continuity, exact-stack durability, failed-write retry,
+chunk epoch invalidation, world-unload barriers, 300-item native budgets, stale
+mailbox preparations and native receipt reconciliation. The tests model
 Paper entity state using API mocks; the unload ordering above was established
 separately against the actual server artifact.
 

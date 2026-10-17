@@ -61,6 +61,11 @@ object DungeonsMenuSchema {
      * Config instance before validation; the on-disk file is never saved here.
      */
     fun load(legacyDataRoot: Path): PaperMenuConfiguration {
+        return bind(prepare(legacyDataRoot))
+    }
+
+    /** Worker-only YAML projection; native material checks remain in [bind]. */
+    internal fun prepare(legacyDataRoot: Path): Config {
         val config = Config(legacyDataRoot, RESOURCE)
 
         config.keys(LAYOUT_ROOT)
@@ -72,7 +77,10 @@ object DungeonsMenuSchema {
             .filterNot(retainedTemplates::contains)
             .forEach { config.removeKey("$TEMPLATE_ROOT.$it") }
 
-        return PaperMenuConfigurationParser.require(
+        return config
+    }
+
+    internal fun bind(config: Config): PaperMenuConfiguration = PaperMenuConfigurationParser.require(
             config = config,
             layoutRoot = LAYOUT_ROOT,
             templateRoot = TEMPLATE_ROOT,
@@ -80,7 +88,6 @@ object DungeonsMenuSchema {
             requiredTemplates = dynamicTemplates,
             textContracts = textContracts,
         )
-    }
 
     private fun referencedTemplates(config: Config): Set<String> = buildSet {
         layoutNames.forEach { layout ->

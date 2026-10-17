@@ -16,79 +16,60 @@ import ru.arc.common.locationpools.LocationPoolManager
  * internal WeightedRandom/Gson persistence shape.
  */
 object OpsLocationPoolHandlers {
+    private data class Environment(val server: String, val worlds: Set<String>)
+
+    private fun environment(): Environment = OpsBukkitSync.call {
+        Environment(checkNotNull(ARC.serverName) { "ARC server name is not initialized" }, Bukkit.getWorlds().map { it.name }.toSet())
+    }
+
+    /** HTTP-worker entry: native capture is memory-only; full snapshots/sort run on workers. */
     fun list(id: String? = null): Map<String, Any?> {
+        check(!Bukkit.isPrimaryThread()) { "Location pool reports must run on an HTTP worker" }
         val normalizedId = id?.takeIf { it.isNotBlank() }?.let(LocationPool::normalizePersistentId)
-        return OpsBukkitSync.call {
-            val selected =
-                if (normalizedId == null) {
-                    LocationPoolManager
-                        .getAll()
-                        .filterNot { LocationPoolManager.isEphemeralPool(it.id) }
-                        .sortedBy { it.id }
-                } else {
-                    listOfNotNull(LocationPoolManager.getPool(normalizedId))
-                        .filterNot { LocationPoolManager.isEphemeralPool(it.id) }
-                }
-            if (normalizedId != null && selected.isEmpty()) {
-                throw NoSuchElementException("Location pool not found: $normalizedId")
-            }
-            mapOf(
-                "source" to "arc-location-pools",
-                "server" to (ARC.serverName ?: "unknown"),
-                "count" to selected.size,
-                "pools" to selected.map(::poolToMap),
-            )
+        val capture = OpsBukkitSync.call {
+            val config = checkNotNull(ARC.instance.locationPoolConfig) { "Location pools are unavailable" }
+            val selected = if (normalizedId == null) LocationPoolManager.getAll()
+                else listOfNotNull(LocationPoolManager.getPool(normalizedId))
+            config to selected.filterNot { LocationPoolManager.isEphemeralPool(it.id) }
         }
+        val pools = capture.first.snapshots(capture.second).get(15, java.util.concurrent.TimeUnit.SECONDS).sortedBy { it.id }
+        if (normalizedId != null && pools.isEmpty()) throw NoSuchElementException("Location pool not found: $normalizedId")
+        val env = environment()
+        return mapOf("source" to "arc-location-pools", "server" to env.server, "count" to pools.size,
+            "pools" to pools.map { poolToMap(it, env) })
     }
 
-    fun preview(
-        id: String,
-        body: JsonObject,
-    ): Map<String, Any?> {
+    fun preview(id: String, body: JsonObject): Map<String, Any?> {
         val definition = parseDefinition(id, body)
-        return OpsBukkitSync.call {
-            validateForCurrentNode(definition)
-            mapOf(
-                "source" to "arc-location-pools",
-                "preview" to true,
-                "persisted" to false,
-                "exists" to (LocationPoolManager.getPool(definition.id) != null),
-                "pool" to definitionToMap(definition),
-            )
-        }
+        val env = environment()
+        validateForCurrentNode(definition, env)
+        val exists = OpsBukkitSync.call { LocationPoolManager.getPool(definition.id) != null }
+        return mapOf("source" to "arc-location-pools", "preview" to true, "persisted" to false,
+            "exists" to exists, "pool" to definitionToMap(definition, env))
     }
 
-    fun upsert(
-        id: String,
-        body: JsonObject,
-    ): Map<String, Any?> {
+    fun upsert(id: String, body: JsonObject): Map<String, Any?> {
+        check(!Bukkit.isPrimaryThread()) { "Location pool writes must run on an HTTP worker" }
         val definition = parseDefinition(id, body)
-        return OpsBukkitSync.call {
-            validateForCurrentNode(definition)
+        val env = environment()
+        validateForCurrentNode(definition, env)
+        val pool = definition.toPool()
+        val accepted = OpsBukkitSync.call {
             val existed = LocationPoolManager.getPool(definition.id) != null
-            val pool = definition.toPool()
-            LocationPoolManager.replacePersistent(pool)
-            mapOf(
-                "source" to "arc-location-pools",
-                "created" to !existed,
-                "saved" to true,
-                "pool" to poolToMap(pool),
-            )
+            existed to LocationPoolManager.replacePersistent(pool)
         }
+        accepted.second.get(15, java.util.concurrent.TimeUnit.SECONDS)
+        return mapOf("source" to "arc-location-pools", "created" to !accepted.first, "saved" to true,
+            "pool" to definitionToMap(definition, env))
     }
 
     fun delete(id: String): Map<String, Any?> {
+        check(!Bukkit.isPrimaryThread()) { "Location pool writes must run on an HTTP worker" }
         val normalizedId = LocationPool.normalizePersistentId(id)
-        return OpsBukkitSync.call {
-            if (!LocationPoolManager.delete(normalizedId)) {
-                throw NoSuchElementException("Location pool not found: $normalizedId")
-            }
-            mapOf(
-                "source" to "arc-location-pools",
-                "deleted" to true,
-                "id" to normalizedId,
-            )
-        }
+        val deleted = OpsBukkitSync.call { LocationPoolManager.delete(normalizedId) }
+            .get(15, java.util.concurrent.TimeUnit.SECONDS)
+        if (!deleted) throw NoSuchElementException("Location pool not found: $normalizedId")
+        return mapOf("source" to "arc-location-pools", "deleted" to true, "id" to normalizedId)
     }
 
     internal fun parseDefinition(
@@ -156,10 +137,8 @@ object OpsLocationPoolHandlers {
         )
     }
 
-    private fun validateForCurrentNode(definition: LocationPoolDefinition) {
-        val currentServer =
-            ARC.serverName
-                ?: throw IllegalStateException("ARC server name is not initialized")
+    private fun validateForCurrentNode(definition: LocationPoolDefinition, env: Environment) {
+        val currentServer = env.server
         val local = definition.locations.filter { it.location.server == currentServer }
         require(local.isNotEmpty()) {
             "Location pool ${definition.id} has no locations for current server $currentServer"
@@ -167,7 +146,7 @@ object OpsLocationPoolHandlers {
         val missingWorlds =
             local
                 .mapNotNull { it.location.world }
-                .filter { Bukkit.getWorld(it) == null }
+                .filter { it !in env.worlds }
                 .distinct()
                 .sorted()
         require(missingWorlds.isEmpty()) {
@@ -175,11 +154,11 @@ object OpsLocationPoolHandlers {
         }
     }
 
-    private fun poolToMap(pool: LocationPool): Map<String, Any?> {
+    private fun poolToMap(pool: LocationPool, env: Environment): Map<String, Any?> {
         val entries = pool.getWeightedLocations()
-        val currentServer = ARC.serverName
+        val currentServer = env.server
         val local = entries.filter { it.value.server == currentServer }
-        val localUsable = local.count { Bukkit.getWorld(it.value.world ?: "") != null }
+        val localUsable = local.count { it.value.world in env.worlds }
         return mapOf(
             "id" to pool.id,
             "size" to entries.size,
@@ -190,14 +169,15 @@ object OpsLocationPoolHandlers {
         )
     }
 
-    private fun definitionToMap(definition: LocationPoolDefinition): Map<String, Any?> {
-        val currentServer = ARC.serverName
+    private fun definitionToMap(definition: LocationPoolDefinition, env: Environment): Map<String, Any?> {
+        val currentServer = env.server
         val local = definition.locations.filter { it.location.server == currentServer }
         return mapOf(
             "id" to definition.id,
             "size" to definition.locations.size,
             "localCount" to local.size,
-            "localUsable" to local.count { Bukkit.getWorld(it.location.world ?: "") != null },
+            "localUsable" to local.count { it.location.world in env.worlds },
+            "healthyForCurrentServer" to local.any { it.location.world in env.worlds },
             "locations" to
                 definition.locations.map {
                     weightedLocationToMap(WeightedRandom.Pair(it.location, it.weight))

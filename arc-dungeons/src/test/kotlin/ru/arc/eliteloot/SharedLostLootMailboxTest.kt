@@ -9,24 +9,40 @@ import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 import ru.arc.core.Tasks
+import ru.arc.core.BoundedAsyncExecutor
+import ru.arc.core.BudgetedTaskQueue
+import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.TestTaskScheduler
 import ru.arc.paper.playerstate.PaperPlayerDataPersistence
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import java.util.Base64
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 
 class SharedLostLootMailboxTest : FreeSpec({
     lateinit var paper: MockBukkitTestRuntime
     lateinit var scheduler: TestTaskScheduler
     lateinit var repository: MemoryLostLootRepository
     lateinit var gateway: TestLootCredits
+    lateinit var worker: BoundedAsyncExecutor
+    lateinit var scope: LifecycleTaskScope
+    lateinit var native: BudgetedTaskQueue
     val services = mutableListOf<SharedLostLootMailbox>()
-    beforeEach { scheduler = TestTaskScheduler(); Tasks.install(scheduler); paper = MockBukkitTestRuntime.open(); repository = MemoryLostLootRepository(); gateway = TestLootCredits() }
-    afterEach { services.forEach { it.close() }; services.clear(); Tasks.reset(); paper.close() }
-    fun drain() { repeat(12) { scheduler.executeImmediate() } }
+    beforeEach {
+        paper = MockBukkitTestRuntime.open(); scheduler = TestTaskScheduler(); Tasks.install(scheduler)
+        repository = MemoryLostLootRepository(); gateway = TestLootCredits()
+        worker = BoundedAsyncExecutor("lost-loot-mailbox-test")
+        scope = LifecycleTaskScope(scheduler); native = BudgetedTaskQueue(scope, nanoTime = { 0 })
+    }
+    afterEach {
+        services.forEach { it.close() }; services.clear()
+        worker.closeAsync().get(5, TimeUnit.SECONDS)
+        native.close(); scope.close(); Tasks.reset(); paper.close()
+    }
+    fun drain() { repeat(12) { worker.submit {}.get(5, TimeUnit.SECONDS); scheduler.executeImmediate(); scheduler.tick() } }
     fun service(server: String = "survival", persist: PaperPlayerDataPersistence = PaperPlayerDataPersistence {}) =
-        SharedLostLootMailbox(repository, server, { _, _, fallback -> Component.text(fallback) }, gateway, persist).also(services::add)
+        SharedLostLootMailbox(repository, server, { _, _, fallback -> Component.text(fallback) }, gateway, persist, native, worker).also(services::add)
     fun item(player: Player) = ItemStack.of(Material.DIAMOND_HELMET).also { item -> item.editMeta {
         it.displayName(Component.text("Сокровище босса")); it.tooltipStyle = NamespacedKey("lzblocks", "tooltip/rare")
         it.persistentDataContainer.set(NamespacedKey("elitemobs", "soulbind"), PersistentDataType.STRING, player.uniqueId.toString())
@@ -138,6 +154,60 @@ class SharedLostLootMailboxTest : FreeSpec({
         repository.rows.getValue(record.id).state shouldBe SharedLootState.CLAIMING
         player.inventory.storageContents.filterNotNull().size shouldBe 0
     }
+
+    "large mailbox cards bind one native item per shared step and keep all original entries" {
+        val player = paper.addPlayer("large-mailbox")
+        val record = put(player)
+        val caller = Thread.currentThread()
+        var decoded = 0
+        val loot = SharedLostLootMailbox(repository, "survival", { _, _, fallback -> Component.text(fallback) }, gateway,
+            PaperPlayerDataPersistence {}, native, worker, nativeDecode = { bytes ->
+                (Thread.currentThread() === caller) shouldBe true
+                decoded++
+                ItemStack.deserializeBytes(bytes)
+            }).also(services::add)
+        val cards = loot.prepareCards(player, List(300) { record }) { true }
+        worker.submit {}.get(5, TimeUnit.SECONDS)
+        decoded shouldBe 0
+        scheduler.executeImmediate(); scheduler.tick()
+        (decoded in 1..128) shouldBe true
+        cards.isDone shouldBe false
+        var previous = decoded
+        while (!cards.isDone) {
+            scheduler.tick()
+            (decoded - previous <= 128) shouldBe true
+            previous = decoded
+        }
+        cards.get(5, TimeUnit.SECONDS).cards.size shouldBe 300
+        decoded shouldBe 300
+    }
+
+    "superseded and closed partial mailbox preparation cannot finish binding" {
+        val player = paper.addPlayer("stale-mailbox")
+        val record = put(player)
+        var current = true
+        var decoded = 0
+        val loot = SharedLostLootMailbox(repository, "survival", { _, _, fallback -> Component.text(fallback) }, gateway,
+            PaperPlayerDataPersistence {}, native, worker, nativeDecode = { bytes -> decoded++; ItemStack.deserializeBytes(bytes) })
+            .also(services::add)
+        val stale = loot.prepareCards(player, List(300) { record }) { current }
+        worker.submit {}.get(5, TimeUnit.SECONDS)
+        scheduler.executeImmediate(); scheduler.tick()
+        current = false
+        val atSupersede = decoded
+        scheduler.tick(3)
+        stale.isCompletedExceptionally shouldBe true
+        decoded shouldBe atSupersede
+        val stopped = loot.prepareCards(player, List(300) { record }) { true }
+        worker.submit {}.get(5, TimeUnit.SECONDS)
+        scheduler.executeImmediate(); scheduler.tick()
+        loot.close()
+        val atClose = decoded
+        scheduler.tick(3)
+        stopped.isCompletedExceptionally shouldBe true
+        decoded shouldBe atClose
+    }
+
 })
 
 private class TestLootCredits : LostLootCreditGateway {

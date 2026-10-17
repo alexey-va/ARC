@@ -30,8 +30,17 @@ internal data class LostLootRecord(
     }
 }
 
-/** Feature-owned state over the shared durable journal; callers hold the Paper mutation barrier. */
-internal class LostLootStore(root: Path) {
+/** Worker-owned journal port. No method may be called from a gameplay callback. */
+internal interface LostLootJournal {
+    fun records(): Collection<LostLootRecord>
+    fun pending(limit: Int): List<LostLootRecord>
+    fun get(id: String): LostLootRecord?
+    fun certain(id: String): Boolean
+    fun write(record: LostLootRecord): LostLootRecord
+}
+
+/** Feature-owned state over the shared durable journal; one outbox worker owns all access. */
+internal class LostLootStore(root: Path) : LostLootJournal {
     private val gson = Gson()
     private val journal = DurableRecordJournal(
         root, Path.of("data/lost-elite-loot"), 300_000,
@@ -45,16 +54,17 @@ internal class LostLootStore(root: Path) {
     }.toMutableMap()
     private val uncertain = mutableSetOf<String>()
     private val pendingIds = records.values.filter { it.state == LostLootState.STORED }.mapTo(linkedSetOf()) { it.id }
-    fun pending(limit: Int): List<LostLootRecord> = pendingIds.asSequence().filter { it !in uncertain }.take(limit).map { records.getValue(it) }.toList()
+    override fun records(): Collection<LostLootRecord> = records.values
+    override fun pending(limit: Int): List<LostLootRecord> = pendingIds.asSequence().filter { it !in uncertain }.take(limit).map { records.getValue(it) }.toList()
 
-    fun get(id: String): LostLootRecord? = records[id]
-    fun certain(id: String): Boolean = id in records && id !in uncertain
+    override fun get(id: String): LostLootRecord? = records[id]
+    override fun certain(id: String): Boolean = id in records && id !in uncertain
     fun forOwner(owner: UUID): List<LostLootRecord> = records.values
         .filter { it.owner == owner.toString() && it.state != LostLootState.CLAIMED }
         .sortedWith(compareBy(LostLootRecord::capturedAt, LostLootRecord::id))
     fun available(record: LostLootRecord) = record.state == LostLootState.STORED && record.id !in uncertain
 
-    fun write(record: LostLootRecord): LostLootRecord {
+    override fun write(record: LostLootRecord): LostLootRecord {
         record.validate()
         val previous = records[record.id]
         require(previous == null || previous.owner == record.owner)

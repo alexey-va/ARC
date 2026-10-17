@@ -6,6 +6,7 @@ import org.bukkit.event.inventory.ClickType
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.Plugin
 import ru.arc.config.ConfigManager
+import ru.arc.config.Config
 import ru.arc.core.BukkitTaskScheduler
 import ru.arc.menu.MenuElementId
 import ru.arc.menu.MenuId
@@ -42,12 +43,10 @@ object ArcMenus {
     private var dialogRuntime: PaperDialogRuntime? = null
     private var shortcuts: MenuShortcutController? = null
 
-    fun initialize(plugin: Plugin, root: Path) {
+    fun initialize(plugin: Plugin, root: Path, prepared: Config) {
         check(runtime == null && dialogRuntime == null) { "ARC menu runtime is already initialized" }
         dataRoot = root
-        val disk = ConfigManager.of(root, ArcMenuConfiguration.RESOURCE)
-        disk.mergeMissingFromBundled(ArcMenuConfiguration.RESOURCE)
-        runtime = PaperMenuRuntime(plugin, BukkitTaskScheduler(plugin), ArcMenuConfiguration.load(root))
+        runtime = PaperMenuRuntime(plugin, BukkitTaskScheduler(plugin), ArcMenuConfiguration.bind(prepared))
         dialogRuntime = PaperDialogRuntime(plugin)
         shortcuts = MenuShortcutController(plugin)
     }
@@ -58,9 +57,9 @@ object ArcMenus {
         dialogRuntime = PaperDialogRuntime(plugin)
     }
 
-    fun reload() {
+    fun reload(prepared: Config) {
         val active = requireNotNull(runtime) { "ARC menu runtime is not initialized" }
-        active.replace(ArcMenuConfiguration.load(dataRoot))
+        active.replace(ArcMenuConfiguration.bind(prepared))
     }
 
     fun current(): PaperMenuConfiguration =

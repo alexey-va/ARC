@@ -145,12 +145,15 @@ internal class MySqlSharedLostLootRepository private constructor(private val run
         }
     }
 
-    @Synchronized private fun ready(): CompletableFuture<Unit> {
+    @Synchronized internal fun ready(): CompletableFuture<Unit> {
         if (migration.isCompletedExceptionally) migration = migrate(runtime)
         return migration
     }
 
-    override fun close() = runtime.close()
+    /** Module terminal worker only: finish accepted JDBC operations before returning its lease. */
+    override fun close() {
+        try { runtime.executor.closeAsync().join() } finally { runtime.close() }
+    }
 
     private fun deleteGate(connection: Connection, owner: String, id: String, token: String) {
         connection.prepareStatement(GATE_DELETE).use { statement ->
@@ -181,9 +184,25 @@ internal class MySqlSharedLostLootRepository private constructor(private val run
             val service = requireNotNull(org.bukkit.Bukkit.getServicesManager().load(ru.arc.paper.api.ArcSqlService::class.java)) {
                 "ARC SQL service is unavailable"
             }
+            return open(service, settings)
+        }
+
+        /** The typed service is captured on Paper; pool acquisition and migration are worker work. */
+        fun open(service: ru.arc.paper.api.ArcSqlService, settings: ru.arc.paper.api.ArcSqlSettings): MySqlSharedLostLootRepository {
             val lease = service.acquire("ArcDungeons-lost-loot", settings)
-            val runtime = SqlRuntime.borrow(lease.dataSource, lease.executor, lease.completionExecutor, lease, lease::evictConnection)
-            return MySqlSharedLostLootRepository(runtime, migrate(runtime))
+            var runtime: SqlRuntime? = null
+            try {
+                // This direct consumer lease must outlive provider shutdown until the outbox's
+                // terminal worker finishes accepted publications and closes the JDBC facade.
+                lease.retainDuringShutdown()
+                val borrowed = SqlRuntime.borrow(lease.dataSource, lease.executor, lease.completionExecutor, lease, lease::evictConnection)
+                runtime = borrowed
+                return MySqlSharedLostLootRepository(borrowed, migrate(borrowed))
+            } catch (failure: Throwable) {
+                try { if (runtime == null) lease.close() else runtime.close() }
+                catch (closing: Throwable) { if (closing !== failure) failure.addSuppressed(closing) }
+                throw failure
+            }
         }
 
         fun open(config: SqlConnectionConfig, runtimeName: String = "ARC-shared-lost-loot"): MySqlSharedLostLootRepository {

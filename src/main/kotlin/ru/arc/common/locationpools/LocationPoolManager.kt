@@ -4,6 +4,7 @@ import org.bukkit.Location
 import org.bukkit.event.block.BlockPlaceEvent
 import ru.arc.ARC
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 
 /**
  * Фасад для управления пулами локаций.
@@ -15,6 +16,11 @@ import java.util.UUID
  * Этот объект существует для обратной совместимости с существующим кодом.
  */
 object LocationPoolManager {
+    private val pending = mutableSetOf<String>() // Native owner only.
+
+    internal fun requireWritable(id: String) {
+        check(id !in pending) { "Location pool $id is being saved; retry after it finishes" }
+    }
     // === Инициализация ===
 
     /**
@@ -30,7 +36,10 @@ object LocationPoolManager {
     // === Работа с пулами (делегирование в Repository) ===
 
     @JvmStatic
-    fun addPool(pool: LocationPool) = LocationPoolRepository.add(pool)
+    fun addPool(pool: LocationPool) {
+        requireWritable(pool.id)
+        LocationPoolRepository.add(pool)
+    }
 
     @JvmStatic
     fun getPool(id: String?): LocationPool? = id?.let { LocationPoolRepository.get(it) }
@@ -45,6 +54,7 @@ object LocationPoolManager {
     fun clear() {
         LocationPoolRepository.clear()
         LocationPoolEditor.clear()
+        pending.clear()
     }
 
     @JvmStatic
@@ -57,28 +67,70 @@ object LocationPoolManager {
     fun removeEphemeralPool(id: String): Boolean = LocationPoolRepository.removeEphemeral(id)
 
     @JvmStatic
-    fun delete(id: String): Boolean {
+    fun delete(id: String): CompletableFuture<Boolean> {
         if (isEphemeralPool(id)) {
             LocationPoolEditor.cancelEditingForPool(id)
-            return removeEphemeralPool(id)
+            return CompletableFuture.completedFuture(removeEphemeralPool(id))
         }
-        if (LocationPoolRepository.get(id) == null) return false
-        // Delete durable state first so a failed filesystem operation cannot
-        // make a pool disappear only until the next restart.
-        ARC.plugin?.locationPoolConfig?.deleteFile(id)
-        LocationPoolEditor.cancelEditingForPool(id)
-        return LocationPoolRepository.remove(id)
+        val current = LocationPoolRepository.get(id) ?: return CompletableFuture.completedFuture(false)
+        val plugin = ARC.instance
+        val config = checkNotNull(plugin.locationPoolConfig) { "Location pool persistence is unavailable" }
+        config.requireWritable()
+        requireWritable(id)
+        pending.add(id)
+        current.setWritable(false)
+        val result = CompletableFuture<Boolean>()
+        config.deleteFile(id).whenComplete { _, failure ->
+            plugin.nativeWork.call({ plugin.locationPoolConfig === config }) {
+                if (failure != null) {
+                    pending.remove(id)
+                    current.setWritable(true)
+                    throw java.util.concurrent.CompletionException(failure)
+                }
+                check(LocationPoolRepository.get(id) === current) { "Location pool $id changed during deletion" }
+                LocationPoolEditor.cancelEditingForPool(id)
+                val removed = LocationPoolRepository.remove(id)
+                pending.remove(id)
+                removed
+            }.whenComplete { removed, problem ->
+                if (problem == null) result.complete(removed) else result.completeExceptionally(problem)
+            }
+        }
+        return result
     }
 
     @JvmStatic
-    fun replacePersistent(pool: LocationPool) {
+    fun replacePersistent(pool: LocationPool): CompletableFuture<Unit> {
         require(!isEphemeralPool(pool.id)) { "Cannot replace an ephemeral location pool" }
+        val plugin = ARC.instance
         val config =
-            ARC.plugin?.locationPoolConfig
+            plugin.locationPoolConfig
                 ?: throw IllegalStateException("Location pool config is not initialized")
-        // Persist the fully built replacement before publishing it to readers.
-        config.saveLocationPool(pool)
-        LocationPoolRepository.add(pool)
+        config.requireWritable()
+        requireWritable(pool.id)
+        val previous = LocationPoolRepository.get(pool.id)
+        pending.add(pool.id)
+        previous?.setWritable(false)
+        pool.setWritable(false)
+        val result = CompletableFuture<Unit>()
+        config.replace(pool).whenComplete { _, failure ->
+            plugin.nativeWork.call({ plugin.locationPoolConfig === config }) {
+                if (failure != null) {
+                    pending.remove(pool.id)
+                    previous?.setWritable(true)
+                    pool.setWritable(true)
+                    throw java.util.concurrent.CompletionException(failure)
+                }
+                check(LocationPoolRepository.get(pool.id) === previous) { "Location pool ${pool.id} changed during replacement" }
+                config.bindReplacement(pool)
+                LocationPoolRepository.add(pool)
+                pool.setWritable(true)
+                pending.remove(pool.id)
+            }.whenComplete { _, problem ->
+                if (problem == null) result.complete(Unit) else result.completeExceptionally(problem)
+            }
+        }
+        return result
     }
 
     // === Работа с локациями ===

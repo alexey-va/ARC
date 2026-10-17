@@ -2,6 +2,7 @@ package ru.arc.audit
 
 import java.security.MessageDigest
 import java.util.concurrent.CompletableFuture
+import ru.arc.core.BoundedAsyncExecutor
 
 /**
  * Compatibility adapter around the legacy Redis snapshot repository.
@@ -12,26 +13,29 @@ import java.util.concurrent.CompletableFuture
  */
 class RedisAuditEventStore(
     private val repository: AuditRepository,
+    maximumPendingEvents: Int = 10_000,
 ) : AuditEventStore {
-    override fun append(event: AuditEvent): CompletableFuture<AuditAppendResult> {
+    private val work = BoundedAsyncExecutor("arc-audit-redis", capacity = maximumPendingEvents)
+    private var closing: CompletableFuture<Unit>? = null
+
+    override fun append(event: AuditEvent): CompletableFuture<AuditAppendResult> = work.submit {
         val entityId = entityId(event)
-        return repository.getOrCreate(entityId) {
+        val data = repository.getOrCreate(entityId) {
             AuditData.create(event.playerName, entityId.takeIf { ':' in it })
-        }.thenApply { data ->
-            synchronized(data) {
-                if (data.transactions.any { transaction -> stableEventId(data.name, transaction) == event.eventId }) {
-                    AuditAppendResult(false)
-                } else {
-                    data.transactions.add(event.transaction.copy(eventId = event.eventId))
-                    repository.save(data)
-                    AuditAppendResult(true)
-                }
+        }.join()
+        synchronized(data) {
+            if (data.transactions.any { transaction -> stableEventId(data.name, transaction) == event.eventId }) {
+                AuditAppendResult(false)
+            } else {
+                data.transactions.add(event.transaction.copy(eventId = event.eventId))
+                repository.save(data)
+                AuditAppendResult(true)
             }
         }
     }
 
     override fun page(request: AuditPageRequest): CompletableFuture<AuditPage> =
-        CompletableFuture.completedFuture(
+        work.submit {
             snapshotEvents()
                 .asSequence()
                 .filter { it.playerKey == request.playerKey }
@@ -44,13 +48,13 @@ class RedisAuditEventStore(
                             .map(AuditEvent::transaction),
                         totalRecords = matches.size.toLong(),
                     )
-                },
-        )
+                }
+        }
 
     override fun scan(
         request: AuditScanRequest,
         consumer: AuditEventConsumer,
-    ): CompletableFuture<Long> {
+    ): CompletableFuture<Long> = work.submit {
         val events =
             snapshotEvents()
                 .asSequence()
@@ -63,15 +67,13 @@ class RedisAuditEventStore(
                 .sortedWith(compareBy<AuditEvent> { it.transaction.timestamp }.thenBy(AuditEvent::eventId))
                 .toList()
         events.forEach(consumer::accept)
-        return CompletableFuture.completedFuture(events.size.toLong())
+        events.size.toLong()
     }
 
     override fun count(): CompletableFuture<Long> =
-        CompletableFuture.completedFuture(
-            repository.all().sumOf { data -> synchronized(data) { data.transactions.size.toLong() } },
-        )
+        work.submit { repository.all().sumOf { data -> synchronized(data) { data.transactions.size.toLong() } } }
 
-    override fun clearPlayer(playerName: String): CompletableFuture<Int> {
+    override fun clearPlayer(playerName: String): CompletableFuture<Int> = work.submit {
         var removed = 0
         repository.all().filter { it.name.equals(playerName, ignoreCase = true) }.forEach { data ->
             synchronized(data) {
@@ -80,10 +82,10 @@ class RedisAuditEventStore(
                 repository.save(data)
             }
         }
-        return CompletableFuture.completedFuture(removed)
+        removed
     }
 
-    override fun clearAll(): CompletableFuture<Int> {
+    override fun clearAll(): CompletableFuture<Int> = work.submit {
         var removed = 0
         repository.all().forEach { data ->
             synchronized(data) {
@@ -92,10 +94,10 @@ class RedisAuditEventStore(
                 repository.save(data)
             }
         }
-        return CompletableFuture.completedFuture(removed)
+        removed
     }
 
-    override fun prune(beforeEpochMs: Long): CompletableFuture<Int> {
+    override fun prune(beforeEpochMs: Long): CompletableFuture<Int> = work.submit {
         var removed = 0
         repository.all().forEach { data ->
             synchronized(data) {
@@ -106,7 +108,7 @@ class RedisAuditEventStore(
                 removed += changed
             }
         }
-        return CompletableFuture.completedFuture(removed)
+        removed
     }
 
     override fun status(): CompletableFuture<AuditStorageStatus> =
@@ -119,7 +121,14 @@ class RedisAuditEventStore(
             )
         }
 
-    override fun close() = repository.shutdown()
+    /** Called by AuditManager's worker retirement; accepted mutations precede the final flush. */
+    override fun close() {
+        closeAsync().join()
+    }
+
+    @Synchronized
+    internal fun closeAsync(): CompletableFuture<Unit> =
+        (closing ?: work.closeAsync { repository.shutdown() }.also { closing = it }).copy()
 
     internal fun snapshotEvents(): List<AuditEvent> = snapshotEventSequence().toList()
 
@@ -212,7 +221,11 @@ class DualWriteAuditEventStore(
         }
 
     override fun close() {
-        redis.close()
-        sql.close()
+        var failure: Throwable? = null
+        try { redis.close() } catch (problem: Throwable) { failure = problem }
+        try { sql.close() } catch (problem: Throwable) {
+            if (failure == null) failure = problem else if (failure !== problem) failure.addSuppressed(problem)
+        }
+        failure?.let { throw it }
     }
 }

@@ -82,6 +82,7 @@ abstract class KotestTestBase(
 
         // Load the plugin - must succeed for tests to run
         plugin = MockBukkit.load(ARC::class.java)
+        awaitMainThreadFuture(server, plugin.readiness())
         ARC.plugin = plugin
         dataPath = plugin.dataFolder.toPath()
 
@@ -164,6 +165,7 @@ abstract class KotestTestBase(
     private fun tearDownBase() {
         try {
             plugin.onDisable()
+            plugin.closeCompletion().get(10, java.util.concurrent.TimeUnit.SECONDS)
         } catch (_: Exception) {
             // Ignore disable errors
         }

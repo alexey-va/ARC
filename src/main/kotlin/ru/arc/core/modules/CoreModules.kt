@@ -69,13 +69,47 @@ object RedisModule : PluginModule {
     internal var bindingGeneration = 0L
         private set
 
-    override fun init() {
-        RedisConfigBootstrap.ensure(ARC.instance.dataPath)
-        val redis = RedisModuleConfig.load(ARC.instance.dataPath)
+    private data class Prepared(val connection: RedisConnection?, val origin: String, val client: PaperRedisClient?)
+    @Volatile private var prepared: Prepared? = null
 
-        if (!redis.enabled) {
+    /** Fresh detached read: a rejected transport edit must not alter the active config cache. */
+    internal fun requireReloadCompatible(root: java.nio.file.Path) {
+        val detached = RedisModuleConfig(Config(root, ConfigManager.moduleYamlRelative(root, "redis.yml")))
+        val connection = if (detached.enabled) detached.connection() else null
+        check(connection == activeConnection && detached.serverName == (activeOrigin ?: ARC.serverName)) {
+            "Redis endpoint, credentials, enabled state or server-name changed; a server restart is required. The active runtime was retained."
+        }
+    }
+
+    internal fun preparedClient(): PaperRedisClient? = prepared?.client ?: ARC.redisManager
+    internal fun preparedOrigin(): String = prepared?.origin ?: checkNotNull(ARC.serverName)
+
+    /** Disk, pool acquisition and discarded-candidate cleanup belong to ARC's worker. */
+    internal fun prepareOnWorker(root: java.nio.file.Path, service: ru.arc.paper.api.ArcRedisService, owner: String) {
+        discardPreparedOnWorker()
+        RedisConfigBootstrap.ensure(root)
+        val redis = RedisModuleConfig.load(root)
+        val connection = if (redis.enabled) redis.connection() else null
+        val origin = redis.serverName
+        val replacement = if (connection != null && (activeConnection != connection || activeOrigin != origin || ARC.redisManager == null)) {
+            PaperRedisClient.open(service, owner, connection, origin)
+        } else null
+        prepared = Prepared(connection, origin, replacement)
+    }
+
+    internal fun discardPreparedOnWorker() {
+        prepared?.client?.close()
+        prepared = null
+    }
+
+    override fun init() {
+        val candidate = checkNotNull(prepared) { "Redis preparation is not ready" }
+        prepared = null
+        ARC.serverName = candidate.origin
+        val connection = candidate.connection
+        if (connection == null) {
             if (activeConnection != null) bindingGeneration++
-            ARC.redisManager?.close()
+            ARC.redisManager?.let { old -> ARC.instance.retireInBackground { old.close() } }
             ARC.redisManager = null
             activeConnection = null
             activeOrigin = null
@@ -84,17 +118,15 @@ object RedisModule : PluginModule {
             return
         }
 
-        val connection = redis.connection()
-
         // ConfigModule refreshes ARC.serverName later in the lifecycle; bind
         // this immutable lease to the current Redis configuration directly.
-        val origin = redis.serverName
+        val origin = candidate.origin
         ARC.instance.redisService.configurePrimary(
             ArcRedisSettings(connection.host, connection.port, connection.username, connection.password), origin,
         )
         if (ARC.redisManager != null && activeConnection == connection && activeOrigin == origin) return
-        val replacement = PaperRedisClient.openPrimary(ARC.instance)
-        ARC.redisManager?.close()
+        val replacement = checkNotNull(candidate.client) { "Redis replacement was not prepared" }
+        ARC.redisManager?.let { old -> ARC.instance.retireInBackground { old.close() } }
         ARC.redisManager = replacement
         activeConnection = connection
         activeOrigin = origin
@@ -106,7 +138,7 @@ object RedisModule : PluginModule {
 
     override fun shutdown() {
         if (activeConnection != null) bindingGeneration++
-        ARC.redisManager?.close()
+        ARC.redisManager?.let { old -> ARC.instance.retireInBackground { old.close() } }
         ARC.redisManager = null
         activeConnection = null
         activeOrigin = null
@@ -138,6 +170,9 @@ object NetworkModule : PluginModule {
  * Hook registry for external plugin integrations.
  */
 object HooksModule : PluginModule {
+    private var retirement = java.util.concurrent.CompletableFuture.completedFuture<Void>(null)
+    fun drained(): java.util.concurrent.CompletableFuture<Void> = retirement.copy()
+
     override val name = "Hooks"
     override val priority = 15
     private var pluginUpdateNotifications: PluginUpdateNotifications? = null
@@ -152,7 +187,7 @@ object HooksModule : PluginModule {
         } catch (failure: Throwable) {
             runCatching { pluginUpdateNotifications?.close() }.exceptionOrNull()?.let(failure::addSuppressed)
             pluginUpdateNotifications = null
-            runCatching { registry.close() }
+            runCatching { retirement = registry.closeAsync() }
                 .exceptionOrNull()
                 ?.let(failure::addSuppressed)
             throw failure
@@ -178,7 +213,7 @@ object HooksModule : PluginModule {
             try {
                 notifications?.close()
             } finally {
-                registry?.close()
+                if (registry != null) retirement = registry.closeAsync()
             }
         }
     }
@@ -235,7 +270,6 @@ object ConfigModule : PluginModule {
     override val priority = 30
 
     override fun init() {
-        ConfigManager.reloadAll()
         ARC.serverName = ArcRedisConfig.get().serverName
     }
 
@@ -252,16 +286,61 @@ object ConfigModule : PluginModule {
 object LocationPoolModule : PluginModule {
     override val name = "LocationPools"
     override val priority = 35
+    @Volatile private var prepared: LocationPoolConfig? = null
+    private var ready = java.util.concurrent.CompletableFuture.completedFuture<Void>(null)
+    internal fun readiness(): java.util.concurrent.CompletableFuture<Void> = ready.copy()
+
+    internal fun prepareOnWorker(root: java.nio.file.Path) {
+        if (ARC.plugin?.locationPoolConfig != null) return
+        discardPreparedOnWorker()
+        prepared = LocationPoolConfig.open(root)
+    }
+
+    internal fun discardPreparedOnWorker() {
+        val unused = prepared
+        prepared = null
+        unused?.closeAsync()?.join() // ARC preparation/retirement worker only.
+    }
 
     override fun init() {
-        ARC.instance.locationPoolConfig = LocationPoolConfig()
+        if (ARC.instance.locationPoolConfig != null) {
+            ru.arc.common.locationpools.LocationPoolEditor.reloadConfig()
+            return
+        }
+        val config = checkNotNull(prepared) { "Location pools have not been prepared" }
+        prepared = null
+        config.bindInitialPools()
+        ARC.instance.locationPoolConfig = config
+        LocationPoolManager.clear()
+        config.initialPools.forEach(LocationPoolManager::addPool)
+        config.startSaveTask(Tasks.scheduler)
         LocationPoolManager.init()
+        ready = java.util.concurrent.CompletableFuture.completedFuture(null)
+    }
+
+    override fun reload() {
+        val plugin = ARC.instance
+        val config = plugin.locationPoolConfig ?: return init()
+        ready = config.prepareReload().thenCompose { pools ->
+            plugin.nativeWork.call({ plugin.locationPoolConfig === config }) {
+                config.bindReload(pools)
+                LocationPoolManager.clear()
+                pools.forEach(LocationPoolManager::addPool)
+                ru.arc.common.locationpools.LocationPoolEditor.reloadConfig()
+                null
+            }
+        }
     }
 
     override fun shutdown() {
-        ARC.instance.locationPoolConfig?.saveLocationPools(true)
-        ARC.instance.locationPoolConfig?.cancelTasks()
+        val config = ARC.instance.locationPoolConfig ?: return
+        ready.completeExceptionally(java.util.concurrent.CancellationException("Location pools stopped"))
         ARC.instance.locationPoolConfig = null
+        ru.arc.common.locationpools.LocationPoolEditor.stopTasks()
+        ru.arc.common.locationpools.LocationPoolEditor.clear()
+        config.cancelTasks()
+        val closing = config.closeAsync()
+        ARC.instance.retireInBackground { closing.join() }
     }
 }
 
@@ -275,6 +354,8 @@ object BoardModule : PluginModule {
     override fun init() {
         BoardManager.init()
     }
+
+    override fun reload() = Unit
 
     override fun shutdown() {
         BoardManager.shutdown()
@@ -323,11 +404,15 @@ object HeadCacheModule : PluginModule {
     override val priority = 52
 
     override fun init() {
-        ARC.headTextureCache = HeadTextureCache()
+        check(ARC.headTextureCache != null) { "Head cache preparation is not ready" }
     }
 
+    override fun reload() = Unit
+
     override fun shutdown() {
-        ARC.headTextureCache?.save()
+        val cache = ARC.headTextureCache
+        ARC.headTextureCache = null
+        if (cache != null) ARC.instance.retireInBackground { cache.save() }
     }
 }
 
@@ -341,6 +426,8 @@ object AuditModule : PluginModule {
     override fun init() {
         AuditManager.init()
     }
+
+    override fun reload() = AuditManager.reload()
 
     override fun shutdown() {
         AuditManager.shutdown()
@@ -396,6 +483,8 @@ object StoreModule : PluginModule {
         ru.arc.store.StoreManager
             .init()
     }
+
+    override fun reload() = Unit
 
     override fun shutdown() {
         ru.arc.store.StoreManager
@@ -524,6 +613,8 @@ object JoinMessagesModule : PluginModule {
         JoinMessageCatalogManager.init()
         JoinMessagesManager.init()
     }
+
+    override fun reload() = Unit
 
     override fun shutdown() {
         JoinMessagesManager.shutdown()

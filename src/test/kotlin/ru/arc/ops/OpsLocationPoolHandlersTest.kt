@@ -6,6 +6,9 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import ru.arc.KotestTestBase
+import ru.arc.awaitMainThreadFuture
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 import ru.arc.common.locationpools.LocationPoolManager
 import java.nio.file.Files
 
@@ -17,7 +20,7 @@ class OpsLocationPoolHandlersTest :
 
         afterTest {
             LocationPoolManager.getPool("event_spawn")?.let {
-                LocationPoolManager.delete("event_spawn")
+                awaitMainThreadFuture(server, LocationPoolManager.delete("event_spawn"))
             }
         }
 
@@ -157,7 +160,9 @@ class OpsLocationPoolHandlersTest :
                         """.trimIndent(),
                     ).asJsonObject
 
-                val result = OpsLocationPoolHandlers.upsert("event_spawn", body)
+                val result = awaitMainThreadFuture(server, CompletableFuture.supplyAsync {
+                    OpsLocationPoolHandlers.upsert("event_spawn", body)
+                })
                 result["saved"] shouldBe true
                 val path = dataPath.resolve("location_pools/event_spawn.json")
                 Files.exists(path) shouldBe true
@@ -167,12 +172,16 @@ class OpsLocationPoolHandlersTest :
                     .use { stream -> stream.filter { it.fileName.toString().endsWith(".tmp") }.toList() }
                     .shouldBeEmpty()
 
-                plugin.locationPoolConfig!!.loadConfig()
-                val reloaded = LocationPoolManager.getPool("event_spawn")!!
-                reloaded.size shouldBe 1
-                reloaded.getWeightedLocations().single().weight shouldBe 3.0
+                val reopened = CompletableFuture.supplyAsync { ru.arc.config.LocationPoolConfig.open(dataPath) }.get(5, TimeUnit.SECONDS)
+                try {
+                    val reloaded = reopened.initialPools.single { it.id == "event_spawn" }
+                    reloaded.size shouldBe 1
+                    reloaded.getWeightedLocations().single().weight shouldBe 3.0
+                } finally { reopened.closeAsync().get(5, TimeUnit.SECONDS) }
 
-                OpsLocationPoolHandlers.delete("event_spawn")["deleted"] shouldBe true
+                awaitMainThreadFuture(server, CompletableFuture.supplyAsync {
+                    OpsLocationPoolHandlers.delete("event_spawn")
+                })["deleted"] shouldBe true
                 Files.exists(path) shouldBe false
             }
         }

@@ -18,18 +18,18 @@ repositories {
 }
 dependencies {
     implementation(kotlin("stdlib"))
-    implementation("ru.ruscrafting.arc:arc-core:2.7.34")
-    implementation("ru.ruscrafting.arc:arc-core-logging:2.7.34")
-    implementation("ru.ruscrafting.arc:arc-core-paper:2.7.34")
-    implementation("ru.ruscrafting.arc:arc-core-menu:2.7.34")
-    implementation("ru.ruscrafting.arc:arc-core-paper-menu:2.7.34")
-    implementation("ru.ruscrafting.arc:arc-core-redis:2.7.34")
-    implementation("ru.ruscrafting.arc:arc-core-sql:2.7.34")
+    implementation("ru.ruscrafting.arc:arc-core:2.7.38")
+    implementation("ru.ruscrafting.arc:arc-core-logging:2.7.38")
+    implementation("ru.ruscrafting.arc:arc-core-paper:2.7.38")
+    implementation("ru.ruscrafting.arc:arc-core-menu:2.7.38")
+    implementation("ru.ruscrafting.arc:arc-core-paper-menu:2.7.38")
+    implementation("ru.ruscrafting.arc:arc-core-redis:2.7.38")
+    implementation("ru.ruscrafting.arc:arc-core-sql:2.7.38")
     implementation(libs.com.google.code.gson.gson)
     implementation(libs.de.tr7zw.item.nbt.api)
     compileOnly(project(":arc-dungeons-api"))
     compileOnly(project(":arc-staff-spells-api"))
-    compileOnly("ru.ruscrafting.arc:arc-core-paper-api:2.7.34")
+    compileOnly("ru.ruscrafting.arc:arc-core-paper-api:2.7.38")
     compileOnly(libs.io.papermc.paper.paper.api)
     compileOnly("com.magmaguy:EliteMobs:10.9.8@jar") { isTransitive = false }
     compileOnly(libs.ru.ruscrafting.thirdparty.magmacore)
@@ -42,8 +42,8 @@ dependencies {
 
     testImplementation(project(":arc-dungeons-api"))
     testImplementation(project(":arc-staff-spells-api"))
-    testImplementation("ru.ruscrafting.arc:arc-core-paper-api:2.7.34")
-    testImplementation("ru.ruscrafting.arc:arc-core-paper-testing:2.7.34")
+    testImplementation("ru.ruscrafting.arc:arc-core-paper-api:2.7.38")
+    testImplementation("ru.ruscrafting.arc:arc-core-paper-testing:2.7.38")
     testImplementation("com.magmaguy:EliteMobs:10.9.8@jar") { isTransitive = false }
     testImplementation(libs.ru.ruscrafting.thirdparty.magmacore)
     testImplementation("com.magmaguy:FreeMinecraftModels:2.12.1") { isTransitive = false }
@@ -70,7 +70,7 @@ kotlin.target.compilations.getByName("integrationTest").associateWith(kotlin.tar
 configurations["integrationTestImplementation"].extendsFrom(configurations["testImplementation"])
 configurations["integrationTestRuntimeOnly"].extendsFrom(configurations["testRuntimeOnly"])
 dependencies {
-    "integrationTestImplementation"("ru.ruscrafting.arc:arc-core-integration-testing:2.7.34")
+    "integrationTestImplementation"("ru.ruscrafting.arc:arc-core-integration-testing:2.7.38")
 }
 tasks.withType<Test>().configureEach {
     classpath = files(classpath.filter { it.name.startsWith("adventure-") }, classpath)
@@ -91,6 +91,7 @@ tasks.jar { archiveClassifier.set("plain") }
 tasks.shadowJar {
     archiveClassifier.set("")
     mergeServiceFiles()
+        exclude("ru/arc/paper/runtime/PaperNativeCleanupServiceProvider*.class")
     // These contracts and host implementations have a single runtime owner: ARC.
     exclude("ru/arc/paper/api/**", "ru/arc/dungeons/api/**", "ru/arc/staffspells/api/**")
     exclude("ru/arc/paper/packet/PaperVisualPacketRuntime*.class")

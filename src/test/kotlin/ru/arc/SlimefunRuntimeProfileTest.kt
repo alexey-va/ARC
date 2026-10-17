@@ -64,6 +64,7 @@ class SlimefunRuntimeProfileTest : FreeSpec({
             runtime.server.commandMap.register("other", otherBuy)
             runtime.server.commandMap.register("other", otherSpawn)
             val plugin = loadSlimefunProfilePlugin(SlimefunProfilePlugin::class.java)
+            awaitMainThreadFuture(runtime.server, plugin.readiness())
 
             plugin.runtimeProfile shouldBe ArcRuntimeProfile.SLIMEFUN
             ModuleRegistry.getRuntimeStatuses().map { it.name }.toSet() shouldBe
@@ -122,7 +123,7 @@ class SlimefunRuntimeProfileTest : FreeSpec({
             runtime.server.messenger.getOutgoingChannels(plugin).toSet() shouldBe setOf("bungeecord:main")
             runtime.server.messenger.getIncomingChannels(plugin).toSet() shouldBe emptySet()
 
-            plugin.reload()
+            awaitMainThreadFuture(runtime.server, plugin.reload())
             ModuleRegistry.getRuntimeStatuses().map { it.name }.toSet() shouldBe
                 setOf("Config", "OpsHttp", "Restart", "ItemInfo", "Redis", "ChatMode", "SlimefunNetworkChat", "SlimefunMenu", "Hooks", "HelpCenter")
             ModuleRegistry.getRuntimeStatuses().all { it.ready && it.failures == 0L } shouldBe true
@@ -142,6 +143,7 @@ class SlimefunRuntimeProfileTest : FreeSpec({
             plugin.tablist shouldBe null
 
             runtime.server.pluginManager.enablePlugin(plugin)
+            awaitMainThreadFuture(runtime.server, plugin.readiness())
             val reenabledAlias = runtime.server.commandMap.getCommand("mm")
             (reenabledAlias is SlimefunMenuAliasCommand) shouldBe true
             (reenabledAlias === oldAlias) shouldBe false
@@ -168,12 +170,18 @@ class SlimefunRuntimeProfileTest : FreeSpec({
             every { loadMap(any()) } returns CompletableFuture.completedFuture(emptyMap())
         }
         mockkObject(RedisModule)
+        every { RedisModule.prepareOnWorker(any(), any(), any()) } returns Unit
+        every { RedisModule.requireReloadCompatible(any()) } returns Unit
+        every { RedisModule.preparedClient() } returns redis
+        every { RedisModule.preparedOrigin() } returns "slimefun"
+        every { RedisModule.discardPreparedOnWorker() } returns Unit
         every { RedisModule.init() } answers { ARC.redisManager = redis }
         every { RedisModule.reload() } answers { ARC.redisManager = redis }
         try {
             MockBukkitTestRuntime.open().use { runtime ->
                 loadArcCoreHostForTest()
                 val plugin = loadSlimefunProfilePlugin(SlimefunGlyphProfilePlugin::class.java)
+                awaitMainThreadFuture(runtime.server, plugin.readiness())
                 plugin.runtimeProfile shouldBe ArcRuntimeProfile.SLIMEFUN
                 ModuleRegistry.getRuntimeStatuses().map { it.name }.toSet() shouldBe
                     setOf("Redis", "ChatGlyphProtection", "Config", "OpsHttp", "Restart", "ItemInfo", "ChatMode", "SlimefunNetworkChat", "SlimefunMenu", "Hooks", "HelpCenter")
@@ -188,7 +196,7 @@ class SlimefunRuntimeProfileTest : FreeSpec({
                 )
                 PlayerManager.getPlayerNames() shouldBe setOf("SkyblockQA", "SpawnQA")
                 HandlerList.getRegisteredListeners(plugin).any { it.listener is ChatListener } shouldBe true
-                plugin.reload()
+                awaitMainThreadFuture(runtime.server, plugin.reload())
                 ModuleRegistry.getRuntimeStatuses().all { it.ready && it.failures == 0L } shouldBe true
                 verify(atLeast = 2) { redis.registerChannelUnique("arc.proxy_player_list", any()) }
                 ARC.networkRegistry shouldBe null
@@ -197,6 +205,7 @@ class SlimefunRuntimeProfileTest : FreeSpec({
                 verify(atLeast = 2) { redis.unregisterChannel("arc.proxy_player_list", any()) }
             }
         } finally {
+            ARC.plugin?.closeCompletion()?.get(10, java.util.concurrent.TimeUnit.SECONDS)
             unmockkObject(RedisModule)
             ARC.plugin = null
             ARC.redisManager = null
@@ -215,6 +224,11 @@ private fun <T : ARC> loadSlimefunProfilePlugin(type: Class<T>): T {
 
 open class SlimefunProfilePlugin : ARC() {
     override fun onLoad() {
+        prepareProfile()
+        super.onLoad()
+    }
+
+    protected open fun prepareProfile() {
         File(dataFolder, "modules/runtime.yml").apply {
             parentFile.mkdirs()
             writeText("profile: slimefun\n")
@@ -223,13 +237,12 @@ open class SlimefunProfilePlugin : ARC() {
             parentFile.mkdirs()
             writeText("enabled: false\nserver-name: slimefun\nmain-server: false\n")
         }
-        super.onLoad()
     }
 }
 
 open class SlimefunGlyphProfilePlugin : SlimefunProfilePlugin() {
-    override fun onLoad() {
-        super.onLoad()
+    override fun prepareProfile() {
+        super.prepareProfile()
         File(dataFolder, "modules/chat-mode.yml").apply {
             parentFile.mkdirs()
             writeText("glyph-protection:\n  isolated-enabled: true\n")

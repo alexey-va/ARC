@@ -9,26 +9,23 @@ import ru.arc.util.Logging.error
 import ru.arc.util.Logging.warn
 import java.nio.file.Files
 
-class TranslatorHook {
+class TranslatorHook(private val map: Map<String, String> = ARC.instance.materialTranslations) {
 
-    private val map: Map<String, String>
-    private val gson = Gson()
-
-    init {
-        val path = ARC.instance.dataPath.resolve("lang.json")
-        if (!Files.exists(path)) {
-            warn("Required lang.json is not present in the ARC folder; material translation is disabled")
-            map = emptyMap()
-        } else {
-            var loaded: Map<String, String> = emptyMap()
-            try {
-                val s = Files.readString(path)
-                val token = object : TypeToken<Map<String, String>>() {}
-                loaded = gson.fromJson(s, token)
-            } catch (e: Exception) {
-                error("Error loading translations", e)
+    companion object {
+        /** Disk and JSON work must finish before native hooks attach. */
+        internal fun prepare(root: java.nio.file.Path): Map<String, String> {
+            val path = root.resolve("lang.json")
+            if (!Files.exists(path)) {
+                warn("Required lang.json is not present in the ARC folder; material translation is disabled")
+                return emptyMap()
             }
-            map = loaded
+            return try {
+                val token = object : TypeToken<Map<String, String>>() {}
+                Gson().fromJson<Map<String, String>>(Files.readString(path), token.type).orEmpty().toMap()
+            } catch (failure: Exception) {
+                error("Error loading translations", failure)
+                emptyMap()
+            }
         }
     }
 

@@ -122,6 +122,7 @@ object JoinMessagesManager {
     private lateinit var scope: CoroutineScope
     @Volatile
     private var initialized = false
+    private var prepared = false
     // ponytail: serialize low-volume preference writes; use per-player locks if contention becomes measurable.
     private val writes = Mutex()
 
@@ -130,6 +131,13 @@ object JoinMessagesManager {
         if (initialized) return
         if (ru.arc.ARC.redisManager == null) return
 
+        check(prepared) { "Join messages repository preparation is not ready" }
+        prepared = false
+        initialized = true
+    }
+
+    internal fun prepareOnWorker(redis: ru.arc.redis.RedisOperations) {
+        if (initialized || prepared) return
         scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         repo =
             redisRepo<JoinMessagesData>(
@@ -137,19 +145,30 @@ object JoinMessagesManager {
                 storageKey = "arc.join_messages",
                 updateChannel = "arc.join_messages_update",
                 scope = scope,
+                redis = redis,
             ) {
                 loadAllOnStart(true)
                 saveInterval(1.seconds)
             }
-        initialized = true
+        prepared = true
+    }
+
+    internal fun discardPreparedOnWorker() {
+        if (!prepared) return
+        prepared = false
+        ru.arc.repository.sealRepositoryOperations(scope)
+        ru.arc.repository.drainRepository(repo, scope)
     }
 
     @JvmStatic
     fun shutdown() {
         if (!initialized) return
-        runBlocking { repo.shutdown() }
-        scope.cancel()
+        val retiring = repo
+        val operations = scope
         initialized = false
+        ru.arc.repository.sealRepositoryOperations(operations)
+        ru.arc.ARC.instance.retireInBackground { ru.arc.repository.drainRepository(retiring, operations) }
+            .whenComplete { _, failure -> if (failure != null) ru.arc.util.Logging.error("Could not drain join messages", failure) }
     }
 
     /**

@@ -18,15 +18,19 @@ data class InvestigationNpcPoint(
 )
 
 class InvestigationConfig(private val config: Config) {
-    val enabled: Boolean get() = config.bool("enabled", false)
-    val world: String get() = config.string("scene.world", "rc_origin_spawn").trim()
-    val feeMinor: Long get() = moneyMinor("challenge.fee", "100.00")
-    val rewardMinor: Long get() = moneyMinor("challenge.reward", "300.00")
-    val duration: Duration get() = config.duration("challenge.duration", Duration.ofSeconds(150))
-    val cooldown: Duration get() = config.duration("challenge.cooldown", Duration.ofHours(20))
-    val contractGroup: String get() = config.string("contracts.group", "bank_orders").trim().lowercase(Locale.ROOT)
+    val enabled: Boolean = config.bool("enabled", false)
+    val world: String by lazy(LazyThreadSafetyMode.NONE) { config.string("scene.world", "rc_origin_spawn").trim() }
+    val feeMinor: Long by lazy(LazyThreadSafetyMode.NONE) { moneyMinor("challenge.fee", "100.00") }
+    val rewardMinor: Long by lazy(LazyThreadSafetyMode.NONE) { moneyMinor("challenge.reward", "300.00") }
+    val duration: Duration by lazy(LazyThreadSafetyMode.NONE) { config.duration("challenge.duration", Duration.ofSeconds(150)) }
+    val cooldown: Duration by lazy(LazyThreadSafetyMode.NONE) { config.duration("challenge.cooldown", Duration.ofHours(20)) }
+    val contractGroup: String by lazy(LazyThreadSafetyMode.NONE) { config.string("contracts.group", "bank_orders").trim().lowercase(Locale.ROOT) }
 
-    fun point(role: String): InvestigationNpcPoint {
+    private val points = mutableMapOf<String, InvestigationNpcPoint>()
+
+    fun point(role: String): InvestigationNpcPoint = points.getOrPut(role) { readPoint(role) }
+
+    private fun readPoint(role: String): InvestigationNpcPoint {
         val root = "scene.npcs.$role"
         return InvestigationNpcPoint(
             npcId = config.integer("$root.id", 0),

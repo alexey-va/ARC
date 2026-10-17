@@ -23,6 +23,7 @@ object MountHostServices {
         fun <T : Any> register(type: Class<T>, provider: T) =
             services.register(type, provider, plugin, ServicePriority.Normal)
         register(ArcMountConfiguration::class.java, object : ArcMountConfiguration {
+            override fun ready() = ARC.instance.fullRuntimeReadiness()
             override fun dataPath() = ARC.instance.dataPath
             override fun serverName() = requireNotNull(ARC.serverName)
             override fun sharedRedisAvailable() = ARC.redisManager != null

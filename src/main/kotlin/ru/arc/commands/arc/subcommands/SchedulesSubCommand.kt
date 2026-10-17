@@ -1,11 +1,15 @@
 package ru.arc.commands.arc.subcommands
 
 import org.bukkit.command.CommandSender
+import org.bukkit.entity.Player
+import ru.arc.ARC
 import ru.arc.commands.arc.CommandConfig
 import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.player
 import ru.arc.scheduled.ScheduledCommandsManager
 import ru.arc.util.TextUtil
+import java.util.concurrent.CompletableFuture
+import java.util.logging.Level
 
 /**
  * /arc schedules — GUI управления расписанием команд.
@@ -51,11 +55,22 @@ object SchedulesSubCommand : SubCommand {
         }
 
         val id = args[1]
-        val ok = ScheduledCommandsManager.runNow(id)
-        if (ok) {
-            sender.sendMessage(TextUtil.mm("<green>Запущена команда <white>$id", true))
-        } else {
-            sender.sendMessage(TextUtil.mm("<red>Команда <white>$id<red> не найдена", true))
+        val plugin = ARC.instance
+        val nativeWork = plugin.nativeWork
+        val dispatched = runCatching { ScheduledCommandsManager.runNowAsync(id) }
+            .getOrElse { CompletableFuture.failedFuture(it) }
+        dispatched.whenComplete { _, failure ->
+            if (failure != null) plugin.logger.log(Level.WARNING, "Scheduled command run failed for $id", failure)
+        }
+        plugin.whenCompleteOnMain(dispatched) { ok, failure ->
+            if (ARC.plugin !== plugin || !plugin.isEnabled || plugin.nativeWork !== nativeWork ||
+                sender is Player && !sender.isOnline) return@whenCompleteOnMain
+            val message = when {
+                failure != null -> "<red>Не удалось выполнить"
+                ok == true -> "<green>Запущена команда <white>$id"
+                else -> "<red>Команда <white>$id<red> не найдена"
+            }
+            sender.sendMessage(TextUtil.mm(message, true))
         }
         return true
     }
@@ -69,9 +84,7 @@ object SchedulesSubCommand : SubCommand {
             return listOf("run").filter { it.startsWith(args[0], ignoreCase = true) }
         }
         if (args.size == 2 && args[0].equals("run", ignoreCase = true)) {
-            return ScheduledCommandsManager.settings().entries().map { it.id }.filter {
-                it.startsWith(args[1], ignoreCase = true)
-            }
+            return ScheduledCommandsManager.commandIds(args[1])
         }
         return emptyList()
     }

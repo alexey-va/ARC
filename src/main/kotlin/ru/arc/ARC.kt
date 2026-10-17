@@ -40,6 +40,10 @@ import ru.arc.config.LocationPoolConfig
 import ru.arc.core.ModuleRegistry
 import ru.arc.core.PaperArcRuntime
 import ru.arc.core.Tasks
+import ru.arc.core.LifecycleTaskScope
+import ru.arc.core.whenCompleteSync
+import ru.arc.core.BoundedAsyncExecutor
+import ru.arc.core.BudgetedTaskQueue
 import ru.arc.core.dataPath
 import ru.arc.core.modules.AiModule
 import ru.arc.core.modules.AnnounceModule
@@ -109,6 +113,11 @@ import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import ru.arc.xserver.PluginMessenger
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardCopyOption
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CancellationException
 
 /**
  * Main plugin class for ARC.
@@ -142,9 +151,90 @@ open class ARC : JavaPlugin() {
     internal lateinit var redisService: PaperRedisServiceProvider
         private set
     private var sqlConsumer: AutoCloseable? = null
+    private var sqlDrain = CompletableFuture<Void>()
     private var metricsService: PaperArcMetricsProvider? = null
     private var sharedServiceMetrics: SharedServiceMetrics? = null
     private var coreServices: ArcCoreServices? = null
+    private var completionTasks: LifecycleTaskScope? = null
+    private class StorageGeneration(val previous: CompletableFuture<Unit>) {
+        val worker = BoundedAsyncExecutor("arc-lifecycle")
+        val drain = CompletableFuture<Unit>()
+        var installedGlobals = false
+    }
+    private var storageGeneration: StorageGeneration? = null
+    private lateinit var background: BoundedAsyncExecutor
+    private lateinit var bootstrapConfiguration: CompletableFuture<PreparedConfiguration>
+    private var lifecycleDrain = CompletableFuture.completedFuture(Unit)
+    private var stopped = false
+    @Volatile private var ready = CompletableFuture<Void>()
+    private var pendingReload: CompletableFuture<Void>? = null
+    private val cleanupMonitor = Any()
+    private val pendingCleanup = java.util.concurrent.ConcurrentLinkedQueue<() -> Unit>()
+    private var cleanupSealed = false
+    private var cleanupFailure: Throwable? = null
+    internal var materialTranslations: Map<String, String> = emptyMap()
+        private set
+    internal lateinit var nativeWork: BudgetedTaskQueue
+        private set
+
+    private data class PreparedConfiguration(
+        val profile: ArcRuntimeProfile,
+        val menus: ru.arc.config.Config?,
+        val joinMessageDialog: ru.arc.config.Config?,
+        val headCache: HeadTextureCache?,
+        val translations: Map<String, String>,
+    )
+
+    /** Actual generation readiness; stable host providers are registered before dependents enable. */
+    fun readiness(): CompletableFuture<Void> = if (stopped) {
+        CompletableFuture.failedFuture(IllegalStateException("ARC is stopped"))
+    } else ready.copy()
+
+    internal fun closeCompletion(): CompletableFuture<Unit> = (storageGeneration?.drain ?: lifecycleDrain).copy()
+
+    internal fun fullRuntimeReadiness(): CompletableFuture<Void> = readiness().thenApply {
+        check(runtimeProfile == ArcRuntimeProfile.FULL) { "This ARC runtime profile does not provide FULL host services" }
+        null
+    }
+
+    internal fun <T> submitBackground(action: () -> T): CompletableFuture<T> = background.submit(action)
+    internal fun backgroundOwner(): BoundedAsyncExecutor = background
+
+    /** Fixed module resource owners retire even if ordinary work has filled the worker queue. */
+    internal fun retireInBackground(action: () -> Unit): CompletableFuture<Unit> {
+        val result = CompletableFuture<Unit>()
+        synchronized(cleanupMonitor) {
+            if (cleanupSealed) return CompletableFuture.failedFuture(IllegalStateException("ARC cleanup admission is closed"))
+            pendingCleanup.add {
+                try { action(); result.complete(Unit) }
+                catch (failure: Throwable) { result.completeExceptionally(failure); throw failure }
+            }
+        }
+        // A rejected ordinary wake-up leaves the accepted cleanup for the reserved terminal drain.
+        background.submit(::drainCleanupOnWorker)
+        return result
+    }
+
+    private fun drainCleanupOnWorker() {
+        while (true) {
+            val close = pendingCleanup.poll() ?: break
+            try { close() } catch (failure: Throwable) {
+                recordCleanupFailure(failure)
+            }
+        }
+    }
+
+    private fun recordCleanupFailure(failure: Throwable) {
+        if (cleanupFailure == null) cleanupFailure = failure
+        else if (cleanupFailure !== failure) cleanupFailure?.addSuppressed(failure)
+    }
+
+    internal fun <T> whenCompleteOnMain(
+        future: java.util.concurrent.CompletionStage<T>,
+        callback: (T?, Throwable?) -> Unit,
+    ) {
+        completionTasks?.let { future.whenCompleteSync(it, action = callback) }
+    }
 
     internal fun sharedServiceSnapshot(): Map<String, Int> = sharedServiceMetrics?.snapshot().orEmpty()
 
@@ -167,41 +257,118 @@ open class ARC : JavaPlugin() {
 
     override fun onLoad() {
         plugin = this
-        createDefaultConfigs()
-        runtimeProfile = ArcRuntimeProfile.load(dataPath)
-        if (runtimeProfile == ArcRuntimeProfile.FULL) GuiDefaults.init(dataPath)
-        initLogging()
+        startPreparation()
+    }
+
+    private fun startPreparation() {
+        val owner = StorageGeneration(lifecycleDrain)
+        storageGeneration = owner
+        background = owner.worker
+        val root = dataPath
+        val resources = javaClass.classLoader
+        // Waiting does not occupy a worker and cannot open stores for a superseded owner.
+        bootstrapConfiguration = owner.previous.thenCompose {
+            owner.worker.submit {
+                cleanupFailure = null
+                prepareConfiguration(root, resources, initial = true)
+            }
+        }
     }
 
     override fun onEnable() {
-        printBanner()
-
-        if ((runtimeProfile == ArcRuntimeProfile.FULL || runtimeProfile == ArcRuntimeProfile.SLIMEFUN) && pluginMessenger == null) {
-            pluginMessenger = PluginMessenger(networkRtpEnabled = runtimeProfile == ArcRuntimeProfile.FULL)
+        if (stopped) {
+            ready = CompletableFuture()
+            sqlDrain = CompletableFuture()
+            startPreparation()
+            stopped = false
         }
+        val owner = checkNotNull(storageGeneration)
+        completionTasks = LifecycleTaskScope(ru.arc.core.BukkitTaskScheduler(this))
+        nativeWork = BudgetedTaskQueue(requireNotNull(completionTasks))
+        owner.previous.whenCompleteSync(requireNotNull(completionTasks)) { _, failure ->
+            if (storageGeneration !== owner || stopped) return@whenCompleteSync
+            if (failure != null) {
+                ready.completeExceptionally(failure)
+                logger.log(java.util.logging.Level.SEVERE, "Previous ARC generation did not drain", failure)
+                server.pluginManager.disablePlugin(this)
+            } else try {
+                beginGeneration(owner)
+            } catch (startupFailure: Throwable) {
+                ready.completeExceptionally(startupFailure)
+                logger.log(java.util.logging.Level.SEVERE, "ARC host bindings failed", startupFailure)
+                server.pluginManager.disablePlugin(this)
+            }
+        }
+    }
 
+    private fun beginGeneration(lifecycleOwner: StorageGeneration) {
+        printBanner()
+        lifecycleOwner.installedGlobals = true
         PaperArcRuntime.installScheduling(this)
         val sharedServices = checkNotNull(server.servicesManager.load(ArcCoreServices::class.java)) {
             "ArcCore services are unavailable; install and enable ArcCore before ARC"
         }
         coreServices = sharedServices
         sqlService = sharedServices.sql
-        sqlConsumer = PaperSqlServices.installConsumer(this)
+        sqlConsumer = PaperSqlServices.installConsumer(this, sqlDrain)
         redisService = sharedServices.redis
+        val redisApi = checkNotNull(server.servicesManager.load(ru.arc.paper.api.ArcRedisService::class.java)) {
+            "ArcCore Redis service is unavailable"
+        }
         metricsService = sharedServices.metrics.also {
             sharedServiceMetrics = SharedServiceMetrics(it, sqlService, redisService)
         }
         visualPacketRuntime = sharedServices.visualPackets
-        val configRoot = dataPath
-        ru.arc.core.async {
+        chunkTicketRegistry = PaperChunkTicketRegistry(this)
+        ru.arc.dungeons.DungeonHostServices.register(this)
+        ru.arc.integrations.mounts.MountHostServices.register(this)
+        ru.arc.integrations.contracts.ContractsHostServices.register(this)
+        ru.arc.integrations.origin.OriginHostServices.register(this)
+        val root = dataPath
+        val owner = name
+        val jobsAvailable = server.pluginManager.isPluginEnabled("Jobs")
+        val scheduler = Tasks.scheduler
+        val generation = ready
+        val worker = lifecycleOwner.worker
+        val prepared = bootstrapConfiguration.thenCombine(sharedServices.ready()) { config, _ -> config }
+            .thenCompose { config -> worker.submit {
+                if (config.profile != ArcRuntimeProfile.ISOLATED || ChatModeConfig.load(root).isolatedGlyphProtectionEnabled) {
+                    RedisModule.prepareOnWorker(root, redisApi, owner)
+                }
+                prepareRepositoriesOnWorker(config.profile, root, scheduler, jobsAvailable)
+                config
+            } }
+        whenCompleteOnMain(prepared) { config, failure ->
+            if (storageGeneration !== lifecycleOwner || ready !== generation || stopped) return@whenCompleteOnMain
+            if (failure != null || config == null) {
+                generation.completeExceptionally(failure ?: IllegalStateException("ARC preparation failed"))
+                logger.log(java.util.logging.Level.SEVERE, "ARC preparation failed", failure)
+                server.pluginManager.disablePlugin(this)
+                return@whenCompleteOnMain
+            }
             try {
-                ConfigManager.of(configRoot, "modules/misc.yml").mergeMissingFromBundled("config/portal-animation-defaults.yml")
-            } catch (failure: Exception) {
-                error("Could not merge portal animation defaults into modules/misc.yml", failure)
+                synchronized(cleanupMonitor) { cleanupSealed = false }
+                attachPreparedRuntime(config)
+                finishReadiness(generation, initial = true)
+            } catch (attachFailure: Throwable) {
+                generation.completeExceptionally(attachFailure)
+                logger.log(java.util.logging.Level.SEVERE, "ARC attachment failed", attachFailure)
+                server.pluginManager.disablePlugin(this)
             }
         }
+    }
+
+    private fun attachPreparedRuntime(config: PreparedConfiguration) {
+        runtimeProfile = config.profile
+        headTextureCache = config.headCache
+        materialTranslations = config.translations
+        if (runtimeProfile == ArcRuntimeProfile.FULL) GuiDefaults.init(dataPath)
+        if ((runtimeProfile == ArcRuntimeProfile.FULL || runtimeProfile == ArcRuntimeProfile.SLIMEFUN) && pluginMessenger == null) {
+            pluginMessenger = PluginMessenger(networkRtpEnabled = runtimeProfile == ArcRuntimeProfile.FULL)
+        }
         if (runtimeProfile == ArcRuntimeProfile.FULL) {
-            ArcMenus.initialize(this, dataPath)
+            ArcMenus.initialize(this, dataPath, requireNotNull(config.menus))
+            ru.arc.misc.JoinMessageGuiFactory.attach(requireNotNull(config.joinMessageDialog))
         } else if (runtimeProfile == ArcRuntimeProfile.SLIMEFUN) {
             ArcMenus.initializeDialogRuntime(this)
         }
@@ -210,7 +377,6 @@ open class ARC : JavaPlugin() {
             server.servicesManager.register(ArcSidebarService::class.java, sidebarService, this, ServicePriority.Normal)
         }
         if (runtimeProfile == ArcRuntimeProfile.FULL) {
-            chunkTicketRegistry = PaperChunkTicketRegistry(this)
             RtpPlayerRegistry.initialize(dataPath)
         }
         registerModules()
@@ -219,12 +385,6 @@ open class ARC : JavaPlugin() {
             logError = { msg, t -> error(msg, t) },
         )
         ModuleRegistry.initAll()
-        if (runtimeProfile == ArcRuntimeProfile.FULL) {
-            ru.arc.dungeons.DungeonHostServices.register(this)
-            ru.arc.integrations.mounts.MountHostServices.register(this)
-            ru.arc.integrations.contracts.ContractsHostServices.register(this)
-            ru.arc.integrations.origin.OriginHostServices.register(this)
-        }
         bindTelemetryRegistry(MetricsModule.registry())
 
         if (runtimeProfile == ArcRuntimeProfile.FULL) {
@@ -244,7 +404,33 @@ open class ARC : JavaPlugin() {
         }
         registerCommands()
 
-        consoleLog("<dark_gray>[ARC]</dark_gray> <bold><green>✔  ARC is ready</green></bold>")
+    }
+
+    private fun finishReadiness(generation: CompletableFuture<Void>, initial: Boolean) {
+        val durableState = if (runtimeProfile == ArcRuntimeProfile.FULL) CompletableFuture.allOf(
+            RtpPlayerRegistry.readiness(), ru.arc.onboarding.OnboardingService.readiness(),
+            LocationPoolModule.readiness(), ru.arc.investigation.InvestigationModule.readiness(),
+            ru.arc.scheduled.ScheduledCommandsManager.readiness(),
+        ) else CompletableFuture.completedFuture(null)
+        val prepared = CompletableFuture.allOf(durableState, OpsHttpModule.readiness())
+        whenCompleteOnMain(prepared) { _, failure ->
+            if (ready !== generation) return@whenCompleteOnMain
+            if (failure != null) {
+                generation.completeExceptionally(failure)
+                error("ARC durable-state preparation failed", failure)
+                if (initial) server.pluginManager.disablePlugin(this)
+                return@whenCompleteOnMain
+            }
+            generation.complete(null)
+            if (initial) consoleLog("<dark_gray>[ARC]</dark_gray> <bold><green>✔  ARC is ready</green></bold>")
+            else {
+                ru.arc.integrations.mounts.mountService()?.reload()
+                ru.arc.integrations.contracts.contractsService()?.reload()
+                ru.arc.integrations.origin.originService()?.reload()
+                ru.arc.dungeons.dungeonService()?.reload()
+                info("ARC plugin reloaded")
+            }
+        }
     }
 
     private fun printBanner() {
@@ -260,75 +446,146 @@ open class ARC : JavaPlugin() {
     }
 
     override fun onDisable() {
-        info("Stopping ARC plugin")
-        server.servicesManager.unregisterAll(this)
-        unregisterSlimefunMenuAlias()
-        unregisterNetworkSpawnAlias()
-        if (runtimeProfile == ArcRuntimeProfile.FULL) Portal.removeAll()
-        ModuleRegistry.shutdownAll()
-        sharedServiceMetrics?.close()
-        sharedServiceMetrics = null
-        runCatching { sqlConsumer?.close() }.onFailure { error("Failed to release ARC SQL leases", it) }
-        sqlConsumer = null
-        // ArcCore owns the providers; ARC only releases its own resources and exporter.
-        metricsService?.rebind(null)
-        metricsService = null
-        visualPacketRuntime = null
-        coreServices = null
-        baseSidebar?.close()
-        baseSidebar = null
-        tablist?.close()
-        tablist = null
-        if (::sidebarService.isInitialized) {
-            runCatching(sidebarService::close)
-                .onFailure { error("Failed to close ARC sidebar service", it) }
+        if (stopped) return
+        stopped = true
+        val owner = storageGeneration ?: return
+        storageGeneration = null
+        lifecycleDrain = owner.drain
+        var nativeFailure: Throwable? = null
+        fun attempt(action: () -> Unit) {
+            try { action() } catch (failure: Throwable) {
+                if (nativeFailure == null) nativeFailure = failure else if (nativeFailure !== failure) nativeFailure!!.addSuppressed(failure)
+            }
         }
-        if (runtimeProfile == ArcRuntimeProfile.FULL || runtimeProfile == ArcRuntimeProfile.SLIMEFUN) ArcMenus.close()
-        if (::chunkTicketRegistry.isInitialized) {
-            runCatching(chunkTicketRegistry::close)
-                .onFailure { error("Failed to close ARC chunk ticket registry", it) }
+        ready.completeExceptionally(CancellationException("ARC is stopping"))
+        pendingReload?.completeExceptionally(CancellationException("ARC is stopping"))
+        pendingReload = null
+        if (::nativeWork.isInitialized) attempt { nativeWork.close() }
+        attempt { completionTasks?.close() }
+        completionTasks = null
+        val moduleDrains = mutableListOf<CompletableFuture<*>>()
+        if (owner.installedGlobals) {
+            info("Stopping ARC plugin")
+            attempt { server.servicesManager.unregisterAll(this) }
+            attempt { unregisterSlimefunMenuAlias() }
+            attempt { unregisterNetworkSpawnAlias() }
+            if (runtimeProfile == ArcRuntimeProfile.FULL) attempt { Portal.removeAll() }
+            attempt { ModuleRegistry.shutdownAll() }
+            attempt { RtpPlayerRegistry.shutdown() }
+            moduleDrains += RtpPlayerRegistry.closeCompletion()
+            moduleDrains += ru.arc.onboarding.OnboardingService.closeCompletion()
+            moduleDrains += ru.arc.investigation.InvestigationModule.drained()
+            moduleDrains += HooksModule.drained()
+            moduleDrains += ru.arc.scheduled.ScheduledCommandsManager.drained()
+            attempt { sharedServiceMetrics?.close() }
+            sharedServiceMetrics = null
+            val retiredSqlConsumer = sqlConsumer
+            sqlConsumer = null
+            attempt { retiredSqlConsumer?.close() }
+            attempt { metricsService?.rebind(null) }
+            metricsService = null
+            visualPacketRuntime = null
+            coreServices = null
+            attempt { baseSidebar?.close() }
+            baseSidebar = null
+            attempt { tablist?.close() }
+            tablist = null
+            if (::sidebarService.isInitialized) attempt { sidebarService.close() }
+            if (runtimeProfile == ArcRuntimeProfile.FULL || runtimeProfile == ArcRuntimeProfile.SLIMEFUN) attempt { ArcMenus.close() }
+            attempt { ru.arc.misc.JoinMessageGuiFactory.close() }
+            if (::chunkTicketRegistry.isInitialized) attempt { chunkTicketRegistry.close() }
+            attempt { pluginMessenger?.shutdown() }
+            pluginMessenger = null
+            attempt { GuiDefaults.reset() }
+            synchronized(cleanupMonitor) { cleanupSealed = true }
+            attempt { Tasks.reset() }
         }
-        pluginMessenger?.shutdown()
-        pluginMessenger = null
-        GuiDefaults.reset()
-        Tasks.reset()
-        info("ARC plugin disabled")
+        val sqlCompletion = sqlDrain
+        val closeFailure = nativeFailure
+        val storageDrain = owner.worker.closeAsync {
+            if (owner.installedGlobals) {
+                drainCleanupOnWorker()
+                try { discardPreparedRepositoriesOnWorker() } catch (failure: Throwable) { recordCleanupFailure(failure) }
+                cleanupFailure?.let { throw it }
+            }
+        }
+        val actualDrains = moduleDrains + storageDrain + owner.previous
+        CompletableFuture.allOf(*actualDrains.toTypedArray()).whenComplete { _, _ ->
+            var failure = closeFailure
+            actualDrains.forEach { drain -> runCatching { drain.join() }.exceptionOrNull()?.let { error ->
+                val cause = error.cause ?: error
+                if (failure == null) failure = cause else if (failure !== cause) failure!!.addSuppressed(cause)
+            } }
+            if (failure == null) {
+                sqlCompletion.complete(null)
+                owner.drain.complete(Unit)
+            } else {
+                sqlCompletion.completeExceptionally(failure)
+                owner.drain.completeExceptionally(failure)
+                logger.log(java.util.logging.Level.SEVERE, "ARC background drain failed", failure)
+            }
+        }
+        info("ARC plugin disabled; accepted storage is draining")
     }
 
     // ==================== Reload ====================
 
-    /** Reload all plugin configuration and modules. Called by /arc reload. */
-    fun reload() {
-        info("Reloading ARC plugin")
-        if (runtimeProfile == ArcRuntimeProfile.FULL) Portal.removeAll()
-        // Reload YAML from disk before modules re-read configs (announce delay, etc.).
-        ConfigManager.reloadAll()
-        coreServices?.let { services ->
+    /** Prepare config and transport off-thread, then attach one fenced generation. */
+    fun reload(): CompletableFuture<Void> {
+        if (stopped) return CompletableFuture.failedFuture(IllegalStateException("ARC is stopped"))
+        if (!ready.isDone || pendingReload != null) return CompletableFuture.failedFuture(IllegalStateException("ARC is already preparing"))
+        val generation = CompletableFuture<Void>()
+        pendingReload = generation
+        val root = dataPath
+        val resources = javaClass.classLoader
+        val activeProfile = runtimeProfile
+        val services = checkNotNull(coreServices)
+        val redisApi = checkNotNull(server.servicesManager.load(ru.arc.paper.api.ArcRedisService::class.java))
+        val completions = checkNotNull(completionTasks)
+        val owner = name
+        val hasRedisModule = ModuleRegistry.getModules().any { it === RedisModule }
+        val prepared = background.submit {
+            // Reject transport changes before publishing any config or readiness state.
+            if (hasRedisModule) RedisModule.requireReloadCompatible(root)
+            if (activeProfile == ArcRuntimeProfile.FULL) ru.arc.audit.AuditManager.requireReloadCompatible(root)
+            val config = prepareConfiguration(root, resources, initial = false, activeProfile = activeProfile)
+            if (activeProfile != ArcRuntimeProfile.ISOLATED || ChatModeConfig.load(root).isolatedGlyphProtectionEnabled) {
+                RedisModule.prepareOnWorker(root, redisApi, owner)
+            }
+            config
+        }.thenCompose { config ->
+            completions.callSync { services.reloadVisualPacketConfigAsync() }
+                .thenCompose { it }
+                .thenApply { config }
+        }
+        whenCompleteOnMain(prepared) { config, failure ->
+            if (pendingReload !== generation) return@whenCompleteOnMain
+            pendingReload = null
+            if (failure != null || config == null) {
+                generation.completeExceptionally(failure ?: IllegalStateException("ARC reload preparation failed"))
+                error("ARC reload preparation failed; the active runtime remains attached", failure)
+                return@whenCompleteOnMain
+            }
             try {
-                services.reloadVisualPacketConfig()
-            } catch (failure: IllegalArgumentException) {
-                warn("Invalid plugins/ArcCore/visual-packets.yml; keeping active visual packet limits: {}", failure.message)
+                ready = generation
+                if (config.profile != runtimeProfile) warn("Runtime profile changes require a server restart; keeping {}", runtimeProfile)
+                if (runtimeProfile == ArcRuntimeProfile.FULL) {
+                    Portal.removeAll()
+                    ArcMenus.reload(requireNotNull(config.menus))
+                    ru.arc.misc.JoinMessageGuiFactory.attach(requireNotNull(config.joinMessageDialog))
+                }
+                ModuleRegistry.reloadAll()
+                bindTelemetryRegistry(MetricsModule.registry())
+                baseSidebar?.refresh()
+                tablist?.refresh()
+                redisManager?.init()
+                finishReadiness(generation, initial = false)
+            } catch (attachFailure: Throwable) {
+                generation.completeExceptionally(attachFailure)
+                error("ARC reload attachment failed", attachFailure)
             }
         }
-        if (ArcRuntimeProfile.load(dataPath) != runtimeProfile) {
-            warn("Runtime profile changes require a server restart; keeping {}", runtimeProfile)
-        }
-        if (runtimeProfile == ArcRuntimeProfile.FULL) ArcMenus.reload()
-        ModuleRegistry.reloadAll()
-        ru.arc.integrations.mounts.mountService()?.reload()
-        ru.arc.integrations.contracts.contractsService()?.reload()
-        ru.arc.integrations.origin.originService()?.reload()
-        ru.arc.dungeons.dungeonService()?.reload()
-        bindTelemetryRegistry(MetricsModule.registry())
-        baseSidebar?.refresh()
-        tablist?.refresh()
-        // Modules may replace channel listeners during reload; restart the subscription once
-        // after every module has refreshed its registrations.
-        redisManager?.let {
-            info("Redis resubscribing to {} channels after reload", it.getChannelCount())
-            it.init()
-        }
-        info("ARC plugin reloaded")
+        return generation.copy()
     }
 
     // ==================== Module Registration ====================
@@ -583,38 +840,110 @@ open class ARC : JavaPlugin() {
 
     // ==================== Configuration ====================
 
-    private fun createDefaultConfigs() {
-        debug("Creating default configs in: {}", dataFolder.absolutePath)
-        dataFolder.mkdirs()
-
-        for (resource in BUNDLED_RESOURCES) {
-            val file = File(dataFolder, resource)
-            if (resource in AUTHORITATIVE_BUNDLED_RESOURCES) {
-                file.parentFile.mkdirs()
-                saveResource(resource, true)
-                debug("Refreshed authoritative bundled resource: {}", resource)
-            } else if (!file.exists()) {
-                file.parentFile.mkdirs()
-                saveResource(resource, false)
-                debug("Saved bundled resource: {}", resource)
-            }
+    private fun prepareRepositoriesOnWorker(
+        profile: ArcRuntimeProfile,
+        root: Path,
+        scheduler: ru.arc.core.TaskScheduler,
+        jobsAvailable: Boolean,
+    ) {
+        val redis = RedisModule.preparedClient()
+        if (profile == ArcRuntimeProfile.ISOLATED) return
+        if (redis != null) {
+            ru.arc.chat.ChatModeService.prepareOnWorker(redis)
+            if (jobsAvailable) ru.arc.jobs.JobsModule.prepareOnWorker(redis, root)
         }
-
-        ConfigManager.of(dataPath, "modules/personalloot.yml").mergeMissingFromBundled("modules/personalloot.yml")
-        ConfigManager.of(dataPath, "modules/item-presets.yml").mergeMissingFromBundled("modules/item-presets.yml")
-        ConfigManager.of(dataPath, "modules/misc.yml")
-
-        val commandsConfig = ConfigManager.of(dataFolder.toPath().resolve("config"), "commands.yml")
-        if (commandsConfig.mergeMissingFromBundled("config/commands.yml")) {
-            debug("Added missing bundled keys to config/commands.yml")
+        if (profile != ArcRuntimeProfile.FULL) return
+        LocationPoolModule.prepareOnWorker(root)
+        val origin = RedisModule.preparedOrigin()
+        if (redis != null) {
+            ru.arc.board.BoardManager.prepareOnWorker(redis)
+            ru.arc.store.StoreManager.prepareOnWorker(redis)
+            ru.arc.misc.JoinMessagesManager.prepareOnWorker(redis)
+            ru.arc.misc.JoinMessageCatalogManager.prepareOnWorker(redis)
+            ru.arc.bschests.PersonalLootModule.prepareOnWorker(redis, origin)
         }
+        ru.arc.audit.AuditManager.prepareOnWorker(root, scheduler, redis, origin)
     }
 
-    private fun initLogging() {
+    /** Also releases candidates when bootstrap failed before ModuleRegistry attached them. */
+    private fun discardPreparedRepositoriesOnWorker() {
+        val cleanup = listOf<() -> Unit>(
+            LocationPoolModule::discardPreparedOnWorker,
+            ru.arc.audit.AuditManager::discardPreparedOnWorker,
+            ru.arc.bschests.PersonalLootModule::discardPreparedOnWorker,
+            ru.arc.misc.JoinMessageCatalogManager::discardPreparedOnWorker,
+            ru.arc.misc.JoinMessagesManager::discardPreparedOnWorker,
+            ru.arc.store.StoreManager::discardPreparedOnWorker,
+            ru.arc.board.BoardManager::discardPreparedOnWorker,
+            ru.arc.jobs.JobsModule::discardPreparedOnWorker,
+            ru.arc.chat.ChatModeService::discardPreparedOnWorker,
+            RedisModule::discardPreparedOnWorker,
+        )
+        var failure: Throwable? = null
+        for (close in cleanup) try { close() } catch (problem: Throwable) {
+            if (failure == null) failure = problem else failure.addSuppressed(problem)
+        }
+        failure?.let { throw it }
+    }
+
+    /** Worker-only resource/config phase; no Bukkit registry or native object is touched here. */
+    private fun prepareConfiguration(
+        root: Path,
+        resources: ClassLoader,
+        initial: Boolean,
+        activeProfile: ArcRuntimeProfile? = null,
+    ): PreparedConfiguration {
+        createDefaultConfigs(root, resources)
+        if (!initial) ConfigManager.reloadAll()
+        for (directory in listOf("modules", "guis", "config")) {
+            val folder = root.resolve(directory)
+            if (!Files.isDirectory(folder)) continue
+            Files.list(folder).use { paths ->
+                paths.filter { it.fileName.toString().endsWith(".yml") || it.fileName.toString().endsWith(".yaml") }
+                    .forEach { path ->
+                        val file = path.fileName.toString()
+                        ConfigManager.of(root, "$directory/$file")
+                        if (directory == "modules") ConfigManager.ofModule(root, file)
+                    }
+            }
+        }
+        val profile = ArcRuntimeProfile.load(root)
+        ConfigManager.of(root, "modules/misc.yml").mergeMissingFromBundled("config/portal-animation-defaults.yml")
+        val menus = if ((activeProfile ?: profile) == ArcRuntimeProfile.FULL) {
+            ConfigManager.of(root, ru.arc.gui.ArcMenuConfiguration.RESOURCE)
+                .mergeMissingFromBundled(ru.arc.gui.ArcMenuConfiguration.RESOURCE)
+            ru.arc.gui.ArcMenuConfiguration.prepare(root)
+        } else null
+        val joinMessageDialog = if ((activeProfile ?: profile) == ArcRuntimeProfile.FULL) {
+            ru.arc.misc.JoinMessageGuiFactory.prepareOnWorker(root)
+        } else null
+        initLogging(root)
+        val headCache = if (initial && profile == ArcRuntimeProfile.FULL) HeadTextureCache(root.resolve("head-cache.json")) else null
+        val translations = if (initial && profile != ArcRuntimeProfile.ISOLATED) ru.arc.hooks.ztranslator.TranslatorHook.prepare(root) else emptyMap()
+        return PreparedConfiguration(profile, menus, joinMessageDialog, headCache, translations)
+    }
+
+    private fun createDefaultConfigs(root: Path, resources: ClassLoader) {
+        Files.createDirectories(root)
+        for (resource in BUNDLED_RESOURCES) {
+            val target = root.resolve(resource)
+            if (resource !in AUTHORITATIVE_BUNDLED_RESOURCES && Files.exists(target)) continue
+            Files.createDirectories(target.parent)
+            resources.getResourceAsStream(resource).use { source ->
+                requireNotNull(source) { "Bundled resource is unavailable: $resource" }
+                Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING)
+            }
+        }
+        ConfigManager.of(root, "modules/personalloot.yml").mergeMissingFromBundled("modules/personalloot.yml")
+        ConfigManager.of(root, "modules/item-presets.yml").mergeMissingFromBundled("modules/item-presets.yml")
+        ConfigManager.of(root.resolve("config"), "commands.yml").mergeMissingFromBundled("config/commands.yml")
+    }
+
+    private fun initLogging(root: Path) {
         try {
-            Logging.installForPlugin(dataPath)
-        } catch (e: Throwable) {
-            error("Error initializing logging / Loki", e)
+            Logging.installForPlugin(root)
+        } catch (failure: Throwable) {
+            error("Error initializing logging / Loki", failure)
         }
     }
 
@@ -625,6 +954,28 @@ open class ARC : JavaPlugin() {
         private val BUNDLED_RESOURCES =
             listOf(
                 "modules/runtime.yml",
+                "modules/audit.yml",
+                "modules/bank-audit.yml",
+                "modules/decor-interactions.yml",
+                "modules/dialog-demo.yml",
+                "modules/enchanting.yml",
+                "modules/enchantments-guide.yml",
+                "modules/entity-cleanup.yml",
+                "modules/graves.yml",
+                "modules/home-markers.yml",
+                "modules/item-lore.yml",
+                "modules/join-message-dialog-legacy.yml",
+                "modules/join-message-dialog-v2.yml",
+                "modules/metrics.yml",
+                "modules/npc-chat.yml",
+                "modules/player-telemetry.yml",
+                "modules/resourcepack-sync.yml",
+                "modules/reward-catalog.yml",
+                "modules/reward-redemption.yml",
+                "modules/survival-gameplay.yml",
+                "guis/jobs-boost.yml",
+                "guis/personal-loot.yml",
+                "guis/store.yml",
                 "modules/logging.yml",
                 "modules/visual-packets.yml",
                 "modules/redis.yml",

@@ -23,78 +23,43 @@ import ru.arc.scheduled.ValidationResult
 object OpsScheduledCommandHandlers {
     fun list(id: String? = null): Map<String, Any?> {
         val normalizedId = id?.takeIf { it.isNotBlank() }?.let(::validateIdentifier)
-        return OpsBukkitSync.call {
-            val selected =
-                if (normalizedId == null) {
-                    ScheduledCommandsManager.entries()
-                } else {
-                    listOfNotNull(ScheduledCommandsManager.entry(normalizedId))
-                }
-            if (normalizedId != null && selected.isEmpty()) {
-                throw NoSuchElementException("Scheduled command not found: $normalizedId")
-            }
-            mapOf(
-                "source" to "arc-scheduled-commands",
-                "timezone" to ScheduledCommandsManager.settings().timezone.id,
-                "count" to selected.size,
-                "entries" to selected.map(::entryToMap),
-            )
-        }
+        val settings = ScheduledCommandsManager.settings() // Immutable memory view, no native bridge.
+        val selected = if (normalizedId == null) settings.entries() else listOfNotNull(settings.entry(normalizedId))
+        if (normalizedId != null && selected.isEmpty()) throw NoSuchElementException("Scheduled command not found: $normalizedId")
+        return mapOf("source" to "arc-scheduled-commands", "timezone" to settings.timezone.id,
+            "count" to selected.size, "entries" to selected.map(::entryToMap))
     }
 
-    fun preview(
-        id: String,
-        body: JsonObject,
-    ): Map<String, Any?> {
+    fun preview(id: String, body: JsonObject): Map<String, Any?> {
         val draft = parseDraft(id, body)
         validate(draft)
-        return OpsBukkitSync.call {
-            draftToMap(draft) +
-                mapOf(
-                    "preview" to true,
-                    "persisted" to false,
-                    "exists" to (ScheduledCommandsManager.entry(draft.id) != null),
-                    "source" to "arc-scheduled-commands",
-                )
-        }
+        return draftToMap(draft) + mapOf("preview" to true, "persisted" to false,
+            "exists" to (ScheduledCommandsManager.entry(draft.id) != null), "source" to "arc-scheduled-commands")
     }
 
-    fun upsert(
-        id: String,
-        body: JsonObject,
-    ): Map<String, Any?> {
+    fun upsert(id: String, body: JsonObject): Map<String, Any?> {
+        requireWorker()
         val draft = parseDraft(id, body)
         validate(draft)
-        return OpsBukkitSync.call {
-            val existed = ScheduledCommandsManager.entry(draft.id) != null
-            when (val result = ScheduledCommandsManager.saveEntry(draft)) {
-                ValidationResult.Ok -> Unit
-                is ValidationResult.Error -> throw IllegalArgumentException(result.message)
-            }
-            val saved =
-                ScheduledCommandsManager.entry(draft.id)
-                    ?: throw IllegalStateException("Scheduled command was not available after save: ${draft.id}")
-            mapOf(
-                "source" to "arc-scheduled-commands",
-                "created" to !existed,
-                "saved" to true,
-                "entry" to entryToMap(saved),
-            )
+        val saved = ScheduledCommandsManager.saveSnapshotAsync(draft).join()
+        when (val result = saved.validation) {
+            ValidationResult.Ok -> Unit
+            is ValidationResult.Error -> throw IllegalArgumentException(result.message)
         }
+        return mapOf("source" to "arc-scheduled-commands", "created" to saved.created,
+            "saved" to true, "entry" to entryToMap(checkNotNull(saved.entry)))
     }
 
     fun delete(id: String): Map<String, Any?> {
+        requireWorker()
         val normalized = validateIdentifier(id)
-        return OpsBukkitSync.call {
-            if (!ScheduledCommandsManager.deleteEntry(normalized)) {
-                throw NoSuchElementException("Scheduled command not found: $normalized")
-            }
-            mapOf(
-                "source" to "arc-scheduled-commands",
-                "deleted" to true,
-                "id" to normalized,
-            )
-        }
+        if (!ScheduledCommandsManager.deleteEntryAsync(normalized).join())
+            throw NoSuchElementException("Scheduled command not found: $normalized")
+        return mapOf("source" to "arc-scheduled-commands", "deleted" to true, "id" to normalized)
+    }
+
+    private fun requireWorker() {
+        check(!org.bukkit.Bukkit.isPrimaryThread()) { "Scheduled command HTTP persistence must run on its request worker" }
     }
 
     internal fun parseDraft(

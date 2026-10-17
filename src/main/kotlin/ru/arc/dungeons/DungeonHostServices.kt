@@ -31,6 +31,7 @@ object DungeonHostServices {
         fun <T : Any> register(type: Class<T>, service: T) =
             services.register(type, service, plugin, ServicePriority.Normal)
         register(ArcDungeonConfiguration::class.java, object : ArcDungeonConfiguration {
+            override fun ready() = ARC.instance.fullRuntimeReadiness()
             override fun legacyDataPath() = ARC.instance.dataPath
             override fun serverName() = requireNotNull(ARC.serverName)
             override fun sharedRedisAvailable() = ARC.redisManager != null

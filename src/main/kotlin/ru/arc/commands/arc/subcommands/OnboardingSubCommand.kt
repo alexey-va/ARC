@@ -28,13 +28,11 @@ object OnboardingSubCommand : SubCommand {
             return true
         }
         val (playerId, displayName) = resolvePlayer(sender, args[1]) ?: return true
-        val result =
-            try {
-                OnboardingService.reset(playerId)
-            } catch (failure: Exception) {
+        ru.arc.ARC.instance.whenCompleteOnMain(OnboardingService.reset(playerId)) { result, failure ->
+            if (failure != null || result == null) {
                 error("Could not reset onboarding state for {}", displayName, failure)
                 sender.sendMessage(TextUtil.mm("<red>Не удалось сохранить сброс онбординга. Проверьте лог ARC.", true))
-                return true
+                return@whenCompleteOnMain
             }
         when (result) {
             OnboardingResetResult.DISABLED ->
@@ -45,6 +43,7 @@ object OnboardingSubCommand : SubCommand {
 
             OnboardingResetResult.RESET ->
                 sender.sendMessage(TextUtil.mm("<green>Состояние онбординга <white>$displayName<green> сброшено", true))
+        }
         }
         return true
     }

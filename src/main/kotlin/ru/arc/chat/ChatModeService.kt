@@ -22,10 +22,20 @@ object ChatModeService {
 
     @Volatile
     private var scope: CoroutineScope? = null
+    private var prepared: Pair<CachedRepository<PlayerChatMode>, CoroutineScope>? = null
 
     @Synchronized
     fun init() {
         if (repository != null || ARC.redisManager == null) return
+        val candidate = checkNotNull(prepared) { "Chat mode repository preparation is not ready" }
+        prepared = null
+        repository = candidate.first
+        chatModes = ChatModeRepository(candidate.first)
+        scope = candidate.second
+    }
+
+    internal fun prepareOnWorker(redis: ru.arc.redis.RedisOperations) {
+        if (repository != null || prepared != null) return
         val newScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         try {
             val newRepository =
@@ -34,6 +44,7 @@ object ChatModeService {
                     storageKey = ChatModeRepository.STORAGE_KEY,
                     updateChannel = ChatModeRepository.UPDATE_CHANNEL,
                     scope = newScope,
+                    redis = redis,
                 ) {
                     loadAllOnStart(true)
                     // Chat routing is synchronous; keep every mode available so
@@ -41,13 +52,18 @@ object ChatModeService {
                     enableCleanup(false)
                     saveInterval(1.seconds)
                 }
-            repository = newRepository
-            chatModes = ChatModeRepository(newRepository)
-            scope = newScope
+            prepared = newRepository to newScope
         } catch (failure: Throwable) {
             newScope.cancel()
             throw failure
         }
+    }
+
+    internal fun discardPreparedOnWorker() {
+        val candidate = prepared ?: return
+        prepared = null
+        ru.arc.repository.sealRepositoryOperations(candidate.second)
+        ru.arc.repository.drainRepository(candidate.first, candidate.second)
     }
 
     fun getMode(playerId: UUID): ChatMode =
@@ -83,11 +99,14 @@ object ChatModeService {
     @Synchronized
     fun shutdown() {
         val currentRepository = repository
+        val operations = scope
         repository = null
         chatModes = null
         scope = null
-        if (currentRepository != null) {
-            runBlocking { currentRepository.shutdown() }
+        if (currentRepository != null && operations != null) {
+            ru.arc.repository.sealRepositoryOperations(operations)
+            ARC.instance.retireInBackground { ru.arc.repository.drainRepository(currentRepository, operations) }
+                .whenComplete { _, failure -> if (failure != null) ru.arc.util.Logging.error("Could not drain chat modes", failure) }
         }
     }
 }

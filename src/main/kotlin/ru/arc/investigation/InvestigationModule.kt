@@ -10,9 +10,11 @@ import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil
 import java.nio.file.Path
-import java.security.SecureRandom
 import java.util.Locale
-import kotlin.random.Random
+import java.util.UUID
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CancellationException
+import ru.arc.core.BoundedAsyncExecutor
 
 internal data class InvestigationRuntimeConfig(
     val config: InvestigationConfig,
@@ -42,39 +44,45 @@ object InvestigationModule : PluginModule {
 
     @Volatile private var config: InvestigationConfig? = null
     @Volatile private var catalog: InvestigationStoryCatalog? = null
-    private var journal: InvestigationJournal? = null
-    private var service: InvestigationService? = null
-    private val tasks = LifecycleTaskScope()
+    @Volatile private var service: InvestigationAsyncRuntime? = null
+    private var tasks: LifecycleTaskScope? = null
+    private var generation = 0L
+    private var stopped = true
+    private var predecessor = CompletableFuture.completedFuture(Unit)
+    private var ready = CompletableFuture<Void>()
 
-    val available: Boolean get() = config?.enabled == true && service != null
+    val available: Boolean get() = config?.enabled == true && service?.available == true
+    fun readiness(): CompletableFuture<Void> = ready.copy()
+    fun drained(): CompletableFuture<Unit> = predecessor.copy()
 
     override fun init() {
+        stopped = false
+        org.bukkit.event.HandlerList.unregisterAll(InvestigationCaseFile)
         Bukkit.getPluginManager().registerEvents(InvestigationCaseFile, ARC.instance)
         InvestigationCaseFile.registerPreciseEntityHandlerIfRequired(ARC.instance)
-        val loaded = loadInvestigationRuntimeConfig(ARC.instance.dataPath)
-        start(loaded.config, loaded.catalog)
+        begin(null)
     }
 
     override fun reload() {
-        val unresolvedWitnessKeys =
-            journal
-                ?.records()
-                .orEmpty()
-                .filterNot { it.status.resolved }
-                .flatMap { it.case.witnesses() }
-                .map(InvestigationWitness::commandValue)
-                .toSet()
-        val loaded =
-            runCatching { loadInvestigationRuntimeConfig(ARC.instance.dataPath, unresolvedWitnessKeys) }
-                .onFailure { warn("Investigations reload rejected; current runtime remains active: {}", it.message ?: it::class.java.simpleName) }
-                .getOrNull() ?: return
-        shutdownRuntime()
-        start(loaded.config, loaded.catalog)
+        val current = service ?: return
+        val expected = generation
+        current.prepareReload().whenComplete { loaded, failure ->
+            tasks?.callSync {
+                if (stopped || generation != expected || service !== current) return@callSync
+                if (failure != null) {
+                    current.rejectReload()
+                    warn("Investigations reload rejected; current runtime remains active: {}", failure.message ?: failure::class.java.simpleName)
+                } else begin(requireNotNull(loaded))
+            }
+        }
     }
 
     override fun shutdown() {
+        if (stopped) return
+        stopped = true
+        generation++
+        ready.completeExceptionally(CancellationException("Investigations shut down"))
         shutdownRuntime()
-        tasks.close()
         config = null
         catalog = null
     }
@@ -82,7 +90,7 @@ object InvestigationModule : PluginModule {
     fun open(player: Player) {
         val currentConfig = config
         val currentService = service
-        if (currentConfig == null || currentService == null || !currentConfig.enabled) {
+        if (currentConfig == null || currentService?.available != true || !currentConfig.enabled) {
             player.sendActionBar(TextUtil.mm("<red>Бюро расследований сейчас закрыто."))
             return
         }
@@ -115,7 +123,7 @@ object InvestigationModule : PluginModule {
 
     fun startCase(player: Player) {
         val currentConfig = config ?: return unavailable(player)
-        val currentService = service ?: return unavailable(player)
+        val currentService = service?.takeIf { it.available } ?: return unavailable(player)
         if (!near(player, currentConfig.point("foma"))) {
             player.sendActionBar(TextUtil.mm("<yellow>Фома уже убрал ведомость. Подойдите к нему снова."))
             return
@@ -124,12 +132,11 @@ object InvestigationModule : PluginModule {
             player.sendActionBar(TextUtil.mm("<yellow>Освободите один слот инвентаря для предмета «Дело». Деньги не списаны."))
             return
         }
-        when (
-            val result = currentService.start(
-                player.uniqueId,
-                bypassCooldown = player.hasPermission(COOLDOWN_BYPASS_PERMISSION),
-            )
-        ) {
+        observe(currentService.startCase(player.uniqueId,
+            bypassCooldown = player.hasPermission(COOLDOWN_BYPASS_PERMISSION),
+            isCurrentPlayer = { player.isOnline && Bukkit.getPlayer(player.uniqueId) === player }) resume@ { result ->
+            if (!player.isOnline || Bukkit.getPlayer(player.uniqueId) !== player) return@resume
+            when (result) {
             is InvestigationStartResult.Started -> {
                 player.closeInventory()
                 InvestigationCaseFile.issue(player, result.record)
@@ -162,7 +169,8 @@ object InvestigationModule : PluginModule {
             InvestigationStartResult.ManualReview -> player.sendMessage(TextUtil.mm("<red>Фома:</red> <gray>Сверка оплаты неоднозначна. Дело заморожено, повторного списания не будет."))
             InvestigationStartResult.Busy -> player.sendActionBar(TextUtil.mm("<yellow>Подождите: Фома ещё ставит отметку."))
             InvestigationStartResult.Disabled -> unavailable(player)
-        }
+            }
+        })
     }
 
     fun collect(player: Player, witnessKey: String) {
@@ -180,7 +188,7 @@ object InvestigationModule : PluginModule {
         requireProximity: Boolean,
     ) {
         val currentConfig = config ?: return unavailable(player)
-        val currentService = service ?: return unavailable(player)
+        val currentService = service?.takeIf { it.available } ?: return unavailable(player)
         val current = currentService.current(player.uniqueId)
         val witness = current?.case?.witness(witnessKey)
         if (witness == null) {
@@ -208,7 +216,9 @@ object InvestigationModule : PluginModule {
             player.sendActionBar(TextUtil.mm("<yellow>Подойдите ближе к свидетелю."))
             return
         }
-        when (val result = currentService.collectClue(player.uniqueId, witness)) {
+        observe(currentService.collect(player.uniqueId, witness) resume@ { result ->
+            if (!player.isOnline || Bukkit.getPlayer(player.uniqueId) !== player) return@resume
+            when (result) {
             is InvestigationClueResult.Evidence -> {
                 InvestigationCaseFile.issue(player, result.record)
                 InvestigationTargetGlow.refresh(player, result.record, currentConfig)
@@ -226,7 +236,8 @@ object InvestigationModule : PluginModule {
             InvestigationClueResult.UnknownWitness -> player.sendActionBar(TextUtil.mm("<gray>Этот свидетель не относится к делу."))
             InvestigationClueResult.ManualReview -> player.sendActionBar(TextUtil.mm("<red>Дело заморожено для ручной сверки."))
             InvestigationClueResult.PersistenceFailure -> player.sendActionBar(TextUtil.mm("<red>Показание не удалось записать. Оно не засчитано."))
-        }
+            }
+        })
     }
 
     fun submit(player: Player, verdict: InvestigationVerdict) {
@@ -236,8 +247,10 @@ object InvestigationModule : PluginModule {
             player.sendActionBar(TextUtil.mm("<yellow>Вердикт принимает только Фома. Вернитесь к нему."))
             return
         }
-        val currentService = service ?: return unavailable(player)
-        when (val result = currentService.submitVerdict(player.uniqueId, verdict)) {
+        val currentService = service?.takeIf { it.available } ?: return unavailable(player)
+        observe(currentService.submit(player.uniqueId, verdict) resume@ { result ->
+            if (!player.isOnline || Bukkit.getPlayer(player.uniqueId) !== player) return@resume
+            when (result) {
             is InvestigationVerdictResult.Success -> {
                 player.closeInventory()
                 InvestigationTargetGlow.clear(player)
@@ -262,7 +275,8 @@ object InvestigationModule : PluginModule {
                 player.sendMessage(TextUtil.mm("<red>Фома:</red> <gray>Вердикт верен, но выплата требует ручной сверки. Повторно её не запускайте."))
             }
             InvestigationVerdictResult.PersistenceFailure -> player.sendActionBar(TextUtil.mm("<red>Вердикт не удалось записать. Попробуйте ещё раз."))
-        }
+            }
+        })
     }
 
     fun openContracts(player: Player) {
@@ -271,6 +285,7 @@ object InvestigationModule : PluginModule {
     }
 
     fun openCaseFile(player: Player, transactionId: String) {
+        if (service?.available != true) return unavailable(player)
         val current = service?.current(player.uniqueId)
         if (current?.status == InvestigationStatus.ACTIVE && current.transactionId == transactionId) {
             InvestigationCaseFile.issue(player, current)
@@ -284,7 +299,7 @@ object InvestigationModule : PluginModule {
 
     /** Rechecks after cross-server inventory restoration has had time to finish. */
     internal fun scheduleCaseFileCleanup(player: Player) {
-        tasks.runLater(60L) {
+        tasks?.runLater(60L) {
             if (player.isOnline) InvestigationCaseFile.cleanupExpired(player)
         }
     }
@@ -296,58 +311,108 @@ object InvestigationModule : PluginModule {
     internal fun money(minor: Long): String =
         java.math.BigDecimal.valueOf(minor, 2).stripTrailingZeros().toPlainString()
 
-    private fun start(
-        loaded: InvestigationConfig,
-        loadedCatalog: InvestigationStoryCatalog?,
-    ) {
-        config = loaded
-        catalog = loadedCatalog
-        if (!loaded.enabled) {
-            info("Investigations disabled by configuration; story catalog load skipped")
-            return
-        }
-        val activeCatalog = requireNotNull(loadedCatalog) { "Enabled investigations require a story catalog" }
-        val epoch = tasks.restart()
-        tasks.runTimer(epoch, 20L, 20L) {
-            Bukkit.getOnlinePlayers().forEach { player -> InvestigationCaseFile.cleanupExpired(player) }
-        }
-        val loadedJournal = FileInvestigationJournal(ARC.instance.dataPath)
-        val loadedService =
-            InvestigationService(
-                journal = loadedJournal,
-                wallet = RedisEconomyInvestigationWallet(),
-                enabled = { config?.enabled == true },
-                feeMinor = { requireNotNull(config).feeMinor },
-                rewardMinor = { requireNotNull(config).rewardMinor },
-                duration = { requireNotNull(config).duration },
-                cooldown = { requireNotNull(config).cooldown },
-                caseGenerator = InvestigationCaseGenerator(activeCatalog),
-                runSync = { action -> tasks.runSync(epoch, action) },
-                random = Random(SecureRandom().nextLong()),
-            )
-        journal = loadedJournal
-        service = loadedService
-        loadedService.recover { record ->
-            warn("Investigation {} requires manual review at stage {}", record.transactionId, record.status.name.lowercase(Locale.ROOT))
-        }
-        tasks.runTimer(epoch, 20L, 20L, loadedService::expireAll)
-        tasks.runTimer(epoch, 20L, 40L) {
-            Bukkit.getOnlinePlayers().forEach { player ->
-                InvestigationTargetGlow.refresh(player, loadedService.current(player.uniqueId), loaded)
+    private fun begin(prepared: InvestigationRuntimeConfig?) {
+        ready.completeExceptionally(CancellationException("Investigation generation superseded"))
+        shutdownRuntime()
+        val expected = ++generation
+        val scope = LifecycleTaskScope()
+        tasks = scope
+        val completion = CompletableFuture<Void>()
+        ready = completion
+        val root = ARC.instance.dataPath
+        predecessor.whenComplete { _, failure ->
+            scope.callSync {
+                if (stopped || generation != expected || tasks !== scope) throw CancellationException("Investigation bootstrap superseded")
+                if (failure != null) throw failure
+                val worker = BoundedAsyncExecutor("ARC-investigations", 1, 256)
+                lateinit var runtime: InvestigationAsyncRuntime
+                runtime = InvestigationAsyncRuntime(scope, worker,
+                    load = { keys -> loadInvestigationRuntimeConfig(root, keys) },
+                    journalFactory = { FileInvestigationJournal(root) },
+                    wallet = RedisEconomyInvestigationWallet(),
+                    currentGeneration = { !stopped && generation == expected && service === runtime },
+                    canWithdraw = { id ->
+                        val player = Bukkit.getPlayer(id)
+                        val policy = config
+                        player != null && player.isOnline && policy != null &&
+                            near(player, policy.point("foma"), policy) && InvestigationCaseFile.canIssue(player)
+                    },
+                    onReady = { loaded ->
+                        config = loaded.config
+                        catalog = loaded.catalog
+                        if (loaded.config.enabled) startTimers(runtime, loaded.config)
+                        else info("Investigations disabled by configuration; story catalog load skipped")
+                        loaded.catalog?.let { info("Investigations module initialized with {} cases and {} witnesses", it.storyCount, it.witnessKeys.size) }
+                    },
+                    onFailure = { id, _ -> Bukkit.getPlayer(id)?.takeIf(Player::isOnline)?.let(::unavailable) },
+                    onManualReview = { record -> warn("Investigation {} requires manual review at stage {}",
+                        record.transactionId, record.status.name.lowercase(Locale.ROOT)) },
+                    onBackgroundFailure = { failure -> warn("Investigation expiration did not complete: {}", failure.message ?: failure::class.java.simpleName) })
+                service = runtime
+                runtime.readiness().whenComplete { _, preparationFailure ->
+                    if (preparationFailure == null) completion.complete(null) else completion.completeExceptionally(preparationFailure)
+                }
+                runtime.start(prepared)
+            }.whenComplete { _, attachFailure ->
+                if (attachFailure != null) completion.completeExceptionally(attachFailure)
             }
         }
-        info("Investigations module initialized with {} cases and {} witnesses", activeCatalog.storyCount, activeCatalog.witnessKeys.size)
+        completion.whenComplete { _, failure ->
+            if (failure != null && !stopped && generation == expected) warn("Investigations preparation failed; admission is closed: {}", failure.message ?: failure::class.java.simpleName)
+        }
+    }
+
+    private fun startTimers(runtime: InvestigationAsyncRuntime, policy: InvestigationConfig) {
+        var round = 0
+        var refreshing: CompletableFuture<Unit>? = null
+        runtime.tasks.runTimer(20L, 20L) {
+            runtime.requestExpiry()
+            if (refreshing?.isDone == false) return@runTimer
+            val glow = round++ % 2 == 0
+            val players = Bukkit.getOnlinePlayers().toList().iterator()
+            refreshing = ARC.instance.nativeWork.submit({ service === runtime && !stopped }) {
+                if (players.hasNext()) {
+                    val player = players.next()
+                    if (player.isOnline) {
+                        InvestigationCaseFile.cleanupExpired(player)
+                        if (glow) InvestigationTargetGlow.refresh(player, runtime.current(player.uniqueId), policy)
+                    }
+                }
+                !players.hasNext()
+            }
+            refreshing?.whenComplete { _, failure ->
+                if (failure != null && failure !is CancellationException && service === runtime && !stopped) {
+                    warn("Investigation native refresh did not complete: {}", failure.message ?: failure::class.java.simpleName)
+                }
+            }
+        }
     }
 
     private fun shutdownRuntime() {
-        InvestigationTargetGlow.clearAll()
-        tasks.cancelAll()
+        val glowDrain = runCatching { InvestigationTargetGlow.clearAllAsync() }
+            .getOrElse { CompletableFuture.failedFuture<Void>(it) }
+        val old = service
         service = null
-        journal = null
+        val oldTasks = tasks
+        tasks = null
+        val closeFailure = runCatching {
+            if (old != null) old.close() else oldTasks?.close()
+        }.exceptionOrNull()
+        // A superseded bootstrap has no worker yet; it still owns the preceding generation's drain.
+        val workerDrain = old?.drained() ?: predecessor
+        predecessor = CompletableFuture.allOf(workerDrain, glowDrain,
+            closeFailure?.let { CompletableFuture.failedFuture<Void>(it) } ?: CompletableFuture.completedFuture(null))
+            .thenApply { Unit }
     }
 
-    private fun near(player: Player, point: InvestigationNpcPoint): Boolean {
-        if (player.world.name != config?.world) return false
+    private fun observe(operation: CompletableFuture<*>) {
+        operation.whenComplete { _, failure ->
+            if (failure != null && !stopped) warn("Investigation operation did not complete: {}", failure.message ?: failure::class.java.simpleName)
+        }
+    }
+
+    private fun near(player: Player, point: InvestigationNpcPoint, policy: InvestigationConfig? = config): Boolean {
+        if (player.world.name != policy?.world) return false
         val location = player.location
         val dx = location.x - point.x
         val dy = location.y - point.y

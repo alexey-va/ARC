@@ -36,6 +36,7 @@ ARC_CORE_ENTRIES = {
     "ru/arc/paper/api/ArcMetricsService.class",
     "ru/arc/paper/api/ArcMetricCounter.class",
     "ru/arc/paper/api/ArcSchematicService.class",
+    "ru/arc/paper/api/ArcNativeCleanupService.class",
     "ru/arc/paper/api/ArcBlockProtectionService.class",
     "ru/arc/paper/api/ArcBlockProtectionService$DefaultImpls.class",
     "ru/arc/paper/api/ArcVisualPacketBudget.class",

@@ -14,6 +14,13 @@ internal class OnboardingStore private constructor(
     private val gson: Gson,
     private val players: MutableMap<UUID, OnboardingPlayerProgress>,
 ) {
+    internal class DeliveryReceipt internal constructor(
+        internal val playerId: UUID,
+        internal val owner: OnboardingPlayerProgress,
+        internal val before: OnboardingPlayerProgress,
+        internal val after: OnboardingPlayerProgress,
+    )
+
     @Synchronized
     fun observe(
         playerId: UUID,
@@ -47,6 +54,11 @@ internal class OnboardingStore private constructor(
     fun nextHint(playerId: UUID): OnboardingHint? = players[playerId]?.pendingHints?.firstOrNull()
 
     @Synchronized
+    fun pendingHints(): Map<UUID, OnboardingHint> = players.mapNotNull { (id, progress) ->
+        progress.pendingHints.firstOrNull()?.let { id to it }
+    }.toMap()
+
+    @Synchronized
     fun markDelivered(
         playerId: UUID,
         hint: OnboardingHint,
@@ -60,6 +72,23 @@ internal class OnboardingStore private constructor(
         progress.updatedAt = now
         runCatching(::save).onFailure { players[playerId] = before }.getOrThrow()
         return true
+    }
+
+    @Synchronized
+    fun reserveDelivery(playerId: UUID, hint: OnboardingHint, now: Long): DeliveryReceipt? {
+        val owner = players[playerId] ?: return null
+        val before = owner.copyMutable()
+        if (!markDelivered(playerId, hint, now)) return null
+        return DeliveryReceipt(playerId, owner, before, owner.copyMutable())
+    }
+
+    /** A disconnected/stopped delivery may restore only the exact state it changed. */
+    @Synchronized
+    fun returnUndelivered(receipt: DeliveryReceipt) {
+        val current = players[receipt.playerId]
+        if (current !== receipt.owner || current != receipt.after) return
+        players[receipt.playerId] = receipt.before.copyMutable()
+        runCatching(::save).onFailure { players[receipt.playerId] = current }.getOrThrow()
     }
 
     @Synchronized

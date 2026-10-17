@@ -103,7 +103,7 @@ internal open class BoardMenuTestPlugin : ARC() {
     }
 
     override fun onEnable() {
-        ArcMenus.initialize(this, dataFolder.toPath())
+        ArcMenus.initialize(this, dataFolder.toPath(), ru.arc.gui.ArcMenuConfiguration.prepare(dataFolder.toPath()))
     }
 
     override fun onDisable() {

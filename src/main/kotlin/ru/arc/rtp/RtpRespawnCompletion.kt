@@ -32,13 +32,11 @@ object RtpRespawnCompletion {
                         error("Could not resolve completed first RTP location for {}", player.name, failure)
                     }.getOrNull() ?: return@Runnable
                 if (request.persistPlayerId != null && request.persistWorldName != null) {
-                    runCatching {
-                        RtpPlayerRegistry.markTeleported(
+                    RtpPlayerRegistry.markTeleported(
                             request.persistPlayerId,
                             request.persistWorldName,
-                        )
-                    }.onFailure { failure ->
-                        error("Could not persist completed first RTP for {}", player.name, failure)
+                        ).whenComplete { _, failure ->
+                        if (failure != null) error("Could not persist completed first RTP for {}", request.persistPlayerId, failure)
                     }
                 }
                 OnboardingService.recordFirstRtp(player, completedLocation)

@@ -13,9 +13,11 @@ import org.bukkit.entity.Player
 import ru.arc.core.sync
 import ru.arc.ARC
 import ru.arc.paper.entity.PaperViewerEntityGlow
+import java.util.concurrent.CompletableFuture
 
-class PacketEventsHook : AutoCloseable {
-    private val glow = PaperViewerEntityGlow(ARC.instance, "entity-highlights")
+class PacketEventsHook internal constructor(private val glow: PaperViewerEntityGlow) : AutoCloseable {
+    constructor() : this(PaperViewerEntityGlow(ARC.instance, "entity-highlights"))
+    private var retirement: CompletableFuture<Void>? = null
 
 
     /**
@@ -57,7 +59,22 @@ class PacketEventsHook : AutoCloseable {
         runOnMainThread { glow.set(player, entity, glowing) }
     }
 
-    override fun close() = glow.close()
+    /** Exact old hook owner: a retiring Core owner already restores this pair itself. */
+    internal fun restoreEntityGlowingFor(entity: LivingEntity, player: Player) {
+        check(Bukkit.isPrimaryThread()) { "Glow retirement must run on Paper" }
+        if (retirement == null) glow.set(player, entity, false)
+    }
+
+    internal fun glowCleanupDrained(): CompletableFuture<Void> = retirement?.copy() ?: glow.cleanupDrained()
+
+    fun closeAsync(): CompletableFuture<Void> {
+        retirement?.let { return it.copy() }
+        val actual = glow.closeAsync()
+        retirement = actual
+        return actual.copy()
+    }
+
+    override fun close() { closeAsync() }
 
     private fun runOnMainThread(action: () -> Unit) {
         if (Bukkit.isPrimaryThread()) action()

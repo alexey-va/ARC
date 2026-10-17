@@ -44,6 +44,7 @@ import ru.arc.paper.api.ArcSidebarPriorities
 import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
+import java.util.concurrent.CompletableFuture
 
 class HookRegistry(
     private val stopJobs: () -> Unit = JobsModule::shutdown,
@@ -67,6 +68,8 @@ class HookRegistry(
 
     internal var isClosed: Boolean = false
         private set
+    private var closeCompletion: CompletableFuture<Void>? = null
+    private var immediateCloseFailure: Throwable? = null
 
     companion object {
         @JvmField var landsHook: LandsHook? = null
@@ -197,16 +200,20 @@ class HookRegistry(
         close()
     }
 
-    override fun close() {
-        if (isClosed) return
+    fun closeAsync(): CompletableFuture<Void> {
+        closeCompletion?.let { return it.copy() }
+        val result = CompletableFuture<Void>()
+        closeCompletion = result
         isClosed = true
 
         val failures = mutableListOf<Throwable>()
+        val oldPackets = packetEventsHook
+        var packetDrain = CompletableFuture.completedFuture<Void>(null)
         cleanup(failures) { auctionHook?.close() }
         cleanup(failures) { huskHomesHook?.close() }
         cleanup(failures) { furnitureGalleryInteractionRuntime?.close() }
         cleanup(failures) { citizensHook?.close() }
-        cleanup(failures) { packetEventsHook?.close() }
+        cleanup(failures) { packetDrain = oldPackets?.closeAsync() ?: packetDrain }
         cleanup(failures) { chatGlyphProtection?.close() }
         chatGlyphProtection = null
         cleanup(failures) { papiHook?.clearPlaceholderCache() }
@@ -228,8 +235,21 @@ class HookRegistry(
         if (failures.isNotEmpty()) {
             val first = failures.first()
             failures.drop(1).forEach(first::addSuppressed)
-            throw first
+            immediateCloseFailure = first
         }
+        packetDrain.whenComplete { _, packetFailure ->
+            val failure = immediateCloseFailure ?: packetFailure
+            if (failure != null && packetFailure != null && failure !== packetFailure) failure.addSuppressed(packetFailure)
+            if (failure == null) result.complete(null) else result.completeExceptionally(failure)
+        }
+        return result.copy()
+    }
+
+    /** Dispatch-only for packet retirement; retains the previous synchronous hook-error behavior. */
+    override fun close() {
+        val first = !isClosed
+        closeAsync()
+        if (first) immediateCloseFailure?.let { throw it }
     }
 
     private fun cleanup(

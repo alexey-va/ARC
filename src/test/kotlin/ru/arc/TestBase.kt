@@ -15,6 +15,8 @@ import ru.arc.util.ItemStackFactory
 import ru.arc.util.Logging
 import java.io.File
 import java.nio.file.Path
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 
 abstract class TestBase {
 
@@ -55,6 +57,7 @@ abstract class TestBase {
 
         // Load the plugin - must succeed for tests to run
         plugin = MockBukkit.load(ARC::class.java)
+        awaitMainThreadFuture(server, plugin.readiness())
         ARC.plugin = plugin
         dataPath = plugin.dataFolder.toPath()
 
@@ -128,6 +131,7 @@ abstract class TestBase {
     fun tearDownBase() {
         try {
             plugin.onDisable()
+            plugin.closeCompletion().get(10, TimeUnit.SECONDS)
         } catch (_: Exception) {
             // Ignore disable errors
         }
@@ -147,4 +151,14 @@ abstract class TestBase {
 internal fun loadArcCoreHostForTest(): ArcCorePlugin {
     val descriptor = PluginDescriptionFile("ArcCore", "0.1.1", ArcCorePlugin::class.java.name)
     return MockBukkit.loadWith(ArcCorePlugin::class.java, descriptor)
+}
+
+/** Drive native attachment while the real worker prepares; never join a future that needs a server tick. */
+internal fun <T> awaitMainThreadFuture(server: ServerMock, future: CompletableFuture<T>): T {
+    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+    while (!future.isDone && System.nanoTime() < deadline) {
+        server.scheduler.performOneTick()
+        Thread.sleep(1)
+    }
+    return future.get(1, TimeUnit.SECONDS)
 }

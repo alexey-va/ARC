@@ -34,7 +34,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: alexey-va/arc-core
-          ref: 7606a5039876f3f949657655e5364f41593aa8dd
+          ref: dcb648a7f07bcad4c749d96375499a3dbe864ae0
           path: .tmp/arc-core-verifier
           persist-credentials: false
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
@@ -56,14 +56,24 @@ jobs:
           test "${#arc_jars[@]}" -eq 1 || { echo "Expected exactly one ARC production JAR, got ${#arc_jars[@]}"; exit 1; }
           test "${#arc_core_jars[@]}" -eq 1 || { echo "Expected exactly one ArcCore production JAR, got ${#arc_core_jars[@]}"; exit 1; }
           test "${#dungeons_jars[@]}" -eq 1 || { echo "Expected exactly one ArcDungeons production JAR, got ${#dungeons_jars[@]}"; exit 1; }
+          python3 - "${arc_jars[0]}" "${dungeons_jars[0]}" <<'PY'
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, ".tmp/arc-core-verifier/scripts")
+          from verify_consumer_architecture import verify_artifact
+          violations = [issue for jar in sys.argv[1:] for issue in verify_artifact(Path(jar), provider_host=False)]
+          for issue in violations:
+              print(issue)
+          sys.exit(bool(violations))
+          PY
           python3 scripts/verify_arc_dungeons_artifact_split.py --arc-jar "${arc_jars[0]}" --arc-core-jar "${arc_core_jars[0]}" --dungeons-jar "${dungeons_jars[0]}"
           # Kotlin default constructor markers cannot cross ARC/ArcDungeons classloaders.
           javap -c -p -classpath "${dungeons_jars[0]}" ru.arc.hooks.elitemobs.DungeonScoreboard > build/dungeons-scoreboard-bytecode.txt
           grep -F 'ArcSidebarFrame."<init>":(Lnet/kyori/adventure/text/Component;Ljava/util/List;Ljava/util/Set;)V' build/dungeons-scoreboard-bytecode.txt
           if grep -E 'ArcSidebarFrame\."<init>".*DefaultConstructorMarker' build/dungeons-scoreboard-bytecode.txt; then exit 1; fi
-          python3 scripts/verify_arc_domain_artifact_split.py --name ArcMounts --arc-jar "${arc_jars[0]}" --arc-core-jar "${arc_core_jars[0]}" --child-jar build/extracted-plugins/ArcMounts-0.1.1.jar
-          python3 scripts/verify_arc_domain_artifact_split.py --name ArcOrigin --arc-jar "${arc_jars[0]}" --arc-core-jar "${arc_core_jars[0]}" --child-jar build/extracted-plugins/ArcOrigin-0.1.1.jar
-          python3 scripts/verify_arc_domain_artifact_split.py --name ArcContracts --arc-jar "${arc_jars[0]}" --arc-core-jar "${arc_core_jars[0]}" --child-jar build/extracted-plugins/ArcContracts-0.1.2.jar
+          python3 scripts/verify_arc_domain_artifact_split.py --name ArcMounts --arc-jar "${arc_jars[0]}" --arc-core-jar "${arc_core_jars[0]}" --child-jar build/extracted-plugins/ArcMounts-0.1.11.jar
+          python3 scripts/verify_arc_domain_artifact_split.py --name ArcOrigin --arc-jar "${arc_jars[0]}" --arc-core-jar "${arc_core_jars[0]}" --child-jar build/extracted-plugins/ArcOrigin-0.1.36.jar
+          python3 scripts/verify_arc_domain_artifact_split.py --name ArcContracts --arc-jar "${arc_jars[0]}" --arc-core-jar "${arc_core_jars[0]}" --child-jar build/extracted-plugins/ArcContracts-0.1.11.jar
       - name: Preserve tested production JARs
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

@@ -18,6 +18,7 @@ object ContractsHostServices {
     fun register(plugin: Plugin) {
         plugin.server.servicesManager.register(ArcContractsHostConfiguration::class.java,
             object : ArcContractsHostConfiguration {
+                override fun ready() = ARC.instance.fullRuntimeReadiness()
                 override fun legacyDataPath() = ARC.instance.dataPath
                 override fun serverName() = requireNotNull(ARC.serverName)
                 override fun commandText(key: String, fallback: String) = ru.arc.commands.arc.CommandConfig.get(key, fallback)

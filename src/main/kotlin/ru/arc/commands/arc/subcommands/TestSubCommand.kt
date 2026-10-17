@@ -72,27 +72,30 @@ object TestSubCommand : SubCommand {
             return
         }
 
-        val shouldDecay = LeafDecayManager.leafChecker.shouldDecay(targetBlock.location, emptySet())
-        val floatingBlobs = LeafDecayManager.leafChecker.findFloatingBlobs(
-            targetBlock.location, emptySet(), 100, 10, HashSet(), true
-        )
-
-        player.sendMessage(
-            CommandConfig.get(
-                "test.leaf-blobs",
-                "<gray>Плавающие блобы: <white>%count%",
-                "%count%",
-                floatingBlobs.size.toString()
+        ARC.instance.whenCompleteOnMain(LeafDecayManager.inspect(targetBlock.location)) { result, failure ->
+            if (!player.isOnline) return@whenCompleteOnMain
+            if (failure != null || result == null) {
+                player.sendMessage("Проверка листвы прервана: мир или модуль изменился.")
+                return@whenCompleteOnMain
+            }
+            val (shouldDecay, floatingCount) = result
+            player.sendMessage(
+                CommandConfig.get(
+                    "test.leaf-blobs",
+                    "<gray>Плавающие блобы: <white>%count%",
+                    "%count%",
+                    floatingCount.toString()
+                )
             )
-        )
-        player.sendMessage(
-            CommandConfig.get(
-                "test.leaf-decay",
-                "<gray>Должен decay: <white>%value%",
-                "%value%",
-                shouldDecay.toString()
+            player.sendMessage(
+                CommandConfig.get(
+                    "test.leaf-decay",
+                    "<gray>Должен decay: <white>%value%",
+                    "%value%",
+                    shouldDecay.toString()
+                )
             )
-        )
+        }
     }
 
     private fun processPloot(player: Player) {

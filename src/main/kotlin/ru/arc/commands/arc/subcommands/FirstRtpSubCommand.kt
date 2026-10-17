@@ -88,8 +88,12 @@ object FirstRtpSubCommand : SubCommand {
                 ?.takeUnless { it.equals("all", ignoreCase = true) }
                 ?.trim()
                 ?.takeIf { it.isNotEmpty() }
-        return try {
-            val result = RtpPlayerRegistry.reset(playerId, world)
+        ru.arc.ARC.instance.whenCompleteOnMain(RtpPlayerRegistry.reset(playerId, world)) { result, failure ->
+            if (failure != null || result == null) {
+                error("Could not reset first-RTP state for {}", displayName, failure)
+                sender.sendMessage(TextUtil.mm("<red>Не удалось сохранить сброс first-RTP. Проверьте лог ARC.", true))
+                return@whenCompleteOnMain
+            }
             if (!result.changed) {
                 sender.sendMessage(
                     TextUtil.mm(
@@ -112,17 +116,8 @@ object FirstRtpSubCommand : SubCommand {
                     ),
                 )
             }
-            true
-        } catch (failure: Exception) {
-            error("Could not reset first-RTP state for {}", displayName, failure)
-            sender.sendMessage(
-                TextUtil.mm(
-                    "<red>Не удалось сохранить сброс first-RTP. Проверьте лог ARC.",
-                    true,
-                ),
-            )
-            true
         }
+        return true
     }
 
     private fun resolvePlayer(

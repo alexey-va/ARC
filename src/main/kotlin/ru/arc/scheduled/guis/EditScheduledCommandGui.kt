@@ -10,6 +10,7 @@ import ru.arc.config.ConfigManager
 import ru.arc.gui.ArcMenuSchema
 import ru.arc.gui.ArcMenus
 import ru.arc.paper.menu.PaperMenuItemRenderContext
+import ru.arc.paper.menu.PaperMenuSession
 import ru.arc.scheduled.ScheduleEditorType
 import ru.arc.scheduled.ScheduledCommandDraft
 import ru.arc.scheduled.ScheduledCommandEntry
@@ -17,15 +18,23 @@ import ru.arc.scheduled.ScheduledCommandInputValidator
 import ru.arc.scheduled.ScheduledCommandsManager
 import ru.arc.scheduled.ValidationResult
 import ru.arc.util.TextUtil
+import java.util.concurrent.CompletableFuture
+import java.util.logging.Level
 
 class EditScheduledCommandGui private constructor(
     private val player: Player,
     entry: ScheduledCommandEntry,
 ) : Inputable {
+    private val plugin = ARC.instance
+    private val nativeWork = plugin.nativeWork
+    private val menuGeneration = ArcMenus.current()
     private val draft = ScheduledCommandDraft.from(entry)
     private var lastValidationError = "Некорректное значение"
+    private var session: PaperMenuSession? = null
+    private var actionPending = false
 
     fun open() {
+        if (!current() || actionPending) return
         val weekly = draft.scheduleType == ScheduleEditorType.WEEKLY
         val valueLabel = if (weekly) "${draft.weeklyDays} @ ${draft.scheduleValue}" else draft.scheduleValue.ifBlank { "не задано" }
         val valueTemplate = when (draft.scheduleType) {
@@ -59,20 +68,26 @@ class EditScheduledCommandGui private constructor(
                 "schedule-type",
                 values("type" to draft.scheduleType.label),
             )) {
-                draft.scheduleType = draft.scheduleType.next()
-                open()
+                if (!actionPending) {
+                    draft.scheduleType = draft.scheduleType.next()
+                    open()
+                }
             })
             put("servers", ArcMenus.entry(ArcMenus.item(
                 ArcMenuSchema.SCHEDULED_EDIT,
                 "servers",
                 values("servers" to draft.serverMode.label),
             )) {
-                draft.serverMode = draft.serverMode.next()
-                open()
+                if (!actionPending) {
+                    draft.serverMode = draft.serverMode.next()
+                    open()
+                }
             })
             put("enabled", ArcMenus.entry(ArcMenus.item(if (draft.enabled) "scheduled-edit-enabled-on" else "scheduled-edit-enabled-off")) {
-                draft.enabled = !draft.enabled
-                open()
+                if (!actionPending) {
+                    draft.enabled = !draft.enabled
+                    open()
+                }
             })
             put("back", ArcMenus.entry(ArcMenus.item(ArcMenuSchema.SCHEDULED_EDIT, "back")) {
                 ScheduledCommandsGuiFactory.openList(it)
@@ -82,7 +97,7 @@ class EditScheduledCommandGui private constructor(
             }
             put("save", ArcMenus.entry(ArcMenus.item(ArcMenuSchema.SCHEDULED_EDIT, "save")) { save() })
         }
-        ArcMenus.open(
+        session = ArcMenus.open(
             player,
             ArcMenuSchema.SCHEDULED_EDIT,
             TextUtil.mm(buildTitle(draft.id), true),
@@ -91,6 +106,7 @@ class EditScheduledCommandGui private constructor(
     }
 
     private fun startInput(id: Int) {
+        if (actionPending || !current()) return
         TitleInput(player, this, id)
         player.closeInventory()
     }
@@ -114,7 +130,9 @@ class EditScheduledCommandGui private constructor(
     }
 
     override fun satisfy(input: String, id: Int): Boolean {
-        val existingIds = ScheduledCommandsManager.settings().entries().map { it.id }.toSet()
+        val existingIds = if (id == 3) {
+            ScheduledCommandsManager.entry(input.trim().lowercase())?.let { setOf(it.id) }.orEmpty()
+        } else emptySet()
         return when (val result = ScheduledCommandInputValidator.validate(
             inputId = id,
             input = input,
@@ -150,21 +168,44 @@ class EditScheduledCommandGui private constructor(
     }
 
     private fun save() {
-        when (val result = ScheduledCommandsManager.saveEntry(draft)) {
-            is ValidationResult.Error -> player.sendMessage(TextUtil.mm("<red>${result.message}", true))
-            ValidationResult.Ok -> {
-                player.sendMessage(TextUtil.mm(guiConfig().string("edit-menu.saved", "<green>Изменения сохранены"), true))
-                ScheduledCommandsGuiFactory.openList(player)
+        completeAction({ ScheduledCommandsManager.saveEntryAsync(draft) }) { result ->
+            when (result) {
+                is ValidationResult.Error -> player.sendMessage(TextUtil.mm("<red>${result.message}", true))
+                ValidationResult.Ok -> {
+                    player.sendMessage(TextUtil.mm(guiConfig().string("edit-menu.saved", "<green>Изменения сохранены"), true))
+                    ScheduledCommandsGuiFactory.openList(player)
+                }
             }
         }
     }
 
     private fun runNow() {
-        val ok = ScheduledCommandsManager.runNow(draft.id)
-        val key = if (ok) "edit-menu.run-now-success" else "edit-menu.run-now-fail"
-        val fallback = if (ok) "<green>Команда выполнена" else "<red>Не удалось выполнить"
-        player.sendMessage(TextUtil.mm(guiConfig().string(key, fallback), true))
+        completeAction({ ScheduledCommandsManager.runNowAsync(draft.id) }) { ok ->
+            val key = if (ok) "edit-menu.run-now-success" else "edit-menu.run-now-fail"
+            val fallback = if (ok) "<green>Команда выполнена" else "<red>Не удалось выполнить"
+            player.sendMessage(TextUtil.mm(guiConfig().string(key, fallback), true))
+        }
     }
+
+    private fun <T : Any> completeAction(operation: () -> CompletableFuture<T>, acknowledge: (T) -> Unit) {
+        val origin = session ?: return
+        if (actionPending || !current() || !origin.isOpen) return
+        actionPending = true
+        val accepted = runCatching(operation).getOrElse { CompletableFuture.failedFuture(it) }
+        accepted.whenComplete { _, failure ->
+            if (failure != null) plugin.logger.log(Level.WARNING, "Scheduled command action failed for ${draft.originalId}", failure)
+        }
+        plugin.whenCompleteOnMain(accepted) { result, failure ->
+            actionPending = false
+            if (!current() || session !== origin || !origin.isOpen) return@whenCompleteOnMain
+            if (failure != null || result == null) {
+                player.sendMessage(TextUtil.mm(guiConfig().string("edit-menu.run-now-fail", "<red>Не удалось выполнить"), true))
+            } else acknowledge(result)
+        }
+    }
+
+    private fun current(): Boolean = player.isOnline && ARC.plugin === plugin && plugin.isEnabled &&
+        plugin.nativeWork === nativeWork && runCatching { ArcMenus.current() === menuGeneration }.getOrDefault(false)
 
     private fun values(vararg pairs: Pair<String, String>) = PaperMenuItemRenderContext(
         values = pairs.associate { (key, value) -> key to Component.text(value) },

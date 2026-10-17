@@ -15,6 +15,15 @@ data class PlayerRtpState(
     val hasTeleportedToWorld: Boolean,
 )
 
+/** Detached read model; callers never share the file store's monitor. */
+internal data class RtpPlayerSnapshot(
+    val players: Set<UUID>,
+    val worlds: Map<String, Set<UUID>>,
+) {
+    fun state(playerId: UUID, worldName: String): PlayerRtpState =
+        PlayerRtpState(playerId in players, playerId in worlds[worldName.trim().lowercase(Locale.ROOT)].orEmpty())
+}
+
 data class PlayerRtpResetResult(
     val globalRemoved: Boolean,
     val worldsRemoved: List<String>,
@@ -120,6 +129,10 @@ class RtpPlayerStore private constructor(
 
     @Synchronized
     fun worldCount(): Int = teleportedByWorld.size
+
+    @Synchronized
+    internal fun snapshot(): RtpPlayerSnapshot =
+        RtpPlayerSnapshot(teleportedPlayers.toSet(), teleportedByWorld.mapValues { it.value.toSet() })
 
     private fun save() {
         Files.createDirectories(path.parent)

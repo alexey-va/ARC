@@ -33,23 +33,22 @@ object OnboardingModule : PluginModule {
     }
 
     override fun init() {
-        OnboardingService.init()
+        OnboardingService.init { particleColors -> attachReady(particleColors) }
         register(OnboardingPlayerListener())
         registerOptional("Lands") { OnboardingLandsListener() }
+        info("Onboarding outcome listeners registered: {}; contextual hints preparing", listeners.size)
+    }
+
+    private fun attachReady(particleColors: Set<Int>) {
         if (Bukkit.getPluginManager().isPluginEnabled("Lands")) {
             OnboardingService.guideConfig()?.takeIf { it.claimGuideEnabled }?.let { config ->
-                claimGuide = ClaimBlockGuide(config).also { register(it); it.start() }
+                claimGuide = ClaimBlockGuide(config, particleColors).also { register(it); it.start() }
                 register(ClaimBoundaryListener(config))
             }
         }
         if (OnboardingService.isEnabled()) {
             Bukkit.getOnlinePlayers().forEach(OnboardingService::resume)
         }
-        info(
-            "Onboarding outcome listeners registered: {}; contextual hints enabled={}",
-            listeners.size,
-            OnboardingService.isEnabled(),
-        )
     }
 
     override fun reload() {

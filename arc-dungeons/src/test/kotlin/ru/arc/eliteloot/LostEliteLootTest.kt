@@ -6,51 +6,96 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import net.kyori.adventure.text.Component
+import org.bukkit.Chunk
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
-import org.bukkit.Chunk
 import org.bukkit.entity.Item
 import org.bukkit.entity.Player
+import org.bukkit.event.entity.EntityPickupItemEvent
 import org.bukkit.event.entity.ItemSpawnEvent
 import org.bukkit.event.player.PlayerDropItemEvent
+import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.world.EntitiesLoadEvent
 import org.bukkit.event.world.EntitiesUnloadEvent
+import org.bukkit.event.world.WorldUnloadEvent
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
+import ru.arc.core.BudgetedTaskQueue
+import ru.arc.core.LifecycleTaskScope
+import ru.arc.core.Tasks
+import ru.arc.core.TestTaskScheduler
+import ru.arc.paper.api.ArcNativeCleanupService
+import ru.arc.paper.chunk.PaperChunkKey
+import ru.arc.paper.chunk.PaperChunkTicketAddResult
+import ru.arc.paper.chunk.PaperChunkTicketBackend
+import ru.arc.paper.chunk.PaperChunkTicketRegistry
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Base64
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.function.BooleanSupplier
 
 class LostEliteLootTest : FreeSpec({
     lateinit var paper: MockBukkitTestRuntime
     lateinit var root: Path
-    lateinit var scheduler: ru.arc.core.TestTaskScheduler
-    val ownerKey = NamespacedKey("elitemobs", "soulbind")
-    val sourceKey = NamespacedKey("elitemobs", "itemsource")
+    lateinit var scheduler: TestTaskScheduler
+    lateinit var scope: LifecycleTaskScope
+    lateinit var native: BudgetedTaskQueue
+    lateinit var cleanupScope: LifecycleTaskScope
+    lateinit var cleanupQueue: BudgetedTaskQueue
+    lateinit var cleanup: ArcNativeCleanupService
+    lateinit var protection: LostLootProtection
+    lateinit var plugin: org.bukkit.plugin.Plugin
+    val loots = mutableListOf<LostEliteLoot>()
+    val openTickets = mutableSetOf<PaperChunkKey>()
 
-    beforeEach { scheduler = ru.arc.core.TestTaskScheduler(); ru.arc.core.Tasks.install(scheduler); paper = MockBukkitTestRuntime.open(); root = Files.createTempDirectory("lost-elite-loot-test") }
-    afterEach { ru.arc.core.Tasks.reset(); paper.close(); root.toFile().deleteRecursively() }
+    fun tickUntil(condition: () -> Boolean) {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(8)
+        while (!condition() && System.nanoTime() < deadline) { scheduler.tick(); Thread.sleep(1) }
+        condition() shouldBe true
+    }
+    beforeEach {
+        paper = MockBukkitTestRuntime.open()
+        scheduler = TestTaskScheduler(); Tasks.install(scheduler)
+        scope = LifecycleTaskScope(scheduler); native = BudgetedTaskQueue(scope, nanoTime = { 0 })
+        cleanupScope = LifecycleTaskScope(scheduler); cleanupQueue = BudgetedTaskQueue(cleanupScope, nanoTime = { 0 })
+        cleanup = object : ArcNativeCleanupService {
+            override fun submit(owner: String, step: BooleanSupplier) = cleanupQueue.submit({ true }) { step.asBoolean }.thenApply<Void> { null }
+        }
+        plugin = paper.createSimplePlugin("LostLootConsumer")
+        val host = paper.createSimplePlugin("ArcCoreLootFixture")
+        protection = LostLootProtection()
+        paper.server.pluginManager.registerEvents(protection, host)
+        root = Files.createTempDirectory("lost-elite-loot-test")
+    }
+    afterEach {
+        val drains = loots.map { it.closeAsync() }
+        tickUntil { drains.all { it.isDone } }
+        drains.forEach { it.get(5, TimeUnit.SECONDS) }
+        loots.clear(); openTickets.clear()
+        native.close(); scope.close(); cleanupQueue.close(); cleanupScope.close()
+        Tasks.reset(); paper.close(); root.toFile().deleteRecursively()
+    }
 
     fun item(player: Player): ItemStack = ItemStack.of(Material.DIAMOND_HELMET).also {
         it.editMeta { meta ->
             meta.displayName(Component.text("Добыча босса"))
-            meta.persistentDataContainer.set(ownerKey, PersistentDataType.STRING, player.uniqueId.toString())
-            meta.persistentDataContainer.set(sourceKey, PersistentDataType.STRING, "Выпало с Босс")
+            meta.persistentDataContainer.set(lostLootSoulbindKey, PersistentDataType.STRING, player.uniqueId.toString())
+            meta.persistentDataContainer.set(lostLootSourceKey, PersistentDataType.STRING, "Выпало с Босс")
         }
     }
-
-    fun service(publish: (LostLootRecord) -> CompletableFuture<Unit> = { CompletableFuture.completedFuture(Unit) }) = LostEliteLoot(
-        root, publish, isElite = { true }, mobSource = { "Выпало с \$mob" }, nativePrice = { 12.5 },
-    )
-
-    fun entity(player: Player, stack: ItemStack = item(player), id: UUID = UUID.randomUUID()): Item {
+    fun entity(player: Player, stack: ItemStack = item(player), id: UUID = UUID.randomUUID(), beforeRemove: () -> Unit = {}): Item {
+        player.world.getChunkAt(player.location).load()
         val entity = mockk<Item>(relaxed = true)
+        var dead = false
         every { entity.uniqueId } returns id
-        every { entity.isValid } returns true
-        every { entity.isDead } returns false
+        every { entity.isValid } answers { !dead }
+        every { entity.isDead } answers { dead }
+        every { entity.remove() } answers { beforeRemove(); dead = true }
         every { entity.thrower } returns null
         every { entity.itemStack } returns stack
         every { entity.persistentDataContainer } returns ItemStack.of(Material.STONE).itemMeta.persistentDataContainer
@@ -58,253 +103,197 @@ class LostEliteLootTest : FreeSpec({
         every { entity.location } returns player.location.clone()
         return entity
     }
-
-    fun listen(loot: LostEliteLoot) {
-        paper.server.pluginManager.registerEvents(loot, paper.createSimplePlugin("LostLootTest"))
-        loot.start()
+    fun chunk(player: Player): Chunk = mockk<Chunk>(relaxed = true) {
+        every { world } returns player.world
+        every { x } returns (player.location.blockX shr 4)
+        every { z } returns (player.location.blockZ shr 4)
     }
-
-    fun unloading(vararg items: Item) = EntitiesUnloadEvent(mockk<Chunk>(relaxed = true), items.toList())
-
-    "chunk entity unload commits inactive but living loot before removing it and suppresses a stale reload" {
-        val player = paper.addPlayer("chunk-owner")
-        val loot = service()
-        listen(loot)
-        val stack = item(player)
-        val drop = entity(player, stack)
-        // Purpur makes entities inaccessible before emitting EntitiesUnloadEvent.
-        every { drop.isValid } returns false
-        every { drop.remove() } answers {
-            val saved = requireNotNull(LostLootStore(root).get(drop.uniqueId.toString()))
-            ItemStack.deserializeBytes(Base64.getDecoder().decode(saved.item)) shouldBe stack
-            saved.owner shouldBe player.uniqueId.toString()
-            saved.nativePrice shouldBe 12.5
-        }
-        paper.callEvent(unloading(drop))
-        verify(exactly = 1) { drop.remove() }
-        loot.store.pending(10).size shouldBe 1
-        val stale = entity(player, id = drop.uniqueId)
-        paper.callEvent(EntitiesLoadEvent(mockk<Chunk>(relaxed = true), listOf(stale)))
-        verify(exactly = 1) { stale.remove() }
-        loot.store.pending(10).size shouldBe 1
-        loot.close()
-    }
-
-    "chunk unload keeps excluded drops on the ground" {
-        val player = paper.addPlayer("excluded-owner")
-        val loot = service()
-        listen(loot)
-        val manual = entity(player)
-        paper.callEvent(PlayerDropItemEvent(player, manual))
-        val unbound = entity(player, item(player).also { it.editMeta { meta -> meta.persistentDataContainer.remove(ownerKey) } })
-        val bought = entity(player, item(player).also {
-            it.editMeta { meta -> meta.persistentDataContainer.set(NamespacedKey("arc", "dungeon_case_reward"), PersistentDataType.BYTE, 1) }
+    fun service(
+        open: () -> LostLootJournal = { LostLootStore(root) },
+        publish: (LostLootRecord) -> CompletableFuture<Unit> = { CompletableFuture.completedFuture(Unit) },
+    ): Pair<LostEliteLoot, LostLootOutbox> {
+        val outbox = LostLootOutbox(open, publish)
+        val tickets = PaperChunkTicketRegistry(object : PaperChunkTicketBackend {
+            override fun add(key: PaperChunkKey): PaperChunkTicketAddResult { openTickets.add(key); return PaperChunkTicketAddResult.ADDED }
+            override fun remove(key: PaperChunkKey) = openTickets.remove(key)
         })
-        val ordinary = entity(player, ItemStack.of(Material.STONE))
-        paper.callEvent(unloading(manual, unbound, bought, ordinary))
-        listOf(manual, unbound, bought, ordinary).forEach { drop -> verify(exactly = 0) { drop.remove() } }
-        loot.store.pending(10) shouldBe emptyList()
-        loot.close()
+        val loot = LostEliteLoot(paper.server, outbox, native, cleanup, tickets, protection,
+            isElite = { true }, mobSource = { "Выпало с \$mob" }, nativePrice = { 12.5 })
+        loots.add(loot)
+        paper.server.pluginManager.registerEvents(loot, plugin)
+        loot.start()
+        return loot to outbox
+    }
+    fun ready(loot: LostEliteLoot) { tickUntil { loot.ready().isDone }; loot.ready().get(1, TimeUnit.SECONDS) }
+
+    "blocked journal startup protects only bound native loot and manual drops stay excluded" {
+        val entered = CountDownLatch(1); val release = CountDownLatch(1)
+        val player = paper.addPlayer("startup-owner")
+        val (loot, _) = service(open = { entered.countDown(); check(release.await(5, TimeUnit.SECONDS)); LostLootStore(root) })
+        try {
+            entered.await(5, TimeUnit.SECONDS) shouldBe true
+            val bound = entity(player)
+            paper.callEvent(EntityPickupItemEvent(player, bound, 0)).isCancelled shouldBe true
+            paper.callEvent(EntityPickupItemEvent(player, entity(player, ItemStack.of(Material.STONE)), 0)).isCancelled shouldBe false
+            paper.callEvent(PlayerDropItemEvent(player, bound))
+            paper.callEvent(EntityPickupItemEvent(player, bound, 0)).isCancelled shouldBe false
+            loot.ready().isDone shouldBe false
+        } finally { release.countDown() }
+        ready(loot)
     }
 
-    "failed chunk capture retains the entity and retries the persisted capture marker on load" {
-        val player = paper.addPlayer("chunk-disk-failure")
-        val loot = service()
-        listen(loot)
+    "blocked capture keeps physical ownership frozen and close does not wait on IO" {
+        val entered = CountDownLatch(1); val release = CountDownLatch(1)
+        val player = paper.addPlayer("blocked-owner")
+        val rows = object : MemoryLostLootJournal() {
+            override fun write(record: LostLootRecord): LostLootRecord {
+                entered.countDown(); check(release.await(5, TimeUnit.SECONDS)); return super.write(record)
+            }
+        }
+        val (loot, _) = service(open = { rows })
+        ready(loot)
         val drop = entity(player)
+        loot.capture(drop)
+        tickUntil { entered.count == 0L }
+        try {
+            verify(exactly = 0) { drop.remove() }
+            drop.persistentDataContainer.has(lostLootCaptureKey) shouldBe true
+            paper.callEvent(EntityPickupItemEvent(player, drop, 0)).isCancelled shouldBe true
+            val closing = loot.closeAsync()
+            closing.isDone shouldBe false
+            // Bukkit removes consumer listeners, while the host's O(1) continuity guard survives.
+            org.bukkit.event.HandlerList.unregisterAll(plugin)
+            paper.callEvent(EntityPickupItemEvent(player, entity(player, id = drop.uniqueId), 0)).isCancelled shouldBe true
+        } finally { release.countDown() }
+        tickUntil { loot.closeAsync().isDone }
+        rows.get(drop.uniqueId.toString())?.nativePrice shouldBe 12.5
+        openTickets.size shouldBe 0
+        verify(exactly = 0) { drop.remove() } // No late native mutation from the stopped generation.
+    }
+
+    "capture commits the exact stack before removal and retained UUID suppresses a stale reload" {
+        val player = paper.addPlayer("exact-owner")
+        val exported = CompletableFuture<Unit>()
+        val (loot, outbox) = service(publish = { exported })
+        ready(loot)
+        val stack = item(player)
+        val id = UUID.randomUUID()
+        val drop = entity(player, stack, id) {
+            val record = requireNotNull(LostLootStore(root).get(id.toString()))
+            ItemStack.deserializeBytes(Base64.getDecoder().decode(record.item)) shouldBe stack
+        }
+        try {
+            loot.capture(drop)
+            tickUntil { drop.isDead }
+            outbox.entry(id.toString())?.certain shouldBe true
+            verify(exactly = 1) { drop.remove() }
+            val stale = entity(player, id = id)
+            paper.callEvent(EntitiesLoadEvent(chunk(player), listOf(stale)))
+            paper.callEvent(EntityPickupItemEvent(player, stale, 0)).isCancelled shouldBe true
+            tickUntil { stale.isDead }
+            verify(exactly = 1) { stale.remove() }
+        } finally { exported.complete(Unit) }
+    }
+
+    "late entity unload never serializes an inaccessible object and cancels queued old entity work" {
+        val player = paper.addPlayer("late-unload")
+        val (loot, outbox) = service()
+        ready(loot)
+        val drop = entity(player)
+        paper.callEvent(EntitiesLoadEvent(chunk(player), listOf(drop)))
+        paper.callEvent(EntitiesUnloadEvent(chunk(player), listOf(drop)))
         every { drop.isValid } returns false
+        scheduler.tick(30)
+        verify(exactly = 0) { drop.remove(); drop.itemStack }
+        outbox.entry(drop.uniqueId.toString()) shouldBe null
+    }
+
+    "write failure keeps uncertainty and retries the original payload after recovery" {
+        val player = paper.addPlayer("disk-failure")
+        val (loot, outbox) = service()
+        ready(loot)
+        val drop = entity(player)
         val obstruction = root.resolve("data/lost-elite-loot/${drop.uniqueId}.json")
         Files.createDirectories(obstruction)
-        paper.callEvent(unloading(drop))
+        loot.capture(drop)
+        tickUntil { outbox.entry(drop.uniqueId.toString()) != null }
+        scheduler.tick(5)
         verify(exactly = 0) { drop.remove() }
-        loot.store.pending(10) shouldBe emptyList()
-        val marker = NamespacedKey("arc", "lost_loot_capture")
-        drop.persistentDataContainer.has(marker) shouldBe true
+        outbox.entry(drop.uniqueId.toString())?.certain shouldBe false
         Files.delete(obstruction)
-        val loaded = entity(player, id = drop.uniqueId)
-        loaded.persistentDataContainer.set(marker, PersistentDataType.BYTE, 1)
-        paper.callEvent(EntitiesLoadEvent(mockk<Chunk>(relaxed = true), listOf(loaded)))
-        scheduler.tick()
-        verify(exactly = 1) { loaded.remove() }
-        loot.store.pending(10).size shouldBe 1
-        loot.close()
+        loot.capture(drop)
+        tickUntil { drop.isDead }
+        outbox.entry(drop.uniqueId.toString())?.certain shouldBe true
     }
 
-    "distance collection leaves nearby loot and captures once its owner passes 64 blocks" {
-        val player = paper.addPlayer("distant-owner")
-        val loot = service()
-        listen(loot)
-        val stack = ItemStack.of(Material.DIAMOND_HELMET)
-        val drop = entity(player, stack)
-        paper.callEvent(ItemSpawnEvent(drop))
-        // Native EliteMobs metadata is attached after the spawn event returns.
-        stack.itemMeta = item(player).itemMeta
-        player.teleport(player.location.clone().add(64.0, 0.0, 0.0))
-        scheduler.tick(20)
-        verify(exactly = 0) { drop.remove() }
-        player.teleport(player.location.clone().add(1.0, 0.0, 0.0))
-        scheduler.tick(20)
-        verify(exactly = 1) { drop.remove() }
-        loot.store.pending(10).size shouldBe 1
-        loot.close()
-    }
-
-    "leaving the server collects only the departing owner's tracked mob drops" {
+    "distance collection and departure preserve nearby and manually dropped items" {
         val player = paper.addPlayer("departing-owner")
         val neighbour = paper.addPlayer("staying-owner")
-        val loot = service()
-        listen(loot)
-        val mine = entity(player)
-        val theirs = entity(neighbour)
-        val manual = entity(player)
+        val (loot, outbox) = service()
+        ready(loot)
+        val mine = entity(player); val theirs = entity(neighbour); val manual = entity(player)
         listOf(mine, theirs, manual).forEach { paper.callEvent(ItemSpawnEvent(it)) }
         paper.callEvent(PlayerDropItemEvent(player, manual))
-        paper.callEvent(org.bukkit.event.player.PlayerQuitEvent(player, Component.empty()))
-        scheduler.tick()
-        verify(exactly = 1) { mine.remove() }
+        scheduler.tick(20)
+        verify(exactly = 0) { mine.remove(); theirs.remove(); manual.remove() }
+        paper.callEvent(PlayerQuitEvent(player, Component.empty()))
+        tickUntil { mine.isDead }
         verify(exactly = 0) { theirs.remove(); manual.remove() }
-        loot.store.pending(10).map { it.owner } shouldBe listOf(player.uniqueId.toString())
-        loot.close()
+        outbox.entry(mine.uniqueId.toString())?.record?.owner shouldBe player.uniqueId.toString()
     }
 
-    "changing worlds collects tracked loot and pickup before collection cannot create a mailbox copy" {
-        val player = paper.addPlayer("world-traveller")
-        val loot = service()
-        listen(loot)
-        val oldWorld = player.world
+    "world unload is cancelled until sliced capture and its durable write finish" {
+        val player = paper.addPlayer("world-unload")
+        val (loot, _) = service()
+        ready(loot)
         val drop = entity(player)
-        val pickedUp = entity(player)
-        every { drop.world } returns oldWorld
-        every { pickedUp.world } returns oldWorld
-        listOf(drop, pickedUp).forEach { paper.callEvent(ItemSpawnEvent(it)) }
-        every { pickedUp.isDead } returns true
-        player.teleport(paper.addSimpleWorld("destination").spawnLocation)
-        scheduler.tick(20)
-        verify(exactly = 1) { drop.remove() }
-        verify(exactly = 0) { pickedUp.remove() }
-        loot.store.pending(10).size shouldBe 1
-        loot.close()
-    }
-
-    "loaded mob loot for an offline owner is collected without another disconnect event" {
-        val player = paper.addPlayer("offline-fixture")
-        val owner = UUID.randomUUID()
-        val stack = item(player).also {
-            it.editMeta { meta -> meta.persistentDataContainer.set(ownerKey, PersistentDataType.STRING, owner.toString()) }
+        paper.callEvent(ItemSpawnEvent(drop))
+        val first = WorldUnloadEvent(player.world)
+        loot.worldUnloading(first)
+        first.isCancelled shouldBe true
+        tickUntil { drop.isDead }
+        var allowed = false
+        tickUntil {
+            val retry = WorldUnloadEvent(player.world)
+            loot.worldUnloading(retry)
+            allowed = !retry.isCancelled
+            allowed
         }
-        val loot = service()
-        listen(loot)
-        val drop = entity(player, stack)
-        paper.callEvent(EntitiesLoadEvent(mockk<Chunk>(relaxed = true), listOf(drop)))
-        scheduler.tick(20)
-        verify(exactly = 1) { drop.remove() }
-        loot.store.pending(10).map { it.owner } shouldBe listOf(owner.toString())
-        loot.close()
+        allowed shouldBe true
+        LostLootStore(root).get(drop.uniqueId.toString())?.owner shouldBe player.uniqueId.toString()
     }
 
-    "world unload is refused if committing an inactive living item fails" {
-        val player = paper.addPlayer("world-write-failure")
-        val loot = service()
-        val drop = entity(player)
-        every { drop.isValid } returns false
-        val world = mockk<org.bukkit.World>()
-        every { world.getEntitiesByClass(Item::class.java) } returns listOf(drop)
-        Files.createDirectories(root.resolve("data/lost-elite-loot/${drop.uniqueId}.json"))
-        val event = org.bukkit.event.world.WorldUnloadEvent(world)
-        loot.worldUnloading(event)
-        event.isCancelled shouldBe true
-        verify(exactly = 0) { drop.remove() }
-        loot.store.pending(10) shouldBe emptyList()
-        loot.close()
-    }
-
-    "only canonical bound mob loot qualifies and a deliberate throw permanently excludes that entity" {
-        val player = paper.addPlayer("owner")
-        val stack = item(player)
-        val entity = entity(player, stack)
-        val loot = service()
-        loot.owner(entity) shouldBe player.uniqueId
-        stack.editMeta { it.persistentDataContainer.set(NamespacedKey("arc", "dungeon_case_reward"), PersistentDataType.BYTE, 1) }
-        loot.owner(entity) shouldBe null
-        stack.editMeta { it.persistentDataContainer.remove(NamespacedKey("arc", "dungeon_case_reward")); it.persistentDataContainer.remove(ownerKey) }
-        loot.owner(entity) shouldBe null
-        loot.manuallyDropped(PlayerDropItemEvent(player, entity))
-        loot.owner(entity) shouldBe null
-        loot.close()
-    }
-
-    "failed journal commit keeps the entity frozen and unavailable until a verified retry" {
-        val player = paper.addPlayer("disk-failure")
-        val loot = service()
-        val id = UUID.randomUUID()
-        val entity = entity(player, id = id)
-        val obstruction = root.resolve("data/lost-elite-loot/$id.json")
-        Files.createDirectories(obstruction)
-        loot.despawn(org.bukkit.event.entity.ItemDespawnEvent(entity, player.location))
-        loot.capture(entity)
-        verify(exactly = 0) { entity.remove() }
-        loot.store.available(requireNotNull(loot.store.get(id.toString()))) shouldBe false
-        Files.delete(obstruction)
-        loot.capture(entity)
-        verify(exactly = 1) { entity.remove() }
-        loot.store.available(requireNotNull(loot.store.get(id.toString()))) shouldBe true
-        loot.close()
-    }
-
-    "world unload captures remaining mob loot before an instance can be deleted" {
-        val player = paper.addPlayer("unload-owner")
-        val loot = service()
-        val entity = entity(player)
-        val world = mockk<org.bukkit.World>()
-        var valid = true
-        every { entity.isValid } answers { valid }
-        every { entity.isDead } answers { !valid }
-        every { entity.remove() } answers { valid = false }
-        every { world.getEntitiesByClass(Item::class.java) } returns listOf(entity)
-        val event = org.bukkit.event.world.WorldUnloadEvent(world)
-        loot.worldUnloading(event)
-        event.isCancelled shouldBe false
-        valid shouldBe false
-        loot.store.get(entity.uniqueId.toString())?.state shouldBe LostLootState.STORED
-        loot.close()
-    }
-
-    "capture commits the exact stack before removing its physical entity" {
-        val player = paper.addPlayer("drop-owner")
-        val stack = item(player)
-        val loot = service()
-        val id = UUID.randomUUID()
-        val entity = entity(player, stack, id)
-        every { entity.remove() } answers {
-            val saved = requireNotNull(LostLootStore(root).get(id.toString()))
-            ItemStack.deserializeBytes(Base64.getDecoder().decode(saved.item)) shouldBe stack
+    "large stale entity loads share a native budget and close cancels partial reconciliation" {
+        val player = paper.addPlayer("bulk-stale")
+        val rows = MemoryLostLootJournal()
+        val drops = List(300) {
+            entity(player).also { item -> rows.write(LostLootRecord(item.uniqueId.toString(), player.uniqueId.toString(), null, 1234, LostLootState.EXPORTED)) }
         }
-        loot.capture(entity)
-        verify(exactly = 1) { entity.remove() }
+        val (loot, _) = service(open = { rows })
+        ready(loot)
+        var removed = 0
+        for (drop in drops) every { drop.remove() } answers { removed++; Unit }
+        paper.callEvent(EntitiesLoadEvent(chunk(player), drops))
+        removed shouldBe 0
+        var previous = 0
+        repeat(3) {
+            scheduler.tick()
+            (removed - previous <= 128) shouldBe true
+            previous = removed
+        }
+        (removed < 300) shouldBe true
         loot.close()
+        val atClose = removed
+        scheduler.tick(10)
+        removed shouldBe atClose
     }
 
-    "publish retries after failure and exports an idempotent tombstone" {
-        val player = paper.addPlayer("publisher")
-        var attempts = 0
-        val loot = service {
-            attempts++
-            if (attempts == 1) CompletableFuture.failedFuture(IllegalStateException("temporary"))
-            else CompletableFuture.completedFuture(Unit)
-        }
-        val entity = entity(player)
-        loot.capture(entity)
-        loot.publishPending()
-        scheduler.executeImmediate()
-        attempts shouldBe 1
-        loot.publishPending()
-        scheduler.executeImmediate()
-        attempts shouldBe 2
-        loot.store.get(entity.uniqueId.toString())?.state shouldBe LostLootState.EXPORTED
-        loot.store.get(entity.uniqueId.toString())?.item shouldBe null
-        loot.publishPending()
-        scheduler.executeImmediate()
-        attempts shouldBe 2
-        loot.close()
+    "failed startup releases ordinary loot but keeps bound feature loot protected" {
+        val player = paper.addPlayer("failed-startup")
+        val (loot, _) = service(open = { error("corrupt journal") })
+        tickUntil { loot.ready().isDone }
+        loot.ready().isCompletedExceptionally shouldBe true
+        paper.callEvent(EntityPickupItemEvent(player, entity(player), 0)).isCancelled shouldBe true
+        paper.callEvent(EntityPickupItemEvent(player, entity(player, ItemStack.of(Material.STONE)), 0)).isCancelled shouldBe false
     }
 })

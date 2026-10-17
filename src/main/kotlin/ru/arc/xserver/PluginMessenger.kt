@@ -117,10 +117,16 @@ class PluginMessenger(private val networkRtpEnabled: Boolean = true) : PluginMes
             )
         }
 
+        val state = RtpPlayerRegistry.state(player.uniqueId, world.name)
+        if (state == null) {
+            player.sendMessage(TextUtil.mm("<yellow>Состояние RTP ещё загружается или сохраняется. Повторите через несколько секунд."))
+            warn("Rejected network RTP request {} while player state is unavailable", request.requestId)
+            return
+        }
         val dispatch =
             selectNetworkRtpDispatch(
                 request.mode,
-                RtpPlayerRegistry.state(player.uniqueId, world.name),
+                state,
             )
         when (dispatch) {
             NetworkRtpDispatch.FIRST_ENTRY -> handleFirstEntryRtp(player, request, world, worldName)

@@ -29,7 +29,8 @@ object LocationPoolEditor {
             }
 
         val moduleConfig = LocationPoolModuleConfig.load(ARC.instance.dataPath)
-        service = LocationPoolService(moduleConfig, scheduler, playerProvider)
+        service?.stop()
+        service = LocationPoolService(moduleConfig, scheduler, playerProvider, ARC.instance.nativeWork)
         service?.start()
     }
 

@@ -5,12 +5,19 @@ import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.ints.shouldBeExactly
+import io.kotest.matchers.shouldBe
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
+import ru.arc.hooks.packetevents.PacketEventsHook
+import java.util.concurrent.CompletableFuture
 
 class HookRegistryLifecycleTest :
     FreeSpec({
         afterTest {
             HookRegistry.auctionHook = null
             HookRegistry.jobsEnabled = false
+            HookRegistry.packetEventsHook = null
         }
 
         "close stops the Jobs hook when it was enabled" {
@@ -64,5 +71,24 @@ class HookRegistryLifecycleTest :
             shouldThrow<IllegalStateException> {
                 registry.setupHooks()
             }
+        }
+
+        "retirement detaches globals immediately and waits for the exact captured packet owner" {
+            val actual = CompletableFuture<Void>()
+            val packets = mockk<PacketEventsHook> { every { closeAsync() } returns actual.copy() }
+            HookRegistry.packetEventsHook = packets
+            val registry = HookRegistry()
+            val cancelled = registry.closeAsync()
+            HookRegistry.packetEventsHook shouldBe null
+            registry.isClosed.shouldBeTrue()
+            cancelled.cancel(false).shouldBeTrue()
+            val observation = registry.closeAsync()
+            observation.isDone.shouldBeFalse()
+            val replacement = mockk<PacketEventsHook>(relaxed = true)
+            HookRegistry.packetEventsHook = replacement
+            actual.complete(null)
+            observation.join() shouldBe null
+            verify(exactly = 1) { packets.closeAsync() }
+            verify(exactly = 0) { replacement.closeAsync() }
         }
     })

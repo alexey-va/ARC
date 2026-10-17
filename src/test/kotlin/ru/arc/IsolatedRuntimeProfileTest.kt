@@ -32,12 +32,18 @@ class IsolatedRuntimeProfileTest : FreeSpec({
             every { loadMap(any()) } returns CompletableFuture.completedFuture(emptyMap())
         }
         mockkObject(RedisModule)
+        every { RedisModule.prepareOnWorker(any(), any(), any()) } returns Unit
+        every { RedisModule.requireReloadCompatible(any()) } returns Unit
+        every { RedisModule.preparedClient() } returns redis
+        every { RedisModule.preparedOrigin() } returns "slimefun"
+        every { RedisModule.discardPreparedOnWorker() } returns Unit
         every { RedisModule.init() } answers { ARC.redisManager = redis }
         every { RedisModule.reload() } answers { ARC.redisManager = redis }
         try {
             MockBukkitTestRuntime.open().use { runtime ->
                 loadArcCoreHostForTest()
                 val plugin = runtime.loadPlugin(IsolatedGlyphProfilePlugin::class.java)
+                awaitMainThreadFuture(runtime.server, plugin.readiness())
                 plugin.runtimeProfile shouldBe ArcRuntimeProfile.ISOLATED
                 ModuleRegistry.getRuntimeStatuses().map { it.name }.toSet() shouldBe
                     setOf("Redis", "ChatGlyphProtection", "Config", "OpsHttp", "Restart", "ItemInfo")
@@ -47,10 +53,11 @@ class IsolatedRuntimeProfileTest : FreeSpec({
                 runtime.server.servicesManager.getRegistration(ArcSidebarService::class.java) shouldBe null
                 ArcCommand.INSTANCE.availableSubcommands(runtime.server.consoleSender)
                     .map { it.configKey }.toSet() shouldBe setOf("help", "reload", "restart")
-                plugin.reload()
+                awaitMainThreadFuture(runtime.server, plugin.reload())
                 ModuleRegistry.getRuntimeStatuses().all { it.ready && it.failures == 0L } shouldBe true
             }
         } finally {
+            ARC.plugin?.closeCompletion()?.get(10, java.util.concurrent.TimeUnit.SECONDS)
             unmockkObject(RedisModule)
             ARC.plugin = null
             ARC.redisManager = null
@@ -70,6 +77,7 @@ class IsolatedRuntimeProfileTest : FreeSpec({
             }
             runtime.server.commandMap.register("other", otherBuy)
             val plugin = runtime.loadPlugin(IsolatedProfilePlugin::class.java)
+            awaitMainThreadFuture(runtime.server, plugin.readiness())
             plugin.runtimeProfile shouldBe ArcRuntimeProfile.ISOLATED
             ModuleRegistry.getRuntimeStatuses().map { it.name }.toSet() shouldBe setOf("Config", "OpsHttp", "Restart", "ItemInfo")
             ModuleRegistry.getRuntimeStatuses().all { it.ready && it.failures == 0L } shouldBe true
@@ -82,7 +90,7 @@ class IsolatedRuntimeProfileTest : FreeSpec({
             runtime.server.commandMap.getCommand("arc:menu") shouldBe null
             ArcCommand.INSTANCE.availableSubcommands(runtime.server.consoleSender)
                 .map { it.configKey }.toSet() shouldBe setOf("help", "reload", "restart")
-            plugin.reload()
+            awaitMainThreadFuture(runtime.server, plugin.reload())
             ModuleRegistry.getRuntimeStatuses().map { it.name }.toSet() shouldBe setOf("Config", "OpsHttp", "Restart", "ItemInfo")
             ModuleRegistry.getRuntimeStatuses().all { it.ready && it.failures == 0L } shouldBe true
             ARC.redisManager shouldBe null

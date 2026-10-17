@@ -17,11 +17,13 @@ object FirstRtpCoordinator {
     fun route(
         player: Player,
         world: World,
-    ): FirstRtpRouteResult =
-        route(
+    ): FirstRtpRouteResult {
+        val state = RtpPlayerRegistry.state(player.uniqueId, world.name)
+            ?: return FirstRtpRouteResult.Rejected("состояние RTP ещё загружается или сохраняется; повторите через несколько секунд")
+        return route(
             player = player,
             world = world,
-            state = RtpPlayerRegistry.state(player.uniqueId, world.name),
+            state = state,
             start = {
                 FirstRtpService.start(
                     player = player,
@@ -40,6 +42,7 @@ object FirstRtpCoordinator {
                 }
             },
         )
+    }
 
     internal fun route(
         player: Player,

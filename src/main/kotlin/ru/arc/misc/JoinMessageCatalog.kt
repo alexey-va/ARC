@@ -104,11 +104,19 @@ object JoinMessageCatalogManager {
 
     @Volatile
     private var initialized = false
+    private var prepared = false
 
     @JvmStatic
     @Synchronized
     fun init() {
         if (initialized || ru.arc.ARC.redisManager == null) return
+        check(prepared) { "Join catalog repository preparation is not ready" }
+        prepared = false
+        initialized = true
+    }
+
+    internal fun prepareOnWorker(redis: ru.arc.redis.RedisOperations) {
+        if (initialized || prepared) return
         scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         repo =
             redisRepo<JoinMessageCatalog>(
@@ -116,12 +124,20 @@ object JoinMessageCatalogManager {
                 storageKey = "arc.join_message_catalog",
                 updateChannel = "arc.join_message_catalog_update",
                 scope = scope,
+                redis = redis,
             ) {
                 loadAllOnStart(true)
                 enableCleanup(false)
                 saveInterval(1.hours)
             }
-        initialized = true
+        prepared = true
+    }
+
+    internal fun discardPreparedOnWorker() {
+        if (!prepared) return
+        prepared = false
+        ru.arc.repository.sealRepositoryOperations(scope)
+        ru.arc.repository.drainRepository(repo, scope)
     }
 
     @JvmStatic
@@ -142,7 +158,10 @@ object JoinMessageCatalogManager {
     fun shutdown() {
         if (!initialized) return
         initialized = false
-        runBlocking { repo.shutdown() }
-        scope.cancel()
+        val retiring = repo
+        val operations = scope
+        ru.arc.repository.sealRepositoryOperations(operations)
+        ru.arc.ARC.instance.retireInBackground { ru.arc.repository.drainRepository(retiring, operations) }
+            .whenComplete { _, failure -> if (failure != null) ru.arc.util.Logging.error("Could not drain join catalog", failure) }
     }
 }

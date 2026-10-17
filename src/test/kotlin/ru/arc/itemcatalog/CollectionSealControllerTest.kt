@@ -109,7 +109,7 @@ class CollectionSealControllerTest : StringSpec({
             val player = paper.addPlayer("ArchivedSealHolder")
             val plugin = paper.createSimplePlugin("ArchivedSealTest")
             val root = Files.createTempDirectory("archived-seal-menu")
-            ArcMenus.initialize(plugin, root)
+            ArcMenus.initialize(plugin, root, ru.arc.gui.ArcMenuConfiguration.prepare(root))
             val controller = CollectionSealController(
                 plugin,
                 settings,

@@ -331,9 +331,13 @@ object ArcMenuConfiguration {
     )
 
     fun load(dataRoot: Path): PaperMenuConfiguration {
-        val config = Config(dataRoot, RESOURCE)
-        return parse(filterToArcMenus(config))
+        return bind(prepare(dataRoot))
     }
+
+    /** Worker-only disk/YAML projection. Material validation remains in [bind] on Paper. */
+    internal fun prepare(dataRoot: Path): Config = filterToArcMenus(Config(dataRoot, RESOURCE))
+
+    internal fun bind(config: Config): PaperMenuConfiguration = parse(config)
 
     /**
      * Keep host validation away from extracted plugin layouts and their reserved

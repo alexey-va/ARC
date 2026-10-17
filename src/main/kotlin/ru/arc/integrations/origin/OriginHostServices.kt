@@ -53,6 +53,7 @@ object OriginHostServices {
         fun <T : Any> register(type: Class<T>, provider: T) =
             services.register(type, provider, plugin, ServicePriority.Normal)
         register(ArcOriginConfiguration::class.java, object : ArcOriginConfiguration {
+            override fun ready() = ARC.instance.fullRuntimeReadiness()
             override fun legacyDataPath() = ARC.instance.dataPath
             override fun serverName() = requireNotNull(ARC.serverName)
             override fun sharedRedisAvailable() = ARC.redisManager != null

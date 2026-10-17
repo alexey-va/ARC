@@ -1,148 +1,153 @@
 package ru.arc.ops
 
-import ru.arc.ARC
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
+import java.nio.file.Path
 
 /**
  * Configuration for the ops HTTP API ([OpsHttpModule]).
  */
-open class OpsHttpConfig(private val config: Config) {
+open class OpsHttpConfig(private val config: Config? = null) {
+    private fun bool(path: String, default: Boolean) = config?.bool(path, default) ?: default
+    private fun string(path: String, default: String) = config?.string(path, default) ?: default
+    private fun integer(path: String, default: Int) = config?.integer(path, default) ?: default
+    private fun stringList(path: String) = config?.stringList(path).orEmpty()
+
 
     open val enabled: Boolean
-        get() = config.bool("enabled", false)
+        get() = bool("enabled", false)
 
     open val token: String
-        get() = config.string("token", "")
+        get() = string("token", "")
 
     open val bindHost: String
-        get() = config.string("bind-host", "127.0.0.1")
+        get() = string("bind-host", "127.0.0.1")
 
     open val bindPort: Int
-        get() = config.integer("bind-port", 25823)
+        get() = integer("bind-port", 25823)
 
     open val consoleEnabled: Boolean
-        get() = config.bool("console-enabled", false)
+        get() = bool("console-enabled", false)
 
     open val messagesEnabled: Boolean
-        get() = config.bool("messages-enabled", true)
+        get() = bool("messages-enabled", true)
 
     open val effectsEnabled: Boolean
-        get() = config.bool("effects-enabled", true)
+        get() = bool("effects-enabled", true)
 
     open val reloadEnabled: Boolean
-        get() = config.bool("reload-enabled", true)
+        get() = bool("reload-enabled", true)
 
     open val runAsEnabled: Boolean
-        get() = config.bool("run-as-enabled", false)
+        get() = bool("run-as-enabled", false)
 
     open val economyAuditReadEnabled: Boolean
-        get() = config.bool("economy-audit-read-enabled", true)
+        get() = bool("economy-audit-read-enabled", true)
 
     open val productInterestReadEnabled: Boolean
-        get() = config.bool("product-interest-read-enabled", true)
+        get() = bool("product-interest-read-enabled", true)
 
     open val playerTelemetryReadEnabled: Boolean
-        get() = config.bool("player-telemetry-read-enabled", true)
+        get() = bool("player-telemetry-read-enabled", true)
 
     open val contractReconciliationReadEnabled: Boolean
-        get() = config.bool("contract-reconciliation-read-enabled", true)
+        get() = bool("contract-reconciliation-read-enabled", true)
 
     open val contractReconciliationWriteEnabled: Boolean
-        get() = config.bool("contract-reconciliation-write-enabled", false)
+        get() = bool("contract-reconciliation-write-enabled", false)
 
     open val itemsReadEnabled: Boolean
-        get() = config.bool("items-read-enabled", true)
+        get() = bool("items-read-enabled", true)
 
     open val itemsGiveEnabled: Boolean
-        get() = config.bool("items-give-enabled", false)
+        get() = bool("items-give-enabled", false)
 
     open val itemsGiveMaxStack: Int
-        get() = config.integer("items-give-max-stack", 64).coerceIn(1, 6400)
+        get() = integer("items-give-max-stack", 64).coerceIn(1, 6400)
 
     open val itemPresetsReadEnabled: Boolean
-        get() = config.bool("item-presets-read-enabled", true)
+        get() = bool("item-presets-read-enabled", true)
 
     open val itemPresetsWriteEnabled: Boolean
-        get() = config.bool("item-presets-write-enabled", false)
+        get() = bool("item-presets-write-enabled", false)
 
     open val cmiKitsWriteEnabled: Boolean
-        get() = config.bool("cmi-kits-write-enabled", false)
+        get() = bool("cmi-kits-write-enabled", false)
 
     open val cmiHologramsReadEnabled: Boolean
-        get() = config.bool("cmi-holograms-read-enabled", true)
+        get() = bool("cmi-holograms-read-enabled", true)
 
     open val cmiHologramsWriteEnabled: Boolean
-        get() = config.bool("cmi-holograms-write-enabled", false)
+        get() = bool("cmi-holograms-write-enabled", false)
 
     open val scheduledCommandsReadEnabled: Boolean
-        get() = config.bool("scheduled-commands-read-enabled", true)
+        get() = bool("scheduled-commands-read-enabled", true)
 
     open val scheduledCommandsWriteEnabled: Boolean
-        get() = config.bool("scheduled-commands-write-enabled", false)
+        get() = bool("scheduled-commands-write-enabled", false)
 
     open val locationPoolsReadEnabled: Boolean
-        get() = config.bool("location-pools-read-enabled", true)
+        get() = bool("location-pools-read-enabled", true)
 
     open val locationPoolsWriteEnabled: Boolean
-        get() = config.bool("location-pools-write-enabled", false)
+        get() = bool("location-pools-write-enabled", false)
 
     open val worldScenesReadEnabled: Boolean
-        get() = config.bool("world-scenes-read-enabled", true)
+        get() = bool("world-scenes-read-enabled", true)
 
     open val worldScenesWriteEnabled: Boolean
-        get() = config.bool("world-scenes-write-enabled", false)
+        get() = bool("world-scenes-write-enabled", false)
 
     open val treasurePoolsReadEnabled: Boolean
-        get() = config.bool("treasure-pools-read-enabled", true)
+        get() = bool("treasure-pools-read-enabled", true)
 
     open val treasurePoolsWriteEnabled: Boolean
-        get() = config.bool("treasure-pools-write-enabled", false)
+        get() = bool("treasure-pools-write-enabled", false)
 
     open val npcsReadEnabled: Boolean
-        get() = config.bool("npcs-read-enabled", true)
+        get() = bool("npcs-read-enabled", true)
 
     open val npcsWriteEnabled: Boolean
-        get() = config.bool("npcs-write-enabled", true)
+        get() = bool("npcs-write-enabled", true)
 
     open val npcsLoadChunksEnabled: Boolean
-        get() = config.bool("npcs-load-chunks-enabled", true)
+        get() = bool("npcs-load-chunks-enabled", true)
 
     open val qaWorldReadEnabled: Boolean
-        get() = config.bool("qa-world-read-enabled", false)
+        get() = bool("qa-world-read-enabled", false)
 
     open val qaWorldWriteEnabled: Boolean
-        get() = config.bool("qa-world-write-enabled", false)
+        get() = bool("qa-world-write-enabled", false)
 
     open val qaWorldAllowedPlayers: Set<String>
-        get() = config.stringList("qa-world-allowed-players").map { it.lowercase() }.toSet()
+        get() = stringList("qa-world-allowed-players").map { it.lowercase() }.toSet()
 
     open val luckpermsGroupsReadEnabled: Boolean
-        get() = config.bool("luckperms-groups-read-enabled", true)
+        get() = bool("luckperms-groups-read-enabled", true)
 
     open val luckpermsGroupsWriteEnabled: Boolean
-        get() = config.bool("luckperms-groups-write-enabled", false)
+        get() = bool("luckperms-groups-write-enabled", false)
 
     open val luckpermsUsersReadEnabled: Boolean
-        get() = config.bool("luckperms-users-read-enabled", true)
+        get() = bool("luckperms-users-read-enabled", true)
 
     open val luckpermsUsersWriteEnabled: Boolean
-        get() = config.bool("luckperms-users-write-enabled", false)
+        get() = bool("luckperms-users-write-enabled", false)
 
     open val luckpermsMigrationsEnabled: Boolean
-        get() = config.bool("luckperms-migrations-enabled", false)
+        get() = bool("luckperms-migrations-enabled", false)
 
     open val errorBufferSize: Int
-        get() = config.integer("error-buffer-size", 200).coerceIn(50, 2000)
+        get() = integer("error-buffer-size", 200).coerceIn(50, 2000)
 
     companion object {
         @Volatile
-        private var instance: OpsHttpConfig = OpsHttpConfig(EmptyConfig)
+        private var instance: OpsHttpConfig = OpsHttpConfig()
 
         fun current(): OpsHttpConfig = instance
 
-        fun reload() {
-            val cfg = ConfigManager.ofModule(ARC.instance.dataPath, "ops-http.yml")
+        fun reload(root: Path) {
+            val cfg = ConfigManager.ofModule(root, "ops-http.yml")
             instance = OpsHttpConfig(cfg)
             OpsLogBuffer.resize(instance.errorBufferSize)
         }
@@ -198,7 +203,7 @@ class TestOpsHttpConfig(
     override val luckpermsUsersWriteEnabled: Boolean = false,
     override val luckpermsMigrationsEnabled: Boolean = false,
     override val errorBufferSize: Int = 100,
-) : OpsHttpConfig(EmptyConfig) {
+) : OpsHttpConfig() {
     fun copy(
         consoleEnabled: Boolean = this.consoleEnabled,
         messagesEnabled: Boolean = this.messagesEnabled,
@@ -279,8 +284,3 @@ class TestOpsHttpConfig(
             errorBufferSize = errorBufferSize,
         )
 }
-
-private object EmptyConfig : Config(
-    java.nio.file.Paths.get(System.getProperty("java.io.tmpdir")),
-    "empty-ops-http.yml",
-)

@@ -322,12 +322,20 @@ object StoreManager {
     private lateinit var repo: CachedRepository<StoreData>
     private lateinit var scope: CoroutineScope
     private var initialized = false
+    private var prepared = false
 
     @JvmStatic
     fun init() {
         if (initialized) return
         if (ru.arc.ARC.redisManager == null) return
 
+        check(prepared) { "Store repository preparation is not ready" }
+        prepared = false
+        initialized = true
+    }
+
+    internal fun prepareOnWorker(redis: ru.arc.redis.RedisOperations) {
+        if (initialized || prepared) return
         scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         repo =
             redisRepo<StoreData>(
@@ -335,18 +343,30 @@ object StoreManager {
                 storageKey = "arc.store",
                 updateChannel = "arc.store_update",
                 scope = scope,
+                redis = redis,
             ) {
                 loadAllOnStart(true)
                 saveInterval(1.seconds)
             }
-        initialized = true
+        prepared = true
+    }
+
+    internal fun discardPreparedOnWorker() {
+        if (!prepared) return
+        prepared = false
+        ru.arc.repository.sealRepositoryOperations(scope)
+        ru.arc.repository.drainRepository(repo, scope)
     }
 
     @JvmStatic
     fun shutdown() {
         if (!initialized) return
-        runBlocking { repo.shutdown() }
+        val retiring = repo
+        val operations = scope
         initialized = false
+        ru.arc.repository.sealRepositoryOperations(operations)
+        ru.arc.ARC.instance.retireInBackground { ru.arc.repository.drainRepository(retiring, operations) }
+            .whenComplete { _, failure -> if (failure != null) Logging.error("Could not drain store repository", failure) }
     }
 
     /**

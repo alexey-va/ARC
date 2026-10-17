@@ -7,7 +7,6 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
-import ru.arc.ARC
 import ru.arc.commands.arc.subcommands.JoinMessageSubCommand
 import ru.arc.commands.arc.subcommands.QuitMessageSubCommand
 import ru.arc.config.Config
@@ -24,14 +23,31 @@ import ru.arc.paper.menu.PaperDialogTextInput
 import ru.arc.util.Logging.error
 import ru.arc.util.TextUtil
 import java.util.concurrent.CompletableFuture
+import java.nio.file.Path
 
 /** Native dialogs for network-wide join/leave selections. The name preserves existing command callers. */
 object JoinMessageGuiFactory {
-    private val dialogs by lazy {
-        JoinMessageDialogs(ConfigManager.of(ARC.instance.dataFolder.toPath(), "modules/join-message-dialog.yml"))
+    private var dialogs: JoinMessageDialogs? = null
+
+    /** Bundled resource migration and persistence belong to ARC's configuration worker. */
+    internal fun prepareOnWorker(root: Path): Config =
+        ConfigManager.of(root, "modules/join-message-dialog.yml").also(JoinMessageDialogs::prepare)
+
+    internal fun attach(config: Config) {
+        close()
+        dialogs = JoinMessageDialogs(config)
     }
 
-    fun show(player: Player, isJoin: Boolean = true, startPage: Int = 0) = dialogs.show(player, isJoin, startPage)
+    internal fun close() {
+        dialogs?.close()
+        dialogs = null
+    }
+
+    fun show(player: Player, isJoin: Boolean = true, startPage: Int = 0) {
+        val active = dialogs
+        if (active == null) player.sendMessage(TextUtil.mm("<gray>Настройки сообщений пока загружаются. Попробуйте чуть позже."))
+        else active.show(player, isJoin, startPage)
+    }
 }
 
 internal class JoinMessageDialogs(
@@ -40,29 +56,17 @@ internal class JoinMessageDialogs(
         if (Bukkit.isPrimaryThread()) block() else sync { block() }
     },
 ) {
-    init {
-        config.mergeMissingFromBundled("modules/join-message-dialog.yml")
-        val loader = org.snakeyaml.engine.v2.api.Load(org.snakeyaml.engine.v2.api.LoadSettings.builder().build())
-        fun bundledText(resource: String): Map<*, *> = checkNotNull(javaClass.getResourceAsStream("/modules/$resource")).use {
-            (loader.loadFromInputStream(it) as Map<*, *>)["text"] as Map<*, *>
-        }
-        val defaults = bundledText("join-message-dialog.yml")
-        var changed = false
-        listOf("join-message-dialog-legacy.yml", "join-message-dialog-v2.yml").flatMap { bundledText(it).entries }.forEach { (key, old) ->
-            val replacement = defaults[key] as? String
-            if (replacement != null && replacement != old && config.string("text.$key").replace("<color:#", "<#") == old) {
-                config.setString("text.$key", replacement)
-                changed = true
-            }
-        }
-        if (changed) config.saveStrict()
-    }
-
     private val inputId = PaperDialogInputId.of("message")
     private val generations = mutableMapOf<java.util.UUID, Long>()
     private var nextGeneration = 0L
+    private var closed = false
     private val width get() = config.int("button-width", 600).coerceIn(300, 1024)
     private val pageSize get() = config.int("page-size", 12).coerceIn(2, 20)
+
+    fun close() {
+        closed = true
+        generations.clear()
+    }
 
     fun show(player: Player, isJoin: Boolean = true, startPage: Int = 0) {
         runOnMain {
@@ -353,7 +357,7 @@ internal class JoinMessageDialogs(
     }
 
     private fun allowed(player: Player, isJoin: Boolean, custom: Boolean = false): Boolean {
-        if (!player.isOnline) return false
+        if (closed || !player.isOnline) return false
         val permission = if (isJoin) JoinMessageSubCommand.permission else QuitMessageSubCommand.permission
         val catalogAllowed = permission == null || player.hasPermission(permission)
         if (!catalogAllowed || (custom && !player.hasPermission(CUSTOM_PERMISSION))) {
@@ -431,6 +435,25 @@ internal class JoinMessageDialogs(
     )
     companion object {
         const val CUSTOM_PERMISSION = "arc.join.message.custom"
+
+        /** Worker-only; constructing and opening the native dialog never loads or saves YAML. */
+        fun prepare(config: Config) {
+            config.mergeMissingFromBundled("modules/join-message-dialog.yml")
+            val loader = org.snakeyaml.engine.v2.api.Load(org.snakeyaml.engine.v2.api.LoadSettings.builder().build())
+            fun bundledText(resource: String): Map<*, *> = checkNotNull(JoinMessageDialogs::class.java.getResourceAsStream("/modules/$resource")).use {
+                (loader.loadFromInputStream(it) as Map<*, *>)["text"] as Map<*, *>
+            }
+            val defaults = bundledText("join-message-dialog.yml")
+            var changed = false
+            listOf("join-message-dialog-legacy.yml", "join-message-dialog-v2.yml").flatMap { bundledText(it).entries }.forEach { (key, old) ->
+                val replacement = defaults[key] as? String
+                if (replacement != null && replacement != old && config.string("text.$key").replace("<color:#", "<#") == old) {
+                    config.setString("text.$key", replacement)
+                    changed = true
+                }
+            }
+            if (changed) config.saveStrict()
+        }
     }
 
 }

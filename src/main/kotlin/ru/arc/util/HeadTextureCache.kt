@@ -3,25 +3,20 @@ package ru.arc.util
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.annotations.SerializedName
-import ru.arc.ARC
 import ru.arc.util.Logging.error
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import java.util.concurrent.ConcurrentHashMap
 
-class HeadTextureCache {
+/** Construct and save on the lifecycle worker; ordinary lookups are memory only. */
+class HeadTextureCache(private val path: Path) {
 
-    private lateinit var path: Path
     private var data: Data = Data()
     private val gson: Gson = GsonBuilder().setPrettyPrinting().create()
 
     init {
         try {
-            path =
-                ARC.instance.dataFolder
-                    .toPath()
-                    .resolve("head-cache.json")
             if (!Files.exists(path)) {
                 Files.createFile(path)
             }

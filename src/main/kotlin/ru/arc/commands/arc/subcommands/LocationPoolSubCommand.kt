@@ -161,10 +161,15 @@ object LocationPoolSubCommand : SubCommand {
     }
 
     private fun deletePool(player: Player, poolId: String) {
-        if (LocationPoolManager.delete(poolId)) {
-            player.sendMessage(CommandConfig.locpoolDeleted(poolId))
-        } else {
-            player.sendMessage(CommandConfig.locpoolNotFound(poolId))
+        val deletion = runCatching { LocationPoolManager.delete(poolId) }.getOrElse {
+            player.sendMessage(ru.arc.util.TextUtil.mm("<red>Пул сохраняется или недоступен. Повторите позже."))
+            return
+        }
+        ru.arc.ARC.instance.whenCompleteOnMain(deletion) { deleted, failure ->
+            if (!player.isOnline) return@whenCompleteOnMain
+            if (failure != null) player.sendMessage(ru.arc.util.TextUtil.mm("<red>Не удалось удалить пул. Проверьте лог ARC."))
+            else if (deleted == true) player.sendMessage(CommandConfig.locpoolDeleted(poolId))
+            else player.sendMessage(CommandConfig.locpoolNotFound(poolId))
         }
     }
 

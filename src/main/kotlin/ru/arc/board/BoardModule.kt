@@ -599,6 +599,7 @@ object BoardManager {
     private lateinit var repo: CachedRepository<BoardEntryData>
     private lateinit var scope: CoroutineScope
     private var initialized = false
+    private var prepared = false
 
     private val cache = BoardEntryCache()
     private var updateCacheJob: kotlinx.coroutines.Job? = null
@@ -620,6 +621,14 @@ object BoardManager {
             return
         }
 
+        check(prepared) { "Board repository preparation is not ready" }
+        prepared = false
+        setupTasks()
+        initialized = true
+    }
+
+    internal fun prepareOnWorker(redis: ru.arc.redis.RedisOperations) {
+        if (initialized || prepared) return
         scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         repo =
             redisRepo<BoardEntryData>(
@@ -627,23 +636,34 @@ object BoardManager {
                 storageKey = "arc.board",
                 updateChannel = "arc.board_update",
                 scope = scope,
+                redis = redis,
             ) {
                 loadAllOnStart(true)
                 // Board operations enumerate the complete network-wide queue.
                 enableCleanup(false)
                 saveInterval(1.seconds)
             }
-        setupTasks()
-        initialized = true
+        prepared = true
+    }
+
+    internal fun discardPreparedOnWorker() {
+        if (!prepared) return
+        prepared = false
+        ru.arc.repository.sealRepositoryOperations(scope)
+        ru.arc.repository.drainRepository(repo, scope)
     }
 
     @JvmStatic
     fun shutdown() {
         if (!initialized) return
         cancelTasks()
-        runBlocking { repo.shutdown() }
+        val retiring = repo
+        val operations = scope
         contractAnnouncements.clear()
         initialized = false
+        ru.arc.repository.sealRepositoryOperations(operations)
+        ARC.instance.retireInBackground { ru.arc.repository.drainRepository(retiring, operations) }
+            .whenComplete { _, failure -> if (failure != null) Logging.error("Could not drain board repository", failure) }
     }
 
     private fun setupTasks() {

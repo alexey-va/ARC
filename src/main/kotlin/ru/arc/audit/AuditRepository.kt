@@ -75,20 +75,18 @@ class RedisAuditRepository private constructor(
     override fun getContext(): Set<String> = contextIds.toSet()
 
     override fun shutdown() {
-        runBlocking {
-            repo.shutdown()
-        }
+        ru.arc.repository.sealRepositoryOperations(scope)
+        ru.arc.repository.drainRepository(repo, scope)
     }
 
     companion object {
         /**
          * Create repository with default configuration.
          */
-        fun create(): RedisAuditRepository {
-            val config = ConfigManager.of(ARC.instance.dataPath, "modules/audit.yml")
+        fun create(root: java.nio.file.Path, redis: ru.arc.redis.RedisOperations, localServer: String): RedisAuditRepository {
+            val config = ConfigManager.of(root, "modules/audit.yml")
             val auditConfig = AuditConfig(config)
             val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-            val localServer = checkNotNull(ARC.serverName) { "ARC server name is not initialized" }
 
             val saveIntervalTicks = auditConfig.saveInterval
             val saveIntervalMs = saveIntervalTicks * 50 // Convert ticks to ms
@@ -99,6 +97,7 @@ class RedisAuditRepository private constructor(
                     storageKey = "arc.audits",
                     updateChannel = "arc.audit-invalidate.v2",
                     scope = scope,
+                    redis = redis,
                     syncMode = RedisSyncMode.INVALIDATION,
                     localSyncOrigin = localServer,
                     invalidationCoalesceWindow = auditConfig.invalidationCoalesceSeconds.seconds,

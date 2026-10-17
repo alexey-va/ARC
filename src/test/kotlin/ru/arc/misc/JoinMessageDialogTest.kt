@@ -22,7 +22,7 @@ import java.util.concurrent.CompletableFuture
 
 class JoinMessageDialogTest : FreeSpec({
     val directory = Files.createTempDirectory("join-message-dialog")
-    val config = Config(directory, "modules/join-message-dialog.yml")
+    val config = Config(directory, "modules/join-message-dialog.yml").also(JoinMessageDialogs::prepare)
     val runOnMain: (() -> Unit) -> Unit = { it() }
     val dialogs = JoinMessageDialogs(config, runOnMain)
     val player = mockk<Player>(relaxed = true)
@@ -133,6 +133,7 @@ class JoinMessageDialogTest : FreeSpec({
         }
         val old = Config(legacyDirectory, "modules/join-message-dialog.yml")
         old.setString("text.join-title", "Наш заголовок")
+        JoinMessageDialogs.prepare(old)
         val upgraded = JoinMessageDialogs(old, runOnMain)
         old.string("text.join-title") shouldBe "Наш заголовок"
         old.string("text.custom-list") shouldBe "<#c4a7e7>Мои фразы ›"
@@ -152,6 +153,7 @@ class JoinMessageDialogTest : FreeSpec({
         javaClass.getResourceAsStream("/modules/join-message-dialog-v2.yml")!!.use { Files.copy(it, file) }
         val old = Config(dir, "modules/join-message-dialog.yml")
         old.setString("text.create", "Моя кнопка")
+        JoinMessageDialogs.prepare(old)
         JoinMessageDialogs(old, runOnMain)
         old.string("text.create") shouldBe "Моя кнопка"
         old.string("text.custom-list") shouldBe "<#c4a7e7>Мои фразы ›"

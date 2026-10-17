@@ -59,7 +59,7 @@ internal class OnboardingConfig private constructor(
             "remove" to "<white>Встань внутри своего участка → <#ff9f0f>/unclaim <white>— снять защиту здесь",
         )
 
-        fun load(source: Config = ConfigManager.ofModule(ARC.instance.dataPath, "onboarding.yml")): OnboardingConfig {
+        fun load(source: Config = Config(ARC.instance.dataPath, ConfigManager.moduleYamlRelative(ARC.instance.dataPath, "onboarding.yml"))): OnboardingConfig {
             val enabled = source.bool("enabled", false)
             val worlds =
                 source

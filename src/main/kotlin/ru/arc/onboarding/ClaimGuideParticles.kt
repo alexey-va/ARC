@@ -10,9 +10,7 @@ import com.github.retrooper.packetevents.protocol.particle.data.ParticleDustData
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerParticle
 import org.bukkit.Bukkit
 import org.bukkit.configuration.ConfigurationSection
-import org.bukkit.configuration.file.YamlConfiguration
 import ru.arc.util.Logging.warn
-import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -41,11 +39,8 @@ internal class ClaimGuideParticles(private val colors: Set<Int>) : AutoCloseable
     }
 
     companion object {
-        fun create(): ClaimGuideParticles? {
+        fun create(colors: Set<Int>): ClaimGuideParticles? {
             if (!Bukkit.getPluginManager().isPluginEnabled("packetevents")) return null
-            val lands = Bukkit.getPluginManager().getPlugin("Lands") ?: return null
-            val config = YamlConfiguration.loadConfiguration(File(lands.dataFolder, "config.yml"))
-            val colors = claimGuideParticleColors(config)
             if (colors.isEmpty()) {
                 warn("Claim guide: no Lands border dust palette found; particle filter disabled")
                 return null

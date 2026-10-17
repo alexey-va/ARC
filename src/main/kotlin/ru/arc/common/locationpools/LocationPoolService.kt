@@ -7,6 +7,9 @@ import org.bukkit.entity.Player
 import org.bukkit.event.block.BlockPlaceEvent
 import ru.arc.core.ScheduledTask
 import ru.arc.core.TaskScheduler
+import ru.arc.core.BudgetedTaskQueue
+import ru.arc.ARC
+import ru.arc.common.ServerLocation
 import ru.arc.util.Logging.debug
 import ru.arc.util.ParticleManager
 import ru.arc.util.TextUtil.mm
@@ -30,6 +33,7 @@ class LocationPoolService(
     private var config: LocationPoolModuleConfig,
     private val scheduler: TaskScheduler,
     private val playerProvider: PlayerProvider,
+    private val nativeWork: BudgetedTaskQueue,
 ) {
     private val editingPlayers = ConcurrentHashMap<UUID, String>()
 
@@ -41,6 +45,8 @@ class LocationPoolService(
 
     private var showTask: ScheduledTask? = null
     private var timeoutTask: ScheduledTask? = null
+    @Volatile private var generation = 0L
+    private val pendingShows = ConcurrentHashMap<UUID, Long>()
 
     // === Lifecycle ===
 
@@ -58,181 +64,138 @@ class LocationPoolService(
      * Stop the editing service tasks.
      */
     fun stop() {
+        generation++
         showTask?.cancel()
         timeoutTask?.cancel()
         showTask = null
         timeoutTask = null
+        pendingShows.clear()
     }
 
-    /**
-     * Reload configuration.
-     */
     fun reloadConfig(newConfig: LocationPoolModuleConfig) {
-        this.config = newConfig
-        // Restart tasks with new config
+        config = newConfig
         start()
     }
 
-    /**
-     * Clear all editing sessions.
-     */
     fun clearSessions() {
         editingPlayers.clear()
         recentEdits.invalidateAll()
     }
 
-    // === Editing Management ===
-
-    /**
-     * Start editing a pool for a player.
-     */
-    fun startEditing(
-        player: Player,
-        poolId: String,
-    ) {
+    fun startEditing(player: Player, poolId: String) {
         editingPlayers[player.uniqueId] = poolId
-
-        val message = config.messages.startEditing.replace("%name%", poolId)
-        player.sendMessage(mm(message))
+        player.sendMessage(mm(config.messages.startEditing.replace("%name%", poolId)))
     }
 
-    /**
-     * Cancel editing for a player.
-     *
-     * @param timeout true if cancelled due to timeout
-     */
-    fun cancelEditing(
-        uuid: UUID,
-        timeout: Boolean = false,
-    ) {
+    fun cancelEditing(uuid: UUID, timeout: Boolean = false) {
         val poolId = editingPlayers.remove(uuid) ?: return
-
         playerProvider.getPlayer(uuid)?.let { player ->
-            val message =
-                if (timeout) {
-                    config.messages.timeoutEditing
-                } else {
-                    config.messages.cancelEditing
-                }.replace("%name%", poolId)
-
-            player.sendMessage(mm(message))
+            val message = if (timeout) config.messages.timeoutEditing else config.messages.cancelEditing
+            player.sendMessage(mm(message.replace("%name%", poolId)))
         }
     }
 
-    /**
-     * Get the pool ID being edited by a player.
-     */
     fun getEditingPool(uuid: UUID): String? = editingPlayers[uuid]
 
-    /**
-     * Check if a player is editing.
-     */
     fun isEditing(uuid: UUID): Boolean = editingPlayers.containsKey(uuid)
 
-    /**
-     * Cancel editing for all players editing a specific pool.
-     */
     fun cancelEditingForPool(poolId: String) {
-        editingPlayers.entries
-            .filter { it.value == poolId }
-            .forEach { cancelEditing(it.key, timeout = false) }
+        editingPlayers.entries.filter { it.value == poolId }.forEach { cancelEditing(it.key) }
     }
 
-    // === Block Processing ===
-
-    /**
-     * Process a block place event for location pool editing.
-     *
-     * @return true if the event was handled
-     */
     fun processBlockPlace(event: BlockPlaceEvent): Boolean {
         val poolId = editingPlayers[event.player.uniqueId] ?: return false
-
         val blockType = event.blockPlaced.type
         val isAdd = blockType == Material.GOLD_BLOCK
         val isRemove = blockType == Material.REDSTONE_BLOCK
-
         if (!isAdd && !isRemove) {
             event.player.sendMessage(mm(config.messages.invalidBlock))
             return true
         }
-
         event.isCancelled = true
         val location = event.block.location.toCenterLocation()
-        val pool = LocationPoolRepository.getOrCreate(poolId)
-
-        if (isAdd) {
-            pool.addLocation(location)
-            val message = config.messages.blockAdded.replace("%count%", pool.size.toString())
-            event.player.sendMessage(mm(message))
-        } else {
-            val removed = pool.removeLocation(location)
-            val message =
-                if (removed) {
-                    config.messages.blockRemoved
-                } else {
-                    config.messages.notInPool
-                }.replace("%count%", pool.size.toString())
-            event.player.sendMessage(mm(message))
+        try {
+            val pool = LocationPoolRepository.getOrCreate(poolId)
+            val message = if (isAdd) {
+                pool.addLocation(location)
+                config.messages.blockAdded
+            } else if (pool.removeLocation(location)) config.messages.blockRemoved else config.messages.notInPool
+            event.player.sendMessage(mm(message.replace("%count%", pool.size.toString())))
+            recentEdits.put(event.player.uniqueId, poolId)
+        } catch (failure: IllegalStateException) {
+            event.player.sendMessage(mm("<red>Пул пока занят сохранением. Изменение не принято; повторите позже."))
+        } catch (failure: java.util.concurrent.RejectedExecutionException) {
+            event.player.sendMessage(mm("<red>Хранилище пула занято. Изменение не принято; повторите позже."))
         }
-
-        recentEdits.put(event.player.uniqueId, poolId)
         return true
     }
-
-    // === Tasks ===
 
     private fun startShowTask() {
         val delay = config.editorSettings.particleShowDelayTicks
         val interval = config.editorSettings.particleShowIntervalTicks
-
-        showTask =
-            scheduler.runTimerAsync(delay, interval) {
-                val settings = config.editorSettings
-                val radius = settings.nearbyRadius
-                val particleType = settings.particleType
-                val particleCount = settings.particleCount
-                val particleExtra = settings.particleExtra
-                val particleOffset = settings.particleOffset
-
-                val toRemove = mutableListOf<UUID>()
-
-                for ((uuid, poolId) in editingPlayers) {
-                    val player = playerProvider.getPlayer(uuid)
-                    if (player == null || !player.isOnline) {
-                        toRemove.add(uuid)
-                        continue
-                    }
-
-                    val nearby = LocationPoolRepository.getNearbyLocations(poolId, player.location, radius)
-                    nearby.forEach { loc ->
-                        ParticleManager.queue(
-                            ParticleBuilder(particleType)
-                                .location(loc)
-                                .count(particleCount)
-                                .extra(particleExtra)
-                                .offset(particleOffset, particleOffset, particleOffset)
-                                .receivers(listOf(player)),
-                        )
-                    }
-                }
-
-                toRemove.forEach { editingPlayers.remove(it) }
+        showTask = scheduler.runTimer(delay, interval) {
+            val epoch = generation
+            val entries = editingPlayers.entries.iterator()
+            nativeWork.submit({ generation == epoch }) {
+                if (!entries.hasNext()) return@submit true
+                val (uuid, poolId) = entries.next()
+                showForPlayer(uuid, poolId, epoch)
+                !entries.hasNext()
             }
+        }
+    }
+
+    private fun showForPlayer(uuid: UUID, poolId: String, epoch: Long) {
+        val player = playerProvider.getPlayer(uuid)
+        if (player == null || !player.isOnline) {
+            editingPlayers.remove(uuid, poolId)
+            return
+        }
+        val pool = LocationPoolRepository.get(poolId) ?: return
+        val store = ARC.plugin?.locationPoolConfig ?: return
+        if (pendingShows.putIfAbsent(uuid, epoch) != null) return
+        val settings = config.editorSettings
+        val radius = settings.nearbyRadius
+        val particleType = settings.particleType
+        val particleCount = settings.particleCount
+        val particleExtra = settings.particleExtra
+        val particleOffset = settings.particleOffset
+        val center = ServerLocation.of(player.location)
+        // The worker searches only its own coordinate mirror. Bukkit capture and emission
+        // each consume the same plugin-wide native budget, one player/particle per step.
+        store.nearby(pool, center, radius).thenCompose { nearby ->
+            val points = nearby.iterator()
+            nativeWork.call({ generation == epoch }) {
+                nativeWork.submit({ generation == epoch && editingPlayers[uuid] == poolId }) {
+                    if (!points.hasNext()) return@submit true
+                    val point = points.next()
+                    val current = playerProvider.getPlayer(uuid)
+                    if (current == null || !current.isOnline || current.world.name != center.world) return@submit true
+                    val location = point.toLocation()
+                    if (location != null && current.location.distanceSquared(location) <= radius * radius) {
+                        ParticleManager.queue(ParticleBuilder(particleType).location(location).count(particleCount)
+                            .extra(particleExtra).offset(particleOffset, particleOffset, particleOffset)
+                            .receivers(listOf(current)))
+                    }
+                    !points.hasNext()
+                }
+            }.thenCompose { it }
+        }.whenComplete { _, _ -> pendingShows.remove(uuid, epoch) }
     }
 
     private fun startTimeoutTask() {
         val delay = config.editorSettings.timeoutCheckDelayTicks
         val interval = config.editorSettings.timeoutCheckIntervalTicks
-
-        timeoutTask =
-            scheduler.runTimerAsync(delay, interval) {
-                for (uuid in editingPlayers.keys) {
-                    if (recentEdits.getIfPresent(uuid) == null) {
-                        cancelEditing(uuid, timeout = true)
-                    }
-                }
+        timeoutTask = scheduler.runTimer(delay, interval) {
+            val epoch = generation
+            val players = editingPlayers.keys.iterator()
+            nativeWork.submit({ generation == epoch }) {
+                if (!players.hasNext()) return@submit true
+                val uuid = players.next()
+                if (recentEdits.getIfPresent(uuid) == null) cancelEditing(uuid, timeout = true)
+                !players.hasNext()
             }
+        }
     }
 
     // === Stats ===

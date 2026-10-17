@@ -30,10 +30,10 @@ import ru.arc.util.Logging.error
 import java.util.UUID
 
 /** Read-only Lands guidance. All entities are transient and visible to just their owner. */
-internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener, AutoCloseable {
+internal class ClaimBlockGuide(private val config: OnboardingConfig, particleColors: Set<Int>) : Listener, AutoCloseable {
     private val integration = LandsIntegration.of(ARC.instance)
     private val tasks = LifecycleTaskScope()
-    private val particles = ClaimGuideParticles.create()
+    private val particles = ClaimGuideParticles.create(particleColors)
     private val sessions = mutableMapOf<UUID, Session>()
     private val views = mutableMapOf<UUID, ClaimGuideView>()
     private val failedViewers = mutableSetOf<UUID>()

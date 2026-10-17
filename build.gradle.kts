@@ -22,7 +22,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath("ru.ruscrafting.arc:arc-core-integration-testing:2.7.34")
+        classpath("ru.ruscrafting.arc:arc-core-integration-testing:2.7.39")
     }
 }
 
@@ -76,10 +76,10 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.420"
+version = "1.4.421"
 description = "ARC"
 val pluginVersion = version.toString()
-val arcCoreVersion = "2.7.34"
+val arcCoreVersion = "2.7.39"
 val arcCorePluginVersion: String by project
 val arcDungeonsPluginVersion: String by project
 val landsJar = providers.gradleProperty("landsJar").orNull?.let(::file)
@@ -88,6 +88,20 @@ val landsCompileDependency: Any = landsJar?.let { files(it) } ?: libs.com.github
 val crateApiJar = providers.gradleProperty("crateApiJar").orNull?.let(::file)
 if (crateApiJar != null) require(crateApiJar.isFile) { "Crate API JAR does not exist: $crateApiJar" }
 val crateApiDependency: Any = crateApiJar?.let { files(it) } ?: "ru.ruscrafting.arc:arc-crate-api:0.1.0"
+
+// Compile against the host facade only. Its fat runtime JAR embeds older consumer
+// implementation classes; allowing those onto compileClasspath can mask the explicitly
+// selected arc-core version (for example the new viewer-glow completion methods).
+val coreHostCompile by configurations.creating { isCanBeConsumed = false; isTransitive = false }
+val coreHostCompileJar = tasks.register<Jar>("coreHostCompileJar") {
+    from({ coreHostCompile.map { zipTree(it) } })
+    include("ru/arc/coreplugin/**")
+    archiveFileName.set("arc-core-host-compile.jar")
+    destinationDirectory.set(layout.buildDirectory.dir("provider-compile-api"))
+    isPreserveFileTimestamps = false
+    isReproducibleFileOrder = true
+}
+
 
 java { toolchain { languageVersion.set(JavaLanguageVersion.of(25)) } }
 kotlin { jvmToolchain(25) }
@@ -154,17 +168,19 @@ dependencies {
     implementation("ru.ruscrafting.arc:arc-core-telemetry:$arcCoreVersion")
     implementation("ru.ruscrafting.arc:arc-core-paper:$arcCoreVersion")
     implementation("ru.ruscrafting.arc:arc-core-paper-api:$arcCoreVersion")
-    compileOnly("ru.ruscrafting:ArcCore:$arcCorePluginVersion") { isTransitive = false }
-    testImplementation("ru.ruscrafting:ArcCore:$arcCorePluginVersion") { isTransitive = false }
+    coreHostCompile("ru.ruscrafting:ArcCore:$arcCorePluginVersion")
+    compileOnly(files(coreHostCompileJar))
+    testCompileOnly(files(coreHostCompileJar))
+    testRuntimeOnly("ru.ruscrafting:ArcCore:$arcCorePluginVersion") { isTransitive = false }
     implementation("ru.ruscrafting.arc:arc-core-menu:$arcCoreVersion")
     implementation("ru.ruscrafting.arc:arc-core-paper-menu:$arcCoreVersion")
     implementation("ru.ruscrafting.arc:arc-core-ai:$arcCoreVersion")
     // ARC owns this service API at runtime. Keep the unrelocated contract classes in its provider JAR.
     implementation(project(":arc-staff-spells-api"))
     implementation(project(":arc-dungeons-api"))
-    implementation("ru.ruscrafting.arc:arc-mounts-api:0.1.0")
+    implementation("ru.ruscrafting.arc:arc-mounts-api:0.1.1")
     implementation("ru.ruscrafting.arc:arc-origin-api:0.1.1")
-    implementation("ru.ruscrafting.arc:arc-contracts-api:0.1.0")
+    implementation("ru.ruscrafting.arc:arc-contracts-api:0.1.1")
 
     // snakeyaml-engine comes transitively from arc-core
 
@@ -402,6 +418,7 @@ tasks {
         archiveClassifier.set("")
 
         mergeServiceFiles()
+        exclude("ru/arc/paper/runtime/PaperNativeCleanupServiceProvider*.class")
         transform(
             com.github.jengelman.gradle.plugins.shadow.transformers
                 .Log4j2PluginsCacheFileTransformer(),
@@ -411,7 +428,7 @@ tasks {
 
         // ArcCore owns these runtime types. Keep consumer factories and domain APIs local.
         exclude("ru/arc/paper/api/ArcSql*", "ru/arc/paper/api/ArcRedis*", "ru/arc/paper/api/ArcMetric*", "ru/arc/paper/api/ArcSchematic*")
-        exclude("ru/arc/paper/api/ArcBlockProtectionService*")
+        exclude("ru/arc/paper/api/ArcBlockProtectionService*", "ru/arc/paper/api/ArcNativeCleanupService*")
         exclude("ru/arc/paper/api/ArcVisualPacketBudget*", "ru/arc/paper/api/VisualPacketAdmission*")
         exclude("ru/arc/paper/packet/PaperVisualPacketRuntime*", "ru/arc/metrics/core/MetricPoint*")
         exclude("ru/arc/paper/sql/PaperSqlServiceProvider*", "ru/arc/paper/sql/SharedPaperSqlService*")
@@ -597,9 +614,9 @@ val prepareE2ePaper = e2ePaperPin?.let { (name, sha256) ->
 // These immutable artifacts were built and tested in their owning repositories.
 val extractedArtifactVersions = mapOf(
     "ArcCore" to arcCorePluginVersion,
-    "ArcMounts" to "0.1.1",
-    "ArcOrigin" to "0.1.1",
-    "ArcContracts" to "0.1.2",
+    "ArcMounts" to "0.1.11",
+    "ArcOrigin" to "0.1.36",
+    "ArcContracts" to "0.1.11",
     "ArcContractsContractTestFixture" to "0.1.2",
     "ArcContractsContractCrashFixture" to "0.1.2",
 )
