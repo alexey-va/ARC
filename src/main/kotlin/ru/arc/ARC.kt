@@ -144,6 +144,7 @@ open class ARC : JavaPlugin() {
     private var sqlConsumer: AutoCloseable? = null
     private var metricsService: PaperArcMetricsProvider? = null
     private var sharedServiceMetrics: SharedServiceMetrics? = null
+    private var coreServices: ArcCoreServices? = null
 
     internal fun sharedServiceSnapshot(): Map<String, Int> = sharedServiceMetrics?.snapshot().orEmpty()
 
@@ -178,13 +179,14 @@ open class ARC : JavaPlugin() {
         val sharedServices = checkNotNull(server.servicesManager.load(ArcCoreServices::class.java)) {
             "ArcCore services are unavailable; install and enable ArcCore before ARC"
         }
+        coreServices = sharedServices
         sqlService = sharedServices.sql
         sqlConsumer = PaperSqlServices.installConsumer(this)
         redisService = sharedServices.redis
         metricsService = sharedServices.metrics.also {
             sharedServiceMetrics = SharedServiceMetrics(it, sqlService, redisService)
         }
-        visualPacketRuntime = PaperVisualPacketRuntime.install(this)
+        visualPacketRuntime = sharedServices.visualPackets
         val configRoot = dataPath
         ru.arc.core.async {
             try {
@@ -266,9 +268,8 @@ open class ARC : JavaPlugin() {
         // ArcCore owns the providers; ARC only releases its own resources and exporter.
         metricsService?.rebind(null)
         metricsService = null
-        runCatching { visualPacketRuntime?.close() }
-            .onFailure { failure -> error("Failed to close the visual packet budget", failure) }
         visualPacketRuntime = null
+        coreServices = null
         baseSidebar?.close()
         baseSidebar = null
         tablist?.close()
@@ -297,16 +298,11 @@ open class ARC : JavaPlugin() {
         if (runtimeProfile == ArcRuntimeProfile.FULL) Portal.removeAll()
         // Reload YAML from disk before modules re-read configs (announce delay, etc.).
         ConfigManager.reloadAll()
-        visualPacketRuntime?.let { runtime ->
+        coreServices?.let { services ->
             try {
-                runtime.reload(
-                    ConfigManager.of(
-                        dataPath.resolve(ConfigManager.MODULE_YAML_DIR),
-                        PaperVisualPacketRuntime.CONFIG_FILE,
-                    ),
-                )
+                services.reloadVisualPacketConfig()
             } catch (failure: IllegalArgumentException) {
-                warn("Invalid modules/visual-packets.yml; keeping active visual packet limits: {}", failure.message)
+                warn("Invalid plugins/ArcCore/visual-packets.yml; keeping active visual packet limits: {}", failure.message)
             }
         }
         if (ArcRuntimeProfile.load(dataPath) != runtimeProfile) {

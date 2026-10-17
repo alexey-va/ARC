@@ -20,6 +20,8 @@ ARC_CORE_ENTRIES = {
     "ru/arc/paper/api/ArcSchematicService.class",
     "ru/arc/paper/api/ArcBlockProtectionService.class",
     "ru/arc/paper/api/ArcBlockProtectionService$DefaultImpls.class",
+    "ru/arc/paper/api/ArcVisualPacketBudget.class",
+    PAPER_API_VISUAL_CLASS,
     *(f"{provider}.class" for provider in PROVIDER_CLASSES),
     *(f"{prefix}.class" for prefix in ARC_CORE_RUNTIME_CLASS_PREFIXES),
     *(f"{package}CoreType.class" for package in ARC_CORE_RUNTIME_PACKAGES),
@@ -33,7 +35,7 @@ class ArtifactOwnershipTest(unittest.TestCase):
         for name, (domain, entry, service, resources) in DOMAINS.items():
             with self.subTest(plugin=name):
                 api = f"ru/arc/{domain}/api/{service}.class"
-                host = {"ru/arc/ARC.class", api, PAPER_API_VISUAL_CLASS, "ru/arc/paper/api/ArcSidebarService.class"}
+                host = {"ru/arc/ARC.class", api, "ru/arc/paper/api/ArcSidebarService.class"}
                 child = {f"ru/arc/{domain}/{entry}.class", *resources}
                 descriptor = f"name: {name}\ndepend: [ARC]"
                 self.assertEqual([], verify(host, ARC_CORE_ENTRIES, child, ARC_DESCRIPTOR, ARC_CORE_DESCRIPTOR, descriptor, name))

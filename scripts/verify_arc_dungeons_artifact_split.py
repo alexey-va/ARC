@@ -4,13 +4,15 @@
 from __future__ import annotations
 
 import argparse
+import re
+import subprocess
 import sys
 import zipfile
 from pathlib import Path
 
 
 PAPER_API_PACKAGE = "ru/arc/paper/api/"
-ARC_CORE_API_PREFIXES = ("ArcSql", "ArcRedis", "ArcMetric", "ArcSchematic", "ArcBlockProtectionService")
+ARC_CORE_API_PREFIXES = ("ArcSql", "ArcRedis", "ArcMetric", "ArcSchematic", "ArcBlockProtectionService", "ArcVisualPacketBudget", "VisualPacketAdmission")
 PAPER_API_VISUAL_CLASS = "ru/arc/paper/api/VisualPacketAdmission.class"
 DOMAIN_API_PACKAGES = (
     "ru/arc/dungeons/api/",
@@ -28,12 +30,14 @@ PROVIDER_CLASSES = (
     "ru/arc/paper/metrics/PaperArcMetricsProvider",
 )
 ARC_CORE_RUNTIME_CLASS_PREFIXES = (
+    "ru/arc/paper/packet/PaperVisualPacketRuntime",
     "ru/arc/redis/RedisTelemetrySink",
     "ru/arc/redis/NoOpRedisTelemetrySink",
     "ru/arc/redis/RedisOperation",
     "ru/arc/redis/RedisOperationResult",
     "ru/arc/redis/RedisReconnectPath",
     "ru/arc/redis/RedisReconnectResult",
+    "ru/arc/metrics/core/MetricPoint",
 )
 ARC_CORE_RUNTIME_PACKAGES = (
     "io/micrometer/core/",
@@ -115,10 +119,6 @@ def verify_arc_core_ownership(
     for entry in arc_api:
         if entry.rsplit("/", 1)[-1].startswith(ARC_CORE_API_PREFIXES):
             violations.append(f"ARC JAR embeds ArcCore-owned Paper API class {entry}")
-    if PAPER_API_VISUAL_CLASS not in arc_api:
-        violations.append(f"ARC JAR is missing ARC-owned Paper API class {PAPER_API_VISUAL_CLASS}")
-    if PAPER_API_VISUAL_CLASS in arc_core_api:
-        violations.append(f"ArcCore JAR embeds ARC-owned Paper API class {PAPER_API_VISUAL_CLASS}")
     for name, child in children:
         for entry in class_entries(child, PAPER_API_PACKAGE):
             violations.append(f"{name} JAR embeds shared Paper API class {entry}")
@@ -260,6 +260,32 @@ def verify(
     return violations
 
 
+def verify_shared_host_linkage(jar_path: Path) -> list[str]:
+    """Verify actual consumer calls across the shared host classloader boundary."""
+    shared_types = (b"ru/arc/metrics/core/MetricPoint", b"ru/arc/paper/packet/PaperVisualPacketRuntime")
+    with zipfile.ZipFile(jar_path) as archive:
+        consumers = []
+        for name in archive.namelist():
+            if name.endswith(".class") and name.startswith("ru/arc/"):
+                bytecode = archive.read(name)
+                if any(shared_type in bytecode for shared_type in shared_types):
+                    consumers.append(name[:-6].replace("/", "."))
+    if not consumers:
+        return []
+    result = subprocess.run(["javap", "-c", "-p", "-classpath", str(jar_path), *consumers],
+                            capture_output=True, text=True)
+    if result.returncode:
+        raise ValueError("could not inspect shared host bytecode linkage: " + result.stderr.strip())
+    violations = []
+    if re.search(r'MetricPoint\."<init>":[^\n]*DefaultConstructorMarker', result.stdout):
+        violations.append("ARC calls host-owned MetricPoint through a plugin-private Kotlin DefaultConstructorMarker")
+    if re.search(r'PaperVisualPacketRuntime(?:\$Companion)?\.install(?:\$default)?:', result.stdout):
+        violations.append("ARC installs the host-owned visual packet runtime; only ArcCore may install it")
+    if re.search(r'PaperVisualPacketRuntime\.close:', result.stdout):
+        violations.append("ARC closes the host-owned visual packet runtime; only ArcCore may close it")
+    return violations
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--arc-jar", required=True, type=Path, help="built ARC plugin JAR")
@@ -279,7 +305,8 @@ def main(argv: list[str] | None = None) -> int:
             arc_core_descriptor,
             dungeons_descriptor,
         )
-    except ValueError as failure:
+        violations.extend(verify_shared_host_linkage(args.arc_jar))
+    except (ValueError, OSError) as failure:
         print(f"ARC_DUNGEONS_ARTIFACT_SPLIT_ERROR {failure}", file=sys.stderr)
         return 2
 

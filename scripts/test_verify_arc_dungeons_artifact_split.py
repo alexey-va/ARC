@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Small stdlib regression checks for the ArcDungeons artifact boundary."""
 
+import subprocess
+import tempfile
 import unittest
+import zipfile
+from pathlib import Path
 
 from verify_arc_dungeons_artifact_split import (
     ARC_CORE_API_PREFIXES,
@@ -10,6 +14,7 @@ from verify_arc_dungeons_artifact_split import (
     PAPER_API_VISUAL_CLASS,
     PROVIDER_CLASSES,
     verify,
+    verify_shared_host_linkage,
 )
 
 
@@ -17,7 +22,6 @@ ARC_ENTRIES = {
     "ru/arc/ARC.class",
     "ru/arc/redis/RedisOperations.class",
     "ru/arc/redis/ChannelListener.class",
-    PAPER_API_VISUAL_CLASS,
     "ru/arc/paper/api/ArcSidebarService.class",
     "ru/arc/paper/api/ArcItemMaterializer.class",
     "ru/arc/dungeons/DungeonHostServices.class",
@@ -34,6 +38,8 @@ ARC_CORE_ENTRIES = {
     "ru/arc/paper/api/ArcSchematicService.class",
     "ru/arc/paper/api/ArcBlockProtectionService.class",
     "ru/arc/paper/api/ArcBlockProtectionService$DefaultImpls.class",
+    "ru/arc/paper/api/ArcVisualPacketBudget.class",
+    PAPER_API_VISUAL_CLASS,
     *(f"{provider}.class" for provider in PROVIDER_CLASSES),
     *(f"{prefix}.class" for prefix in ARC_CORE_RUNTIME_CLASS_PREFIXES),
     *(f"{package}CoreType.class" for package in ARC_CORE_RUNTIME_PACKAGES),
@@ -64,6 +70,87 @@ ARC_CORE_DESCRIPTOR = """\
 name: ArcCore
 main: ru.arc.coreplugin.ArcCorePlugin
 """
+
+
+class SharedHostLinkageTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.temporary = tempfile.TemporaryDirectory()
+        cls.root = Path(cls.temporary.name)
+        sources = {
+            "kotlin/jvm/internal/DefaultConstructorMarker.java": """
+                package kotlin.jvm.internal;
+                public final class DefaultConstructorMarker {}
+            """,
+            "ru/arc/metrics/core/MetricPoint.java": """
+                package ru.arc.metrics.core;
+                public final class MetricPoint {
+                    public MetricPoint(String name, String description, double value) {}
+                    public MetricPoint(String name, String description, double value,
+                        java.util.Map tags, int mask, kotlin.jvm.internal.DefaultConstructorMarker marker) {}
+                }
+            """,
+            "ru/arc/paper/packet/PaperVisualPacketRuntime.java": """
+                package ru.arc.paper.packet;
+                public final class PaperVisualPacketRuntime {
+                    public static PaperVisualPacketRuntime install() { return new PaperVisualPacketRuntime(); }
+                    public void close() {}
+                    public int snapshot() { return 0; }
+                }
+            """,
+            "ru/arc/SafeConsumer.java": """
+                package ru.arc;
+                public final class SafeConsumer {
+                    public Object sample(ru.arc.paper.packet.PaperVisualPacketRuntime runtime) {
+                        return new ru.arc.metrics.core.MetricPoint("used", "used packets", runtime.snapshot());
+                    }
+                }
+            """,
+            "ru/arc/RuntimeOwner.java": """
+                package ru.arc;
+                public final class RuntimeOwner {
+                    public void run() { ru.arc.paper.packet.PaperVisualPacketRuntime.install().close(); }
+                }
+            """,
+            "ru/arc/LegacyMetricConsumer.java": """
+                package ru.arc;
+                public final class LegacyMetricConsumer {
+                    public Object sample() {
+                        return new ru.arc.metrics.core.MetricPoint("used", "used packets", 1, null, 8, null);
+                    }
+                }
+            """,
+        }
+        files = []
+        for relative, source in sources.items():
+            path = cls.root / "src" / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(source)
+            files.append(str(path))
+        subprocess.run(["javac", "-d", str(cls.root / "classes"), *files], check=True, capture_output=True)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.temporary.cleanup()
+
+    def verify_consumer(self, name: str) -> list[str]:
+        path = self.root / f"{name}.jar"
+        entry = f"ru/arc/{name}.class"
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.write(self.root / "classes" / entry, entry)
+        return verify_shared_host_linkage(path)
+
+    def test_shared_runtime_read_and_explicit_metric_constructor_pass(self) -> None:
+        self.assertEqual([], self.verify_consumer("SafeConsumer"))
+
+    def test_consumer_cannot_install_or_close_host_runtime(self) -> None:
+        violations = self.verify_consumer("RuntimeOwner")
+        self.assertTrue(any("only ArcCore may install" in violation for violation in violations))
+        self.assertTrue(any("only ArcCore may close" in violation for violation in violations))
+
+    def test_private_kotlin_marker_cannot_cross_host_dto_boundary(self) -> None:
+        self.assertTrue(any("DefaultConstructorMarker" in violation
+                            for violation in self.verify_consumer("LegacyMetricConsumer")))
 
 
 class ArtifactSplitTest(unittest.TestCase):
@@ -110,23 +197,23 @@ class ArtifactSplitTest(unittest.TestCase):
         self.assertTrue(any("provider implementation ru/arc/paper/redis/PaperRedisServiceProvider" in value for value in violations))
 
     def test_provider_api_families_belong_to_arc_core(self) -> None:
-        self.assertIn(PAPER_API_VISUAL_CLASS, ARC_ENTRIES)
-        self.assertNotIn(PAPER_API_VISUAL_CLASS, ARC_CORE_ENTRIES)
+        self.assertNotIn(PAPER_API_VISUAL_CLASS, ARC_ENTRIES)
+        self.assertIn(PAPER_API_VISUAL_CLASS, ARC_CORE_ENTRIES)
         self.assertTrue(all(
             entry.rsplit("/", 1)[-1].startswith(ARC_CORE_API_PREFIXES)
             for entry in ARC_CORE_ENTRIES
             if entry.startswith("ru/arc/paper/api/")
         ))
 
-        visual_in_core = verify(
-            ARC_ENTRIES,
-            ARC_CORE_ENTRIES | {PAPER_API_VISUAL_CLASS},
+        visual_in_arc = verify(
+            ARC_ENTRIES | {PAPER_API_VISUAL_CLASS},
+            ARC_CORE_ENTRIES,
             DUNGEONS_ENTRIES,
             ARC_DESCRIPTOR,
             ARC_CORE_DESCRIPTOR,
             DUNGEONS_DESCRIPTOR,
         )
-        self.assertTrue(any("ArcCore JAR embeds ARC-owned Paper API class" in value for value in visual_in_core))
+        self.assertTrue(any("ARC JAR embeds ArcCore-owned Paper API class" in value for value in visual_in_arc))
 
         shared_api_in_arc = verify(
             ARC_ENTRIES | {"ru/arc/paper/api/ArcRedisSettings.class"},
@@ -138,15 +225,30 @@ class ArtifactSplitTest(unittest.TestCase):
         )
         self.assertTrue(any("ARC JAR embeds ArcCore-owned Paper API class" in value for value in shared_api_in_arc))
 
-        visual_missing_from_arc = verify(
-            ARC_ENTRIES - {PAPER_API_VISUAL_CLASS},
-            ARC_CORE_ENTRIES,
+        visual_missing_from_core = verify(
+            ARC_ENTRIES,
+            ARC_CORE_ENTRIES - {PAPER_API_VISUAL_CLASS},
             DUNGEONS_ENTRIES,
             ARC_DESCRIPTOR,
             ARC_CORE_DESCRIPTOR,
             DUNGEONS_DESCRIPTOR,
         )
-        self.assertTrue(any("ARC JAR is missing ARC-owned Paper API class" in value for value in visual_missing_from_arc))
+        self.assertTrue(any("missing shared Paper API family VisualPacketAdmission" in value for value in visual_missing_from_core))
+
+    def test_visual_budget_is_a_single_shared_host_contract(self) -> None:
+        budget = "ru/arc/paper/api/ArcVisualPacketBudget.class"
+        for api in (budget, PAPER_API_VISUAL_CLASS):
+            with self.subTest(api=api):
+                missing = verify(ARC_ENTRIES, ARC_CORE_ENTRIES - {api}, DUNGEONS_ENTRIES,
+                                 ARC_DESCRIPTOR, ARC_CORE_DESCRIPTOR, DUNGEONS_DESCRIPTOR)
+                self.assertTrue(any("missing shared Paper API family" in value for value in missing))
+                duplicate = verify(ARC_ENTRIES, ARC_CORE_ENTRIES, DUNGEONS_ENTRIES | {api},
+                                   ARC_DESCRIPTOR, ARC_CORE_DESCRIPTOR, DUNGEONS_DESCRIPTOR)
+                self.assertTrue(any(f"ArcDungeons JAR embeds shared Paper API class {api}" in value for value in duplicate))
+        for runtime in ("ru/arc/paper/packet/PaperVisualPacketRuntime", "ru/arc/metrics/core/MetricPoint"):
+            duplicate = verify(ARC_ENTRIES | {f"{runtime}.class"}, ARC_CORE_ENTRIES, DUNGEONS_ENTRIES,
+                               ARC_DESCRIPTOR, ARC_CORE_DESCRIPTOR, DUNGEONS_DESCRIPTOR)
+            self.assertTrue(any(f"ARC JAR embeds ArcCore runtime class {runtime}" in value for value in duplicate))
 
     def test_block_protection_api_and_default_impls_are_host_owned(self) -> None:
         service = "ru/arc/paper/api/ArcBlockProtectionService.class"
