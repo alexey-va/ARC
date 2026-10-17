@@ -1,0 +1,16 @@
+# Only the owner sees their nearby homes and warps. Open settings with Shift + right-click.
+refresh-ticks: 100
+view-distance: 32.0
+scale: 1.6
+label-scale: 0.6
+# Optional ItemsAdder POTION model with its floor at local Y=-1 and height 1.5.
+# An empty or unavailable model uses a vanilla beacon without a resource pack.
+model-id: ""
+colors:
+  home: "#68D8FF"
+  warp: "#FFC14D"
+text:
+  home: "Дом"
+  warp: "Варп"
+  label: "<kind> · <white><name><newline><#E8DFD2>Shift + ПКМ · Настройки"
+  unavailable: "<#F4BD6A>Не удалось открыть настройки точки. Попробуйте ещё раз."

@@ -24,6 +24,14 @@ object HelpCenterModule : PluginModule {
 
     fun isAvailable(): Boolean = controller != null
 
+    /** Opens the existing point settings after the caller has freshly verified the player's own home. */
+    fun openHomeSettings(player: Player, home: HelpCenterHome): Boolean {
+        val current = controller ?: return false
+        return runCatching { current.openHome(player, home) }
+            .onFailure { failure -> error("Could not open home settings for {}", player.name, failure) }
+            .isSuccess
+    }
+
     fun open(player: Player, page: HelpCenterPage = HelpCenterPage.ROOT): Boolean {
         val current = controller ?: return false
         return runCatching { current.open(player, page) }

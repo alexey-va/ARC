@@ -1053,7 +1053,7 @@ internal class HelpCenterController(
         )
     }
 
-    private fun openHome(player: Player, home: HelpCenterHome) {
+    fun openHome(player: Player, home: HelpCenterHome) {
         markNavigation(player)
         showDialog(
             player,
