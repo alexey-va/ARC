@@ -1,15 +1,17 @@
 package ru.arc.hooks.elitemobs
 
 import com.magmaguy.elitemobs.instanced.MatchInstance
-import com.magmaguy.elitemobs.instanced.InstancePlayerMovement
 import com.magmaguy.elitemobs.instanced.dungeons.DungeonInstance
-import com.magmaguy.elitemobs.playerdata.database.PlayerData
+import com.magmaguy.elitemobs.magmacore.match.Match
+import com.magmaguy.elitemobs.magmacore.match.MatchCore
+import com.magmaguy.elitemobs.magmacore.match.MatchPhase
+import com.magmaguy.elitemobs.magmacore.match.MatchPlayer
+import com.magmaguy.elitemobs.magmacore.match.MatchSettings
+import com.magmaguy.elitemobs.magmacore.match.MatchSpace
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.mockkStatic
-import io.mockk.unmockkStatic
 import org.bukkit.Location
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
@@ -27,7 +29,22 @@ class EMCheckpointTeleporterTest : FreeSpec({
     lateinit var world: org.bukkit.World
     lateinit var match: DungeonInstance
     lateinit var teleporter: EMCheckpointTeleporter
-    lateinit var nativeGuard: MatchInstance.MatchInstanceEvents
+    lateinit var nativeGuard: Listener
+    val nativeParticipants = mutableListOf<MatchPlayer>()
+    var inside: (Location) -> Boolean = { true }
+
+    @Suppress("UNCHECKED_CAST")
+    fun instances() = MatchInstance::class.java.getDeclaredField("instances").apply {
+        isAccessible = true
+    }.get(null) as MutableSet<MatchInstance>
+
+    fun trackNative(target: Player) {
+        val participant = object : MatchPlayer(target, match) {}
+        nativeParticipants += participant
+        MatchCore::class.java.getDeclaredMethod("track", MatchPlayer::class.java).apply {
+            isAccessible = true
+        }.invoke(null, participant)
+    }
 
     beforeEach {
         paper = MockBukkitTestRuntime.open()
@@ -41,18 +58,30 @@ class EMCheckpointTeleporterTest : FreeSpec({
         every { match.state } returns MatchInstance.InstancedRegionState.ONGOING
         every { match.world } returns world
         every { match.players } returns linkedSetOf(player)
-        every { match["isInRegion"](any<Location>()) } returns true
-        // Native movement reads these fields directly, rather than the public getters.
+        // EliteMobs retains its facade roster; current native movement is owned by MagmaCore.
         for ((name, value) in mapOf(
             "world" to world,
             "state" to MatchInstance.InstancedRegionState.ONGOING,
             "players" to hashSetOf(player),
             "spectators" to hashSetOf<Player>(),
         )) MatchInstance::class.java.getDeclaredField(name).apply { isAccessible = true }.set(match, value)
-        mockkStatic(MatchInstance::class, PlayerData::class)
-        every { MatchInstance.getPlayerInstance(any()) } answers { if (firstArg<Player>() === player) match else null }
-        every { PlayerData.getMatchInstance(any<Player>()) } answers { if (firstArg<Player>() === player) match else null }
-        nativeGuard = MatchInstance.MatchInstanceEvents()
+        instances().add(match)
+        inside = { true }
+        nativeParticipants.clear()
+        val settings = MatchSettings.builder().space(MatchSpace.region(world) { inside(it) }).build()
+        for ((name, value) in mapOf(
+            "settings" to settings,
+            "phase" to MatchPhase.ONGOING,
+            "participants" to nativeParticipants,
+            "open" to true,
+        )) Match::class.java.getDeclaredField(name).apply { isAccessible = true }.set(match, value)
+        every { match.settings } answers { callOriginal() }
+        every { match.isOpen } answers { callOriginal() }
+        every { match.contains(any()) } answers { callOriginal() }
+        every { match.getMatchPlayer(any()) } answers { callOriginal() }
+        trackNative(player)
+        nativeGuard = Class.forName("com.magmaguy.elitemobs.magmacore.match.TeleportGuard")
+            .getDeclaredConstructor().apply { isAccessible = true }.newInstance() as Listener
         paper.server.pluginManager.registerEvents(nativeGuard, plugin)
     }
 
@@ -62,11 +91,17 @@ class EMCheckpointTeleporterTest : FreeSpec({
     }
 
     afterEach {
-        unmockkStatic(MatchInstance::class, PlayerData::class)
+        nativeParticipants.forEach { participant ->
+            MatchCore::class.java.getDeclaredMethod("untrack", MatchPlayer::class.java).apply {
+                isAccessible = true
+            }.invoke(null, participant)
+        }
+        instances().remove(match)
         paper.close()
     }
 
-    fun nativeAuthorizationActive(target: Player = player): Boolean = InstancePlayerMovement::class.java
+    fun nativeAuthorizationActive(target: Player = player): Boolean =
+        Class.forName("com.magmaguy.elitemobs.magmacore.match.MatchMovement")
         .getDeclaredMethod("hasAuthorization", Player::class.java).apply { isAccessible = true }
         .invoke(null, target) as Boolean
 
@@ -101,32 +136,20 @@ class EMCheckpointTeleporterTest : FreeSpec({
 
     listOf(false, true).forEach { nativeRegisteredLast ->
         "real native membership is respected with nativeRegisteredLast=$nativeRegisteredLast" {
-            // Native guards read fields and the static instance set directly, not mocked getters.
-            fun setField(name: String, value: Any) = MatchInstance::class.java.getDeclaredField(name).apply {
-                isAccessible = true
-            }.set(match, value)
-            setField("world", world)
-            setField("players", hashSetOf(player))
-            setField("spectators", hashSetOf<Player>())
-            @Suppress("UNCHECKED_CAST")
-            val instances = MatchInstance::class.java.getDeclaredField("instances").apply {
-                isAccessible = true
-            }.get(null) as MutableSet<MatchInstance>
-            instances.add(match)
-            try {
-                if (nativeRegisteredLast) HandlerList.unregisterAll(nativeGuard)
-                installTeleporter()
-                if (nativeRegisteredLast) paper.server.pluginManager.registerEvents(nativeGuard, plugin)
-                val destination = world.location(12.0, 70.0, 12.0)
-                val ordinary = PlayerTeleportEvent(player, player.location, destination, PlayerTeleportEvent.TeleportCause.COMMAND)
-                paper.callEvent(ordinary)
-                ordinary.isCancelled shouldBe true
-                teleporter.teleport(player, destination, instance = true) shouldBe true
-                nativeAuthorizationActive() shouldBe false
-                val subsequent = PlayerTeleportEvent(player, player.location, world.location(15.0, 70.0, 15.0), PlayerTeleportEvent.TeleportCause.PLUGIN)
-                paper.callEvent(subsequent)
-                subsequent.isCancelled shouldBe true
-            } finally { instances.remove(match) }
+            MatchInstance.getPlayerInstance(player) shouldBe match
+            MatchCore.matchOf(player) shouldBe match
+            if (nativeRegisteredLast) HandlerList.unregisterAll(nativeGuard)
+            installTeleporter()
+            if (nativeRegisteredLast) paper.server.pluginManager.registerEvents(nativeGuard, plugin)
+            val destination = world.location(12.0, 70.0, 12.0)
+            val ordinary = PlayerTeleportEvent(player, player.location, destination, PlayerTeleportEvent.TeleportCause.COMMAND)
+            paper.callEvent(ordinary)
+            ordinary.isCancelled shouldBe true
+            teleporter.teleport(player, destination, instance = true) shouldBe true
+            nativeAuthorizationActive() shouldBe false
+            val subsequent = PlayerTeleportEvent(player, player.location, world.location(15.0, 70.0, 15.0), PlayerTeleportEvent.TeleportCause.PLUGIN)
+            paper.callEvent(subsequent)
+            subsequent.isCancelled shouldBe true
         }
     }
 
@@ -156,7 +179,7 @@ class EMCheckpointTeleporterTest : FreeSpec({
 
     "native movement rejects a destination outside the instance" {
         installTeleporter()
-        every { match["isInRegion"](any<Location>()) } answers { firstArg<Location>().blockX != 12 }
+        inside = { it.blockX != 12 }
 
         teleporter.teleport(player, world.location(12.0, 70.0, 12.0), instance = true) shouldBe false
         nativeAuthorizationActive() shouldBe false
@@ -211,14 +234,14 @@ class EMCheckpointTeleporterTest : FreeSpec({
         every { throwing.uniqueId } returns player.uniqueId
         every { throwing.world } returns world
         every { throwing.location } returns player.location
+        every { throwing.gameMode } returns player.gameMode
         every { throwing.isOnline } returns true
         every { throwing.isValid } returns true
         every { throwing.teleport(any<Location>(), PlayerTeleportEvent.TeleportCause.PLUGIN) } throws IllegalStateException("boom")
-        every { MatchInstance.getPlayerInstance(throwing) } returns match
-        every { PlayerData.getMatchInstance(throwing) } returns match
         every { match.players } returns linkedSetOf(player, throwing)
         MatchInstance::class.java.getDeclaredField("players").apply { isAccessible = true }
             .set(match, hashSetOf(player, throwing))
+        trackNative(throwing)
 
         runCatching { teleporter.teleport(throwing, world.location(12.0, 70.0, 12.0), instance = true) }.isFailure shouldBe true
         nativeAuthorizationActive(throwing) shouldBe false
