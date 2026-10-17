@@ -3,6 +3,7 @@ package ru.arc.helpcenter
 import org.bukkit.entity.Player
 import ru.arc.ARC
 import ru.arc.core.PluginModule
+import ru.arc.gui.ArcMenus
 import ru.arc.landsui.LandsUiModule
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
@@ -27,7 +28,10 @@ object HelpCenterModule : PluginModule {
     /** Opens the existing point settings after the caller has freshly verified the player's own home. */
     fun openHomeSettings(player: Player, home: HelpCenterHome): Boolean {
         val current = controller ?: return false
-        return runCatching { current.openHome(player, home) }
+        return runCatching {
+            ArcMenus.beginDialogFlow(player)
+            current.openHome(player, home)
+        }
             .onFailure { failure -> error("Could not open home settings for {}", player.name, failure) }
             .isSuccess
     }
