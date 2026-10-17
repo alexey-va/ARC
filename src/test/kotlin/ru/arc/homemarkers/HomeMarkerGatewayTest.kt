@@ -29,7 +29,7 @@ class HomeMarkerGatewayTest : StringSpec({
         MockBukkitTestRuntime.open().use { paper ->
             val huskPlugin = paper.createSimplePlugin("HuskHomes")
             val warpPlugin = paper.createSimplePlugin("PlayerWarps") as JavaPlugin
-            warpPlugin.config.set("database.mysql.server-name", "survival")
+            warpPlugin.config.set("settings.database.mysql.server-name", "survival")
             val player = paper.addPlayer("MarkerOwner")
             val foreignOwner = UUID.fromString("00000000-0000-0000-0000-000000000099")
 
@@ -77,7 +77,7 @@ class HomeMarkerGatewayTest : StringSpec({
         MockBukkitTestRuntime.open().use { paper ->
             paper.createSimplePlugin("PlayerWarps")
             val warpPlugin = Bukkit.getPluginManager().getPlugin("PlayerWarps") as JavaPlugin
-            warpPlugin.config.set("database.mysql.server-name", "survival")
+            warpPlugin.config.set("settings.database.mysql.server-name", "survival")
             val player = paper.addPlayer("MarkerOwner")
             val owner = mockk<WPlayer>()
             val api = mockk<PlayerWarpsAPI>()
@@ -111,7 +111,7 @@ class HomeMarkerGatewayTest : StringSpec({
         MockBukkitTestRuntime.open().use { paper ->
             val warpPlugin = paper.createSimplePlugin("PlayerWarps") as JavaPlugin
             warpPlugin.config.set("settings.main-command", "marketwarp")
-            warpPlugin.config.set("database.mysql.server-name", "survival")
+            warpPlugin.config.set("settings.database.mysql.server-name", "survival")
 
             val ownerId = UUID.fromString("00000000-0000-0000-0000-000000000007")
             val player = mockk<Player>()

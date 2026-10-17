@@ -155,7 +155,7 @@ internal class HomeMarkerGateway {
     private companion object {
         const val HUSK_HOMES_PLUGIN = "HuskHomes"
         const val PLAYER_WARPS_PLUGIN = "PlayerWarps"
-        const val PLAYER_WARPS_SERVER_PATH = "database.mysql.server-name"
+        const val PLAYER_WARPS_SERVER_PATH = "settings.database.mysql.server-name"
         const val HOME_TIMEOUT_SECONDS = 3L
     }
 }
