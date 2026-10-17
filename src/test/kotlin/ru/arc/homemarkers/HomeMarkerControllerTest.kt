@@ -5,22 +5,29 @@ import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import org.bukkit.event.block.Action
+import org.bukkit.event.player.PlayerToggleSneakEvent
 import org.bukkit.event.player.PlayerQuitEvent
-import org.bukkit.inventory.EquipmentSlot
 import ru.arc.core.Tasks
 import ru.arc.core.TestTaskScheduler
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import java.util.concurrent.CompletableFuture
 
 class HomeMarkerControllerTest : StringSpec({
-    "only Shift and the main-hand right click can open a marker" {
-        for (sneaking in listOf(false, true)) {
-            for (hand in listOf(null, EquipmentSlot.HAND, EquipmentSlot.OFF_HAND)) {
-                for (action in Action.entries) {
-                    isHomeMarkerGesture(sneaking, hand, action) shouldBe
-                        (sneaking && hand == EquipmentSlot.HAND &&
-                            (action == Action.RIGHT_CLICK_AIR || action == Action.RIGHT_CLICK_BLOCK))
+    "sneak transition updates input immediately using the event state and ignores cancelled transitions" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val plugin = paper.createSimplePlugin("HomeMarkersTest")
+            val player = paper.addPlayer("Owner")
+            val scheduler = TestTaskScheduler()
+            val gateway = mockk<HomeMarkerGateway>()
+            val scene = mockk<HomeMarkerScene>(relaxed = true)
+            Tasks.withScheduler(scheduler) {
+                HomeMarkerController(plugin, HomeMarkerSettings(), gateway, scene).use {
+                    player.isSneaking shouldBe false
+                    plugin.server.pluginManager.callEvent(PlayerToggleSneakEvent(player, true))
+                    verify(exactly = 1) { scene.updateSneaking(player, true) }
+                    val cancelled = PlayerToggleSneakEvent(player, false).apply { isCancelled = true }
+                    plugin.server.pluginManager.callEvent(cancelled)
+                    verify(exactly = 0) { scene.updateSneaking(player, false) }
                 }
             }
         }

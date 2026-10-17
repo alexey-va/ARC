@@ -7,7 +7,7 @@ import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
 import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.player.PlayerChangedWorldEvent
-import org.bukkit.event.player.PlayerInteractEvent
+import org.bukkit.event.player.PlayerToggleSneakEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.plugin.Plugin
 import ru.arc.ARC
@@ -112,12 +112,8 @@ internal class HomeMarkerController(
         }
     }
 
-    @EventHandler(priority = EventPriority.HIGH)
-    fun onInteract(event: PlayerInteractEvent) {
-        // RIGHT_CLICK_AIR is natively pre-cancelled for an empty hand; it is still a valid marker gesture.
-        if (!isHomeMarkerGesture(event.player.isSneaking, event.hand, event.action)) return
-        if (scene.intercept(event.player)) event.isCancelled = true
-    }
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onSneak(event: PlayerToggleSneakEvent) = scene.updateSneaking(event.player, event.isSneaking)
 
     @EventHandler fun onQuit(event: PlayerQuitEvent) = clear(event.player.uniqueId)
     @EventHandler fun onWorldChange(event: PlayerChangedWorldEvent) = clear(event.player.uniqueId)

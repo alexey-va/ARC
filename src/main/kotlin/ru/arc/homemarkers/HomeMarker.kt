@@ -2,8 +2,6 @@ package ru.arc.homemarkers
 
 import org.bukkit.Location
 import org.bukkit.World
-import org.bukkit.event.block.Action
-import org.bukkit.inventory.EquipmentSlot
 import java.util.UUID
 
 internal enum class HomeMarkerKind { HOME, WARP }
@@ -26,6 +24,3 @@ internal data class HomeMarker(
 
     fun location(world: World): Location = Location(world, x, y, z)
 }
-
-internal fun isHomeMarkerGesture(sneaking: Boolean, hand: EquipmentSlot?, action: Action): Boolean =
-    sneaking && hand == EquipmentSlot.HAND && (action == Action.RIGHT_CLICK_AIR || action == Action.RIGHT_CLICK_BLOCK)

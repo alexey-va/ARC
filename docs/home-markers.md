@@ -5,12 +5,17 @@ Those providers remain the authority for ownership, positions and settings.
 Only points on the current server and world are admitted; provider data is not copied to new storage.
 
 - Each marker and label has `SceneAudience.Private(ownerId)` over `PaperPacketDisplays`.
-- **Shift + right-click** on the light column or floor rune opens that point's existing settings.
-- `PaperSpatialControls` checks the `EXTERNAL_RAY` hit, native interaction reach and block occlusion at the click.
-  It creates no native Interaction entity, so ordinary block use and mining keep their targets.
+- **Shift + main-hand right-click** on the light column, floor rune or caption opens that point's existing settings.
+- `PaperSpatialControls` uses `ENTITY_RIGHT` with private native Interaction targets only while sneaking.
+  Vanilla 1.21.11 sends no use-item packet for an air miss with both hands empty; a native target makes that click observable.
+  This follows `Minecraft.startUseItem` in the official [1.21.11 client and mappings](https://piston-meta.mojang.com/v1/packages/718cd84b4912691fe5de829aab6876a4b7f6c5c4/1.21.11.json).
+  ToggleSneak's new event state admits/removes targets immediately; ordinary standing interactions keep their targets.
+- Separate body and caption boxes include a 0.2-block margin and stay stable when the player turns their head.
+  Before activation, a temporary Core ray scene checks the current body/caption/rune planes with native reach and
+  block occlusion. A box protruding before a wall cannot authorize the marker hidden behind it.
 - Gesture dispatch and scene activation require sneaking. The accepted click needs no continued Shift or aim.
   The provider callback rechecks ownership, the unchanged point, and the player's current session and world.
-- Nearby selection keeps the closest 64 owned points, matching the shared control limit.
+- Nearby selection keeps 64 owned points; body and caption use separate viewer scenes within Core's 64-control limit.
 
 `HomeMarkersModule` owns the controller, source refresh and reload lifecycle.
 Provider snapshots refresh every 100 ticks (five seconds at 20 TPS).
