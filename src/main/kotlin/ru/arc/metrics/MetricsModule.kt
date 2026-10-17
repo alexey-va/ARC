@@ -224,10 +224,11 @@ object MetricsModule : PluginModule {
 
     /** Ops HTTP worker only; a gameplay caller must use the asynchronous product facade. */
     fun productInterestReport(days: Int, limit: Int): Map<String, Any?> {
+        val product = productInterest
+            ?: return linkedMapOf("complete" to false, "status" to lifecycleState, "captureQueue" to worker?.health(), "message" to "Product-interest telemetry is not active")
         check(!Bukkit.isPrimaryThread()) { "Product reports must not wait on the Paper thread" }
-        return productInterest?.report(days, limit, ARC.redisManager?.isConnected() == true)
-            ?.get(30, java.util.concurrent.TimeUnit.SECONDS)?.plus("uiCoverage" to productUi?.coverage())
-            ?: linkedMapOf("complete" to false, "status" to lifecycleState, "captureQueue" to worker?.health(), "message" to "Product-interest telemetry is not active")
+        return product.report(days, limit, ARC.redisManager?.isConnected() == true)
+            .get(30, java.util.concurrent.TimeUnit.SECONDS).plus("uiCoverage" to productUi?.coverage())
     }
 
     /** Let feature modules publish cached snapshots without owning scrape-time work. */
