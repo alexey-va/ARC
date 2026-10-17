@@ -13,6 +13,7 @@ import ru.arc.chat.IsolatedChatGlyphModule
 import ru.arc.chat.SlimefunNetworkChatModule
 import ru.arc.itemcatalog.ArcItemMaterializerBridge
 import ru.arc.paper.api.ArcTelemetryProvider
+import ru.arc.paper.api.ArcAfkProvider
 import ru.arc.paper.api.ArcItemMaterializer
 import ru.arc.paper.api.ArcSidebarService
 import ru.arc.sidebar.SectionedSidebarService
@@ -73,6 +74,7 @@ import ru.arc.core.modules.TreasureModule
 import ru.arc.core.modules.XActionModule
 import ru.arc.investigation.InvestigationModule
 import ru.arc.hooks.HookRegistry
+import ru.arc.hooks.CmiAfkProviderBridge
 import ru.arc.hooks.citizens.ArcNpcHologramModule
 import ru.arc.gui.GuiDefaults
 import ru.arc.gui.ArcMenus
@@ -353,6 +355,7 @@ open class ARC : JavaPlugin() {
         bindTelemetryRegistry(MetricsModule.registry())
 
         if (runtimeProfile == ArcRuntimeProfile.FULL) {
+            server.servicesManager.register(ArcAfkProvider::class.java, CmiAfkProviderBridge, this, ServicePriority.Normal)
             server.servicesManager.register(ArcTelemetryProvider::class.java, ArcTelemetryProviderBridge, this, ServicePriority.Normal)
             server.servicesManager.register(ArcItemMaterializer::class.java, ArcItemMaterializerBridge, this, ServicePriority.Normal)
         }

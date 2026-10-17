@@ -9,8 +9,15 @@ import org.bukkit.Material
 import org.bukkit.boss.BarColor
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
+import java.util.UUID
 
 class CMIHook {
+
+    /** Main-thread cached CMI AFK flag, including manually toggled AFK. */
+    fun isAfk(playerId: UUID): Boolean {
+        val cmi = CMI.getInstance()?.takeIf { it.isEnabled } ?: return false
+        return cmi.afkManager?.isAfk(playerId) == true
+    }
 
     fun sendBossbar(bossBarName: String?, message: String?, player: Player, barColor: BarColor?, seconds: Int, keepFor: Int) {
         val info = BossBarInfo(player, bossBarName ?: "")

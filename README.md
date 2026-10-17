@@ -8,9 +8,12 @@ McFine **Paper/Purpur** plugin — treasure hunts, board, and cross-server Redis
 
 - **Java 25** (Temurin)
 - **Gradle 9.2.1**
-- Published `arc-core 2.7.39` artifacts from the public RusCrafting repository
-- `ArcCore 0.1.13` installed alongside ARC (shared SQL, Redis and metrics host;
+- Published `arc-core 2.7.40` artifacts from the public RusCrafting repository
+- `ArcCore 0.1.14` installed alongside ARC (shared SQL, Redis and metrics host;
   published by [ArcCorePlugin](https://github.com/alexey-va/ArcCorePlugin))
+
+The already-published `arc-dungeons-api 0.1.1` retains its original Core API
+dependency metadata; the runtime uses the binary-compatible `2.7.40` API.
 
 ## Build
 
