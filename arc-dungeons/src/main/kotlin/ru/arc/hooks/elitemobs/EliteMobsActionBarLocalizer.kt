@@ -24,6 +24,7 @@ import ru.arc.logging.ArcLogging as Logging
  */
 internal class EliteMobsActionBarLocalizer(
     dynamicTranslations: Map<String, String> = emptyMap(),
+    private val passiveClassesActive: () -> Boolean = PassiveClassCompatibility::isInstalled,
 ) {
     private val plain = PlainTextComponentSerializer.plainText()
     private val translations = (dynamicTranslations + FIXED_TRANSLATIONS + CHAT_NOTICE_TRANSLATIONS)
@@ -34,24 +35,26 @@ internal class EliteMobsActionBarLocalizer(
     private val dynamicSources = dynamicTranslations.keys.filter(String::isNotBlank)
 
     fun localize(component: Component): Component {
-        val source = plain.serialize(component)
+        val filtered = if (passiveClassesActive()) withoutClassControls(component) else component
+        val source = plain.serialize(filtered)
         // The resource-pack HUD precomputes half-pixel offsets from the original text metrics.
         // Replacing its text after packet assembly would shift the whole panel, so leave it intact.
-        if (source.any(::isPrivateUse)) return component
-        if (!looksLikeEliteMobsCombatUi(source)) return component
+        if (source.any(::isPrivateUse)) return filtered
+        if (!looksLikeEliteMobsCombatUi(source)) return filtered
         val translated = translate(source)
-        if (translated == source) return component
+        if (translated == source) return filtered
 
-        val leaves = localizeLeaves(component)
+        val leaves = localizeLeaves(filtered)
         if (plain.serialize(leaves) == translated) return leaves
 
         // Ability names are gradient-rendered one character per child. Rebuild only the recognized
         // resource-pack-free feedback line so the complete name is translated as one component.
-        return Component.text(translated).style(component.style())
+        return Component.text(translated).style(filtered.style())
     }
 
     internal fun shouldSuppressNotice(component: Component, isOverlay: Boolean): Boolean {
         val source = plain.serialize(component)
+        if (passiveClassesActive() && if (isOverlay) source == CLASS_CONTROLS else source in PASSIVE_ONLY_NOTICES) return true
         // Entry reconciliation can run before the native class profile finishes loading.
         // Hide only its unsolicited reminders, not HUD state or ability rejection feedback.
         return if (isOverlay) source == NO_CLASS_ENTRY_HINT || source == FIXED_TRANSLATIONS[NO_CLASS_ENTRY_HINT]
@@ -96,7 +99,45 @@ internal class EliteMobsActionBarLocalizer(
         return translated.children(translated.children().map(::localizeLeaves))
     }
 
+    /** Native compositor appends this one exact hint to HP or feedback; retain its coloured prefix. */
+    private fun withoutClassControls(component: Component): Component {
+        val source = plain.serialize(component)
+        val suffix = " | $CLASS_CONTROLS"
+        if (!source.endsWith(suffix)) return component
+        return visiblePrefix(component, source.length - suffix.length)
+    }
+
+    private fun visiblePrefix(component: Component, length: Int): Component {
+        val own = component.children(emptyList())
+        val ownText = plain.serialize(own)
+        if (length <= ownText.length) return if (own is TextComponent) own.content(own.content().take(length))
+            else Component.text(ownText.take(length)).style(own.style())
+        var remaining = length - ownText.length
+        val children = buildList {
+            for (child in component.children()) {
+                if (remaining <= 0) break
+                val size = plain.serialize(child).length
+                add(if (size <= remaining) child else visiblePrefix(child, remaining))
+                remaining -= size
+            }
+        }
+        return own.children(children)
+    }
+
     private companion object {
+        const val CLASS_CONTROLS = "F,F: Mobility | F+LMB: Signature | F+RMB: Utility"
+        const val CLASS_CONTROL_NOTICE = "[Alpha] Advanced Combat System » New: hold sneak and double-tap F " +
+            "to toggle class controls anywhere outside EliteMobs content."
+        val PASSIVE_ONLY_NOTICES = setOf(
+            CLASS_CONTROL_NOTICE,
+            "[Class Skills] Try all three class skills! Press and release your swap-hands key (default F), then quickly use the second input.",
+            "[Class Skills] Your class resource stays full while waiting. Try your skills here!",
+            "[Class Skills] F, then F — Mobility",
+            "[Class Skills] F, then left-click — Signature",
+            "[Class Skills] F, then right-click — Utility",
+            "[Class Skills] A successful cast checks off a skill. Targeted skills may need a suitable target.",
+            "How to play: F,F: Mobility | F+LMB: Signature | F+RMB: Utility.",
+        )
         const val NO_CLASS_ENTRY_NOTICE = "No class active! Open /em class and pick a free class to use abilities here."
         const val NO_CLASS_ENTRY_HINT = "No class » pick one with /em class"
         const val ALPHA_PROMOTIONAL_NOTICE =
@@ -105,8 +146,7 @@ internal class EliteMobsActionBarLocalizer(
         val CHAT_NOTICE_TRANSLATIONS = mapOf(
             NO_CLASS_ENTRY_NOTICE to
                 "Класс не выбран. Выберите бесплатный класс: Shift + F → Классы.",
-            "[Alpha] Advanced Combat System » New: hold sneak and double-tap F " +
-                "to toggle class controls anywhere outside EliteMobs content." to
+            CLASS_CONTROL_NOTICE to
                 "Управление классом » Вне данжей его можно переключать: зажмите Shift и дважды нажмите F.",
         )
         val OFF_CLASS_CHAT = Regex(

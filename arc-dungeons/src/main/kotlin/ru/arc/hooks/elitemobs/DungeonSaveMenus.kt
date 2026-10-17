@@ -30,6 +30,7 @@ internal class DungeonSaveMenus(
     private val changeTracking: (Player, UUID, Boolean) -> DungeonQuestTrackingChange = ::changeDungeonQuestTracking,
     private val abandonQuest: (Player, UUID) -> DungeonQuestAbandonChange = ::abandonDungeonQuest,
     private val classService: DungeonClassService = NativeDungeonClassService,
+    private val classTrials: DungeonClassTrials = NativeDungeonClassTrials,
     private val classGrants: DungeonClassGrantService = NativeDungeonClassGrantService,
     private val canGrantClasses: (Player) -> Boolean = { it.hasPermission("arc.dungeon.admin.classgrant") },
     private val adventure: DungeonAdventureService = NativeDungeonAdventureService,
@@ -415,7 +416,7 @@ internal class DungeonSaveMenus(
         )) { classes(player) }
     }
 
-    private fun classDetail(player: Player, formId: String, feedback: Component? = null) {
+    internal fun classDetail(player: Player, formId: String, feedback: Component? = null, atTrainer: Boolean = false) {
         val view = classService.view(player)
         val form = view.forms[formId]
         if (view.availability != DungeonClassAvailability.READY || form == null) {
@@ -433,6 +434,7 @@ internal class DungeonSaveMenus(
             form.unlocked -> text("classes.detail-unlocked", "<#e8dfd2>Класс открыт. Нажмите «Выбрать», чтобы сделать его активным.")
             else -> text("classes.detail-locked", "<#e8dfd2>Класс закрыт. Условия открытия указаны ниже.")
         }
+        val trial = if (atTrainer && !view.runLocked) classTrials.quote(player, formId) else null
         val body = mutableListOf(
             PaperDialogBody(intro, 468),
             classTable(buildList {
@@ -459,6 +461,9 @@ internal class DungeonSaveMenus(
                 text("classes.requirement", "<#e8dfd2>Чтобы открыть") to text("classes.progress", "<#e8dfd2>Сейчас"),
             ))
         }
+        if (!form.unlocked && !atTrainer) body += PaperDialogBody(text(
+            "classes.trial-location", "<#e8dfd2>Испытание запускается у наставника этого класса.",
+        ), 468)
         if (form.unlocked && form.children.isNotEmpty()) body += PaperDialogBody(text(
             "classes.next-heading",
             "<#e8dfd2>Следующие ступени — выберите направление развития:",
@@ -466,40 +471,59 @@ internal class DungeonSaveMenus(
         feedback?.let { body.add(0, PaperDialogBody(plain(it), 468)) }
 
         val buttons = buildList {
-            if (!form.active) {
+            if (trial != null) add(PaperDialogButton(
+                PaperDialogActionId.of("class_trial_${form.id}"),
+                text("classes.trial-label", "<#d7b486>Испытание · <white>💎</white> <#c7a0e8><fee>", "fee" to Component.text(trial.feeText)),
+                tooltip = text("classes.trial-tooltip",
+                    "Одиночный бой с наставником, <level> ур. Цена в кристаллах EliteMobs: <fee>. Оплата при начале боя. Победа откроет и выберет этот класс.",
+                    "level" to Component.text(trial.level), "fee" to Component.text(trial.feeText)),
+                width = 230, closeDialogBeforeAction = true,
+                onClick = {
+                    val current = classService.view(player)
+                    if (current.availability != DungeonClassAvailability.READY || current.runLocked) {
+                        classDetail(player, form.id, text("classes.trial-unavailable",
+                            "<#d7b486>Испытание сейчас недоступно. Условия обновлены."), atTrainer)
+                    } else classTrials.admit(player, trial)
+                },
+            ))
+            else if (!form.active) {
                 if (!form.unlocked && canGrantClasses(player)) {
                     if (view.runLocked) add(disabledClassAction(
                         "class_admin_grant_${form.id}", "classes.admin-disabled", "<#ffffff>[Недоступно] Открыть класс",
                         classLockReason(view),
-                    ) { classDetail(player, form.id) })
+                    ) { classDetail(player, form.id, atTrainer = atTrainer) })
                     else add(action(
                         "class_admin_grant_${form.id}", "classes.admin-label", "<#c4a7e7>Открыть класс",
                         "classes.admin-tooltip", "Открыть и выбрать класс, повысив только необходимые боевые навыки",
                     ) {
-                        classDetail(player, form.id, classAdminGrantMessage(classGrants.grant(player, form.id)))
+                        classDetail(player, form.id, classAdminGrantMessage(classGrants.grant(player, form.id)), atTrainer)
                     })
                 } else if (form.unlocked && view.canChange) add(action(
                     "class_select_${form.id}", "classes.select-label", "<#9bd48d>Выбрать класс",
                     "classes.select-tooltip", "Сделать <name> активным классом",
                 ) {
-                    classDetail(player, form.id, classChangeMessage(classService.select(player, form.id), form.name))
+                    classDetail(player, form.id, classChangeMessage(classService.select(player, form.id), form.name), atTrainer)
                 }.copy(tooltip = text("classes.select-tooltip", "Сделать <name> активным классом", "name" to Component.text(form.name))))
                 else add(disabledClassAction(
                     "class_select_${form.id}", "classes.select-disabled", "<#ffffff>[Недоступно] Выбрать класс",
                     if (!form.unlocked) text("classes.select-locked-tooltip", "Сначала выполните условия открытия класса") else classLockReason(view),
-                ) { classDetail(player, form.id) })
+                ) { classDetail(player, form.id, atTrainer = atTrainer) })
             }
-            if (form.unlocked) form.children.mapNotNull(view.forms::get).forEach { add(classNextDestination(player, it)) }
-            form.parentId?.let(view.forms::get)?.let { parent -> add(classPreviousDestination(player, parent)) }
+            if (form.unlocked) form.children.mapNotNull(view.forms::get).forEach {
+                add(classNextDestination(player, it, atTrainer && it.rootId == form.rootId))
+            }
+            if (!atTrainer || form.id != form.rootId) form.parentId?.let(view.forms::get)?.let { parent ->
+                add(classPreviousDestination(player, parent, atTrainer))
+            }
         }
         show(player, PaperDialogScreen(
             id = "dungeon.classes.${form.id}",
             title = text("classes.detail-title", "<#c4abff><name>", "name" to Component.text(form.name)),
-            body = body, buttons = buttons, exitButton = back { classes(player) }, columns = 2,
-        )) { classDetail(player, form.id) }
+            body = body, buttons = buttons, exitButton = if (atTrainer) null else back { classes(player) }, columns = 2,
+        )) { classDetail(player, form.id, atTrainer = atTrainer) }
     }
 
-    private fun classNextDestination(player: Player, form: DungeonClassForm) = PaperDialogButton(
+    private fun classNextDestination(player: Player, form: DungeonClassForm, atTrainer: Boolean = false) = PaperDialogButton(
         PaperDialogActionId.of("class_${form.id}"),
         text(
             if (form.active) "classes.next-active" else if (form.unlocked) "classes.next" else "classes.next-locked",
@@ -515,10 +539,10 @@ internal class DungeonSaveMenus(
             "level" to Component.text(form.requiredLevel),
         ),
         width = 230,
-        onClick = { classDetail(player, form.id) },
+        onClick = { classDetail(player, form.id, atTrainer = atTrainer) },
     )
 
-    private fun classPreviousDestination(player: Player, form: DungeonClassForm) = PaperDialogButton(
+    private fun classPreviousDestination(player: Player, form: DungeonClassForm, atTrainer: Boolean = false) = PaperDialogButton(
         PaperDialogActionId.of("class_${form.id}"),
         text(
             "classes.previous",
@@ -527,7 +551,7 @@ internal class DungeonSaveMenus(
         ),
         tooltip = text("classes.previous-tooltip", "Вернуться на предыдущую ступень этой ветки"),
         width = 230,
-        onClick = { classDetail(player, form.id) },
+        onClick = { classDetail(player, form.id, atTrainer = atTrainer) },
     )
 
     private fun disabledClassAction(

@@ -456,6 +456,75 @@ class DungeonSaveMenusTest : FreeSpec({
             .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
     }
 
+    "only an eligible trainer page offers the native trial and captures its displayed fee" {
+        val player = paper.addPlayer("class-trial")
+        val dungeon = mockk<EMDungeonQol>(relaxed = true)
+        every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
+        val classes = mockk<DungeonClassService>()
+        val trials = mockk<DungeonClassTrials>()
+        val form = dungeonClassForm("warrior", "Воин").copy(unlocked = false, parentId = "adventurer")
+        var view = DungeonClassesView(DungeonClassAvailability.READY, roots = listOf(form.id), forms = mapOf(form.id to form))
+        every { classes.view(player) } answers { view }
+        val quote = DungeonClassTrialQuote(form.id, 12.5, "12.5", 30)
+        every { trials.quote(player, form.id) } returns quote
+        every { trials.admit(player, quote) } returns Unit
+        val shown = mutableListOf<PaperDialogScreen>()
+        val menus = DungeonSaveMenus(dungeon, classService = classes, classTrials = trials, canGrantClasses = { false }) {
+            _, screen, _ -> shown += screen
+        }
+        menus.classDetail(player, form.id)
+        shown.last().buttons.none { it.id.value.startsWith("class_trial_") } shouldBe true
+        verify(exactly = 0) { trials.quote(any(), any()) }
+        menus.classDetail(player, form.id, atTrainer = true)
+        val trialButton = shown.last().buttons.single { it.id.value == "class_trial_warrior" }
+        trialButton.closeDialogBeforeAction shouldBe true
+        shown.last().exitButton shouldBe null
+        shown.last().buttons.none { it.id.value == "class_adventurer" } shouldBe true
+        trialButton.onClick.handle(mockk())
+        verify(exactly = 1) { trials.admit(player, quote) }
+
+        view = view.copy(runLocked = true)
+        trialButton.onClick.handle(mockk())
+        verify(exactly = 1) { trials.admit(player, quote) }
+        shown.last().buttons.none { it.id.value.startsWith("class_trial_") } shouldBe true
+        view = view.copy(runLocked = false)
+        every { trials.quote(player, form.id) } returns null
+        menus.classDetail(player, form.id, atTrainer = true)
+        shown.last().buttons.none { it.id.value.startsWith("class_trial_") } shouldBe true
+    }
+
+    "trainer navigation retains its branch but cannot enroll a different root instructor" {
+        val player = paper.addPlayer("class-trial-branch")
+        val dungeon = mockk<EMDungeonQol>(relaxed = true)
+        every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
+        val classes = mockk<DungeonClassService>()
+        val trials = mockk<DungeonClassTrials>()
+        val root = dungeonClassForm("adventurer", "Искатель").copy(children = listOf("warrior"))
+        val warrior = dungeonClassForm("warrior", "Воин").copy(parentId = root.id, children = listOf("berserker"))
+        val child = dungeonClassForm("berserker", "Берсерк").copy(parentId = warrior.id, rootId = warrior.id, unlocked = false)
+        every { classes.view(player) } returns DungeonClassesView(DungeonClassAvailability.READY,
+            forms = listOf(root, warrior, child).associateBy { it.id })
+        every { trials.quote(player, any()) } answers {
+            if (secondArg<String>() == child.id) DungeonClassTrialQuote(child.id, 40.0, "40", 60) else null
+        }
+        val shown = mutableListOf<PaperDialogScreen>()
+        val menus = DungeonSaveMenus(dungeon, classService = classes, classTrials = trials, canGrantClasses = { false }) {
+            _, screen, _ -> shown += screen
+        }
+        menus.classDetail(player, root.id, atTrainer = true)
+        shown.last().buttons.single { it.id.value == "class_warrior" }.onClick.handle(mockk())
+        shown.last().buttons.single { it.id.value == "class_berserker" }.onClick.handle(mockk())
+        shown.last().buttons.none { it.id.value.startsWith("class_trial_") } shouldBe true
+        verify(exactly = 0) { trials.quote(player, child.id) }
+
+        menus.classDetail(player, warrior.id, atTrainer = true)
+        shown.last().buttons.single { it.id.value == "class_berserker" }.onClick.handle(mockk())
+        shown.last().buttons.any { it.id.value == "class_trial_berserker" } shouldBe true
+        shown.last().buttons.single { it.id.value == "class_warrior" }.onClick.handle(mockk())
+        shown.last().exitButton shouldBe null
+        shown.last().buttons.none { it.id.value == "class_adventurer" } shouldBe true
+    }
+
     "root close is separate from the quit action" {
         val player = paper.addPlayer("viewer")
         val dungeon = mockk<EMDungeonQol>(relaxed = true)

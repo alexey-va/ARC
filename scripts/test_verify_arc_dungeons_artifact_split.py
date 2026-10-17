@@ -65,6 +65,17 @@ main: ru.arc.coreplugin.ArcCorePlugin
 
 
 class ArtifactSplitTest(unittest.TestCase):
+    def test_addon_cannot_embed_a_native_plugin_fork(self) -> None:
+        violations = verify(
+            ARC_ENTRIES,
+            ARC_CORE_ENTRIES,
+            DUNGEONS_ENTRIES | {"com/magmaguy/elitemobs/EliteMobs.class"},
+            ARC_DESCRIPTOR,
+            ARC_CORE_DESCRIPTOR,
+            DUNGEONS_DESCRIPTOR,
+        )
+        self.assertTrue(any("addon must use the stock plugin" in value for value in violations))
+
     def test_expected_split_passes(self) -> None:
         self.assertEqual(
             verify(

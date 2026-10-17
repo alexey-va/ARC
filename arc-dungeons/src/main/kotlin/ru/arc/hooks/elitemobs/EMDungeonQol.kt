@@ -373,6 +373,9 @@ internal class EMDungeonQol(
         }
     }
 
+    internal fun openClass(player: Player, formId: String, atTrainer: Boolean = false) =
+        menus.classDetail(player, formId, atTrainer = atTrainer)
+
     internal fun action(player: Player, action: String, args: List<String> = emptyList()) {
         when (action) {
             "menu", "меню" -> menus.panel(player)

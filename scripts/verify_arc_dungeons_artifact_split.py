@@ -188,6 +188,8 @@ def verify(
         violations.append("ArcDungeons JAR is missing ru/arc/dungeons/ArcDungeonsPlugin.class")
     if class_exists(dungeons, ARC_ENTRYPOINT):
         violations.append("ArcDungeons JAR embeds the ARC plugin entrypoint")
+    if class_entries(dungeons, "com/magmaguy/"):
+        violations.append("ArcDungeons JAR embeds EliteMobs or its native dependency classes; the addon must use the stock plugin")
     if not class_exists(arc, DUNGEON_HOST_SERVICES):
         violations.append("ARC JAR is missing its DungeonHostServices implementation")
     if class_exists(dungeons, DUNGEON_HOST_SERVICES):

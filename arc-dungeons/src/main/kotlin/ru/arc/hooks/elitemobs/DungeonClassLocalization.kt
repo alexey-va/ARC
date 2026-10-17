@@ -1,6 +1,5 @@
 package ru.arc.hooks.elitemobs
 
-import com.magmaguy.elitemobs.advancedcombat.content.BuiltInClassContent
 import com.magmaguy.elitemobs.advancedcombat.passives.PassiveCondition
 import com.magmaguy.elitemobs.advancedcombat.passives.PassiveProfile
 import ru.arc.config.Config
@@ -15,9 +14,9 @@ internal class DungeonClassLocalization(
     fun formName(formId: String, fallback: String): String =
         config.string("dungeon-qol.classes.catalog.$formId.name", fallback)
 
-    /** Values and conditions belong to EliteMobs; YAML only supplies their labels. */
+    /** Shares the exact typed registry installed in native combat; YAML only supplies labels. */
     fun passive(formId: String, fallbackSource: String, contributionLevel: Int): DungeonClassPassive {
-        val registry = BuiltInClassContent.passiveRegistry()
+        val registry = PassiveClassContent.registry()
         val traits = registry.traits(formId)
         val baseline = traits.filter { it.unconditional() }.fold(registry.require(formId).atContributionLevel(contributionLevel)) { sum, trait ->
             sum.plus(trait.profile().atContributionLevel(contributionLevel))

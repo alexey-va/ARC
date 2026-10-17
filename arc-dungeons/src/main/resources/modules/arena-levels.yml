@@ -1,0 +1,25 @@
+# Arena mob levels for unmodified EliteMobs 10.9.8.
+maximum-enemy-level: 200
+menu:
+  spectator-slot: 2
+  decrease-slot: 3
+  value-slot: 4
+  increase-slot: 5
+  player-slot: 6
+messages:
+  enemyLevelName: "&eУровень мобов на старте: $level"
+  lockedEnemyLevelName: "&eВыбран уровень старта: $level"
+  currentWaveName: "&eВолна $wave из $total"
+  originalDifficultyName: "&eИсходная сложность"
+  firstWaveLevelLine: "&fПервая волна: ур. $range"
+  lastWaveLevelLine: "&fПоследняя волна: ур. $range"
+  unknownLevelLine: "&fДоступна исходная сложность арены."
+  fullRunLine: "&fВсе $total волн, начиная с первой."
+  rewardsLine: "&fСостав и уровень наград прежние."
+  allowedLevelsLine: "&fУровень старта: $minimum–$maximum"
+  decreaseLevelName: "&f−1 уровень"
+  increaseLevelName: "&f+1 уровень"
+  decreaseLevelHint: "&fShift + клик: −10 уровней"
+  increaseLevelHint: "&fShift + клик: +10 уровней"
+  joinLevelLine: "&fУровень мобов на старте: $level"
+  lobbyChangedMessage: "&eУсловия арены изменились. Проверьте уровень мобов и нажмите вход ещё раз."

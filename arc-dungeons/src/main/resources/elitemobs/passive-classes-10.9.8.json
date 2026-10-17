@@ -1,0 +1,1057 @@
+{
+  "schema": 1,
+  "nativeVersion": "10.9.8",
+  "stockFingerprint": "3368a7461ea59e2ca62ae7facca481263f5876c77f7000fdda83dd2f523c1ead",
+  "balanceFingerprint": "9d4de8eb00f8fc4afea8a4d3784ae5ebb73eb7679e919b19e423679805587929",
+  "forms": {
+    "aegis": {
+      "traits": [
+        {
+          "conditions": [
+            "GROUPED"
+          ],
+          "profile": {
+            "incomingDamageBase": -0.041999999999999996,
+            "incomingDamagePerLevel": -0.0006
+          }
+        }
+      ],
+      "mechanics": []
+    },
+    "arcane_knight": {
+      "profile": {
+        "abilityCostReductionBase": 0.0,
+        "abilityCostReductionPerLevel": 0.0
+      },
+      "traits": [
+        {
+          "conditions": [
+            "SPELL_DAMAGE"
+          ],
+          "profile": {
+            "outgoingDamageBase": 0.012,
+            "outgoingDamagePerLevel": 0.0001
+          }
+        }
+      ]
+    },
+    "artillerist": {
+      "traits": []
+    },
+    "bannerlord": {
+      "profile": {
+        "abilityCostReductionBase": 0.0,
+        "abilityCostReductionPerLevel": 0.0
+      },
+      "traits": [
+        {
+          "conditions": [
+            "GROUPED"
+          ],
+          "profile": {
+            "incomingDamageBase": -0.01,
+            "incomingDamagePerLevel": -0.0001
+          }
+        }
+      ]
+    },
+    "bloodstorm": {
+      "traits": [
+        {
+          "conditions": [
+            "ALWAYS"
+          ],
+          "profile": {
+            "healingReceivedBase": 0.041999999999999996,
+            "healingReceivedPerLevel": 0.0006
+          }
+        },
+        {
+          "conditions": [
+            "RECENT_ELITE_KILL"
+          ],
+          "profile": {
+            "healingReceivedBase": 0.041999999999999996,
+            "healingReceivedPerLevel": 0.0006
+          }
+        },
+        {
+          "conditions": [
+            "TARGET_BOSS",
+            "TARGET_ISOLATED"
+          ],
+          "profile": {
+            "outgoingDamageBase": -0.041999999999999996,
+            "outgoingDamagePerLevel": -0.0006
+          }
+        }
+      ],
+      "mechanics": []
+    },
+    "cleric": {
+      "profile": {
+        "healingDoneBase": 0.0,
+        "healingDonePerLevel": 0.0,
+        "healingReceivedBase": 0.045,
+        "healingReceivedPerLevel": 0.0005
+      }
+    },
+    "conqueror": {
+      "traits": [
+        {
+          "conditions": [
+            "RECENTLY_HIT"
+          ],
+          "profile": {
+            "outgoingDamageBase": 0.06999999999999999,
+            "outgoingDamagePerLevel": 0.001
+          }
+        }
+      ]
+    },
+    "cryomancer": {
+      "profile": {
+        "abilityCostReductionBase": 0.0,
+        "abilityCostReductionPerLevel": 0.0
+      },
+      "traits": [
+        {
+          "conditions": [
+            "SPELL_DAMAGE"
+          ],
+          "profile": {
+            "outgoingDamageBase": -0.006999999999999999,
+            "outgoingDamagePerLevel": -0.0001
+          }
+        },
+        {
+          "conditions": [
+            "SPELL_DAMAGE"
+          ],
+          "profile": {
+            "outgoingDamageBase": 0.02,
+            "outgoingDamagePerLevel": 0.00015
+          }
+        }
+      ]
+    },
+    "demolitionist": {
+      "profile": {
+        "abilityCostReductionBase": 0.0,
+        "abilityCostReductionPerLevel": 0.0
+      },
+      "traits": [
+        {
+          "conditions": [
+            "CLOSE_RANGE"
+          ],
+          "profile": {
+            "incomingDamageBase": 0.06999999999999999,
+            "incomingDamagePerLevel": 0.001
+          }
+        },
+        {
+          "conditions": [
+            "RANGED_ATTACK",
+            "TARGET_GROUPED"
+          ],
+          "profile": {
+            "outgoingDamageBase": 0.11199999999999999,
+            "outgoingDamagePerLevel": 0.0016
+          }
+        },
+        {
+          "conditions": [
+            "RANGED_ATTACK"
+          ],
+          "profile": {
+            "outgoingDamageBase": 0.015,
+            "outgoingDamagePerLevel": 0.00012
+          }
+        }
+      ]
+    },
+    "elementalist": {
+      "traits": [
+        {
+          "conditions": [
+            "CLOSE_RANGE"
+          ],
+          "profile": {
+            "incomingDamageBase": 0.055999999999999994,
+            "incomingDamagePerLevel": 0.0008
+          }
+        },
+        {
+          "conditions": [
+            "SPELL_DAMAGE",
+            "TARGET_GROUPED"
+          ],
+          "profile": {
+            "outgoingDamageBase": 0.026949999999999998,
+            "outgoingDamagePerLevel": 0.000385
+          }
+        }
+      ]
+    },
+    "exorcist": {
+      "profile": {
+        "healingDoneBase": 0.0,
+        "healingDonePerLevel": 0.0,
+        "healingReceivedBase": 0.018,
+        "healingReceivedPerLevel": 0.00022
+      },
+      "traits": [
+        {
+          "conditions": [
+            "ALWAYS"
+          ],
+          "profile": {
+            "outgoingDamageBase": 0.034999999999999996,
+            "outgoingDamagePerLevel": 0.0005,
+            "healingReceivedBase": -0.017499999999999998,
+            "healingReceivedPerLevel": -0.00025
+          }
+        }
+      ]
+    },
+    "fateweaver": {
+      "profile": {
+        "healingDoneBase": 0.0,
+        "healingDonePerLevel": 0.0,
+        "abilityCostReductionBase": 0.0,
+        "abilityCostReductionPerLevel": 0.0,
+        "healingReceivedBase": 0.035,
+        "healingReceivedPerLevel": 0.0004
+      }
+    },
+    "grovekeeper": {
+      "profile": {
+        "healingDoneBase": 0.0,
+        "healingDonePerLevel": 0.0,
+        "abilityCostReductionBase": 0.0,
+        "abilityCostReductionPerLevel": 0.0,
+        "healingReceivedBase": 0.043,
+        "healingReceivedPerLevel": 0.00048
+      },
+      "traits": [
+        {
+          "conditions": [
+            "MOVING"
+          ],
+          "profile": {
+            "incomingDamageBase": 0.027999999999999997,
+            "incomingDamagePerLevel": 0.0004
+          }
+        },
+        {
+          "conditions": [
+            "STANDING"
+          ],
+          "profile": {
+            "incomingDamageBase": -0.041999999999999996,
+            "incomingDamagePerLevel": -0.0006,
+            "healingReceivedBase": 0.027999999999999997,
+            "healingReceivedPerLevel": 0.0004
+          }
+        }
+      ]
+    },
+    "guardian": {
+      "traits": [
+        {
+          "conditions": [
+            "GROUPED"
+          ],
+          "profile": {
+            "incomingDamageBase": -0.034999999999999996,
+            "incomingDamagePerLevel": -0.0005
+          }
+        }
+      ],
+      "mechanics": []
+    },
+    "harvester": {
+      "profile": {
+        "healingDoneBase": 0.0,
+        "healingReceivedBase": -0.01
+      }
+    },
+    "headsman": {
+      "profile": {
+        "healingDoneBase": 0.0,
+        "healingReceivedBase": -0.01
+      }
+    },
+    "hierophant": {
+      "profile": {
+        "healingDoneBase": 0.0,
+        "healingDonePerLevel": 0.0,
+        "healingReceivedBase": 0.045,
+        "healingReceivedPerLevel": 0.0005
+      },
+      "traits": [
+        {
+          "conditions": [
+            "ALWAYS"
+          ],
+          "profile": {
+            "healingReceivedBase": 0.027999999999999997,
+            "healingReceivedPerLevel": 0.0004
+          }
+        },
+        {
+          "conditions": [
+            "GROUPED"
+          ],
+          "profile": {
+            "healingReceivedBase": 0.055999999999999994,
+            "healingReceivedPerLevel": 0.0008
+          }
+        },
+        {
+          "conditions": [
+            "SOLO"
+          ],
+          "profile": {
+            "healingReceivedBase": -0.041999999999999996,
+            "healingReceivedPerLevel": -0.0006
+          }
+        }
+      ]
+    },
+    "inquisitor": {
+      "profile": {
+        "healingDoneBase": 0.0,
+        "healingReceivedBase": -0.01
+      }
+    },
+    "justicar": {
+      "profile": {
+        "healingDoneBase": 0.0,
+        "healingDonePerLevel": 0.0,
+        "healingReceivedBase": 0.01,
+        "healingReceivedPerLevel": 0.00015
+      },
+      "traits": []
+    },
+    "lich": {
+      "profile": {
+        "healingDoneBase": 0.0,
+        "healingDonePerLevel": 0.0,
+        "healingReceivedBase": 0.03,
+        "healingReceivedPerLevel": 0.0003
+      },
+      "traits": [
+        {
+          "conditions": [
+            "ALWAYS"
+          ],
+          "profile": {
+            "outgoingDamageBase": 0.027999999999999997,
+            "outgoingDamagePerLevel": 0.0004,
+            "healingReceivedBase": 0.034999999999999996,
+            "healingReceivedPerLevel": 0.0005
+          }
+        }
+      ]
+    },
+    "lifewarden": {
+      "profile": {
+        "healingDoneBase": 0.0,
+        "healingDonePerLevel": 0.0,
+        "abilityCostReductionBase": 0.0,
+        "abilityCostReductionPerLevel": 0.0,
+        "healingReceivedBase": 0.043,
+        "healingReceivedPerLevel": 0.00048
+      },
+      "traits": [
+        {
+          "conditions": [
+            "ALWAYS"
+          ],
+          "profile": {
+            "healingReceivedBase": 0.049,
+            "healingReceivedPerLevel": 0.0007000000000000001
+          }
+        },
+        {
+          "conditions": [
+            "STANDING"
+          ],
+          "profile": {
+            "healingReceivedBase": 0.063,
+            "healingReceivedPerLevel": 0.0009
+          }
+        }
+      ],
+      "mechanics": []
+    },
+    "marshal": {
+      "profile": {
+        "abilityCostReductionBase": 0.0,
+        "abilityCostReductionPerLevel": 0.0
+      },
+      "traits": [
+        {
+          "conditions": [
+            "GROUPED"
+          ],
+          "profile": {
+            "incomingDamageBase": -0.01,
+            "incomingDamagePerLevel": -0.0001
+          }
+        },
+        {
+          "conditions": [
+            "GROUPED"
+          ],
+          "profile": {
+            "outgoingDamageBase": 0.041999999999999996,
+            "outgoingDamagePerLevel": 0.0006,
+            "incomingDamageBase": -0.034999999999999996,
+            "incomingDamagePerLevel": -0.0005
+          }
+        },
+        {
+          "conditions": [
+            "SOLO"
+          ],
+          "profile": {
+            "outgoingDamageBase": -0.027999999999999997,
+            "outgoingDamagePerLevel": -0.0004,
+            "incomingDamageBase": 0.027999999999999997,
+            "incomingDamagePerLevel": 0.0004
+          }
+        }
+      ]
+    },
+    "mistweaver": {
+      "profile": {
+        "healingDoneBase": 0.0,
+        "healingDonePerLevel": 0.0,
+        "healingReceivedBase": 0.018,
+        "healingReceivedPerLevel": 0.00022
+      },
+      "traits": [
+        {
+          "conditions": [
+            "ALWAYS"
+          ],
+          "profile": {
+            "outgoingDamageBase": 0.020999999999999998,
+            "outgoingDamagePerLevel": 0.0003,
+            "healingReceivedBase": 0.020999999999999998,
+            "healingReceivedPerLevel": 0.0003
+          }
+        }
+      ]
+    },
+    "necromancer": {
+      "profile": {
+        "healingDoneBase": 0.0,
+        "healingDonePerLevel": 0.0,
+        "healingReceivedBase": 0.025,
+        "healingReceivedPerLevel": 0.00025
+      },
+      "traits": [
+        {
+          "conditions": [
+            "ALWAYS"
+          ],
+          "profile": {
+            "movementSpeedBase": -0.013999999999999999,
+            "movementSpeedPerLevel": -0.0002,
+            "healingReceivedBase": 0.034999999999999996,
+            "healingReceivedPerLevel": 0.0005
+          }
+        }
+      ]
+    },
+    "occultist": {
+      "profile": {
+        "healingDoneBase": 0.0,
+        "abilityCostReductionBase": 0.0,
+        "abilityCostReductionPerLevel": 0.0,
+        "healingReceivedBase": -0.01
+      },
+      "traits": [
+        {
+          "conditions": [
+            "SPELL_DAMAGE"
+          ],
+          "profile": {
+            "outgoingDamageBase": 0.012,
+            "outgoingDamagePerLevel": 0.0001
+          }
+        }
+      ]
+    },
+    "oracle": {
+      "profile": {
+        "healingDoneBase": 0.0,
+        "healingDonePerLevel": 0.0,
+        "abilityCostReductionBase": 0.0,
+        "abilityCostReductionPerLevel": 0.0,
+        "healingReceivedBase": 0.035,
+        "healingReceivedPerLevel": 0.0004
+      },
+      "traits": [
+        {
+          "conditions": [
+            "ALWAYS"
+          ],
+          "profile": {
+            "incomingDamageBase": -0.027999999999999997,
+            "incomingDamagePerLevel": -0.0004,
+            "healingReceivedBase": 0.020999999999999998,
+            "healingReceivedPerLevel": 0.0003
+          }
+        },
+        {
+          "conditions": [
+            "GROUPED"
+          ],
+          "profile": {
+            "incomingDamageBase": -0.034999999999999996,
+            "incomingDamagePerLevel": -0.0005
+          }
+        }
+      ],
+      "mechanics": []
+    },
+    "plaguebringer": {
+      "profile": {
+        "abilityCostReductionBase": 0.0,
+        "abilityCostReductionPerLevel": 0.0
+      },
+      "traits": [
+        {
+          "conditions": [
+            "ALWAYS"
+          ],
+          "profile": {
+            "outgoingDamageBase": 0.027999999999999997,
+            "outgoingDamagePerLevel": 0.0004,
+            "movementSpeedBase": -0.013999999999999999,
+            "movementSpeedPerLevel": -0.0002
+          }
+        },
+        {
+          "conditions": [
+            "SPELL_DAMAGE"
+          ],
+          "profile": {
+            "outgoingDamageBase": 0.018,
+            "outgoingDamagePerLevel": 0.00015
+          }
+        },
+        {
+          "conditions": [
+            "SPELL_DAMAGE"
+          ],
+          "profile": {
+            "outgoingDamageBase": 0.020999999999999998,
+            "outgoingDamagePerLevel": 0.0003
+          }
+        }
+      ]
+    },
+    "priest": {
+      "profile": {
+        "healingDoneBase": 0.0,
+        "healingDonePerLevel": 0.0,
+        "healingReceivedBase": 0.045,
+        "healingReceivedPerLevel": 0.0005
+      }
+    },
+    "reaver": {
+      "traits": [
+        {
+          "conditions": [
+            "ALWAYS"
+          ],
+          "profile": {
+            "healingReceivedBase": -0.013999999999999999,
+            "healingReceivedPerLevel": -0.0002
+          }
+        },
+        {
+          "conditions": [
+            "HEALTH_BELOW_50"
+          ],
+          "profile": {
+            "outgoingDamageBase": 0.027999999999999997,
+            "outgoingDamagePerLevel": 0.0004,
+            "incomingDamageBase": 0.013999999999999999,
+            "incomingDamagePerLevel": 0.0002
+          }
+        }
+      ]
+    },
+    "saboteur": {
+      "profile": {
+        "abilityCostReductionBase": 0.0,
+        "abilityCostReductionPerLevel": 0.0
+      },
+      "traits": [
+        {
+          "conditions": [
+            "RANGED_ATTACK",
+            "TARGET_WOUNDED"
+          ],
+          "profile": {
+            "outgoingDamageBase": 0.098,
+            "outgoingDamagePerLevel": 0.0014000000000000002
+          }
+        },
+        {
+          "conditions": [
+            "RANGED_ATTACK"
+          ],
+          "profile": {
+            "outgoingDamageBase": -0.049,
+            "outgoingDamagePerLevel": -0.0007000000000000001
+          }
+        },
+        {
+          "conditions": [
+            "RANGED_ATTACK"
+          ],
+          "profile": {
+            "outgoingDamageBase": 0.015,
+            "outgoingDamagePerLevel": 0.00012
+          }
+        }
+      ]
+    },
+    "saint": {
+      "profile": {
+        "healingDoneBase": 0.0,
+        "healingDonePerLevel": 0.0,
+        "healingReceivedBase": 0.045,
+        "healingReceivedPerLevel": 0.0005
+      },
+      "traits": [
+        {
+          "conditions": [
+            "ALWAYS"
+          ],
+          "profile": {
+            "outgoingDamageBase": -0.041999999999999996,
+            "outgoingDamagePerLevel": -0.0006,
+            "healingReceivedBase": 0.055999999999999994,
+            "healingReceivedPerLevel": 0.0008
+          }
+        }
+      ]
+    },
+    "seraph": {
+      "profile": {
+        "healingDoneBase": 0.0,
+        "healingDonePerLevel": 0.0,
+        "abilityCostReductionBase": 0.0,
+        "abilityCostReductionPerLevel": 0.0,
+        "healingReceivedBase": 0.035,
+        "healingReceivedPerLevel": 0.0004
+      },
+      "traits": [
+        {
+          "conditions": [
+            "ALWAYS"
+          ],
+          "profile": {
+            "healingReceivedBase": 0.034999999999999996,
+            "healingReceivedPerLevel": 0.0005
+          }
+        },
+        {
+          "conditions": [
+            "GROUPED"
+          ],
+          "profile": {
+            "incomingDamageBase": -0.027999999999999997,
+            "incomingDamagePerLevel": -0.0004,
+            "movementSpeedBase": 0.020999999999999998,
+            "movementSpeedPerLevel": 0.0003
+          }
+        }
+      ]
+    },
+    "shaman": {
+      "profile": {
+        "healingDoneBase": 0.0,
+        "healingDonePerLevel": 0.0,
+        "abilityCostReductionBase": 0.0,
+        "abilityCostReductionPerLevel": 0.0,
+        "healingReceivedBase": 0.043,
+        "healingReceivedPerLevel": 0.00048
+      },
+      "traits": [
+        {
+          "conditions": [
+            "ALWAYS"
+          ],
+          "profile": {
+            "healingReceivedBase": 0.041999999999999996,
+            "healingReceivedPerLevel": 0.0006
+          }
+        }
+      ]
+    },
+    "shepherd": {
+      "profile": {
+        "healingDoneBase": 0.0,
+        "healingDonePerLevel": 0.0,
+        "abilityCostReductionBase": 0.0,
+        "abilityCostReductionPerLevel": 0.0,
+        "healingReceivedBase": 0.043,
+        "healingReceivedPerLevel": 0.00048
+      },
+      "traits": [
+        {
+          "conditions": [
+            "ALWAYS"
+          ],
+          "profile": {
+            "healingReceivedBase": 0.027999999999999997,
+            "healingReceivedPerLevel": 0.0004
+          }
+        },
+        {
+          "conditions": [
+            "GROUPED"
+          ],
+          "profile": {
+            "healingReceivedBase": 0.06999999999999999,
+            "healingReceivedPerLevel": 0.001
+          }
+        },
+        {
+          "conditions": [
+            "SOLO"
+          ],
+          "profile": {
+            "healingReceivedBase": -0.055999999999999994,
+            "healingReceivedPerLevel": -0.0008
+          }
+        }
+      ]
+    },
+    "shieldbearer": {
+      "traits": []
+    },
+    "siegebreaker": {
+      "profile": {
+        "outgoingDamageBase": 0.0,
+        "outgoingDamagePerLevel": 0.0
+      },
+      "traits": [
+        {
+          "conditions": [
+            "TARGET_BOSS"
+          ],
+          "profile": {
+            "outgoingDamageBase": 0.035,
+            "outgoingDamagePerLevel": 0.00025
+          }
+        }
+      ]
+    },
+    "slayer": {
+      "profile": {
+        "healingDoneBase": 0.0,
+        "healingReceivedBase": -0.01
+      }
+    },
+    "soulwarden": {
+      "profile": {
+        "healingDoneBase": 0.0,
+        "healingDonePerLevel": 0.0,
+        "abilityCostReductionBase": 0.0,
+        "abilityCostReductionPerLevel": 0.0,
+        "healingReceivedBase": 0.035,
+        "healingReceivedPerLevel": 0.0004
+      },
+      "traits": [
+        {
+          "conditions": [
+            "ALWAYS"
+          ],
+          "profile": {
+            "healingReceivedBase": 0.0245,
+            "healingReceivedPerLevel": 0.00035000000000000005
+          }
+        },
+        {
+          "conditions": [
+            "GROUPED"
+          ],
+          "profile": {
+            "incomingDamageBase": -0.055999999999999994,
+            "incomingDamagePerLevel": -0.0008
+          }
+        },
+        {
+          "conditions": [
+            "SOLO"
+          ],
+          "profile": {
+            "incomingDamageBase": 0.027999999999999997,
+            "incomingDamagePerLevel": 0.0004
+          }
+        }
+      ]
+    },
+    "spellcaster": {
+      "profile": {
+        "abilityCostReductionBase": 0.0,
+        "abilityCostReductionPerLevel": 0.0
+      },
+      "traits": [
+        {
+          "conditions": [
+            "SPELL_DAMAGE"
+          ],
+          "profile": {
+            "outgoingDamageBase": 0.005,
+            "outgoingDamagePerLevel": 8e-05
+          }
+        }
+      ]
+    },
+    "spiritbinder": {
+      "profile": {
+        "healingDoneBase": 0.0,
+        "healingDonePerLevel": 0.0,
+        "abilityCostReductionBase": 0.0,
+        "abilityCostReductionPerLevel": 0.0,
+        "healingReceivedBase": 0.03,
+        "healingReceivedPerLevel": 0.00035
+      },
+      "traits": [
+        {
+          "conditions": [
+            "ALWAYS"
+          ],
+          "profile": {
+            "healingReceivedBase": 0.049,
+            "healingReceivedPerLevel": 0.0007000000000000001
+          }
+        },
+        {
+          "conditions": [
+            "SPELL_DAMAGE"
+          ],
+          "profile": {
+            "outgoingDamageBase": 0.015,
+            "outgoingDamagePerLevel": 0.00015
+          }
+        },
+        {
+          "conditions": [
+            "SPELL_DAMAGE"
+          ],
+          "profile": {
+            "outgoingDamageBase": 0.020999999999999998,
+            "outgoingDamagePerLevel": 0.0003
+          }
+        }
+      ]
+    },
+    "spiritcaller": {
+      "profile": {
+        "healingDoneBase": 0.0,
+        "healingDonePerLevel": 0.0,
+        "abilityCostReductionBase": 0.0,
+        "abilityCostReductionPerLevel": 0.0,
+        "healingReceivedBase": 0.035,
+        "healingReceivedPerLevel": 0.0004
+      },
+      "traits": [
+        {
+          "conditions": [
+            "ALWAYS"
+          ],
+          "profile": {
+            "incomingDamageBase": 0.041999999999999996,
+            "incomingDamagePerLevel": 0.0006,
+            "healingReceivedBase": 0.027999999999999997,
+            "healingReceivedPerLevel": 0.0004
+          }
+        }
+      ]
+    },
+    "strategist": {
+      "profile": {
+        "abilityCostReductionBase": 0.0,
+        "abilityCostReductionPerLevel": 0.0
+      },
+      "traits": [
+        {
+          "conditions": [
+            "GROUPED"
+          ],
+          "profile": {
+            "incomingDamageBase": -0.01,
+            "incomingDamagePerLevel": -0.0001
+          }
+        },
+        {
+          "conditions": [
+            "GROUPED"
+          ],
+          "profile": {
+            "outgoingDamageBase": 0.020999999999999998,
+            "outgoingDamagePerLevel": 0.0003
+          }
+        },
+        {
+          "conditions": [
+            "SOLO"
+          ],
+          "profile": {
+            "outgoingDamageBase": -0.020999999999999998,
+            "outgoingDamagePerLevel": -0.0003
+          }
+        }
+      ],
+      "mechanics": []
+    },
+    "summoner": {
+      "profile": {
+        "abilityCostReductionBase": 0.0,
+        "abilityCostReductionPerLevel": 0.0
+      },
+      "traits": [
+        {
+          "conditions": [
+            "SPELL_DAMAGE"
+          ],
+          "profile": {
+            "outgoingDamageBase": 0.02,
+            "outgoingDamagePerLevel": 0.0002
+          }
+        }
+      ]
+    },
+    "templar": {
+      "profile": {
+        "healingDoneBase": 0.0,
+        "healingDonePerLevel": 0.0,
+        "healingReceivedBase": 0.01,
+        "healingReceivedPerLevel": 0.00015
+      },
+      "traits": [
+        {
+          "conditions": [
+            "ALWAYS"
+          ],
+          "profile": {
+            "outgoingDamageBase": -0.017499999999999998,
+            "outgoingDamagePerLevel": -0.00025,
+            "healingReceivedBase": 0.013999999999999999,
+            "healingReceivedPerLevel": 0.0002
+          }
+        }
+      ]
+    },
+    "titanbane": {
+      "profile": {
+        "healingDoneBase": 0.0,
+        "healingReceivedBase": -0.01
+      }
+    },
+    "trapper": {
+      "profile": {
+        "abilityCostReductionBase": 0.0,
+        "abilityCostReductionPerLevel": 0.0
+      },
+      "traits": [
+        {
+          "conditions": [
+            "RANGED_ATTACK"
+          ],
+          "profile": {
+            "outgoingDamageBase": 0.015,
+            "outgoingDamagePerLevel": 0.00012
+          }
+        }
+      ],
+      "mechanics": [
+        {
+          "conditions": [
+            "ALWAYS"
+          ],
+          "authoredAtLevelThirty": {
+            "burstHealingMultiplier": 1.0,
+            "periodicHealingMultiplier": 1.0,
+            "groupedEnemyHealingMultiplier": 1.0,
+            "periodicDurationMultiplier": 1.0,
+            "shieldStrengthMultiplier": 1.0,
+            "redirectedDamageMultiplier": 1.0,
+            "controlDurationMultiplier": 1.0,
+            "controlPotencyMultiplier": 1.0,
+            "abilityCostMultiplier": 1.0,
+            "controlResistanceFraction": 0.1,
+            "partyMovementSpeedAdjustment": 0.0
+          }
+        }
+      ]
+    },
+    "tyrant": {
+      "profile": {
+        "healingDoneBase": 0.0,
+        "healingReceivedBase": -0.01
+      },
+      "traits": [
+        {
+          "conditions": [
+            "NOT_RECENTLY_HIT"
+          ],
+          "profile": {
+            "outgoingDamageBase": -0.055999999999999994,
+            "outgoingDamagePerLevel": -0.0008
+          }
+        },
+        {
+          "conditions": [
+            "RECENTLY_HIT"
+          ],
+          "profile": {
+            "outgoingDamageBase": 0.11199999999999999,
+            "outgoingDamagePerLevel": 0.0016
+          }
+        }
+      ]
+    },
+    "warlord": {
+      "profile": {
+        "abilityCostReductionBase": 0.0,
+        "abilityCostReductionPerLevel": 0.0
+      },
+      "traits": [
+        {
+          "conditions": [
+            "GROUPED"
+          ],
+          "profile": {
+            "incomingDamageBase": -0.01,
+            "incomingDamagePerLevel": -0.0001
+          }
+        },
+        {
+          "conditions": [
+            "GROUPED"
+          ],
+          "profile": {
+            "outgoingDamageBase": 0.027999999999999997,
+            "outgoingDamagePerLevel": 0.0004,
+            "incomingDamageBase": 0.013999999999999999,
+            "incomingDamagePerLevel": 0.0002
+          }
+        }
+      ]
+    }
+  }
+}

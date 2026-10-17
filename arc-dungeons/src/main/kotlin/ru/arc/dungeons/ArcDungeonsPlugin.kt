@@ -15,6 +15,7 @@ import ru.arc.eliteloot.EliteLootModule
 import ru.arc.eliteloot.LostLootModule
 import ru.arc.enchanting.EliteEnchantingModule
 import ru.arc.hooks.elitemobs.*
+import ru.arc.hooks.elitemobs.arena.NativeArenaLevels
 import ru.arc.hooks.lootchest.LootChestListener
 import ru.arc.logging.ArcLogging
 import ru.arc.logging.LoggingConfigSource
@@ -55,6 +56,9 @@ open class ArcDungeonsPlugin : JavaPlugin() {
     internal var progression: DungeonProgression? = null
         private set
     private var mastery: DungeonMasteryEffects? = null
+    private var passiveClasses: PassiveClassCompatibility? = null
+    private var arenaLevels: NativeArenaLevels? = null
+    private var nativeInitializationListener: Listener? = null
     private var retiredSync: CompletableFuture<Void> = CompletableFuture.completedFuture(null)
     private var awaitingSync: Any? = null
     private var runtime: PaperPluginRuntime? = null
@@ -84,6 +88,14 @@ open class ArcDungeonsPlugin : JavaPlugin() {
         metrics = PaperArcMetrics.open(this, "arc-dungeons")
         refreshRedis(host)
         DungeonsMenus.initialize(this, legacyDataPath)
+        if (server.pluginManager.isPluginEnabled("EliteMobs")) {
+            nativeInitializationListener = EliteMobsLifecycleListener {
+                // EliteMobs soft reload replaces its runtime; release the old bindings first.
+                closeNative()
+                reloadNative()
+                publishModuleMetrics()
+            }.also { server.pluginManager.registerEvents(it, this) }
+        }
         spells = ArcStaffSpellServiceProvider(this) { StaffSpellsModule.activeController() }
             .also(StaffSpellsModule::installDuelAccess)
         PaperArcRuntime.installModuleLifecycleReporting({ logger.info(it) }, { message, failure ->
@@ -105,7 +117,7 @@ open class ArcDungeonsPlugin : JavaPlugin() {
 
     private fun mergeDefaults() {
         for (resource in listOf("modules/elitemobs.yml", "modules/elitemobs-wormholes.yml",
-            "modules/elite-loot.yml", "modules/staff-spells.yml", "modules/enchanting.yml",
+            "modules/elite-loot.yml", "modules/staff-spells.yml", "modules/enchanting.yml", "modules/arena-levels.yml",
             "guis/eliteloot.yml", "guis/menus.yml")) {
             ConfigManager.of(legacyDataPath, resource).mergeMissingFromBundled(resource)
         }
@@ -159,12 +171,26 @@ open class ArcDungeonsPlugin : JavaPlugin() {
             closeNative()
             return
         }
+        // softdepend orders onEnable calls, but EliteMobs finishes initialization asynchronously.
+        if (!EliteMobsLifecycleListener.isReady()) return
 
         attemptOptionalNativeIntegration(
             initialize = {
                 // Keep the candidate reachable before reload so rollback owns partial state.
                 val hook = emHook ?: EMHook().also { emHook = it }
                 hook.reload()
+                if (passiveClasses == null) {
+                    PassiveClassCompatibility(
+                        this,
+                        openClasses = { player -> dungeonQol?.action(player, "classes") },
+                        openForm = { player, id, atTrainer -> dungeonQol?.openClass(player, id, atTrainer) },
+                    ).also { passiveClasses = it }.start()
+                }
+                val levels = arenaLevels
+                if (levels == null) {
+                    NativeArenaLevels(this, ConfigManager.of(legacyDataPath, "modules/arena-levels.yml"))
+                        .also { arenaLevels = it }.install()
+                } else levels.reload()
                 if (dungeonQol == null) initializeDungeonQol()
                 synchronizeEliteMobs()
             },
@@ -272,6 +298,8 @@ open class ArcDungeonsPlugin : JavaPlugin() {
         val sharedXp = sharedSkillXp
         val progressionOwner = progression
         val masteryOwner = mastery
+        val passiveOwner = passiveClasses
+        val arenaOwner = arenaLevels
 
         // Completion rights must be captured while the old synchronized native state is reachable.
         runCatching { progressionOwner?.flushCompletions() }.onFailure {
@@ -287,6 +315,8 @@ open class ArcDungeonsPlugin : JavaPlugin() {
         sharedSkillXp = null
         progression = null
         mastery = null
+        passiveClasses = null
+        arenaLevels = null
         awaitingSync = null
         StaffSpellsModule.installMasteryCooldown(null)
 
@@ -295,6 +325,8 @@ open class ArcDungeonsPlugin : JavaPlugin() {
         sharedXp?.let { actions.add { it.close() } }
         progressionOwner?.let { actions.add { it.close() } }
         masteryOwner?.let { actions.add { it.close() } }
+        arenaOwner?.let { actions.add { it.close() } }
+        passiveOwner?.let { actions.add { it.close() } }
         qol?.let { actions.add { it.close() } }
         hook?.let { actions.add { it.close() } }
         sync?.let { actions.add { retireSync(it) } }
@@ -312,6 +344,8 @@ open class ArcDungeonsPlugin : JavaPlugin() {
     }
 
     override fun onDisable() {
+        nativeInitializationListener?.let { HandlerList.unregisterAll(it) }
+        nativeInitializationListener = null
         server.servicesManager.unregisterAll(this)
         spells?.close()
         spells = null

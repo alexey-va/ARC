@@ -3,7 +3,7 @@ version: ${version}
 main: ru.arc.dungeons.ArcDungeonsPlugin
 api-version: '1.21'
 depend: [ARC]
-softdepend: [EliteMobs, FreeMinecraftModels, CMI, LootChest, packetevents, AdvancedEnchantments, ItemsAdder, LuckPerms]
+softdepend: [EliteMobs, FreeMinecraftModels, LibsDisguises, CMI, LootChest, packetevents, AdvancedEnchantments, ItemsAdder, LuckPerms]
 commands:
   dungeon:
     description: Dungeon control panel and saved places

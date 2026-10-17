@@ -1583,13 +1583,18 @@ internal fun withStaffHarness(
                             StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false)
                         }
                         every { damage.isCurrent(any(), any()) } answers { currentCast(firstArg(), secondArg()) }
-                        every { damage.hit(any(), any(), any(), any(), any()) } answers {
-                            val player = firstArg<Player>()
-                            val target = secondArg<LivingEntity>()
+                        fun recordHit(player: Player, target: LivingEntity, power: Double, vanillaDamage: Double): Boolean {
                             hits += target
                             hitLocations += target.location.clone()
-                            damageScales += arg<Double>(3) to arg<Double>(4)
-                            hit(player, target)
+                            damageScales += power to vanillaDamage
+                            return hit(player, target)
+                        }
+                        every { damage.hit(any(), any(), any(), any(), any()) } answers {
+                            recordHit(firstArg(), secondArg(), arg(3), arg(4))
+                        }
+                        // Summoned actors explicitly omit a primary weapon strike; reject any non-null tag.
+                        every { damage.hit(any(), any(), any(), any(), any(), null) } answers {
+                            recordHit(firstArg(), secondArg(), arg(3), arg(4))
                         }
                         val effects = mockk<StaffSpellDisplayEffects>(relaxed = true)
                         val visualPlays = mutableListOf<StaffVisualPlay>()

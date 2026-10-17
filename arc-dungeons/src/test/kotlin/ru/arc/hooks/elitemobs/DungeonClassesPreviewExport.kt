@@ -1,7 +1,9 @@
 package ru.arc.hooks.elitemobs
 
 import com.google.gson.GsonBuilder
+import com.magmaguy.elitemobs.advancedcombat.challenges.ClassChallengeInstance
 import com.magmaguy.elitemobs.advancedcombat.content.BuiltInClassContent
+import com.magmaguy.elitemobs.economy.EconomyHandler
 import io.mockk.every
 import io.mockk.mockk
 import net.kyori.adventure.text.Component
@@ -41,9 +43,14 @@ object DungeonClassesPreviewExport {
         val captures = linkedMapOf<String, PaperDialogScreen>()
         MockBukkitTestRuntime.open().use { paper ->
             val player = paper.addPlayer("class-preview")
-            for ((id, level, unlocked) in listOf(Triple("occultist", 39, true), Triple("soulwarden", 99, true), Triple("necromancer", 61, false))) {
+            for ((key, id, level, unlocked, atTrainer) in listOf(
+                PreviewState("occultist", "occultist", 39, true),
+                PreviewState("necromancer", "necromancer", 61, false),
+                PreviewState("necromancer-trainer", "necromancer", 61, false, true),
+            )) {
                 val forms = catalog.forms().associate { definition ->
-                    val effective = if (definition.id() == id) level else definition.band().effectiveStart()
+                    val effective = if (definition.id() == id) level else if (atTrainer && definition.id() == "occultist") 60
+                        else definition.band().effectiveStart()
                     val lineage = catalog.lineageOf(definition.id())
                     val contributions = lineage.passiveContributionLevels(effective)
                     definition.id() to DungeonClassForm(
@@ -54,7 +61,8 @@ object DungeonClassesPreviewExport {
                         unlocked = definition.id() != id || unlocked, selected = definition.id() == id && unlocked,
                         active = definition.id() == id && unlocked, requiredLevel = definition.band().effectiveStart(),
                         level = effective, cap = minOf(100, definition.band().effectiveEnd()), xp = if (unlocked) "450 / 1200" else "Недоступен",
-                        foundations = emptyList(), blockers = if (unlocked || definition.id() != id) emptyList() else listOf(
+                        foundations = emptyList(), blockers = if (unlocked || definition.id() != id) emptyList() else if (atTrainer)
+                            listOf(DungeonClassRequirement("Испытание", "Победить наставника этого класса")) else listOf(
                             DungeonClassRequirement("Оккультист", "39 / 60"),
                             DungeonClassRequirement("Посохи", "48 / 60"), DungeonClassRequirement("Жезлы", "52 / 60"),
                             DungeonClassRequirement("Испытание", "Победить наставника этого класса"),
@@ -74,11 +82,19 @@ object DungeonClassesPreviewExport {
                     mm.deserialize(config.string("dungeon-qol.${firstArg<String>()}", secondArg()),
                         TagResolver.resolver(values.map { (key, value) -> Placeholder.component(key, value) }))
                 }
+                val trials = mockk<DungeonClassTrials>()
+                if (atTrainer) {
+                    val form = catalog.require(id)
+                    val fee = ClassChallengeInstance.fee(form)
+                    every { trials.quote(player, id) } returns DungeonClassTrialQuote(id, fee, EconomyHandler.formatCurrency(fee),
+                        form.band().skillUnlockLevel())
+                }
                 val screens = mutableListOf<PaperDialogScreen>()
-                val menus = DungeonSaveMenus(dungeon, classService = service, canGrantClasses = { false }) { _, screen, _ -> screens += screen }
-                menus.classes(player)
-                screens.last().buttons.first { it.id.value == "class_$id" }.onClick.handle(mockk())
-                captures[id] = screens.last()
+                val menus = DungeonSaveMenus(dungeon, classService = service, classTrials = trials, canGrantClasses = { false }) {
+                    _, screen, _ -> screens += screen
+                }
+                menus.classDetail(player, id, atTrainer = atTrainer)
+                captures[key] = screens.last()
             }
         }
         val content = linkedMapOf<String, Map<String, String>>()
@@ -117,9 +133,12 @@ object DungeonClassesPreviewExport {
                 },
             "sources" to captures.keys.associateWith { mapOf("path" to "content.json", "root" to it, "include" to listOf("*")) },
             "surfaces" to mapOf("dialogs" to dialogs),
-            "limitations" to listOf("Production components with representative profiles; native client and input are unverified."),
+            "limitations" to listOf("Production components with representative profiles; native client and input are unverified.",
+                "Trainer quote uses the stock native fee function with its default config; live server economy is not observed here."),
         )))
         configPath.toFile().deleteRecursively()
         println("CLASS_PREVIEW ${captures.keys} $output")
     }
+
+    private data class PreviewState(val key: String, val formId: String, val level: Int, val unlocked: Boolean, val atTrainer: Boolean = false)
 }

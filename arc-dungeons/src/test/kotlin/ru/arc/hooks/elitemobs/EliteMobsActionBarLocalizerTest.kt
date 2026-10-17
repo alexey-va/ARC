@@ -10,6 +10,41 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 class EliteMobsActionBarLocalizerTest : FreeSpec({
     val plain = PlainTextComponentSerializer.plainText()
 
+    "passive addon removes only its exact native tutorial notices without marking player progress" {
+        val localizer = EliteMobsActionBarLocalizer(passiveClassesActive = { true })
+        listOf(
+            "[Class Skills] Try all three class skills! Press and release your swap-hands key (default F), then quickly use the second input.",
+            "[Class Skills] Your class resource stays full while waiting. Try your skills here!",
+            "[Class Skills] F, then F — Mobility",
+            "[Class Skills] F, then left-click — Signature",
+            "[Class Skills] F, then right-click — Utility",
+            "[Class Skills] A successful cast checks off a skill. Targeted skills may need a suitable target.",
+            "[Alpha] Advanced Combat System » New: hold sneak and double-tap F to toggle class controls anywhere outside EliteMobs content.",
+        ).forEach { localizer.shouldSuppressNotice(Component.text(it), isOverlay = false) shouldBe true }
+        listOf("[Class Skills] Your profile could not be saved.", "Player: [Class Skills] F, then F — Mobility",
+            "Arcane Burst cannot be used right now.", "Your class is locked until this dungeon run ends.").forEach {
+            localizer.shouldSuppressNotice(Component.text(it), isOverlay = false) shouldBe false
+        }
+    }
+
+    "passive addon strips appended controls across component boundaries and preserves health colours" {
+        val localizer = EliteMobsActionBarLocalizer(mapOf("Occultist" to "Оккультист"), passiveClassesActive = { true })
+        val prefix = Component.text("HP 84/120", NamedTextColor.RED)
+            .append(Component.text(" | [39] Occultist", NamedTextColor.AQUA))
+        val source = prefix.append(Component.text(" | F,F: Mobility | F+LMB: ", NamedTextColor.GRAY))
+            .append(Component.text("Signature | F+RMB: Utility", NamedTextColor.GRAY))
+        val result = localizer.localize(source)
+        plain.serialize(result) shouldBe "Здоровье 84/120 | [39] Оккультист"
+        result.color() shouldBe NamedTextColor.RED
+        result.children().last().color() shouldBe NamedTextColor.AQUA
+        val controls = Component.text("F,F: Mobility | F+LMB: Signature | F+RMB: Utility")
+        localizer.shouldSuppressNotice(controls, isOverlay = true) shouldBe true
+        localizer.shouldSuppressNotice(controls, isOverlay = false) shouldBe false
+        val feedback = Component.text("Entering combat! | F,F: Mobility | F+LMB: Signature | F+RMB: Utility", NamedTextColor.RED)
+        plain.serialize(localizer.localize(feedback)) shouldBe "Вы вступили в бой!"
+        result shouldBe localizer.localize(result)
+    }
+
     "passive-only HUD localizes health and class identity without losing colours" {
         val source = Component.text("HP 84/120", NamedTextColor.RED)
             .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
