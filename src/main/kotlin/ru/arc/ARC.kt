@@ -602,6 +602,7 @@ open class ARC : JavaPlugin() {
 
         ConfigManager.of(dataPath, "modules/personalloot.yml").mergeMissingFromBundled("modules/personalloot.yml")
         ConfigManager.of(dataPath, "modules/item-presets.yml").mergeMissingFromBundled("modules/item-presets.yml")
+        ConfigManager.of(dataPath, "modules/misc.yml")
 
         val commandsConfig = ConfigManager.of(dataFolder.toPath().resolve("config"), "commands.yml")
         if (commandsConfig.mergeMissingFromBundled("config/commands.yml")) {

@@ -1,5 +1,6 @@
 package ru.arc.core.modules
 
+import com.github.retrooper.packetevents.PacketEvents
 import kotlinx.coroutines.cancel
 import net.milkbowl.vault.economy.Economy
 import org.bukkit.Bukkit
@@ -22,6 +23,7 @@ import ru.arc.hooks.HookRegistry
 import ru.arc.leafdecay.LeafDecayManager
 import ru.arc.misc.JoinMessagesManager
 import ru.arc.misc.JoinMessageCatalogManager
+import ru.arc.misc.PluginUpdateNotifications
 import ru.arc.mobspawn.MobSpawnManager
 import ru.arc.network.NetworkRegistry
 import ru.arc.config.ArcRedisConfig
@@ -135,14 +137,18 @@ object NetworkModule : PluginModule {
 object HooksModule : PluginModule {
     override val name = "Hooks"
     override val priority = 15
+    private var pluginUpdateNotifications: PluginUpdateNotifications? = null
 
     override fun init() {
         val registry = HookRegistry()
         try {
             registry.setupHooks()
+            reloadPluginUpdateNotifications()
             ARC.hookRegistry = registry
             Tasks.scheduler.runLater(1L, Runnable { if (!registry.isClosed) registry.setupHooks() })
         } catch (failure: Throwable) {
+            runCatching { pluginUpdateNotifications?.close() }.exceptionOrNull()?.let(failure::addSuppressed)
+            pluginUpdateNotifications = null
             runCatching { registry.close() }
                 .exceptionOrNull()
                 ?.let(failure::addSuppressed)
@@ -151,6 +157,7 @@ object HooksModule : PluginModule {
     }
 
     override fun reload() {
+        reloadPluginUpdateNotifications()
         ARC.hookRegistry?.let { registry ->
             registry.setupHooks()
             registry.refreshFurnitureGalleryTargets()
@@ -160,10 +167,31 @@ object HooksModule : PluginModule {
     override fun shutdown() {
         val registry = ARC.hookRegistry
         ARC.hookRegistry = null
+        val notifications = pluginUpdateNotifications
+        pluginUpdateNotifications = null
         try {
             TitleInput.shutdown()
         } finally {
-            registry?.close()
+            try {
+                notifications?.close()
+            } finally {
+                registry?.close()
+            }
+        }
+    }
+
+    private fun reloadPluginUpdateNotifications() {
+        val config = checkNotNull(ConfigManager.get("${ARC.instance.dataPath}/modules/misc.yml")) {
+            "modules/misc.yml must be prepared before HooksModule starts"
+        }
+        val players = config.stringListOrNull(PluginUpdateNotifications.CONFIG_KEY).orEmpty()
+        if (players.isEmpty()) {
+            pluginUpdateNotifications?.close()
+            pluginUpdateNotifications = null
+        } else {
+            val notifications = pluginUpdateNotifications ?: PluginUpdateNotifications(PacketEvents.getAPI().eventManager)
+                .also { pluginUpdateNotifications = it }
+            notifications.reload(players)
         }
     }
 }

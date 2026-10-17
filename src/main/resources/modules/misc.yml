@@ -18,6 +18,10 @@ paths:
   # Каталог с per-module *.yml относительно папки плагина
   feature-config-directory: modules
 
+# UUID игроков, которым скрываются только известные уведомления об обновлении плагинов.
+# Применяется после /arc reload; OP и права игроков сохраняются.
+plugin-update-notifications-muted-players: []
+
 # --- Совместимость старых интеграций с RedisEconomy ---
 economy:
   legacy-money-alias:
