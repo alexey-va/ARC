@@ -48,6 +48,9 @@ class EMDungeonCommandTest : FreeSpec({
         executor.onCommand(player, command, "данж", emptyArray())
         executor.onCommand(player, command, "данж", arrayOf("тп"))
         calls shouldBe listOf("menu", "тп")
+        executor.onTabComplete(player, command, "данж", arrayOf("")) shouldContainExactly listOf("menu", "меню", "tp", "тп", "порталы")
+        executor.onTabComplete(player, command, "dungeon", arrayOf("п")) shouldContainExactly listOf("порталы")
+        executor.onTabComplete(player, command, "dungeon", arrayOf("start")) shouldBe emptyList()
     }
 
     "fails closed for unavailable, nonplayers, and supports Russian tab completion" {
@@ -63,5 +66,18 @@ class EMDungeonCommandTest : FreeSpec({
 
         every { command.name } returns "dungeon"
         EMDungeonCommand(config, { _, _, _ -> }, { true }).onTabComplete(player, command, "dungeon", arrayOf("с")) shouldContainExactly listOf("список", "статистика", "снаряжение", "сохраниться", "сохранения")
+    }
+
+    "argument-free commands and console never request player fallback" {
+        val player = mockk<Player>(relaxed = true)
+        val console = mockk<org.bukkit.command.CommandSender>(relaxed = true)
+        every { command.name } returns "dungeon"
+        val executor = EMDungeonCommand(config, { _, _, _ -> }, { true })
+        executor.onTabComplete(console, command, "dungeon", arrayOf("")) shouldBe emptyList()
+        executor.onTabComplete(player, command, "dungeon", arrayOf("menu", "")) shouldBe emptyList()
+        every { command.name } returns "dungeonsave"
+        executor.onTabComplete(player, command, "dungeonsave", arrayOf("")) shouldBe emptyList()
+        ru.arc.eliteloot.LostLootCommand.onTabComplete(player, command, "loot", arrayOf("")) shouldBe emptyList()
+        ru.arc.eliteloot.LostLootCommand.onTabComplete(player, command, "добыча", arrayOf("extra", "")) shouldBe emptyList()
     }
 })

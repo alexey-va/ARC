@@ -78,9 +78,9 @@ object RtpSubCommand : SubCommand {
             2 ->
                 if (args[0].equals(ONLY_IF_FIRST_FLAG, ignoreCase = true)) {
                     PUBLIC_WORLDS.tabComplete(args[1])
-                } else {
+                } else if (PUBLIC_WORLDS.any { it.equals(args[0], ignoreCase = true) }) {
                     listOf(ONLY_IF_FIRST_FLAG).tabComplete(args[1])
-                }
+                } else emptyList()
             else -> null
         }
 

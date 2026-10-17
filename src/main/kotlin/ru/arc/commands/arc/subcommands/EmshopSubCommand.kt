@@ -59,7 +59,7 @@ object EmshopSubCommand : SubCommand {
     override fun tabComplete(sender: CommandSender, args: Array<String>): List<String>? {
         return when (args.size) {
             1 -> (listOf("reset") + onlinePlayerNames()).tabComplete(args[0])
-            2 -> listOf("gear", "trinket").tabComplete(args[1])
+            2 -> if (args[0].equals("reset", true)) emptyList() else listOf("gear", "trinket").tabComplete(args[1])
             else -> null
         }
     }

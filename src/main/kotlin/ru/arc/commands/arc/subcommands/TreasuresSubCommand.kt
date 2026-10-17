@@ -288,6 +288,7 @@ object TreasuresSubCommand : SubCommand {
         sender: CommandSender,
         args: Array<String>,
     ): List<String>? {
+        if (args.size > 1 && args[0].lowercase() in listOf("list", "reload")) return emptyList()
         val pools = Treasures.getAllPools().map { it.id }
 
         return when (args.size) {
@@ -296,7 +297,7 @@ object TreasuresSubCommand : SubCommand {
             3 -> when (args[1].lowercase()) {
                 "addsubpool" -> pools.filter { !it.equals(args[0], ignoreCase = true) }.tabComplete(args[2])
                 "give" -> tabCompletePlayers(args[2])
-                else -> null
+                else -> suggestFlags(args)
             }
 
             else -> suggestFlags(args)
@@ -304,16 +305,16 @@ object TreasuresSubCommand : SubCommand {
     }
 
     private fun suggestFlags(args: Array<String>): List<String> {
-        val existing = args.toSet()
+        val existing = args.dropLast(1).toSet()
         val action = args.getOrNull(1)?.lowercase()
         val suggestions = mutableListOf<String>()
 
         if (action in listOf("add", "addhand", "addchest", "addsubpool")) {
-            if (existing.none { it.startsWith("-weight:") }) {
+            if (existing.none { it.startsWith("-weight:", ignoreCase = true) }) {
                 suggestions.add("-weight:1")
             }
         }
-        if (action in listOf("add", "addhand") && existing.none { it.startsWith("-quantity:") }) {
+        if (action in listOf("add", "addhand") && existing.none { it.startsWith("-quantity:", ignoreCase = true) }) {
             suggestions.add("-quantity:1")
         }
 

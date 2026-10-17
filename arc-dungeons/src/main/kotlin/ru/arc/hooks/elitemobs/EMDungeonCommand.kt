@@ -38,7 +38,7 @@ class EMDungeonCommand(
         }
         val action = shortcut ?: args.firstOrNull()?.lowercase() ?: "menu"
         if (!available()) {
-            if (action !in setOf("menu", "меню", "tp", "тп", "порталы") || !browse(player, action))
+            if (action !in BROWSE_ACTIONS || !browse(player, action))
                 player.sendMessage(config.component("dungeon-qol.messages.unavailable", "<red>Данжи сейчас недоступны.</red>"))
             return true
         }
@@ -47,9 +47,15 @@ class EMDungeonCommand(
         return true
     }
 
-    override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<String>): List<String> =
-        if (command.name == "dungeon" && args.size == 1) {
+    override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<String>): List<String> {
+        if (sender !is Player || command.name != "dungeon" || args.size != 1) return emptyList()
+        val actions = if (available()) {
             listOf("меню", "menu", "общее", "список", "статистика", "снаряжение", "навыки", "боссы", "классы", "задания", "телепорты", "начать", "выйти", "вход", "вернуться", "продолжить", "магазины", "сохраниться", "сохранения", "тп", "помощь", "global", "stats", "gear", "skills", "bosses", "classes", "quests", "travel", "start", "quit", "entry", "return", "resume", "shops", "save", "saves", "tp", "list", "help")
-                .filter { it.startsWith(args[0], ignoreCase = true) }
-        } else emptyList()
+        } else BROWSE_ACTIONS.toList()
+        return actions.filter { it.startsWith(args[0], ignoreCase = true) }
+    }
+
+    private companion object {
+        val BROWSE_ACTIONS = setOf("menu", "меню", "tp", "тп", "порталы")
+    }
 }

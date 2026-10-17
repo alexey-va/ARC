@@ -64,6 +64,7 @@ object SchedulesSubCommand : SubCommand {
         sender: CommandSender,
         args: Array<String>,
     ): List<String>? {
+        if (!sender.hasPermission("arc.schedules.run") && !sender.hasPermission("arc.admin")) return emptyList()
         if (args.size == 1) {
             return listOf("run").filter { it.startsWith(args[0], ignoreCase = true) }
         }

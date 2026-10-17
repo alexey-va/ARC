@@ -65,7 +65,7 @@ internal class CommandHideSubCommand(
     ): List<String>? =
         when (args.size) {
             1 -> ACTIONS.tabComplete(args[0])
-            2 -> onlinePlayerNames().tabComplete(args[1])
+            2 -> if (args[0].lowercase(Locale.ROOT) in ACTIONS) onlinePlayerNames().tabComplete(args[1]) else emptyList()
             else -> emptyList()
         }
 

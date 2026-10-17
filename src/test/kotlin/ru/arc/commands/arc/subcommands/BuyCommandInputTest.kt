@@ -35,5 +35,8 @@ class BuyCommandInputTest :
             BuyCommandInput.complete(arrayOf("Redstone", "R"), paths).orEmpty() shouldContainExactly listOf("RAIL")
             BuyCommandInput.complete(arrayOf("Blocks.TNT", ""), paths, maxAmount = 32).orEmpty() shouldContainExactly
                 listOf("1", "16", "32")
+            BuyCommandInput.complete(arrayOf("Blocks", "TNT", "6"), paths).orEmpty() shouldContainExactly listOf("64")
+            BuyCommandInput.complete(arrayOf("Blocks", "missing", ""), paths).orEmpty() shouldContainExactly emptyList()
+            BuyCommandInput.complete(arrayOf("Blocks.TNT", "64", ""), paths).orEmpty() shouldContainExactly emptyList()
         }
     })

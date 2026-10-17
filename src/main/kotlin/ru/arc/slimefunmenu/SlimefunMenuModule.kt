@@ -534,7 +534,7 @@ object SlimefunMenuCommand : CommandExecutor, TabCompleter {
     }
 
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<String>): List<String> =
-        if (command.name.equals("skyblock", ignoreCase = true) && args.size == 1) {
+        if (sender is Player && command.name.equals("skyblock", ignoreCase = true) && args.size == 1) {
             listOf("guide", "shop", "hub", "spawn", "progress", "resources", "top").filter { it.startsWith(args[0], ignoreCase = true) }
         } else {
             emptyList()
@@ -542,6 +542,8 @@ object SlimefunMenuCommand : CommandExecutor, TabCompleter {
 }
 
 class NetworkSpawnCommand : Command("spawn") {
+    override fun tabComplete(sender: CommandSender, alias: String, args: Array<String>): List<String> = emptyList()
+
     override fun execute(sender: CommandSender, label: String, args: Array<String>): Boolean {
         val player = sender as? Player ?: run {
             sender.sendMessage("Эта команда доступна только игроку.")
@@ -557,6 +559,8 @@ class NetworkSpawnCommand : Command("spawn") {
 }
 
 internal class SlimefunMenuAliasCommand : Command("mm") {
+    override fun tabComplete(sender: CommandSender, alias: String, args: Array<String>): List<String> = emptyList()
+
     override fun execute(sender: CommandSender, label: String, args: Array<String>): Boolean =
         SlimefunMenuCommand.onCommand(sender, this, label, args)
 }

@@ -2700,8 +2700,8 @@ object TravelAnchorSubCommand : SubCommand {
     override fun tabComplete(sender: org.bukkit.command.CommandSender, args: Array<String>): List<String>? =
         when (args.size) {
             1 -> listOf("give", "public", "staff").tabComplete(args[0])
-            2 -> tabCompletePlayers(args[1])
-            3 -> listOf("1", "8", "16", "64").tabComplete(args[2])
+            2 -> if (travelAnchorGiveKind(args[0]) != null) tabCompletePlayers(args[1]) else emptyList()
+            3 -> if (travelAnchorGiveKind(args[0]) != null) listOf("1", "8", "16", "64").tabComplete(args[2]) else emptyList()
             else -> null
         }
 }
@@ -2779,15 +2779,18 @@ internal data class TravelAnchorCommandRequest(
 )
 
 internal fun resolveTravelAnchorCommand(senderName: String?, args: List<String>): TravelAnchorCommandRequest? {
-    val kind = when (args.firstOrNull()?.lowercase()) {
-        "give", "personal", "якорь" -> TravelAnchorGiveKind.PERSONAL
-        "public", "shared", "общий" -> TravelAnchorGiveKind.PUBLIC
-        "staff", "wand", "палка", "жезл" -> TravelAnchorGiveKind.STAFF
-        else -> return null
-    }
+    val kind = travelAnchorGiveKind(args.firstOrNull()) ?: return null
     val give = resolveTravelAnchorGiveRequest(senderName, args.drop(1)) ?: return null
     return TravelAnchorCommandRequest(kind, give.playerName, give.amount)
 }
+
+private fun travelAnchorGiveKind(action: String?): TravelAnchorGiveKind? =
+    when (action?.lowercase()) {
+        "give", "personal", "якорь" -> TravelAnchorGiveKind.PERSONAL
+        "public", "shared", "общий" -> TravelAnchorGiveKind.PUBLIC
+        "staff", "wand", "палка", "жезл" -> TravelAnchorGiveKind.STAFF
+        else -> null
+    }
 
 internal fun resolveTravelAnchorGiveRequest(senderName: String?, args: List<String>): TravelAnchorGiveRequest? =
     when (args.size) {

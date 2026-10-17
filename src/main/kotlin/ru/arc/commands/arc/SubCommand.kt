@@ -65,7 +65,7 @@ interface SubCommand {
      * Provide tab completions for this subcommand.
      * @param sender The command sender
      * @param args Arguments after the subcommand name
-     * @return List of completions or null
+     * @return List of completions; null means no suggestions and is normalized by the command dispatcher.
      */
     fun tabComplete(sender: CommandSender, args: Array<String>): List<String>? = null
 

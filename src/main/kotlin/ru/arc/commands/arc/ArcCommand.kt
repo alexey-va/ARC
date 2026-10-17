@@ -209,15 +209,19 @@ class ArcCommand(private val profile: ArcRuntimeProfile = ArcRuntimeProfile.FULL
         command: Command,
         label: String,
         args: Array<String>,
-    ): List<String>? {
-        if (args.isEmpty()) return null
+    ): List<String> {
+        if (args.isEmpty()) return emptyList()
 
         // First arg - show subcommand names with smart sorting
         if (args.size == 1) {
             val input = args[0]
             val available =
                 subcommands.entries
-                    .filter { it.value.isAvailable() && sender.checkPermission(it.value.permission) }
+                    .filter {
+                        it.value.isAvailable() && canComplete(sender, it.value) &&
+                            (!it.value.playerOnly || sender.player != null ||
+                                (it.value === FurnitureSubCommand && FurnitureSubCommand.isLocalConsoleSender(sender)))
+                    }
                     .map { it.key }
                     .distinct()
 
@@ -227,13 +231,21 @@ class ArcCommand(private val profile: ArcRuntimeProfile = ArcRuntimeProfile.FULL
         val subName = args[0].lowercase()
 
         // Delegate to subcommand
-        val subCommand = subcommands[subName]?.takeIf { it.isAvailable() } ?: return null
+        val subCommand = subcommands[subName]?.takeIf { it.isAvailable() } ?: return emptyList()
 
-        if (!sender.checkPermission(subCommand.permission)) return null
+        if (!canComplete(sender, subCommand)) return emptyList()
 
         val subArgs = args.drop(1).toTypedArray()
-        return subCommand.tabComplete(sender, subArgs)
+        if (subCommand.playerOnly && sender.player == null &&
+            !(subCommand === FurnitureSubCommand && FurnitureSubCommand.isLocalConsoleSender(sender))
+        ) return emptyList()
+        // Bukkit interprets null as its generic online-player completion.
+        return subCommand.tabComplete(sender, subArgs).orEmpty().tabComplete(subArgs.last())
     }
+
+    private fun canComplete(sender: CommandSender, subCommand: SubCommand): Boolean =
+        sender.checkPermission(subCommand.permission) ||
+            (sender.player != null && (subCommand === FurnitureSubCommand || subCommand === OriginPortalsSubCommand))
 
     companion object {
         private val fullInstance by lazy { ArcCommand(ArcRuntimeProfile.FULL) }

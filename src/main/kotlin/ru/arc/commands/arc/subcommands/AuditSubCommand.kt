@@ -98,10 +98,16 @@ object AuditSubCommand : SubCommand {
     }
 
     override fun tabComplete(sender: CommandSender, args: Array<String>): List<String>? {
+        if (args.size > 1 && args[0].equals("clearall", true)) return emptyList()
+        if (args.firstOrNull()?.equals("reset-period", true) == true && args.size > 1) {
+            return if (args.size == 2 && sender.hasPermission("arc.audit.reset")) {
+                listOf("status", "confirm").tabComplete(args[1])
+            } else emptyList()
+        }
         return when (args.size) {
             1 -> (listOf("clearall") + (if (sender.hasPermission("arc.audit.reset")) listOf("reset-period") else emptyList()) + PlayerManager.getPlayerNames()).tabComplete(args[0])
-            2 -> if (args[0].equals("reset-period", true)) listOf("status", "confirm").tabComplete(args[1]) else (listOf("1", "2", "3", "4", "5", "clear") + filters).tabComplete(args[1])
-            3 -> filters.tabComplete(args[2])
+            2 -> (listOf("1", "2", "3", "4", "5", "clear") + filters).tabComplete(args[1])
+            3 -> if (args[1].toIntOrNull() != null) filters.tabComplete(args[2]) else emptyList()
             else -> null
         }
     }

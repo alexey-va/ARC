@@ -180,10 +180,6 @@ object GiveBoostSubCommand : SubCommand {
                 listOf("1h", "1d", "7d", "30m").tabComplete(args[4])
             }
 
-            6 -> {
-                listOf("[id]")
-            }
-
             else -> {
                 null
             }

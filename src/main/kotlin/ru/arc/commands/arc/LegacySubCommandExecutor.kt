@@ -37,10 +37,12 @@ class LegacySubCommandExecutor(
         command: Command,
         label: String,
         args: Array<String>,
-    ): List<String>? {
-        if (!sender.checkPermission(subCommand.permission)) {
-            return null
+    ): List<String> {
+        if (!subCommand.isAvailable() || !sender.checkPermission(subCommand.permission) ||
+            (subCommand.playerOnly && sender.player == null) || args.isEmpty()
+        ) {
+            return emptyList()
         }
-        return subCommand.tabComplete(sender, args)
+        return subCommand.tabComplete(sender, args).orEmpty().tabComplete(args.last())
     }
 }

@@ -31,7 +31,9 @@ object StaffTestSubCommand : SubCommand {
     }
     override fun tabComplete(sender: CommandSender, args: Array<String>) = when (args.size) {
         1 -> (listOf("all") + dungeonService()?.staffSpellIds().orEmpty()).tabComplete(args[0])
-        2 -> Bukkit.getOnlinePlayers().map { it.name }.tabComplete(args[1])
+        2 -> if ((listOf("all") + dungeonService()?.staffSpellIds().orEmpty()).any { it.equals(args[0], true) }) {
+            Bukkit.getOnlinePlayers().map { it.name }.tabComplete(args[1])
+        } else emptyList()
         else -> emptyList()
     }
 }

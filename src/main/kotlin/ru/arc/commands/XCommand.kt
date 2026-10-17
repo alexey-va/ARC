@@ -155,6 +155,7 @@ object XCommand : CommandExecutor, TabCompleter {
         alias: String,
         args: Array<String>,
     ): List<String> {
+        if (!sender.hasPermission("arc.x")) return emptyList()
         val last = args.lastOrNull() ?: ""
         val suggestions = mutableListOf<String>()
 

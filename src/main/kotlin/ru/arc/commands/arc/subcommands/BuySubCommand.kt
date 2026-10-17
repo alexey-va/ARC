@@ -273,7 +273,9 @@ internal object BuyCommandInput {
                         .tabComplete(args[1])
                 }
             }
-            3 -> allowedAmounts.tabComplete(args[2])
+            3 -> if (itemQueries.any { it.equals("${args[0]}.${args[1]}", ignoreCase = true) }) {
+                allowedAmounts.tabComplete(args[2])
+            } else emptyList()
             else -> null
         }
     }

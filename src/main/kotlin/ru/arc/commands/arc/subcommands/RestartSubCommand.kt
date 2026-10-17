@@ -149,71 +149,55 @@ object RestartSubCommand : SubCommand {
     override fun tabComplete(
         sender: CommandSender,
         args: Array<String>,
-    ): List<String>? {
+    ): List<String> {
         if (args.isEmpty()) return emptyList()
-
-        if (args.size == 1) {
-            return listOf("cancel", "-servers", "-delay").tabComplete(args[0])
-        }
-
-        if (args[0].equals("cancel", ignoreCase = true)) {
-            return tabCompleteFlags(args.copyOfRange(1, args.size))
-        }
-
-        return tabCompleteFlags(args)
+        val cancel = args.size > 1 && args[0].equals("cancel", ignoreCase = true)
+        val allowed = if (cancel) canCancel(sender, RestartServerTarget.Current) else canSchedule(sender, RestartServerTarget.Current)
+        val remote = if (cancel) canCancel(sender, RestartServerTarget.All) else canSchedule(sender, RestartServerTarget.All)
+        val flags = if (allowed) tabCompleteFlags(if (cancel) args.copyOfRange(1, args.size) else args, remote, !cancel) else emptyList()
+        return if (args.size == 1 && canCancel(sender, RestartServerTarget.Current)) {
+            (listOf("cancel") + flags).tabComplete(args[0])
+        } else flags
     }
 
-    private fun tabCompleteFlags(args: Array<String>): List<String> {
+    private fun tabCompleteFlags(args: Array<String>, allowServers: Boolean, allowDelay: Boolean): List<String> {
         val last = args.lastOrNull().orEmpty()
         val prev = args.getOrNull(args.size - 2)
-        val parsed = RestartFlagParser.parseFlags(args)
+        val parsed = RestartFlagParser.parseFlags(args.dropLast(1).toTypedArray())
         val hasServers = parsed.containsKey("servers")
         val hasDelay = parsed.containsKey("delay")
 
         val nextFlags =
             buildList {
-                if (!hasServers) {
+                if (allowServers && !hasServers) {
                     add("-servers")
                     add("-servers:all")
                 }
-                if (!hasDelay) {
+                if (allowDelay && !hasDelay) {
                     add("-delay")
                     add("-delay:3m")
                 }
             }
 
-        if (isServersFlag(last)) {
-            return RestartServerNames.tabComplete(RestartManager.settings(), last.substringAfter(':', ""))
+        if (last.startsWith("-servers:", ignoreCase = true)) {
+            return if (allowServers && !hasServers) RestartServerNames.tabComplete(RestartManager.settings(), last.substringAfter(':'))
+                .map { "-servers:$it" } else emptyList()
         }
 
-        if (prev != null && isServersFlag(prev) && !last.startsWith("-")) {
-            return RestartServerNames.tabComplete(RestartManager.settings(), last)
+        if (prev.equals("-servers", ignoreCase = true) && !last.startsWith("-")) {
+            return if (allowServers && !hasServers) RestartServerNames.tabComplete(RestartManager.settings(), last) else emptyList()
         }
 
-        if (isDelayFlag(last)) {
-            return delaySuggestions().tabComplete(last.substringAfter(':', ""))
+        if (last.startsWith("-delay:", ignoreCase = true)) {
+            return if (allowDelay && !hasDelay) delaySuggestions().tabComplete(last.substringAfter(':')).map { "-delay:$it" } else emptyList()
         }
 
-        if (prev != null && isDelayFlag(prev) && !last.startsWith("-")) {
-            return delaySuggestions().tabComplete(last)
+        if (prev.equals("-delay", ignoreCase = true) && !last.startsWith("-")) {
+            return if (allowDelay && !hasDelay) delaySuggestions().tabComplete(last) else emptyList()
         }
 
-        if (last.isEmpty() && prev != null && !prev.startsWith("-")) {
-            return nextFlags.tabComplete("")
-        }
-
-        if (last.startsWith("-")) {
-            return nextFlags.tabComplete(last)
-        }
-
-        return nextFlags.tabComplete("")
+        return nextFlags.tabComplete(last)
     }
-
-    private fun isServersFlag(token: String): Boolean =
-        token.equals("-servers", ignoreCase = true) || token.startsWith("-servers:", ignoreCase = true)
-
-    private fun isDelayFlag(token: String): Boolean =
-        token.equals("-delay", ignoreCase = true) || token.startsWith("-delay:", ignoreCase = true)
 
     private fun delaySuggestions(): List<String> = listOf("30s", "1m", "3m", "5m", "10m", "30", "60", "180")
 }

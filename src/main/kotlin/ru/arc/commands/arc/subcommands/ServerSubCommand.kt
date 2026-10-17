@@ -30,7 +30,7 @@ object ServerSubCommand : SubCommand {
     override fun tabComplete(sender: CommandSender, args: Array<String>): List<String>? =
         when (args.size) {
             1 -> listOf("main", "etd").tabComplete(args[0])
-            2 -> if (sender.hasPermission(SWITCH_OTHER_PERMISSION)) tabCompletePlayers(args[1]) else null
+            2 -> if (args[0].lowercase(Locale.ROOT) in listOf("main", "etd") && sender.hasPermission(SWITCH_OTHER_PERMISSION)) tabCompletePlayers(args[1]) else null
             else -> null
         }
 

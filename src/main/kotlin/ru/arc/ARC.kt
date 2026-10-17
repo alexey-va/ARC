@@ -463,6 +463,7 @@ open class ARC : JavaPlugin() {
         ChatModeAliasCommand.register(this)
         registerCommand("menu", MainMenuCommand, null)
         registerCommand("arc-reward-issue", CaseRewardIssueCommand(), null)
+        getCommand("graves")?.setTabCompleter { _, _, _, _ -> emptyList() }
         registerLegacyCommands()
     }
 
@@ -566,7 +567,7 @@ open class ARC : JavaPlugin() {
             return
         }
         command.setExecutor(executor)
-        completer?.let { command.tabCompleter = it }
+        command.tabCompleter = completer ?: (executor as? TabCompleter) ?: TabCompleter { _, _, _, _ -> emptyList() }
     }
 
     private fun unregisterOwnedPluginCommand(name: String) {

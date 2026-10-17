@@ -33,8 +33,10 @@ object RestartServerNames {
 
         val prefix = partial.substringBeforeLast(',') + ","
         val token = partial.substringAfterLast(',')
+        val selected = prefix.dropLast(1).lowercase().split(',').toSet()
+        if ("all" in selected) return emptyList()
         return suggestions
-            .filter { it.startsWith(token, ignoreCase = true) }
+            .filter { it != "all" && it !in selected && it.startsWith(token, ignoreCase = true) }
             .map { prefix + it }
             .sortedWith(compareBy({ it.length }, { it.lowercase() }))
     }

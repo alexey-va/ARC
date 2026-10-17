@@ -9,6 +9,7 @@ import org.bukkit.command.RemoteConsoleCommandSender
 import org.bukkit.Location
 import org.bukkit.entity.Player
 import ru.arc.commands.arc.SubCommand
+import ru.arc.commands.arc.checkPermission
 import ru.arc.commands.arc.tabComplete
 import ru.arc.worldcontent.CleanupConfirmationRegistry
 import ru.arc.worldcontent.CleanupConfirmationResult
@@ -300,9 +301,17 @@ object FurnitureSubCommand : SubCommand {
     override fun tabComplete(
         sender: CommandSender,
         args: Array<String>,
-    ): List<String>? =
-        when (args.size) {
-            1 -> listOf("guide", "gallery", "cleanup", "cleanup-at").tabComplete(args[0])
+    ): List<String> {
+        val actions = buildList {
+            if (sender is Player) addAll(listOf("guide", "gallery"))
+            if (sender.checkPermission(permission)) {
+                if (sender is Player) add("cleanup")
+                else if (isLocalConsoleSender(sender)) add("cleanup-at")
+            }
+        }
+        if (args.size > 1 && args[0].lowercase() !in actions) return emptyList()
+        return when (args.size) {
+            1 -> actions.tabComplete(args[0])
             2 -> when {
                 args[0].equals("cleanup", true) -> listOf("4", "8", "12", "16", "24").tabComplete(args[1])
                 args[0].equals("cleanup-at", true) -> Bukkit.getWorlds().map { it.name }.tabComplete(args[1])
@@ -312,4 +321,5 @@ object FurnitureSubCommand : SubCommand {
             7 -> if (args[0].equals("cleanup-at", true)) listOf("confirm").tabComplete(args[6]) else emptyList()
             else -> emptyList()
         }
+    }
 }

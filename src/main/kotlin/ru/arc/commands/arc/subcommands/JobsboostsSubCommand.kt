@@ -77,7 +77,7 @@ object JobsboostsSubCommand : SubCommand {
                 suggestions.tabComplete(args[0])
             }
 
-            2 -> if (args[0].equals("reset", ignoreCase = true)) {
+            2 -> if (args[0].equals("reset", ignoreCase = true) && sender.hasPermission("arc.admin")) {
                 tabCompletePlayers(args[1])
             } else null
 

@@ -24,7 +24,7 @@ object DecorInteractionSubCommand : SubCommand {
     override fun tabComplete(sender: CommandSender, args: Array<String>): List<String> =
         when (args.size) {
             1 -> DecorInteractionAction.entries.map { it.command }.tabComplete(args[0])
-            2 -> tabCompletePlayers(args[1])
+            2 -> if (DecorInteractionAction.entries.any { it.command.equals(args[0], true) }) tabCompletePlayers(args[1]) else emptyList()
             3 ->
                 when (args[0].lowercase(Locale.ROOT)) {
                     "drink" -> listOf("beer", "wine").tabComplete(args[2])

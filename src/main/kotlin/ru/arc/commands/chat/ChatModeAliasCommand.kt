@@ -3,11 +3,12 @@ package ru.arc.commands.chat
 import org.bukkit.command.Command
 import org.bukkit.command.CommandExecutor
 import org.bukkit.command.CommandSender
+import org.bukkit.command.TabCompleter
 import org.bukkit.plugin.java.JavaPlugin
 import ru.arc.chat.ChatMode
 import ru.arc.commands.arc.subcommands.ChatSubCommand
 
-object ChatModeAliasCommand : CommandExecutor {
+object ChatModeAliasCommand : CommandExecutor, TabCompleter {
     internal fun register(plugin: JavaPlugin) {
         val commandMap = plugin.server.commandMap
         for (name in listOf("g", "l")) {
@@ -35,4 +36,7 @@ object ChatModeAliasCommand : CommandExecutor {
             }
         return ChatSubCommand.selectMode(sender, mode)
     }
+
+    override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<String>): List<String> =
+        emptyList()
 }

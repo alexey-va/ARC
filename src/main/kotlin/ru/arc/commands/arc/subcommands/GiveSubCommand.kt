@@ -113,7 +113,7 @@ object GiveSubCommand : SubCommand {
                 } else {
                     ItemPresets.allNames().tabComplete(args[1])
                 }
-            3 -> listOf("1", "2", "3", "5", "10", "64").tabComplete(args[2])
+            3 -> if (args[0].equals("list", true)) emptyList() else listOf("1", "2", "3", "5", "10", "64").tabComplete(args[2])
             else -> null
         }
 }
