@@ -62,6 +62,7 @@ class AuditData(
      * @param type Тип операции
      * @param comment Описание
      */
+    @Synchronized
     fun operation(
         amount: Double,
         type: Type,

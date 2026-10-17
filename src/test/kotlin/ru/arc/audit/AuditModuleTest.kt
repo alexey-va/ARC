@@ -10,6 +10,9 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import ru.arc.TestBase
 import ru.arc.util.Common
+import java.util.concurrent.CyclicBarrier
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * Тесты для модуля аудита экономики.
@@ -789,27 +792,26 @@ class AuditModuleTest : TestBase() {
         @DisplayName("Агрегация работает в многопоточной среде")
         fun testConcurrentAggregation() {
             val auditData = AuditData.create("Player")
-
-            val threads = (1..5).map {
-                Thread {
-                    repeat(20) {
-                        auditData.operation(1.0, Type.JOB, "Одинаковая работа")
+            val start = CyclicBarrier(5)
+            val executor = Executors.newFixedThreadPool(5)
+            try {
+                val updates = (1..5).map {
+                    executor.submit {
+                        repeat(20) {
+                            start.await(10, TimeUnit.SECONDS)
+                            auditData.operation(1.0, Type.JOB, "Одинаковая работа", at = 1_000L)
+                        }
                     }
                 }
+                updates.forEach { it.get(10, TimeUnit.SECONDS) }
+            } finally {
+                executor.shutdownNow()
             }
 
-            threads.forEach { it.start() }
-            threads.forEach { it.join() }
-
-            // Из-за race condition при агрегации возможны потери
-            // Проверяем что сумма в разумных пределах (>90% от ожидаемой)
-            // и что агрегация работает (транзакций меньше чем операций)
-            val transactions = auditData.transactions.filter { it.comment == "Одинаковая работа" }
-            val totalAmount = transactions.sumOf { it.amount }
-
-            assertTrue(totalAmount >= 90.0, "Total should be at least 90, was $totalAmount")
-            assertTrue(totalAmount <= 100.0, "Total should be at most 100, was $totalAmount")
-            assertTrue(transactions.size < 100, "Aggregation should reduce transaction count, was ${transactions.size}")
+            val transactions = auditData.transactions.toList()
+            assertEquals(100.0, transactions.sumOf { it.amount })
+            assertEquals(100, transactions.sumOf { it.occurrenceCount })
+            assertEquals(1, transactions.size)
         }
     }
 }
