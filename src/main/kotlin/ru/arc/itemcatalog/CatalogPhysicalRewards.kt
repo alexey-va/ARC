@@ -1542,7 +1542,7 @@ internal class CatalogPhysicalRewards(
         private const val ELITE_LUCKY_TICKET_COMMAND = "elitemobs:elitemobs loot give %player% elite_lucky_ticket.yml"
         private val TOKEN_COMMAND = Regex("rediseconomy:balance %player% tokens give ([1-9][0-9]{0,5}) arc-lootbox-catalog")
         private val NATIVE_ITEM_COMMANDS = listOf(
-            "arcbuilder" to Regex("arcbuilder:builder systembook %player% [a-z0-9_-]+\\.schem"),
+            "arcbuilder" to SYSTEM_BUILD_BOOK_COMMAND,
             "arcecojobs" to Regex("arcecojobs:arcjobs booster give %player% [a-z0-9_-]+ 1"),
             "elitemobs" to Regex("elitemobs:elitemobs loot give %player% [a-z0-9_-]+\\.yml"),
         )

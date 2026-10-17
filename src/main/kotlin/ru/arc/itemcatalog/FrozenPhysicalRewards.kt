@@ -11,6 +11,9 @@ import java.util.Base64
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 
+internal val SYSTEM_BUILD_BOOK_COMMAND =
+    Regex("arcbuilder:builder systembook %player% (?:[a-z0-9_-]+/)*[a-z0-9_-]+(?:\\.schem)?")
+
 /**
  * Durable archive for provider-backed catalogue rewards.
  *
@@ -741,7 +744,7 @@ internal data class FrozenPhysicalRecipe(
         val FINGERPRINT = Regex("[a-f0-9]{64}")
         val ALLOWED_COMMAND_KINDS = setOf("arcbuilder", "arcecojobs", "elitemobs")
         val ALLOWED_COMMANDS = mapOf(
-            "arcbuilder" to Regex("arcbuilder:builder systembook %player% [a-z0-9_-]+\\.schem"),
+            "arcbuilder" to SYSTEM_BUILD_BOOK_COMMAND,
             "arcecojobs" to Regex("arcecojobs:arcjobs booster give %player% [a-z0-9_-]+ 1"),
             "elitemobs" to Regex("elitemobs:elitemobs loot give %player% [a-z0-9_-]+\\.yml"),
         )
@@ -855,7 +858,7 @@ internal data class FrozenTreasureNode(
         val ID_PATTERN = Regex("[A-Za-z0-9_.:/-]{1,256}")
         val NATIVE_COMMANDS = listOf(
             Regex("rediseconomy:balance %player% tokens give [1-9][0-9]{0,5} arc-lootbox-catalog"),
-            Regex("arcbuilder:builder systembook %player% [a-z0-9_-]+\\.schem"),
+            SYSTEM_BUILD_BOOK_COMMAND,
             Regex("arcecojobs:arcjobs booster give %player% [a-z0-9_-]+ 1"),
             Regex("elitemobs:elitemobs loot give %player% [a-z0-9_-]+\\.yml"),
         )
