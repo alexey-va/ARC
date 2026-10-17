@@ -411,6 +411,7 @@ tasks {
 
         // ArcCore owns these runtime types. Keep consumer factories and domain APIs local.
         exclude("ru/arc/paper/api/ArcSql*", "ru/arc/paper/api/ArcRedis*", "ru/arc/paper/api/ArcMetric*", "ru/arc/paper/api/ArcSchematic*")
+        exclude("ru/arc/paper/api/ArcBlockProtectionService*")
         exclude("ru/arc/paper/sql/PaperSqlServiceProvider*", "ru/arc/paper/sql/SharedPaperSqlService*")
         exclude("ru/arc/paper/redis/PaperRedisServiceProvider*", "ru/arc/paper/redis/SharedPaperRedisService*")
         exclude("ru/arc/paper/metrics/PaperArcMetricsProvider*")

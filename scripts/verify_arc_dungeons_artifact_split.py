@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 PAPER_API_PACKAGE = "ru/arc/paper/api/"
-ARC_CORE_API_PREFIXES = ("ArcSql", "ArcRedis", "ArcMetric", "ArcSchematic")
+ARC_CORE_API_PREFIXES = ("ArcSql", "ArcRedis", "ArcMetric", "ArcSchematic", "ArcBlockProtectionService")
 PAPER_API_VISUAL_CLASS = "ru/arc/paper/api/VisualPacketAdmission.class"
 DOMAIN_API_PACKAGES = (
     "ru/arc/dungeons/api/",

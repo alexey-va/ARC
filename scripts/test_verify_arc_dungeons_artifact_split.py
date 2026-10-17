@@ -32,6 +32,8 @@ ARC_CORE_ENTRIES = {
     "ru/arc/paper/api/ArcMetricsService.class",
     "ru/arc/paper/api/ArcMetricCounter.class",
     "ru/arc/paper/api/ArcSchematicService.class",
+    "ru/arc/paper/api/ArcBlockProtectionService.class",
+    "ru/arc/paper/api/ArcBlockProtectionService$DefaultImpls.class",
     *(f"{provider}.class" for provider in PROVIDER_CLASSES),
     *(f"{prefix}.class" for prefix in ARC_CORE_RUNTIME_CLASS_PREFIXES),
     *(f"{package}CoreType.class" for package in ARC_CORE_RUNTIME_PACKAGES),
@@ -145,6 +147,44 @@ class ArtifactSplitTest(unittest.TestCase):
             DUNGEONS_DESCRIPTOR,
         )
         self.assertTrue(any("ARC JAR is missing ARC-owned Paper API class" in value for value in visual_missing_from_arc))
+
+    def test_block_protection_api_and_default_impls_are_host_owned(self) -> None:
+        service = "ru/arc/paper/api/ArcBlockProtectionService.class"
+        default_impls = "ru/arc/paper/api/ArcBlockProtectionService$DefaultImpls.class"
+        self.assertEqual(
+            [],
+            verify(
+                ARC_ENTRIES,
+                ARC_CORE_ENTRIES,
+                DUNGEONS_ENTRIES,
+                ARC_DESCRIPTOR,
+                ARC_CORE_DESCRIPTOR,
+                DUNGEONS_DESCRIPTOR,
+            ),
+        )
+
+        consumer_copy = DUNGEONS_ENTRIES | {service, default_impls}
+        violations = verify(
+            ARC_ENTRIES,
+            ARC_CORE_ENTRIES,
+            consumer_copy,
+            ARC_DESCRIPTOR,
+            ARC_CORE_DESCRIPTOR,
+            DUNGEONS_DESCRIPTOR,
+        )
+        self.assertTrue(any(f"ArcDungeons JAR embeds shared Paper API class {service}" in value for value in violations))
+        self.assertTrue(any(f"ArcDungeons JAR embeds shared Paper API class {default_impls}" in value for value in violations))
+
+        unrelated_api = "ru/arc/paper/api/ArcSidebarService.class"
+        violations = verify(
+            ARC_ENTRIES,
+            ARC_CORE_ENTRIES | {unrelated_api},
+            DUNGEONS_ENTRIES,
+            ARC_DESCRIPTOR,
+            ARC_CORE_DESCRIPTOR,
+            DUNGEONS_DESCRIPTOR,
+        )
+        self.assertTrue(any(f"ArcCore JAR embeds ARC-owned Paper API class {unrelated_api}" in value for value in violations))
 
     def test_arc_core_owns_shared_apis_and_providers(self) -> None:
         arc = ARC_ENTRIES | {

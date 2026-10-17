@@ -18,6 +18,8 @@ ARC_CORE_ENTRIES = {
     "ru/arc/paper/api/ArcMetricsService.class",
     "ru/arc/paper/api/ArcMetricCounter.class",
     "ru/arc/paper/api/ArcSchematicService.class",
+    "ru/arc/paper/api/ArcBlockProtectionService.class",
+    "ru/arc/paper/api/ArcBlockProtectionService$DefaultImpls.class",
     *(f"{provider}.class" for provider in PROVIDER_CLASSES),
     *(f"{prefix}.class" for prefix in ARC_CORE_RUNTIME_CLASS_PREFIXES),
     *(f"{package}CoreType.class" for package in ARC_CORE_RUNTIME_PACKAGES),
