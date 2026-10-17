@@ -40,6 +40,7 @@ ARC_CORE_ENTRIES = {
     "ru/arc/paper/api/ArcBlockProtectionService.class",
     "ru/arc/paper/api/ArcBlockProtectionService$DefaultImpls.class",
     "ru/arc/paper/api/ArcVisualPacketBudget.class",
+    "ru/arc/paper/api/ArcAfkProvider.class",
     PAPER_API_VISUAL_CLASS,
     *(f"{provider}.class" for provider in PROVIDER_CLASSES),
     *(f"{prefix}.class" for prefix in ARC_CORE_RUNTIME_CLASS_PREFIXES),
@@ -236,13 +237,17 @@ class ArtifactSplitTest(unittest.TestCase):
         )
         self.assertTrue(any("missing shared Paper API family VisualPacketAdmission" in value for value in visual_missing_from_core))
 
-    def test_visual_budget_is_a_single_shared_host_contract(self) -> None:
+    def test_visual_apis_are_single_shared_host_contracts(self) -> None:
         budget = "ru/arc/paper/api/ArcVisualPacketBudget.class"
-        for api in (budget, PAPER_API_VISUAL_CLASS):
+        afk = "ru/arc/paper/api/ArcAfkProvider.class"
+        for api in (budget, PAPER_API_VISUAL_CLASS, afk):
             with self.subTest(api=api):
                 missing = verify(ARC_ENTRIES, ARC_CORE_ENTRIES - {api}, DUNGEONS_ENTRIES,
                                  ARC_DESCRIPTOR, ARC_CORE_DESCRIPTOR, DUNGEONS_DESCRIPTOR)
                 self.assertTrue(any("missing shared Paper API family" in value for value in missing))
+                duplicate_arc = verify(ARC_ENTRIES | {api}, ARC_CORE_ENTRIES, DUNGEONS_ENTRIES,
+                                       ARC_DESCRIPTOR, ARC_CORE_DESCRIPTOR, DUNGEONS_DESCRIPTOR)
+                self.assertTrue(any(f"ARC JAR embeds ArcCore-owned Paper API class {api}" in value for value in duplicate_arc))
                 duplicate = verify(ARC_ENTRIES, ARC_CORE_ENTRIES, DUNGEONS_ENTRIES | {api},
                                    ARC_DESCRIPTOR, ARC_CORE_DESCRIPTOR, DUNGEONS_DESCRIPTOR)
                 self.assertTrue(any(f"ArcDungeons JAR embeds shared Paper API class {api}" in value for value in duplicate))

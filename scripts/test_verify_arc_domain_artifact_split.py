@@ -22,6 +22,7 @@ ARC_CORE_ENTRIES = {
     "ru/arc/paper/api/ArcBlockProtectionService.class",
     "ru/arc/paper/api/ArcBlockProtectionService$DefaultImpls.class",
     "ru/arc/paper/api/ArcVisualPacketBudget.class",
+    "ru/arc/paper/api/ArcAfkProvider.class",
     PAPER_API_VISUAL_CLASS,
     *(f"{provider}.class" for provider in PROVIDER_CLASSES),
     *(f"{prefix}.class" for prefix in ARC_CORE_RUNTIME_CLASS_PREFIXES),

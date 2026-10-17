@@ -430,6 +430,7 @@ tasks {
         exclude("ru/arc/paper/api/ArcSql*", "ru/arc/paper/api/ArcRedis*", "ru/arc/paper/api/ArcMetric*", "ru/arc/paper/api/ArcSchematic*")
         exclude("ru/arc/paper/api/ArcBlockProtectionService*", "ru/arc/paper/api/ArcNativeCleanupService*")
         exclude("ru/arc/paper/api/ArcVisualPacketBudget*", "ru/arc/paper/api/VisualPacketAdmission*")
+        exclude("ru/arc/paper/api/ArcAfkProvider*")
         exclude("ru/arc/paper/packet/PaperVisualPacketRuntime*", "ru/arc/metrics/core/MetricPoint*")
         exclude("ru/arc/paper/sql/PaperSqlServiceProvider*", "ru/arc/paper/sql/SharedPaperSqlService*")
         exclude("ru/arc/paper/redis/PaperRedisServiceProvider*", "ru/arc/paper/redis/SharedPaperRedisService*")
