@@ -13,6 +13,7 @@ import com.magmaguy.elitemobs.items.customenchantments.SoulbindEnchantment
 import com.magmaguy.elitemobs.mobconstructor.custombosses.CustomBossEntity
 import com.magmaguy.elitemobs.playerdata.ElitePlayerInventory
 import com.magmaguy.elitemobs.playerdata.database.PlayerData
+import com.magmaguy.elitemobs.skills.MagicStrike
 import com.magmaguy.elitemobs.skills.SkillType
 import com.magmaguy.elitemobs.skills.WeaponIdentityResolver
 import com.magmaguy.elitemobs.thirdparty.custommodels.CustomModel
@@ -83,7 +84,17 @@ internal class StaffSpellDamage(private val duelAccess: StaffSpellDuelAccess? = 
     }
 
     /** Rechecks at impact; true only if health plus absorption decreased. */
-    fun hit(player: Player, target: LivingEntity, cast: StaffSpellCast, power: Double, vanillaDamage: Double): Boolean {
+    fun hit(player: Player, target: LivingEntity, cast: StaffSpellCast, power: Double, vanillaDamage: Double): Boolean =
+        hit(player, target, cast, power, vanillaDamage, primaryMagicStrike(cast))
+
+    fun hit(
+        player: Player,
+        target: LivingEntity,
+        cast: StaffSpellCast,
+        power: Double,
+        vanillaDamage: Double,
+        magicStrike: MagicStrike?,
+    ): Boolean {
         if (cast.casterId != player.uniqueId || !isCurrent(player, cast)) return false
         if (!power.isFinite() || power <= 0.0 || !vanillaDamage.isFinite() || vanillaDamage <= 0.0) return false
         // Last mutation boundary: a target moving behind cover before contact must be safe for every spell owner.
@@ -104,7 +115,7 @@ internal class StaffSpellDamage(private val duelAccess: StaffSpellDuelAccess? = 
         val before = target.health + target.absorptionAmount
         val attempted = if (cast.eliteMobsEnabled) {
             withEliteMobs(false) {
-                EliteMobsRuntime.hit(player, target, cast, power, vanillaDamage)
+                EliteMobsRuntime.hit(player, target, cast, power, vanillaDamage, magicStrike)
                 true
             }
         } else {
@@ -147,6 +158,14 @@ internal class StaffSpellDamage(private val duelAccess: StaffSpellDuelAccess? = 
     private companion object {
         const val ELITE_MOBS_PLUGIN = "EliteMobs"
         const val HEALTH_EPSILON = 1.0e-6
+    }
+}
+
+private fun primaryMagicStrike(cast: StaffSpellCast): MagicStrike? {
+    if (!cast.nativeEliteWeapon || !cast.eliteMobsEnabled || cast.duelAuthorization != null) return null
+    return when (cast.progressionSkill) {
+        StaffWeaponFamily.WANDS -> MagicStrike.WAND_MISSILE
+        StaffWeaponFamily.STAVES -> MagicStrike.STAFF_FIREBALL
     }
 }
 
@@ -244,7 +263,14 @@ private object EliteMobsRuntime {
             1
         }
 
-    fun hit(player: Player, target: LivingEntity, cast: StaffSpellCast, power: Double, vanillaDamage: Double) {
+    fun hit(
+        player: Player,
+        target: LivingEntity,
+        cast: StaffSpellCast,
+        power: Double,
+        vanillaDamage: Double,
+        magicStrike: MagicStrike?,
+    ) {
         val elite = EntityTracker.getEliteMobEntity(target)
         val weaponPower = power * cast.enchantments.damageMultiplier
         val fallbackDamage = vanillaDamage * cast.eliteDamageEnchantmentMultiplier * cast.enchantments.damageMultiplier
@@ -265,9 +291,15 @@ private object EliteMobsRuntime {
         val source = CombatDamageContext.PlayerDamageSource(
             cast.attackId, SkillType.valueOf(cast.progressionSkill.name), cast.criticalHit, cast.loudStrikesBonus,
         )
+        val nativeStrike = magicStrike?.takeIf {
+            cast.nativeEliteWeapon && cast.eliteMobsEnabled && cast.duelAuthorization == null
+        }
+        val targetDamage = Runnable { target.damage(damage, magicDamageSource(player)) }
         val damageCall = Runnable {
-            CombatDamageContext.runPlayerToEliteBypass(source) {
-                target.damage(damage, magicDamageSource(player))
+            if (nativeStrike == null) {
+                CombatDamageContext.runPlayerToEliteBypass(source, targetDamage)
+            } else {
+                CombatDamageContext.runMagicWeaponHit(source, nativeStrike, targetDamage)
             }
         }
         val customModel = (elite as? CustomBossEntity)?.customModel

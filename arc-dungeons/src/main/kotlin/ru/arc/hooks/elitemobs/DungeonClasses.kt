@@ -1,7 +1,6 @@
 package ru.arc.hooks.elitemobs
 
 import com.magmaguy.elitemobs.advancedcombat.AdvancedCombatModule
-import com.magmaguy.elitemobs.advancedcombat.classes.ClassResourceType
 import com.magmaguy.elitemobs.advancedcombat.progression.ProgressionCapReason
 import com.magmaguy.elitemobs.advancedcombat.progression.SelectionResult
 import com.magmaguy.elitemobs.combatsystem.combattag.DungeonCombatRuntime
@@ -12,8 +11,12 @@ import org.bukkit.entity.Player
 
 internal enum class DungeonClassAvailability { READY, LOADING, DISABLED }
 
-internal data class DungeonClassAbility(val name: String, val description: String)
-internal data class DungeonClassPassive(val source: String, val description: String)
+internal data class DungeonClassPassiveEffect(val label: String, val fraction: Double, val beneficial: Boolean)
+internal data class DungeonClassPassive(
+    val source: String,
+    val contributionLevel: Int,
+    val effects: List<DungeonClassPassiveEffect>,
+)
 internal data class DungeonClassRequirement(val name: String, val progress: String)
 
 internal data class DungeonClassForm(
@@ -32,12 +35,7 @@ internal data class DungeonClassForm(
     val xp: String,
     val foundations: List<DungeonClassRequirement>,
     val blockers: List<DungeonClassRequirement>,
-    val resource: String,
-    val resourceDescription: String,
     val weapons: List<String>,
-    val mobility: DungeonClassAbility,
-    val signature: DungeonClassAbility,
-    val utility: DungeonClassAbility,
     val passives: List<DungeonClassPassive>,
 )
 
@@ -78,11 +76,16 @@ internal object NativeDungeonClassService : DungeonClassService {
         val profile = module.profile(player.uniqueId).orElse(null)
             ?: return DungeonClassesView(DungeonClassAvailability.LOADING)
         val catalog = module.catalog()
-        val activeFormId = profile.activeFormId().orElse(null)
+        val activeLineage = profile.activeLineage()
+        val activeFormId = activeLineage?.activeFormId()
         val forms = catalog.forms().associate { definition ->
             val progress = profile.forms()[definition.id()]
                 ?: error("EliteMobs class profile is missing ${definition.id()}")
             val lineage = catalog.lineageOf(definition.id())
+            val active = activeLineage?.takeIf { it.activeFormId() == definition.id() }
+            val displayedLevel = active?.activeEffectiveLevel()
+                ?: if (progress.unlocked()) progress.effectiveLevel() else definition.band().effectiveStart()
+            val contributionLevels = active?.contributionLevels() ?: lineage.passiveContributionLevels(displayedLevel)
             val foundations = definition.foundationSkills().asList().map { skill ->
                 DungeonClassRequirement(
                     dungeonSkillName(skill),
@@ -117,34 +120,14 @@ internal object NativeDungeonClassService : DungeonClassService {
                 selected = definition.id() == profile.selectedFormId(),
                 active = definition.id() == activeFormId,
                 requiredLevel = definition.band().effectiveStart(),
-                level = progress.effectiveLevel(),
+                level = if (progress.unlocked()) displayedLevel else 0,
                 cap = progress.effectiveCap(),
                 xp = xpSummary(definition.band().effectiveStart(), progress),
                 foundations = foundations,
                 blockers = blockers,
-                resource = dungeonResourceName(lineage.resourceType()),
-                resourceDescription = resourceDescription(lineage.resourceType()),
                 weapons = definition.weaponAffinities().map(::dungeonSkillName),
-                mobility = localization.ability(
-                    catalog.rootOf(definition.id()).id(),
-                    "mobility",
-                    lineage.mobility().displayName(),
-                    lineage.mobility().description(),
-                ),
-                signature = localization.ability(
-                    definition.id(),
-                    "signature",
-                    definition.signature().displayName(),
-                    definition.signature().description(),
-                ),
-                utility = localization.ability(
-                    definition.id(),
-                    "utility",
-                    definition.utility().displayName(),
-                    definition.utility().description(),
-                ),
                 passives = lineage.forms().map {
-                    localization.passive(it.id(), it.displayName(), it.passive().description())
+                    localization.passive(it.id(), it.displayName(), contributionLevels.getValue(it.id()))
                 },
             )
         }
@@ -195,23 +178,6 @@ internal object NativeDungeonClassService : DungeonClassService {
     private fun effectiveLevel(band: com.magmaguy.elitemobs.advancedcombat.classes.ClassBand, localLevel: Int): Int =
         if (localLevel == 0) 0 else band.toEffectiveLevel(localLevel)
 
-    private fun resourceDescription(resource: ClassResourceType): String = when (resource) {
-        ClassResourceType.STAMINA -> "Равномерно восстанавливается в бою и вне боя."
-        ClassResourceType.RESOLVE -> "Быстрее восстанавливается рядом с элитами и растёт в ближнем бою."
-        ClassResourceType.FURY -> "Урон и полученные удары дают ярость; сама она восстанавливается медленнее маны."
-        ClassResourceType.FOCUS -> "Восстанавливается быстрее, если некоторое время не получать урон."
-        ClassResourceType.GRACE -> "Растёт от эффективного лечения и быстрее восстанавливается рядом с другими игроками."
-        ClassResourceType.MANA -> "Равномерно восстанавливается в бою и вне боя."
-    }
-}
-
-internal fun dungeonResourceName(resource: ClassResourceType): String = when (resource) {
-    ClassResourceType.STAMINA -> "Выносливость"
-    ClassResourceType.RESOLVE -> "Решимость"
-    ClassResourceType.FURY -> "Ярость"
-    ClassResourceType.FOCUS -> "Концентрация"
-    ClassResourceType.GRACE -> "Благодать"
-    ClassResourceType.MANA -> "Мана"
 }
 
 internal fun dungeonSkillName(skill: SkillType): String = when (skill) {

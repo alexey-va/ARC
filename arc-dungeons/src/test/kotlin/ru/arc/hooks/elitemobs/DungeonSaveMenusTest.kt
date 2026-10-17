@@ -351,6 +351,13 @@ class DungeonSaveMenusTest : FreeSpec({
             .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
         rootButton.onClick.handle(mockk())
         screens.last().id shouldBe "dungeon.classes.warrior"
+        val plain = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+        val detail = screens.last().body.joinToString("\n") { plain.serialize(it.text) }
+        detail.contains("Получаемый урон: −5%") shouldBe true
+        detail.contains("Предпросмотр") shouldBe true
+        listOf("F +", "F, F", "Ресурс", "Восстанавливается", "Сильная атака").forEach {
+            detail.contains(it) shouldBe false
+        }
         screens.last().buttons.single { it.id.value == "class_select_warrior" }.onClick.handle(mockk())
 
         verify(exactly = 1) { classes.select(player, "warrior") }
@@ -408,7 +415,7 @@ class DungeonSaveMenusTest : FreeSpec({
         screens.last().buttons.map { it.id.value } shouldBe listOf("class_select_paladin", "class_guardian")
         screens.last().buttons.last().label shouldBe Component.text("<#ffffff>[Недоступно] <name> ›")
             .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
-        screens.last().buttons.last().tooltip shouldBe Component.text("<#e8dfd2>Откроется на <level> уровне<newline><newline><#e8dfd2>Показать требования и способности")
+        screens.last().buttons.last().tooltip shouldBe Component.text("<#e8dfd2>Откроется на <level> уровне<newline><newline><#e8dfd2>Показать требования и пассивы")
             .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
     }
 
@@ -606,11 +613,8 @@ private fun dungeonClassForm(id: String, name: String) = DungeonClassForm(
     xp = "0 / 100",
     foundations = listOf(DungeonClassRequirement("Мечи", "10 / 10")),
     blockers = emptyList(),
-    resource = "Выносливость",
-    resourceDescription = "Восстанавливается со временем.",
     weapons = listOf("Мечи"),
-    mobility = DungeonClassAbility("Рывок", "Быстрое перемещение"),
-    signature = DungeonClassAbility("Удар", "Сильная атака"),
-    utility = DungeonClassAbility("Стойка", "Защитный эффект"),
-    passives = listOf(DungeonClassPassive(name, "Повышает стойкость")),
+    passives = listOf(DungeonClassPassive(name, 1, listOf(
+        DungeonClassPassiveEffect("Получаемый урон", -.05, true),
+    ))),
 )

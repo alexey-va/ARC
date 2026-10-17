@@ -476,7 +476,7 @@ internal class StaffSpellSummons(
                 power *= clamp
             }
         }
-        if (!damage.hit(owner, victim, cast, power, vanillaDamage)) return false
+        if (!damage.hit(owner, victim, cast, power, vanillaDamage, magicStrike = null)) return false
         session.successfulHits++
         if (volley != null) {
             volley.successfulHits++

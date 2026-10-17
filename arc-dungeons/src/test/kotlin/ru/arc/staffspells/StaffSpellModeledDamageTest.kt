@@ -14,6 +14,7 @@ import com.magmaguy.elitemobs.items.customenchantments.SoulbindEnchantment
 import com.magmaguy.elitemobs.mobconstructor.custombosses.CustomBossEntity
 import com.magmaguy.elitemobs.playerdata.ElitePlayerInventory
 import com.magmaguy.elitemobs.playerdata.database.PlayerData
+import com.magmaguy.elitemobs.skills.MagicStrike
 import com.magmaguy.elitemobs.skills.SkillType
 import com.magmaguy.elitemobs.skills.WeaponIdentityResolver
 import com.magmaguy.elitemobs.thirdparty.custommodels.CustomModel
@@ -400,8 +401,10 @@ class StaffSpellModeledDamageTest : FreeSpec({
             every { boss.customModel } returns model
             every { AdvancedDamageScaling.magicWeapon(boss, 6, 12.0, 6.0, Material.STICK) } returns 8.0
             var combatSource: CombatDamageContext.PlayerDamageSource? = null
+            var magicHit: CombatDamageContext.MagicHit? = null
             every { target.damage(any<Double>(), any<DamageSource>()) } answers {
                 combatSource = CombatDamageContext.currentPlayerToEliteSource().orElse(null)
+                magicHit = CombatDamageContext.consumePlayerToElite().magicHit()
                 health -= firstArg<Double>()
                 Unit
             }
@@ -416,6 +419,11 @@ class StaffSpellModeledDamageTest : FreeSpec({
             verify(exactly = 1) { unsafeValues.createDamageSourceBuilder(DamageType.MAGIC) }
             verify(exactly = 1) { target.fireTicks = 40 }
             combatSource?.progressionSkill() shouldBe SkillType.WANDS
+            magicHit?.attackId() shouldBe cast.attackId
+            magicHit?.strike() shouldBe MagicStrike.WAND_MISSILE
+            magicHit?.skill() shouldBe SkillType.WANDS
+            CombatDamageContext.isPlayerToEliteBypassActive() shouldBe false
+            CombatDamageContext.currentPlayerToEliteSource().isEmpty shouldBe true
         } finally {
             unmockkObject(StaffEliteItems, StaffEliteEnchantments.Companion)
         }
@@ -434,17 +442,22 @@ class StaffSpellModeledDamageTest : FreeSpec({
         every { target.health } answers { health }
         var damageInsideCombatBypass = false
         var damageSource: CombatDamageContext.PlayerDamageSource? = null
+        val magicHits = mutableListOf<CombatDamageContext.MagicHit?>()
+        var damageCalls = 0
         every { boss.customModel } returns model
         every { EntityTracker.getEliteMobEntity(target) } returns boss
         every { AdvancedDamageScaling.magicWeapon(boss, 4, 4.0, 1.5, Material.BLAZE_ROD) } returns 6.25
         every { target.damage(any<Double>(), any<DamageSource>()) } answers {
             damageInsideCombatBypass = CombatDamageContext.isPlayerToEliteBypassActive()
             damageSource = CombatDamageContext.currentPlayerToEliteSource().orElse(null)
+            magicHits += CombatDamageContext.consumePlayerToElite().magicHit()
+            damageCalls++
             health -= firstArg<Double>()
+            if (damageCalls == 1) target.damage(1.0, secondArg<DamageSource>())
             Unit
         }
 
-        val attack = cast(player)
+        val attack = cast(player).copy(nativeEliteWeapon = true)
         StaffSpellDamage().hit(player, target, attack, power = 1.5, vanillaDamage = 2.0) shouldBe true
 
         damageInsideCombatBypass shouldBe true
@@ -452,8 +465,72 @@ class StaffSpellModeledDamageTest : FreeSpec({
         damageSource?.progressionSkill() shouldBe SkillType.STAVES
         damageSource?.criticalHit() shouldBe true
         damageSource?.loudStrikesBonus() shouldBe 1.2
+        magicHits.map { it?.strike() } shouldBe listOf(MagicStrike.STAFF_FIREBALL, null)
+        magicHits.first()?.attackId() shouldBe attack.attackId
+        magicHits.first()?.skill() shouldBe SkillType.STAVES
         verify(exactly = 1) { boss.customModel }
         verify(exactly = 1) { target.damage(6.25, magicDamageSource) }
+        verify(exactly = 1) { target.damage(1.0, magicDamageSource) }
+        CombatDamageContext.isPlayerToEliteBypassActive() shouldBe false
+        CombatDamageContext.currentPlayerToEliteSource().isEmpty shouldBe true
+    }
+
+    "explicit staff melee hits carry the STAFF_MELEE native weapon strike" {
+        val world = mockk<World>()
+        val player = mockk<Player>()
+        val target = mockk<LivingEntity>()
+        val boss = mockk<CustomBossEntity>()
+        val model = mockk<CustomModel>()
+        readyEntities(player, target, world)
+
+        every { target.absorptionAmount } returns 0.0
+        var health = 20.0
+        every { target.health } answers { health }
+        every { boss.customModel } returns model
+        every { EntityTracker.getEliteMobEntity(target) } returns boss
+        every { AdvancedDamageScaling.magicWeapon(boss, 4, 4.0, 1.5, Material.BLAZE_ROD) } returns 6.25
+        var magicHit: CombatDamageContext.MagicHit? = null
+        every { target.damage(any<Double>(), any<DamageSource>()) } answers {
+            magicHit = CombatDamageContext.consumePlayerToElite().magicHit()
+            health -= firstArg<Double>()
+            Unit
+        }
+
+        val attack = cast(player).copy(nativeEliteWeapon = true)
+        StaffSpellDamage().hit(player, target, attack, 1.5, 2.0, MagicStrike.STAFF_MELEE) shouldBe true
+
+        magicHit?.strike() shouldBe MagicStrike.STAFF_MELEE
+        magicHit?.attackId() shouldBe attack.attackId
+        magicHit?.skill() shouldBe SkillType.STAVES
+        CombatDamageContext.isPlayerToEliteBypassActive() shouldBe false
+        CombatDamageContext.currentPlayerToEliteSource().isEmpty shouldBe true
+    }
+
+    "summoned modeled hits keep the EliteMobs attribution but opt out of weapon passives" {
+        val world = mockk<World>()
+        val player = mockk<Player>()
+        val target = mockk<LivingEntity>()
+        val boss = mockk<CustomBossEntity>()
+        readyEntities(player, target, world)
+
+        every { target.absorptionAmount } returns 0.0
+        var health = 20.0
+        every { target.health } answers { health }
+        var magicHit: CombatDamageContext.MagicHit? = null
+        every { EntityTracker.getEliteMobEntity(target) } returns boss
+        every { boss.customModel } returns null
+        every { AdvancedDamageScaling.magicWeapon(boss, 4, 4.0, 1.5, Material.BLAZE_ROD) } returns 6.25
+        every { target.damage(any<Double>(), any<DamageSource>()) } answers {
+            magicHit = CombatDamageContext.consumePlayerToElite().magicHit()
+            health -= firstArg<Double>()
+            Unit
+        }
+
+        val summonCast = cast(player).copy(nativeEliteWeapon = true)
+        StaffSpellDamage().hit(player, target, summonCast, power = 1.5, vanillaDamage = 2.0,
+            magicStrike = null) shouldBe true
+
+        magicHit shouldBe null
         CombatDamageContext.isPlayerToEliteBypassActive() shouldBe false
         CombatDamageContext.currentPlayerToEliteSource().isEmpty shouldBe true
     }

@@ -1,5 +1,6 @@
 package ru.arc.staffspells
 
+import com.magmaguy.elitemobs.skills.MagicStrike
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Sound
@@ -126,7 +127,14 @@ internal class StaffSpellMelee(
             if (!target.isValid || target.isDead || target.isInvulnerable || !inArea(swing, target) ||
                 !visible(swing.eye, target) || !visible(player.eyeLocation, target) ||
                 !damage.eligible(player, target, swing.cast)) continue
-            if (!damage.hit(player, target, swing.cast, swing.tuning.power, swing.tuning.vanillaDamage)) continue
+            val hit = if (swing.cast.nativeEliteWeapon && swing.cast.eliteMobsEnabled &&
+                swing.cast.duelAuthorization == null && swing.cast.progressionSkill == StaffWeaponFamily.STAVES) {
+                damage.hit(player, target, swing.cast, swing.tuning.power, swing.tuning.vanillaDamage,
+                    magicStrike = MagicStrike.STAFF_MELEE)
+            } else {
+                damage.hit(player, target, swing.cast, swing.tuning.power, swing.tuning.vanillaDamage)
+            }
+            if (!hit) continue
             if (pending[player.uniqueId] !== swing || !current(player, swing)) break
             if (!damage.eligible(player, target, swing.cast)) continue
             if (swing.spell == StaffSpell.FROST &&

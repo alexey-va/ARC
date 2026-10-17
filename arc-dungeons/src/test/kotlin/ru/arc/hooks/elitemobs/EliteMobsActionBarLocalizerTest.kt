@@ -10,14 +10,14 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 class EliteMobsActionBarLocalizerTest : FreeSpec({
     val plain = PlainTextComponentSerializer.plainText()
 
-    "fallback HUD localizes health and the active class resource without losing colours" {
+    "passive-only HUD localizes health and class identity without losing colours" {
         val source = Component.text("HP 84/120", NamedTextColor.RED)
             .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
-            .append(Component.text("Fury 37/100", NamedTextColor.YELLOW))
+            .append(Component.text("[39] Occultist", NamedTextColor.YELLOW))
 
-        val localized = EliteMobsActionBarLocalizer().localize(source)
+        val localized = EliteMobsActionBarLocalizer(mapOf("Occultist" to "Оккультист")).localize(source)
 
-        plain.serialize(localized) shouldBe "Здоровье 84/120 | Ярость 37/100"
+        plain.serialize(localized) shouldBe "Здоровье 84/120 | [39] Оккультист"
         localized.color() shouldBe NamedTextColor.RED
         localized.children().last().color() shouldBe NamedTextColor.YELLOW
     }

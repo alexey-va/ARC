@@ -1,6 +1,7 @@
 package ru.arc.hooks.elitemobs
 
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.Bukkit
 import org.bukkit.Location
@@ -372,7 +373,7 @@ internal class DungeonSaveMenus(
                     rows.add(2, text("classes.path-label", "<#e8dfd2>Ветка") to Component.text(it.path.joinToString(" › ")))
                 }
                 body += classTable(rows, DialogTables.Frame.ARTIFACT)
-                if (active != null) body += abilitiesTable(active)
+                if (active != null) body += passivesTable(active)
             }
         }
         val buttons = if (view.availability != DungeonClassAvailability.READY) emptyList() else buildList {
@@ -390,7 +391,7 @@ internal class DungeonSaveMenus(
                     tooltip = text(
                         if (root.unlocked) "classes.root-tooltip" else "classes.root-locked-tooltip",
                         if (root.unlocked) "<#e8dfd2><role><newline><newline><#e8dfd2>Открыть ветку класса"
-                        else "<#e8dfd2><role><newline><newline><#e8dfd2>Показать требования и способности",
+                        else "<#e8dfd2><role><newline><newline><#e8dfd2>Показать требования и пассивы",
                         "role" to text("classes.catalog.${root.id}.role", root.weapons.joinToString(" / ")),
                     ),
                     width = 230,
@@ -428,26 +429,28 @@ internal class DungeonSaveMenus(
             else -> text("classes.state-locked", "<#ffffff>Заблокирован")
         }
         val intro = when {
-            form.active -> text("classes.detail-active", "<#9bd48d>Это ваш активный класс. Ниже — способности и следующее развитие.")
+            form.active -> text("classes.detail-active", "<#9bd48d>Пассивы класса работают автоматически.")
             form.unlocked -> text("classes.detail-unlocked", "<#e8dfd2>Класс открыт. Нажмите «Выбрать», чтобы сделать его активным.")
-            else -> text("classes.detail-locked", "<#e8dfd2>Эта форма пока закрыта. Ниже показано, чего именно не хватает.")
+            else -> text("classes.detail-locked", "<#e8dfd2>Класс закрыт. Условия открытия указаны ниже.")
         }
         val body = mutableListOf(
             PaperDialogBody(intro, 468),
-            classTable(listOf(
-                text("classes.state-label", "<#e8dfd2>Состояние") to state,
-                text("classes.level-label", "<#e8dfd2>Уровень") to if (form.unlocked) Component.text("${form.level} / ${form.cap}") else Component.text("—"),
-                text("classes.xp-label", "<#e8dfd2>Опыт") to Component.text(form.xp),
-                text("classes.path-label", "<#e8dfd2>Ветка") to Component.text(form.path.joinToString(" › ")),
-                text("classes.resource-label", "<#e8dfd2>Ресурс") to Component.text("${form.resource} — ${form.resourceDescription}"),
-                text("classes.weapons-label", "<#e8dfd2>Оружие") to Component.text(form.weapons.joinToString(", ")),
-            ), DialogTables.Frame.ARTIFACT),
-            abilitiesTable(form),
-            classTable(
-                form.passives.map { Component.text(it.source) to Component.text(it.description) },
-                DialogTables.Frame.EPIC,
-                text("classes.passive-source", "<#e8dfd2>Источник") to text("classes.passive-effect", "<#e8dfd2>Пассивный эффект"),
-            ),
+            classTable(buildList {
+                if (form.unlocked) {
+                    add(text("classes.state-label", "<#e8dfd2>Состояние") to state)
+                    add(text("classes.level-label", "<#e8dfd2>Уровень") to Component.text("${form.level} / ${form.cap}"))
+                    add(text("classes.xp-label", "<#e8dfd2>Опыт") to Component.text(form.xp))
+                }
+                add(text("classes.path-label", "<#e8dfd2>Ветка") to Component.text(form.path.joinToString(" › ")))
+                add(text("classes.weapons-label", "<#e8dfd2>Оружие") to Component.text(form.weapons.joinToString(", ")))
+            }, DialogTables.Frame.ARTIFACT),
+            PaperDialogBody(if (form.active) text(
+                "classes.passives-active", "<#e8dfd2>Показан вклад каждой ступени; условия бонусов указаны в скобках.",
+            ) else text(
+                "classes.passives-preview", "<#e8dfd2>Предпросмотр после выбора, <level> ур. Условия — в скобках.",
+                "level" to Component.text(if (form.unlocked) form.level else form.requiredLevel),
+            ), 468),
+            passivesTable(form),
         )
         if (form.blockers.isNotEmpty()) {
             body.add(2, classTable(
@@ -508,7 +511,7 @@ internal class DungeonSaveMenus(
         tooltip = text(
             if (form.unlocked) "classes.form-tooltip" else "classes.form-locked-tooltip",
             if (form.unlocked) "<#e8dfd2>Открыть ступень класса<newline><newline><#e8dfd2>Уровень ветки: <level>"
-            else "<#e8dfd2>Откроется на <level> уровне<newline><newline><#e8dfd2>Показать требования и способности",
+            else "<#e8dfd2>Откроется на <level> уровне<newline><newline><#e8dfd2>Показать требования и пассивы",
             "level" to Component.text(form.requiredLevel),
         ),
         width = 230,
@@ -589,13 +592,18 @@ internal class DungeonSaveMenus(
         DungeonClassChange.UNKNOWN -> text("classes.result.unknown", "<#ffffff>Эта форма класса больше недоступна. Список обновлён.")
     }
 
-    private fun abilitiesTable(form: DungeonClassForm) = classTable(listOf(
-        text("classes.mobility", "<#92bed8>F, F") to abilityValue(form.mobility),
-        text("classes.signature", "<#ffb277>F + ЛКМ") to abilityValue(form.signature),
-        text("classes.utility", "<#9bd48d>F + ПКМ") to abilityValue(form.utility),
-    ), DialogTables.Frame.EPIC, text("classes.control", "<#e8dfd2>Управление") to text("classes.ability", "<#e8dfd2>Способность"))
-
-    private fun abilityValue(ability: DungeonClassAbility) = Component.text("${ability.name} — ${ability.description}")
+    private fun passivesTable(form: DungeonClassForm) = classTable(
+        form.passives.filter { it.effects.isNotEmpty() }.map { passive ->
+            Component.text(passive.source).color(TextColor.color(0xe8dfd2)).append(Component.newline()).append(text(
+                "classes.passive-level", "<#e8dfd2>Ур. эффекта: <level>", "level" to Component.text(passive.contributionLevel),
+            )) to passive.effects.map { effect ->
+                Component.text("${effect.label}: ").color(TextColor.color(0xe8dfd2)).append(Component.text(dungeonPassivePercent(effect.fraction))
+                    .color(TextColor.fromHexString(if (effect.beneficial) "#9bd48d" else "#ff6b61")))
+            }.reduce { result, effect -> result.append(Component.newline()).append(effect) }
+        },
+        DialogTables.Frame.EPIC,
+        text("classes.passive-source", "<#e8dfd2>Источник") to text("classes.passive-effect", "<#e8dfd2>Пассивный эффект"),
+    )
 
     private fun classTable(
         rows: List<Pair<Component, Component>>,

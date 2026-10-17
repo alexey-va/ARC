@@ -69,7 +69,7 @@ internal class DungeonAdventureMenus(
             button("catalog", "catalog-label", "<#ffb277>Каталог данжей ›", "Поиск, уровни и выбор похода") { catalog(player) },
             button("quests", "quests-label", "<#c4abff>Задания ›", "Прогресс, отслеживание и управление заданиями") { local.quests(player) },
             button("party", "party-label", "<#e5ba73>Группа ›", "Собрать группу и пригласить друзей") { local.party(player) },
-            button("classes", "classes-label", "<#c4abff>Классы ›", "Выбор класса, способности и ветки развития") { local.classes(player) },
+            button("classes", "classes-label", "<#c4abff>Классы ›", "Выбор класса, пассивы и ветки развития") { local.classes(player) },
             button("skills", "progression-label", "<#c4abff>Развитие навыков ›", "Опыт, пассивные бонусы, ближайшие способности и книги прохождений") { skills(player) },
             button("gear", "gear-label", "<#86dcf1>Снаряжение ›", "Вещи, боевые параметры и выбранные перки") { gear(player) },
             button("stats", "stats-label", "<#86dcf1>Статистика ›", "Рейтинг, пройденные данжи и достижения") { statistics(player) },

@@ -1,7 +1,6 @@
 package ru.arc.hooks.elitemobs
 
 import com.magmaguy.elitemobs.advancedcombat.AdvancedCombatModule
-import com.magmaguy.elitemobs.advancedcombat.classes.ClassResourceType
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.entity.Player
@@ -9,13 +8,8 @@ import ru.arc.paper.api.ArcSidebarFrame
 import ru.arc.paper.api.ArcSidebarHandle
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.math.roundToLong
 
-internal data class DungeonCombatResource(
-    val type: ClassResourceType,
-    val amount: Long,
-    val maximum: Long,
-)
+internal data class DungeonCombatClass(val name: String, val level: Int)
 
 /** Main-thread dungeon source for ARC Core's shared native sidebar. */
 internal class DungeonScoreboard(
@@ -23,7 +17,7 @@ internal class DungeonScoreboard(
     private val sidebar: ArcSidebarHandle? = null,
     private val enabled: (Player) -> Boolean = { true },
     private val party: (Player) -> DungeonPartyView? = { dungeon.parties.current(it) },
-    private val resource: (Player) -> DungeonCombatResource? = ::readDungeonCombatResource,
+    private val combatClass: (Player) -> DungeonCombatClass? = ::readDungeonCombatClass,
     private val quest: (Player) -> DungeonQuestInfo? = { player -> readDungeonQuests(player)?.firstOrNull(DungeonQuestInfo::tracked) },
     private val crystals: (Player) -> String? = ::readDungeonCrystals,
 ) {
@@ -60,13 +54,12 @@ internal class DungeonScoreboard(
                 visit.stats?.level?.takeIf { it > 0 }?.let { add(line("level", "<#f4bd6a>| <#e8dfd2>Уровень: <#f4bd6a><value>", "value" to Component.text(it))) }
                 visit.stats?.difficulty?.let { add(line("difficulty", "<#f4bd6a>| <#e8dfd2>Сложность: <#f4bd6a><value>", "value" to dungeonDifficulty(dungeon, it))) }
                 visit.stats?.playerCount?.let { add(line("party", "<#f4bd6a>| <#e8dfd2>Участников: <#9bd48d><value>", "value" to Component.text(it))) }
-                resource(player)?.let {
+                combatClass(player)?.let {
                     add(line(
-                        "resource",
-                        "<#f4bd6a>| <#e8dfd2><resource>: <#92bed8><amount><#aaa49a>/<#92bed8><maximum>",
-                        "resource" to Component.text(dungeonResourceName(it.type)),
-                        "amount" to Component.text(it.amount),
-                        "maximum" to Component.text(it.maximum),
+                        "class",
+                        "<#f4bd6a>| <#e8dfd2><name> <#aaa49a>· <#92bed8>ур. <level>",
+                        "name" to Component.text(it.name),
+                        "level" to Component.text(it.level),
                     ))
                 }
                 if (view.participant) crystals(player)?.let { add(line("crystals", "<#f4bd6a>| <#e8dfd2>Кристаллы: <#c7a0e8>💎 <value>", "value" to Component.text(it))) }
@@ -170,11 +163,12 @@ internal fun joinDungeonScoreboardSections(vararg sections: List<String>): List<
     }
 }
 
-private fun readDungeonCombatResource(player: Player): DungeonCombatResource? = runCatching {
+private fun readDungeonCombatClass(player: Player): DungeonCombatClass? = runCatching {
     if (!AdvancedCombatModule.isInitialized()) return@runCatching null
-    AdvancedCombatModule.resourceSnapshot(player.uniqueId).orElse(null)?.let {
-        DungeonCombatResource(it.type(), it.amount().roundToLong(), it.maximum().roundToLong())
-    }
+    val profile = AdvancedCombatModule.get().profile(player.uniqueId).orElse(null) ?: return@runCatching null
+    val active = profile.activeLineage() ?: return@runCatching null
+    val form = AdvancedCombatModule.get().catalog().require(active.activeFormId())
+    DungeonCombatClass(DungeonClassLocalization().formName(form.id(), form.displayName()), active.activeEffectiveLevel())
 }.getOrNull()
 
 private data class LegacyGlyph(val value: String, val format: String, val whitespace: Boolean)

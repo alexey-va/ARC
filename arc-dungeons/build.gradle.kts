@@ -31,7 +31,7 @@ dependencies {
     compileOnly(project(":arc-staff-spells-api"))
     compileOnly("ru.ruscrafting.arc:arc-core-paper-api:2.7.30")
     compileOnly(libs.io.papermc.paper.paper.api)
-    compileOnly(libs.ru.ruscrafting.thirdparty.elitemobs.api)
+    compileOnly("com.magmaguy:EliteMobs:10.9.8@jar") { isTransitive = false }
     compileOnly(libs.ru.ruscrafting.thirdparty.magmacore)
     compileOnly("com.magmaguy:FreeMinecraftModels:2.12.1") { isTransitive = false }
     compileOnly(libs.fr.black.eyes.lootchest)
@@ -44,7 +44,7 @@ dependencies {
     testImplementation(project(":arc-staff-spells-api"))
     testImplementation("ru.ruscrafting.arc:arc-core-paper-api:2.7.30")
     testImplementation("ru.ruscrafting.arc:arc-core-paper-testing:2.7.30")
-    testImplementation(libs.ru.ruscrafting.thirdparty.elitemobs.api)
+    testImplementation("com.magmaguy:EliteMobs:10.9.8@jar") { isTransitive = false }
     testImplementation(libs.ru.ruscrafting.thirdparty.magmacore)
     testImplementation("com.magmaguy:FreeMinecraftModels:2.12.1") { isTransitive = false }
     testImplementation(libs.com.github.retrooper.packetevents.spigot) { exclude(group = "io.netty") }

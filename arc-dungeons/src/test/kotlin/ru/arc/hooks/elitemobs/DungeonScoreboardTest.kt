@@ -7,7 +7,6 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
-import com.magmaguy.elitemobs.advancedcombat.classes.ClassResourceType
 import org.bukkit.entity.Player
 import ru.arc.paper.api.ArcSidebarFrame
 import ru.arc.paper.api.ArcSidebarHandle
@@ -36,7 +35,7 @@ class DungeonScoreboardTest : FreeSpec({
             qol,
             sidebar = sidebar,
             party = { null },
-            resource = { DungeonCombatResource(ClassResourceType.FURY, 37, 100) },
+            combatClass = { DungeonCombatClass("Оккультист", 39) },
         ) { "42" }
         board.refresh(listOf(player))
         verify(exactly = 1) { sidebar.show(player, capture(frame)) }
@@ -55,7 +54,7 @@ class DungeonScoreboardTest : FreeSpec({
             "| Уровень: 12",
             "| Сложность: Обычная",
             "| Участников: 3",
-            "| Ярость: 37/100",
+            "| Оккультист · ур. 39",
             "| Кристаллы: 💎 42",
             "",
             "Shift + F — меню данжа",
@@ -195,7 +194,7 @@ class DungeonScoreboardTest : FreeSpec({
         val board = DungeonScoreboard(
             qol,
             party = { null },
-            resource = { DungeonCombatResource(ClassResourceType.FURY, 37, 100) },
+            combatClass = { DungeonCombatClass("Оккультист", 39) },
             crystals = { "42" },
             quest = { quest },
         )

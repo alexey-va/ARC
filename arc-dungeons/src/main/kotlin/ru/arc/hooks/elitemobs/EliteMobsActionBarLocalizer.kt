@@ -8,7 +8,6 @@ import com.github.retrooper.packetevents.protocol.packettype.PacketType
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerActionBar
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSystemChatMessage
 import com.magmaguy.elitemobs.advancedcombat.AdvancedCombatModule
-import com.magmaguy.elitemobs.advancedcombat.classes.ClassResourceType
 import com.magmaguy.elitemobs.skills.SkillType
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.TextComponent
@@ -262,19 +261,7 @@ private fun combatCatalogTranslations(): Map<String, String> {
 
     for (form in catalog.forms()) {
         add(form.displayName(), localization.formName(form.id(), form.displayName()))
-        val lineage = catalog.lineageOf(form.id())
-        val rootId = catalog.rootOf(form.id()).id()
-        add(lineage.mobility().displayName(), localization.ability(
-            rootId, "mobility", lineage.mobility().displayName(), lineage.mobility().description(),
-        ).name)
-        add(form.signature().displayName(), localization.ability(
-            form.id(), "signature", form.signature().displayName(), form.signature().description(),
-        ).name)
-        add(form.utility().displayName(), localization.ability(
-            form.id(), "utility", form.utility().displayName(), form.utility().description(),
-        ).name)
     }
-    ClassResourceType.entries.forEach { add(it.displayName(), dungeonResourceName(it)) }
     SkillType.entries.forEach { add(it.displayName, dungeonSkillName(it)) }
     return candidates.mapNotNull { (source, targets) ->
         targets.singleOrNull()?.let { source to it }
