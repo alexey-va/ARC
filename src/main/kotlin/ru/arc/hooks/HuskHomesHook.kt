@@ -19,6 +19,8 @@ import org.bukkit.event.Cancellable
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
+import org.bukkit.event.player.PlayerQuitEvent
+import org.bukkit.event.player.PlayerTeleportEvent
 import ru.arc.Portal
 import ru.arc.PortalData
 import ru.arc.PortalData.ActionType.HUSK
@@ -35,7 +37,9 @@ import java.util.UUID
 
 class HuskHomesHook internal constructor(
     private val portalLauncher: (UUID, HuskTeleport) -> Unit,
-) : Listener {
+) : Listener, AutoCloseable {
+
+    private val localTeleports = HuskHomesLocalTeleportObserver()
 
     constructor() : this(
         { playerId, teleport -> Portal(playerId, PortalData(HUSK, teleport, null, null)) },
@@ -62,6 +66,10 @@ class HuskHomesHook internal constructor(
     }
 
     private fun intercept(event: Cancellable, teleport: Teleport) {
+        if (teleport is ObservedHuskTeleport) {
+            localTeleports.nativeEvent(event, teleport)
+            return
+        }
         val timedTeleport = teleport as? TimedTeleport ?: return
         val teleporter = timedTeleport.teleporter as? BukkitUser ?: return
         if (teleporter.player.hasPermission(PORTAL_BYPASS_PERMISSION)) return
@@ -69,6 +77,14 @@ class HuskHomesHook internal constructor(
         event.isCancelled = true
         portalLauncher(teleporter.uuid, HuskTeleport(timedTeleport, teleporter.position))
     }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = false)
+    fun observeTeleport(event: PlayerTeleportEvent) = localTeleports.bukkitEvent(event)
+
+    @EventHandler
+    fun quit(event: PlayerQuitEvent) = localTeleports.quit(event.player)
+
+    override fun close() = localTeleports.close()
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun homeCreate(event: HomeCreateEvent) {
@@ -137,13 +153,25 @@ class HuskHomesHook internal constructor(
                 onlineUser.position
             }
 
-        api.teleportBuilder(onlineUser)
+        val replay = api.teleportBuilder(onlineUser)
             .target(original.target)
             .type(original.type)
             .actions(*original.actions.toTypedArray())
             .updateLastPosition(false)
             .toTeleport()
-            .execute()
+
+        val observed = localTeleports.prepare(replay, player) {
+            if (original.isUpdateLastPosition && replay.plugin.settings.general.backCommand.canReturnToWorld(lastPosition.world)) {
+                api.setUserLastPosition(onlineUser, lastPosition)
+            }
+        }
+        if (observed != null) {
+            observed.execute()
+            return
+        }
+
+        // Username targets and cross-server routing retain HuskHomes' native lifecycle.
+        replay.execute()
 
         if (original.isUpdateLastPosition) {
             api.setUserLastPosition(onlineUser, lastPosition)

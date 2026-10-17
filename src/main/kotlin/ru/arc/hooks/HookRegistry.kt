@@ -203,6 +203,7 @@ class HookRegistry(
 
         val failures = mutableListOf<Throwable>()
         cleanup(failures) { auctionHook?.close() }
+        cleanup(failures) { huskHomesHook?.close() }
         cleanup(failures) { furnitureGalleryInteractionRuntime?.close() }
         cleanup(failures) { citizensHook?.close() }
         cleanup(failures) { packetEventsHook?.close() }

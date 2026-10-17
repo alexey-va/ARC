@@ -153,6 +153,7 @@ class HuskHomesReplayTest :
                     }
                 val builder = mockk<TeleportBuilder>()
                 val replay = mockk<Teleport>()
+                every { replay.target } returns target
                 every { HuskHomesAPI.getInstance() } returns api
                 every { api.adaptUser(player) } returns user
                 every { api.teleportBuilder(user) } returns builder

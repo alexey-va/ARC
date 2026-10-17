@@ -289,7 +289,6 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
                     return
                 }
                 sync {
-                    player.world.playSound(player.location, org.bukkit.Sound.ENTITY_ENDERMAN_TELEPORT, 1f, 1f)
                     HookRegistry.huskHomesHook!!.teleport(portalData.huskTeleport ?: return@sync, player)
                 }
             }

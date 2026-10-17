@@ -42,6 +42,11 @@ join:
 # --- Порталы из команд (PlayerWarps / CMI): частицы, радиусы, сообщения ---
 # Раньше дублировалось в portal.yml — теперь только эта секция (CommandListener, CMIListener, Portal).
 portal:
+  teleport-observation:
+    # Deadline for observing local HuskHomes arrival; this never retries or cancels transport.
+    timeout-ticks: 200
+    cancelled-message: "<yellow>Телепортация отменена."
+    unconfirmed-message: "<yellow>Прибытие не подтверждено. Сообщите администрации."
   # Включить обработку «портальных» команд
   command-portals: true
   # Подкоманды, которые не открывают портал
