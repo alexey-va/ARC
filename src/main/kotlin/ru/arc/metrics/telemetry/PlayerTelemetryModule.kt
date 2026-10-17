@@ -5,10 +5,13 @@ import org.bukkit.Location
 import org.bukkit.entity.Player
 import ru.arc.ARC
 import ru.arc.audit.AuditConfig
-import ru.arc.config.ConfigManager
+import ru.arc.config.Config
+import ru.arc.metrics.loadTelemetryConfig
 import ru.arc.core.PluginModule
 import ru.arc.core.ScheduledTask
 import ru.arc.core.Tasks
+import ru.arc.metrics.MetricsWorkQueue
+import ru.arc.metrics.NativeTelemetryBatch
 import ru.arc.metrics.ProductInterestConfig
 import ru.arc.metrics.ProductUiKind
 import ru.arc.metrics.ProductUiView
@@ -18,7 +21,6 @@ import ru.arc.telemetry.PlayerTelemetryStore
 import ru.arc.util.Logging.warn
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicLong
 
@@ -31,67 +33,86 @@ object PlayerTelemetryModule : PluginModule {
     private val generation = AtomicLong()
     @Volatile private var closing: CompletableFuture<Unit>? = null
     private val invalidCaptures = AtomicLong()
+    private val unavailableCaptures = AtomicLong()
+    private class Lifecycle(val queue: MetricsWorkQueue) { var store: PlayerTelemetryStore? = null }
+    private var lifecycle: Lifecycle? = null
     private val contexts = ConcurrentHashMap<UUID, JourneyContext>()
     private val observedActions = ConcurrentHashMap<UUID, Pair<String, Long>>()
     private var tracker: PlayerJourneyTracker? = null
     private var listener: PlayerTelemetryListener? = null
     private var sampler: ScheduledTask? = null
+    private var nativeCapture: NativeTelemetryBatch? = null
     private var qaNames: Set<String> = emptySet()
 
     fun storeOrNull(): PlayerTelemetryStore? = store
     fun health(): Map<String, Any?> = mapOf(
         "state" to state, "server" to (ARC.serverName ?: "unknown"),
         "storage" to store?.health()?.asMap(), "trackedSessions" to contexts.size, "invalidCaptures" to invalidCaptures.get(),
-        "sessionScope" to "paper_backend_visit", "positionSampling" to "interval_displacement",
+        "unavailableCaptures" to unavailableCaptures.get(), "sessionScope" to "paper_backend_visit", "positionSampling" to "interval_displacement",
         "captureDurability" to "asynchronous_after_local_journal_commit",
     )
 
     override fun init() {
         if (System.getProperty("arc.test.unit") != null) return
+        stopCapture("reload")
         val epoch = generation.incrementAndGet()
-        val config = ConfigManager.ofModule(ARC.instance.dataPath, "player-telemetry.yml")
-        if (!config.bool("enabled", true)) { state = "disabled"; return }
-        val sql = runCatching { AuditConfig.load().mysql?.copy(minimumIdle = 1, maximumPoolSize = 2) }.getOrNull()
-        if (sql == null) {
-            state = "missing_sql_configuration"
-            warn("Player telemetry requires the existing audit MySQL configuration")
-            return
-        }
-        qaNames = ProductInterestConfig.from(ConfigManager.ofModule(ARC.instance.dataPath, "metrics.yml")).qaPlayerNames
-        val instance = PlayerTelemetryStore(sql, ARC.instance.dataPath.resolve("data"),
-            ARC.serverName ?: "unknown", PlayerTelemetrySettings.from(config))
-        store = instance
+        val dataPath = ARC.instance.dataPath
+        val serverName = ARC.serverName ?: "unknown"
+        val version = ARC.instance.pluginMeta.version
         state = "starting"
-        instance.start().whenComplete { _, failure ->
-            if (generation.get() != epoch || store !== instance) return@whenComplete
-            if (failure != null) {
-                state = "journal_unavailable"
-                warn("Player telemetry local recovery failed: {}", failure.javaClass.simpleName)
-            } else Tasks.scheduler.runSync(Runnable {
-                if (generation.get() != epoch || store !== instance) return@Runnable
+        val queue = MetricsWorkQueue(predecessor = closing ?: CompletableFuture.completedFuture(Unit),
+            onFailure = { warn("Player telemetry asynchronous processing failed", it) })
+        val owner = Lifecycle(queue).also { lifecycle = it }
+        queue.submit {
+            val config = loadTelemetryConfig(dataPath, "player-telemetry.yml")
+            if (!config.bool("enabled", true)) {
+                if (generation.get() == epoch) state = "disabled"
+                return@submit
+            }
+            val sql = AuditConfig(Config(dataPath, "modules/audit.yml")).mysql?.copy(minimumIdle = 1, maximumPoolSize = 2)
+            if (sql == null) {
+                if (generation.get() == epoch) state = "missing_sql_configuration"
+                warn("Player telemetry requires the existing audit MySQL configuration")
+                return@submit
+            }
+            val capturedQaNames = ProductInterestConfig.from(loadTelemetryConfig(dataPath, "metrics.yml")).qaPlayerNames
+            val idleMillis = config.long("idle-after-seconds", 60).coerceIn(10, 3_600) * 1_000
+            val positionMillis = config.long("position-interval-seconds", 15).coerceIn(5, 300) * 1_000
+            val sampleTicks = config.long("sample-interval-seconds", 1).coerceIn(1, 10) * 20
+            val instance = PlayerTelemetryStore(sql, dataPath.resolve("data"), serverName, PlayerTelemetrySettings.from(config))
+            owner.store = instance
+            instance.start().join() // this queue's worker, never Paper
+            Tasks.scheduler.runSync(Runnable {
+                if (generation.get() != epoch || lifecycle !== owner) return@Runnable
+                store = instance
+                qaNames = capturedQaNames
                 tracker = PlayerJourneyTracker(
-                    config.long("idle-after-seconds", 60).coerceIn(10, 3_600) * 1_000,
-                    config.long("position-interval-seconds", 15).coerceIn(5, 300) * 1_000,
-                    { context, event, at, attrs -> capture(context, "player", event, null, null, attrs, at) },
+                    idleMillis,
+                    positionMillis,
+                    { context, event, at, attrs -> capture(context, "player", event, null, null, attrs, at, targetStore = instance) },
                     { id, context -> if (context == null) contexts.remove(id) else contexts[id] = context },
                 )
                 listener = PlayerTelemetryListener().also { it.start() }
                 ru.arc.metrics.MetricsModule.ensureUiCapture()
-                Bukkit.getOnlinePlayers().forEach { join(it, true) }
-                sampler = Tasks.scheduler.runTimer(20, config.long("sample-interval-seconds", 1).coerceIn(1, 10) * 20, Runnable {
-                    val now = System.currentTimeMillis()
-                    observedActions.entries.toList().forEach { (id, action) ->
-                        if (observedActions.remove(id, action)) tracker?.activity(id, action.first, action.second)
-                    }
-                    Bukkit.getOnlinePlayers().forEach {
-                        if (contexts.containsKey(it.uniqueId)) tracker?.sample(it.uniqueId, it.location.position(), now)
+                val batch = NativeTelemetryBatch().also { nativeCapture = it }
+                batch.start(Bukkit.getOnlinePlayers().map { it.uniqueId }) { id ->
+                    if (!contexts.containsKey(id)) Bukkit.getPlayer(id)?.let { join(it, true) }
+                }
+                sampler = Tasks.scheduler.runTimer(20, sampleTicks, Runnable {
+                    batch.start((Bukkit.getOnlinePlayers().map { it.uniqueId } + observedActions.keys).distinct()) { id ->
+                        observedActions.remove(id)?.let { tracker?.activity(id, it.first, it.second) }
+                        val player = Bukkit.getPlayer(id)
+                        if (player != null && contexts.containsKey(id))
+                            tracker?.sample(id, player.location.position(), System.currentTimeMillis())
                     }
                 })
                 state = "capturing"
                 instance.offer(PlayerTelemetryEvent(eventId = UUID.randomUUID().toString(), occurredAt = System.currentTimeMillis(),
-                    server = ARC.serverName ?: "unknown", source = "arc", event = "node.started",
-                    attributes = mapOf("version" to ARC.instance.description.version)))
+                    server = serverName, source = "arc", event = "node.started",
+                    attributes = mapOf("version" to version)))
             })
+        }.whenComplete { _, failure ->
+            if (failure != null && generation.get() == epoch) state = "journal_unavailable"
         }
     }
 
@@ -100,6 +121,7 @@ object PlayerTelemetryModule : PluginModule {
         fun point(suffix: String, help: String, value: Number) =
             ru.arc.metrics.core.MetricPoint("arc_player_telemetry_$suffix", help, value.toDouble())
         return listOf(
+            point("unavailable_captures_total", "Capture calls rejected while the local journal was unavailable", unavailableCaptures.get()),
             point("accepting", "Player telemetry capture accepts events", if (health?.accepting == true) 1 else 0),
             point("sql_ready", "Player telemetry SQL sender is ready", if (health?.sqlReady == true) 1 else 0),
             point("queued_events", "Player telemetry events awaiting local journal commit", health?.queuedEvents ?: 0),
@@ -115,41 +137,32 @@ object PlayerTelemetryModule : PluginModule {
         )
     }
 
-    override fun reload() {
-        val previous = stopCapture("reload")
-        val epoch = generation.get()
-        val completion = previous?.closeAsync() ?: closing ?: CompletableFuture.completedFuture(Unit)
-        closing = completion
-        completion.whenComplete { _, failure ->
-            if (generation.get() == epoch) {
-                if (failure == null) Tasks.scheduler.runSync(Runnable { if (generation.get() == epoch) init() })
-                else {
-                    state = "shutdown_drain_failed"
-                    warn("Player telemetry reload stopped because its previous journal did not close cleanly")
-                }
-            }
-        }
-    }
+    override fun reload() = init()
 
-    override fun shutdown() {
-        val previous = stopCapture("shutdown")
-        closing = previous?.closeAsync() ?: closing
-        // Only shutdown waits; gameplay and reload never wait for disk or network.
-        runCatching { closing?.get(10, TimeUnit.SECONDS) }.onFailure {
-            warn("Player telemetry shutdown did not finish within its bound: {}", it.javaClass.simpleName)
-        }
-    }
+    override fun shutdown() { stopCapture("shutdown") }
 
-    private fun stopCapture(reason: String): PlayerTelemetryStore? {
+    private fun stopCapture(reason: String): CompletableFuture<Unit> {
         generation.incrementAndGet()
         sampler?.cancel(); sampler = null
         listener?.close(); listener = null
-        tracker?.close(System.currentTimeMillis(), reason); tracker = null
+        nativeCapture?.close(); nativeCapture = null
+        val previousTracker = tracker
+        tracker = null
+        val finalActions = observedActions.toMap()
         observedActions.clear()
-        val previous = store
+        val owner = lifecycle
+        lifecycle = null
         store = null
         state = "stopped"
-        return previous
+        val at = System.currentTimeMillis()
+        if (owner == null) return closing ?: CompletableFuture.completedFuture(Unit)
+        // The published journal drains asynchronously. Our non-daemon owner keeps that
+        // final drain alive and writes the censored session summaries without a Paper wait.
+        return owner.queue.closeAsync {
+            finalActions.forEach { (id, action) -> previousTracker?.activity(id, action.first, action.second) }
+            try { previousTracker?.close(at, reason) }
+            finally { owner.store?.closeAsync()?.join() }
+        }.also { closing = it }
     }
 
     internal fun join(player: Player, resumed: Boolean = false) {
@@ -226,8 +239,8 @@ object PlayerTelemetryModule : PluginModule {
 
     private fun capture(context: JourneyContext?, source: String, event: String, subject: String?, operationId: String?,
                         attributes: Map<String, String>, at: Long, playerId: UUID? = context?.playerId,
-                        playerName: String? = context?.playerName): Boolean {
-        val instance = store ?: return false
+                        playerName: String? = context?.playerName, targetStore: PlayerTelemetryStore? = store): Boolean {
+        val instance = targetStore ?: run { unavailableCaptures.incrementAndGet(); return false }
         return runCatching {
             val id = UUID.randomUUID().toString()
             instance.offer(PlayerTelemetryEvent(eventId = id, occurredAt = at, server = ARC.serverName ?: "unknown",

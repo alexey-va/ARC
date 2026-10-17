@@ -148,6 +148,11 @@ open class ARC : JavaPlugin() {
 
     internal fun sharedServiceSnapshot(): Map<String, Int> = sharedServiceMetrics?.snapshot().orEmpty()
 
+    /** Metrics recovery finishes asynchronously; only its current generation binds. */
+    internal fun bindTelemetryRegistry(registry: io.micrometer.core.instrument.MeterRegistry?) {
+        metricsService?.rebind(registry)
+    }
+
     internal fun refreshSharedServiceMetrics() { sharedServiceMetrics?.refresh() }
     internal var tablist: ru.arc.tablist.ArcTablist? = null
         private set
@@ -220,7 +225,7 @@ open class ARC : JavaPlugin() {
             ru.arc.integrations.contracts.ContractsHostServices.register(this)
             ru.arc.integrations.origin.OriginHostServices.register(this)
         }
-        metricsService?.rebind(MetricsModule.registry())
+        bindTelemetryRegistry(MetricsModule.registry())
 
         if (runtimeProfile == ArcRuntimeProfile.FULL) {
             server.servicesManager.register(ArcTelemetryProvider::class.java, ArcTelemetryProviderBridge, this, ServicePriority.Normal)
@@ -314,7 +319,7 @@ open class ARC : JavaPlugin() {
         ru.arc.integrations.contracts.contractsService()?.reload()
         ru.arc.integrations.origin.originService()?.reload()
         ru.arc.dungeons.dungeonService()?.reload()
-        metricsService?.rebind(MetricsModule.registry())
+        bindTelemetryRegistry(MetricsModule.registry())
         baseSidebar?.refresh()
         tablist?.refresh()
         // Modules may replace channel listeners during reload; restart the subscription once
@@ -620,7 +625,6 @@ open class ARC : JavaPlugin() {
             listOf(
                 "modules/runtime.yml",
                 "modules/logging.yml",
-                "modules/metrics.yml",
                 "modules/visual-packets.yml",
                 "modules/redis.yml",
                 "modules/ops-http.yml",

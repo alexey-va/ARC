@@ -10,7 +10,6 @@ import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.time.Instant
 import java.time.LocalDate
-import java.util.concurrent.locks.ReentrantLock
 import kotlin.math.floor
 
 data class ProductJourneySnapshot(
@@ -26,7 +25,7 @@ data class ProductStoreApplyResult(
 )
 
 /**
- * Bounded rolling product state. Player identity is a SHA-256 pseudonym and is
+ * Worker-confined bounded rolling product state; callers serialize access through MetricsWorkQueue. Player identity is a SHA-256 pseudonym and is
  * never emitted as a metric label. The state is small enough to persist
  * atomically and exact enough to calculate unique, funnel and retention gauges.
  */
@@ -184,25 +183,15 @@ class ProductInterestStore private constructor(
         val count: Long = 0,
     )
 
-    @Volatile
     private var dirty = false
-    private var mutationVersion = 0L
-    private val flushLock = ReentrantLock()
-
-    private data class SavePlan(
-        val state: StoreFile,
-        val mutationVersion: Long,
-        val previousLastSavedAt: Long,
-    )
+    private var lastPrunedCutoff: LocalDate? = null
 
     private data class SaveResult(
         val evictedPlayers: Map<String, Long>,
     )
 
-    @Synchronized
     fun journey(player: String): ProductJourneySnapshot? = players[player]?.journey()
 
-    @Synchronized
     fun apply(signal: ProductSignal): ProductStoreApplyResult {
         if (signal.occurredAt < measurementBoundaryAt) return ProductStoreApplyResult(false, players[signal.player]?.journey())
         if (signal.kind == ProductEventKind.MEANINGFUL_OUTCOME && signal.outcome?.isGameplayResult() != true) {
@@ -322,7 +311,6 @@ class ProductInterestStore private constructor(
         return ProductStoreApplyResult(changed || engagementChanged, before)
     }
 
-    @Synchronized
     fun applyExternal(playerId: String, source: ExternalProductSource, event: ExternalProductEvent, occurredAt: Long): Boolean {
         require(playerId.matches(Regex("[a-f0-9]{64}"))) { "External product player must be pseudonymous" }
         require(event.source == source) { "External event does not belong to source" }
@@ -339,7 +327,6 @@ class ProductInterestStore private constructor(
     }
 
     /** Existing product retention/reset/pseudonym rules also own profession-time observations. */
-    @Synchronized
     fun applyJobWork(playerId: String, observation: JobWorkObservation): Boolean {
         require(PSEUDONYM.matches(playerId)) { "Job work player must be pseudonymous" }
         if (!observation.valid()) return false
@@ -354,7 +341,6 @@ class ProductInterestStore private constructor(
     }
 
     /** Actual UI observations, independent from inferred command interest. */
-    @Synchronized
     fun applyUi(signal: ProductUiSignal): Boolean {
         if (!ProductUiCodec.valid(signal)) return false
         if (signal.occurredAt < measurementBoundaryAt) return false
@@ -436,7 +422,6 @@ class ProductInterestStore private constructor(
     }
 
     /** Record local high-volume actions without publishing every action to Redis. */
-    @Synchronized
     fun recordAction(
         player: String,
         action: ProductAction,
@@ -453,55 +438,23 @@ class ProductInterestStore private constructor(
         return previous == 0L
     }
 
-    @Synchronized
     fun actionCount(
         player: String,
         action: ProductAction,
         occurredAt: Long,
     ): Long = players[player]?.days?.get(dayKey(occurredAt))?.actionCounts?.get(action.label) ?: 0L
 
-    fun flush(
-        now: Long,
-        force: Boolean = false,
-    ): Boolean {
-        if (force) {
-            flushLock.lock()
-        } else if (!flushLock.tryLock()) {
-            return false
-        }
-        try {
-            val plan =
-                synchronized(this) {
-                    if (!dirty) return false
-                    if (!force && now - lastSavedAt < config.persistIntervalSeconds * 1_000L) return false
-                    prune(now)
-                    SavePlan(persistedSnapshot(now), mutationVersion, lastSavedAt).also { lastSavedAt = now }
-                }
-            val result =
-                try {
-                    save(plan.state)
-                } catch (failure: Throwable) {
-                    synchronized(this) {
-                        if (lastSavedAt == now) lastSavedAt = plan.previousLastSavedAt
-                    }
-                    throw failure
-                }
-            synchronized(this) {
-                if (mutationVersion == plan.mutationVersion) {
-                    result.evictedPlayers.forEach { (id, _) ->
-                        if (players.remove(id) != null) capacityEvictions++
-                    }
-                    dirty = false
-                }
-            }
-            return true
-        } finally {
-            flushLock.unlock()
-        }
+    fun flush(now: Long, force: Boolean = false): Boolean {
+        if (!dirty || (!force && now - lastSavedAt < config.persistIntervalSeconds * 1_000L)) return false
+        prune(now)
+        val result = save(persistedSnapshot(now))
+        result.evictedPlayers.forEach { (id, _) -> if (players.remove(id) != null) capacityEvictions++ }
+        lastSavedAt = now
+        dirty = false
+        return true
     }
 
     /** Initializes an empty period file. Historical stores must never be cleared by a reset. */
-    @Synchronized
     fun resetPeriod(boundaryAt: Long, observedAt: Long = boundaryAt): Boolean {
         if (boundaryAt == measurementBoundaryAt) return false
         require(boundaryAt > 0 && measurementBoundaryAt == 0L && players.isEmpty()) {
@@ -514,54 +467,11 @@ class ProductInterestStore private constructor(
         return true
     }
 
-    @Synchronized
     fun measurementStartedAt(): Long = resultObservationStartedAt
 
-    fun snapshot(
-        now: Long,
-        scope: String,
-    ): List<MetricPoint> = snapshotState(now).snapshotMetrics(now, scope)
-
-    // Only copy mutable state under the event-writer lock. Rolling-window
-    // aggregation runs on this detached view without blocking player events.
-    @Synchronized
-    private fun snapshotState(now: Long): ProductInterestStore {
+    fun snapshot(now: Long, scope: String): List<MetricPoint> {
         prune(now)
-        val copiedPlayers = players.mapValuesTo(linkedMapOf()) { (_, player) ->
-            player.copy(
-                firstPathAt = player.firstPathAt.toMutableMap(),
-                firstGameplayOutcomeAt = player.firstGameplayOutcomeAt.toMutableMap(),
-                uiAttribution = player.uiAttribution?.copy(),
-                days = player.days.mapValuesTo(linkedMapOf()) { (_, day) ->
-                    day.copy(
-                        engagementFirst = day.engagementFirst.toMutableMap(),
-                        engagementLast = day.engagementLast.toMutableMap(),
-                        ui = day.ui.mapValuesTo(linkedMapOf()) { (_, row) -> row.copyForSave() },
-                        activities = day.activities.toMutableSet(),
-                        features = day.features.toMutableSet(),
-                        pathInterests = day.pathInterests.toMutableSet(),
-                        pathChoices = day.pathChoices.toMutableSet(),
-                        outcomes = day.outcomes.toMutableSet(),
-                        systems = day.systems.toMutableSet(),
-                        actionCounts = day.actionCounts.toMutableMap(),
-                        details = day.details.mapValuesTo(linkedMapOf()) { (_, values) ->
-                            values.mapValuesTo(linkedMapOf()) { (_, detail) -> detail.copy() }
-                        },
-                        exits = day.exits.mapValuesTo(linkedMapOf()) { (_, exit) -> exit.copy(trail = exit.trail.toList()) },
-                        recentTrail = day.recentTrail.toMutableList(),
-                        externalEvents = day.externalEvents.toMutableMap(),
-                        jobWork = day.jobWork.mapValuesTo(linkedMapOf()) { (_, totals) -> totals.copy() },
-                    )
-                },
-            )
-        }
-        return ProductInterestStore(path, config, gson, copiedPlayers, lastSavedAt, measurementBoundaryAt, recoveredInvalidPath).also {
-            it.uiDroppedEvents = uiDroppedEvents
-            it.capacityEvictions = capacityEvictions
-            it.resultObservationStartedAt = resultObservationStartedAt
-            it.engagementObservationStartedAt = engagementObservationStartedAt
-            it.parsedDates.putAll(parsedDates)
-        }
+        return snapshotMetrics(now, scope)
     }
 
     private fun snapshotMetrics(now: Long, scope: String): List<MetricPoint> {
@@ -702,7 +612,6 @@ class ProductInterestStore private constructor(
      * Aggregated operator report. Pseudonyms never leave this store; each row
      * contains only a bounded journey detail plus event and unique-player counts.
      */
-    @Synchronized
     fun report(
         now: Long,
         days: Int,
@@ -1165,6 +1074,10 @@ class ProductInterestStore private constructor(
 
     private fun prune(now: Long) {
         val oldestDate = localDate(now).minusDays(config.retentionDays.toLong() - 1)
+        if (lastPrunedCutoff == oldestDate) return
+        // Remember the exact cutoff, not its maximum: an out-of-order write can reintroduce
+        // an older day; the next current-day action must sweep it again.
+        lastPrunedCutoff = oldestDate
         var changed = false
         players.values.forEach { player ->
             changed = player.days.entries.removeIf { parseDate(it.key)?.isBefore(oldestDate) != false } || changed
@@ -1175,7 +1088,6 @@ class ProductInterestStore private constructor(
 
     private fun markDirty() {
         dirty = true
-        mutationVersion++
     }
 
     private fun save(initial: StoreFile): SaveResult {
@@ -1386,7 +1298,9 @@ class ProductInterestStore private constructor(
                         model.engagementObservationStartedAt != it.engagementObservationStartedAt) it.markDirty()
                     it.prune(now)
                 }
-            }.getOrElse {
+            }.getOrElse { failure ->
+                // An unreadable valid file is not malformed data and must never be reset.
+                if (failure is java.io.IOException || failure is SecurityException) throw failure
                 val invalid = path.resolveSibling("${path.fileName}.invalid-$now")
                 Files.move(path, invalid, StandardCopyOption.REPLACE_EXISTING)
                 ProductInterestStore(path, config, gson, linkedMapOf(), now, recoveredInvalidPath = invalid)

@@ -49,10 +49,14 @@ Replay suppression is bounded and best effort: 24 hours, 4096 recent identities
 per bridge/topic process. It resets on restart and is not an exactly-once
 financial journal. Disabled collection, a crash before persistence, unavailable
 Redis or consumer downtime can lose observations. API success means local
-acceptance, not confirmed delivery to every node. Compare financial volumes
+FIFO admission, not completed processing, persistence or delivery to every node.
+Replay checks run on the worker: a duplicate can be admitted (`true`) and then
+suppressed without adding another observation. A full/closed/failed capture
+boundary returns `false`; no replay claim is consumed before queue admission. Compare financial volumes
 with the economy ledger, never derive them by multiplying these counters by
 catalog prices. `activeSeconds` and session boundaries remain owned by ARC's
-existing `ProductInterestTelemetry`; consumers introduce no timers or sessions.
+existing `ProductInterestProcessor` behind its asynchronous
+`ProductInterestTelemetry` facade; consumers introduce no timers or sessions.
 
 ## Profession work observations
 
@@ -100,7 +104,7 @@ currency, calendar/time window and observation coverage in the money ledger;
 this report deliberately does not divide whole-day payouts by partial observed
 time. Do not use it as an automatic pricing input.
 
-Focused verification: `./gradlew test --tests ru.arc.metrics.JobWorkObservationTest`.
+Focused verification: `./gradlew :test --tests ru.arc.metrics.JobWorkObservationTest`.
 The native producer and actual optional bridge are exercised by ArcEcoJobs'
 paired Paper suite with `-Pe2eArcJar=/absolute/path/to/ARC.jar`.
 
@@ -123,3 +127,71 @@ Do not shade ARC itself or the shared API into consumers. Keep
 plugin resolves the provider interface from ARC's classloader when available.
 Verify the packaged JAR, not just unshaded unit tests. Check load-order edges as
 well as the soft dependency against the full server plugin graph.
+
+## Thread and lifecycle contract
+
+`MetricsModule` captures immutable event values on their native caller thread.
+A bounded `MetricsWorkQueue` owns product pseudonymization, replay checks,
+sessions, rolling aggregation, daily pruning, snapshot sorting, JSON encoding,
+file open/atomic save, measurement reset/rotation, Redis subscription and sends.
+Its FIFO has 8192 accepted queued/running operations and a reserved terminal
+slot. Admission does not execute the processor and never waits for storage.
+Saturation rejects new work explicitly; there is no caller-runs fallback.
+`captureQueue` in the authenticated report/status and
+`arc_product_capture_{queue_depth,accepted_total,rejected_total,failures_total}`
+expose admission and processing outcomes. Rejections/failures make the report's
+`complete` false. External dedupe capacity and Redis publish failures have
+separate bounded transport counters. Pub/sub remains best effort.
+
+Startup and reload read fresh telemetry YAML off-thread, without enrolling it
+in `ConfigManager.reloadAll`. Store and topic readiness fence native attachment;
+failed recovery cannot announce a ready product collector. While the module
+starts, product APIs reject explicitly and startup native observations increment
+the rejection diagnostic. Existing online players are resumed in bounded
+batches after attachment. The facade itself retains accepted work queued behind
+initialization. Factory failures expose `failed`, reject followups, and count
+previously admitted processing failures rather than presenting them as durable.
+
+Shutdown unregisters capture and cancels native batches on Paper, then returns
+without waiting. One non-daemon worker drains accepted FIFO work, emits censored
+sessions, forces the final file save, and only then closes topics and exporter.
+A replacement waits for this drain on its own worker before opening the same
+file. An unsuccessful drain blocks replacement and is reported. Redis failure
+cannot skip the final local flush; network delivery still depends on the shared
+provider remaining available. Graceful shutdown drain is covered; process kill,
+JVM halt, power loss, storage failure and observations rejected before admission
+are not durability guarantees. The existing durable player journal stays in
+published arc-core; ARC's owner waits for its final drain off the Paper thread.
+
+Native movement/join capture reads at most eight players per tick, with a two-ms
+budget checked between calls. Heavy Paper metrics reuse the published collector
+through a typed one-world `Server` view, at most one world per tick. Unloaded
+worlds are skipped. The worker sums the four global world totals, retains each
+world's labels, keeps one global plugin/scheduler series, and replaces the
+entire heavy snapshot only after a successful full sweep of the current
+lifecycle. Capture ticks differ across worlds; this is not an instantaneous
+world snapshot. An individual native getter is indivisible and may exceed two
+ms. The fast fixed-size Paper snapshot, native event values, UI listener wiring
+and pure registry rebind remain on Paper; no asynchronous World/Player reads
+are introduced.
+
+Focused regression suite (published core dependencies, no composite override):
+
+```sh
+./gradlew :test \
+  --tests ru.arc.metrics.MetricsWorkQueueTest \
+  --tests ru.arc.metrics.ProductInterestAsyncTest \
+  --tests ru.arc.metrics.BoundedTelemetryCaptureTest \
+  --tests ru.arc.metrics.ProductInterestTelemetryTest \
+  --tests ru.arc.metrics.ProductInterestStoreTest \
+  --tests ru.arc.metrics.JobWorkObservationTest \
+  --tests ru.arc.metrics.ExternalProductTelemetryBridgeTest \
+  --tests ru.arc.metrics.DungeonInterestMetricsTest \
+  --tests ru.arc.metrics.telemetry.PlayerJourneyTrackerTest
+```
+
+These tests cover blocked recovery/persistence/Redis admission, bounded overflow
+and reserved close, FIFO persistence and reset, previous-generation drain,
+initialization failure fencing, late-day retention, native tick budgets and
+world/global metric totals. They do not constitute a production latency result;
+the sampled futex wait in the original Spark profile did not identify its owner.

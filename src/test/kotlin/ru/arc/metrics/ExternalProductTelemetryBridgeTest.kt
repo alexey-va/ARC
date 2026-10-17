@@ -22,8 +22,7 @@ class ExternalProductTelemetryBridgeTest : StringSpec({
         ExternalProductTelemetryBridge.record(player, "arcranks", outcome = "contract_complete", operationId = "bad id") shouldBe false
     }
 
-    "routes valid signals once and does not replay them" {
-        ExternalProductTelemetryBridge.clearReplayState()
+    "validates before admission and leaves replay handling to the worker" {
         var calls = 0
         val sink: (String, ProductFeature?, ProductOutcome?, ProductAction?) -> Boolean = { _, feature, outcome, action ->
             calls++
@@ -33,12 +32,11 @@ class ExternalProductTelemetryBridgeTest : StringSpec({
             true
         }
         ExternalProductTelemetryBridge.recordForSink(player, "arcranks", outcome = "contract_complete", operationId = "contract:6", sink = sink) shouldBe true
-        ExternalProductTelemetryBridge.recordForSink(player, "arcranks", outcome = "contract_complete", operationId = "contract:6", sink = sink) shouldBe false
-        calls shouldBe 1
+        ExternalProductTelemetryBridge.recordForSink(player, "arcranks", outcome = "contract_complete", operationId = "contract:6", sink = sink) shouldBe true
+        calls shouldBe 2
     }
 
-    "extracted mounts retain the gameplay product signal and deduplicate ride identity" {
-        ExternalProductTelemetryBridge.clearReplayState()
+    "extracted mounts retain the gameplay product signal at admission" {
         var calls = 0
         val sink: (String, ProductFeature?, ProductOutcome?, ProductAction?) -> Boolean = { _, feature, outcome, action ->
             calls++
@@ -47,38 +45,35 @@ class ExternalProductTelemetryBridgeTest : StringSpec({
             action shouldBe null
             true
         }
-        repeat(2) { attempt ->
+        repeat(2) {
             ExternalProductTelemetryBridge.recordForSink(player, "arcmounts", feature = "mounts",
-                outcome = "mount_ride", operationId = "ride:1", sink = sink) shouldBe (attempt == 0)
+                outcome = "mount_ride", operationId = "ride:1", sink = sink) shouldBe true
         }
-        calls shouldBe 1
+        calls shouldBe 2
     }
 
     "does not change result when the sink fails" {
-        ExternalProductTelemetryBridge.clearReplayState()
         ExternalProductTelemetryBridge.recordForSink(player, "arcranks", outcome = "contract_complete", operationId = "contract:7", sink = { _, _, _, _ -> error("sink") }) shouldBe false
     }
 
     "external domain events bind source and keep purchase and activation identities separate" {
-        ExternalProductTelemetryBridge.clearReplayState()
         mockkObject(MetricsModule)
         try {
             every { MetricsModule.recordExternalEvent(any(), any(), any(), any()) } returns true
             ExternalProductTelemetryBridge.recordEvent(player, "arcvotes", "farm_reward_claimed", "grant-1") shouldBe false
             ExternalProductTelemetryBridge.recordEvent(player, "arcecojobs", "job_boost_purchased", "voucher-1") shouldBe true
             ExternalProductTelemetryBridge.recordEvent(player, "arcecojobs", "job_boost_activated", "voucher-1") shouldBe true
-            ExternalProductTelemetryBridge.recordEvent(player, "arcecojobs", "job_boost_activated", "voucher-1") shouldBe false
-            verify(exactly = 2) { MetricsModule.recordExternalEvent(any(), ExternalProductSource.JOBS, any(), ProductPseudonym.of("voucher-1")) }
+            ExternalProductTelemetryBridge.recordEvent(player, "arcecojobs", "job_boost_activated", "voucher-1") shouldBe true
+            verify(exactly = 3) { MetricsModule.recordExternalEvent(any(), ExternalProductSource.JOBS, any(), "voucher-1") }
             val giveaway = "giveaway:$player:$player"
             ExternalProductTelemetryBridge.recordEvent(player, "arcgiveaways", "giveaway_item_granted", giveaway) shouldBe true
-            ExternalProductTelemetryBridge.recordEvent(player, "arcgiveaways", "giveaway_item_granted", giveaway) shouldBe false
-            verify(exactly = 1) { MetricsModule.recordExternalEvent(player, ExternalProductSource.GIVEAWAYS, ExternalProductEvent.GIVEAWAY_ITEM_GRANTED, ProductPseudonym.of(giveaway)) }
+            ExternalProductTelemetryBridge.recordEvent(player, "arcgiveaways", "giveaway_item_granted", giveaway) shouldBe true
+            verify(exactly = 2) { MetricsModule.recordExternalEvent(player, ExternalProductSource.GIVEAWAYS, ExternalProductEvent.GIVEAWAY_ITEM_GRANTED, giveaway) }
             ExternalProductTelemetryBridge.recordEvent(player, "arcvotes", "vote_reward_claimed", "x".repeat(257)) shouldBe false
-            every { MetricsModule.recordExternalEvent(any(), any(), any(), ProductPseudonym.of("failing")) } throws IllegalStateException("unavailable sink")
+            every { MetricsModule.recordExternalEvent(any(), any(), any(), "failing") } throws IllegalStateException("unavailable sink")
             ExternalProductTelemetryBridge.recordEvent(player, "arcvotes", "vote_reward_claimed", "failing") shouldBe false
         } finally {
             unmockkObject(MetricsModule)
-            ExternalProductTelemetryBridge.clearReplayState()
-        }
+            }
     }
 })

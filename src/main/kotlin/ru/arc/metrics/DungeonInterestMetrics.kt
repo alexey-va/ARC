@@ -104,7 +104,7 @@ data class DungeonInterestConfig(
 /**
  * Counts aggregate dungeon interest without exporting player identity.
  *
- * All calls are made on the Paper server thread. Player IDs exist only as
+ * All calls are serialized by the metrics worker; timestamps are captured on Paper. Player IDs exist only as
  * ephemeral session keys and never become metric labels or persisted data.
  */
 class DungeonInterestMetrics(
@@ -134,32 +134,30 @@ class DungeonInterestMetrics(
     fun trackExisting(
         playerId: String,
         worldName: String,
+        now: Long = nanoTime(),
     ) {
-        startSession(playerId, worldName, countVisit = false)
+        startSession(playerId, worldName, countVisit = false, now)
     }
 
     /** Record a join or a world transition. */
     fun enter(
         playerId: String,
         worldName: String,
-    ) {
-        startSession(playerId, worldName, countVisit = true)
-    }
+        now: Long = nanoTime(),
+    ): Boolean = startSession(playerId, worldName, countVisit = true, now)
 
     /** Record an organic quit. */
-    fun leave(playerId: String) {
-        finishSession(playerId, nanoTime(), recordDuration = true)
+    fun leave(playerId: String, now: Long = nanoTime()) {
+        finishSession(playerId, now, recordDuration = true)
     }
 
     /** Flush active player-seconds so long visits are visible before the player leaves. */
-    fun sample() {
-        val now = nanoTime()
+    fun sample(now: Long = nanoTime()) {
         sessions.values.forEach { session -> flushPlayerTime(session, now) }
     }
 
     /** Flush censored active time during module shutdown without claiming a completed visit. */
-    fun shutdown() {
-        val now = nanoTime()
+    fun shutdown(now: Long = nanoTime()) {
         sessions.values.forEach { session -> flushPlayerTime(session, now) }
         sessions.clear()
     }
@@ -168,20 +166,21 @@ class DungeonInterestMetrics(
         playerId: String,
         worldName: String,
         countVisit: Boolean,
-    ) {
-        val now = nanoTime()
+        now: Long,
+    ): Boolean {
         val world = config.dungeonWorld(worldName)
         val current = sessions[playerId]
-        if (current?.world == world && world != null) return
+        if (current?.world == world && world != null) return false
 
         finishSession(playerId, now, recordDuration = true)
-        if (world == null) return
-        val worldMeters = metersFor(world) ?: return
+        if (world == null) return false
+        val worldMeters = metersFor(world) ?: return false
         sessions[playerId] = Session(world, now, now)
         if (countVisit) {
             worldMeters.visits.increment()
             onVisit(playerId, world)
         }
+        return countVisit
     }
 
     private fun finishSession(

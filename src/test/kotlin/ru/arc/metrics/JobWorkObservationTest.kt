@@ -117,17 +117,17 @@ class JobWorkObservationTest : StringSpec({
         val redis = ru.arc.redis.InMemoryRedis()
         val id = "00000000-0000-0000-0000-000000000018"
         val hash = ProductPseudonym.of(id)
-        val telemetry = ProductInterestTelemetry(registry, ProductInterestConfig(networkEnabled = true), "spawn",
+        val telemetry = ProductInterestProcessor(registry, ProductInterestConfig(networkEnabled = true), "spawn",
             Files.createTempDirectory("job-work-reset-").resolve("product.json"), true, redis, clockMillis = { at })
         try {
             telemetry.start()
-            telemetry.pollMeasurementReset().join()
+            telemetry.pollMeasurementReset()
             telemetry.join(id, false, ProductPlayerSample(id, ProductWorldType.SURVIVAL, "world", 0.0, 64.0, 0.0), now = at)
             telemetry.observeJobWork(hash, "miner", at)
             at += 1000
             telemetry.observeJobWork(hash, "miner", at)
             at += 1000
-            telemetry.requestMeasurementReset(0).join()
+            telemetry.requestMeasurementReset(0)
             telemetry.observeJobWork(hash, "miner", at) shouldBe JobWorkObservation("miner", at, at)
             telemetry.receiveJobWork(player, JobWorkObservation("miner", now, now + 1500)) shouldBe false
             at += 500
@@ -143,7 +143,7 @@ class JobWorkObservationTest : StringSpec({
         val registry = PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
         val id = "00000000-0000-0000-0000-000000000017"
         val hash = ProductPseudonym.of(id)
-        val telemetry = ProductInterestTelemetry(registry, ProductInterestConfig(networkEnabled = false), "spawn",
+        val telemetry = ProductInterestProcessor(registry, ProductInterestConfig(networkEnabled = false), "spawn",
             Files.createTempDirectory("job-work-session-").resolve("product.json"), true, clockMillis = { now })
         fun sample() = ProductPlayerSample(id, ProductWorldType.SURVIVAL, "world", 0.0, 64.0, 0.0)
         try {

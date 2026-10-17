@@ -130,13 +130,16 @@ internal class ProductUiListener(private val plugin: Plugin, private val product
 
     /** Called by the Paper sampler; async aggregation reads only the published list. */
     fun refreshSnapshot() {
+        coverageSnapshot = captureCoverage()
         snapshotPoints = coverage.map { (producer, ready) ->
         MetricPoint("arc_product_ui_producer_ready", "Installed UI producer observation hook readiness",
             if (ready && (producer != "zmenu" || zMenu.failures == 0L)) 1.0 else 0.0,
             mapOf("producer" to producer))
         } + MetricPoint("arc_product_ui_adapter_failures", "Native UI adapter observation failures", zMenu.failures.toDouble())
     }
-    fun coverage(): Map<String, Any> = mapOf("producers" to coverage.toMap(),
+    @Volatile private var coverageSnapshot: Map<String, Any> = emptyMap()
+    fun coverage(): Map<String, Any> = coverageSnapshot
+    private fun captureCoverage(): Map<String, Any> = mapOf("producers" to coverage.toMap(),
         "dialogDismissal" to "Escape is not reported by Paper; unresolved dialogs are censored, never counted as no-choice closes",
         "zmenuFailures" to zMenu.failures,
         "zmenuAcceptance" to "Physical presses are attempts; zMenu calls its native click observer before requirements. Accepted clicks and results are unsupported",

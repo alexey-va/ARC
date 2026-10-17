@@ -21,20 +21,20 @@ class ProductInterestTelemetryTest :
             val path = Files.createTempDirectory("product-reset-network-").resolve("product-interest-v1.json")
             val standbyPath = Files.createTempDirectory("product-reset-standby-").resolve("product-interest-v1.json")
             val config = ProductInterestConfig(networkEnabled = true, zoneId = ZoneId.of("UTC"))
-            fun telemetry(file: java.nio.file.Path, primary: Boolean) = ProductInterestTelemetry(
+            fun telemetry(file: java.nio.file.Path, primary: Boolean) = ProductInterestProcessor(
                 PrometheusMeterRegistry(PrometheusConfig.DEFAULT), config, if (primary) "spawn" else "survival",
                 file, primary, redis, clockMillis = { now })
             val leader = telemetry(path, true)
             val follower = telemetry(standbyPath, false)
             leader.start(); follower.start()
-            leader.pollMeasurementReset().join()
-            follower.pollMeasurementReset().join()
+            leader.pollMeasurementReset()
+            follower.pollMeasurementReset()
             val id = "00000000-0000-0000-0000-000000000042"
             leader.join(id, true, sample(id, "vanilla"), now = now)
             leader.command(id, "/before_reset", now)
             now += 10_000
-            val period = leader.requestMeasurementReset(0).join()
-            follower.pollMeasurementReset().join()
+            val period = leader.requestMeasurementReset(0)
+            follower.pollMeasurementReset()
             follower.measurementResetStatus()["generation"] shouldBe period.generation
             leader.report(1, 10, true)["players"] shouldBe 0
             Files.readString(path).contains("before_reset") shouldBe true
@@ -45,7 +45,7 @@ class ProductInterestTelemetryTest :
             follower.shutdown(now)
             val reopened = telemetry(path, true)
             reopened.start()
-            reopened.pollMeasurementReset().join()
+            reopened.pollMeasurementReset()
             reopened.report(1, 10, true).toString().contains("after_reset") shouldBe true
             reopened.report(1, 10, true).toString().contains("before_reset") shouldBe false
             reopened.measurementResetStatus()["boundaryAt"] shouldBe period.boundaryAt
@@ -57,7 +57,7 @@ class ProductInterestTelemetryTest :
             var now = Instant.parse("2026-08-16T12:00:00Z").toEpochMilli()
             val registry = PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
             val telemetry =
-                ProductInterestTelemetry(
+                ProductInterestProcessor(
                     registry = registry,
                     config = ProductInterestConfig(networkEnabled = false, buildingThreshold = 2, zoneId = ZoneId.of("UTC")),
                     rawServerName = "survival",
@@ -106,7 +106,7 @@ class ProductInterestTelemetryTest :
             val now = Instant.parse("2026-08-16T12:00:00Z").toEpochMilli()
             val registry = PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
             val telemetry =
-                ProductInterestTelemetry(
+                ProductInterestProcessor(
                     registry,
                     ProductInterestConfig(networkEnabled = false, zoneId = ZoneId.of("UTC")),
                     "survival",
@@ -131,7 +131,7 @@ class ProductInterestTelemetryTest :
             var now = Instant.parse("2026-08-16T12:00:00Z").toEpochMilli()
             val registry = PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
             val telemetry =
-                ProductInterestTelemetry(
+                ProductInterestProcessor(
                     registry,
                     ProductInterestConfig(networkEnabled = false, zoneId = ZoneId.of("UTC")),
                     "spawn",
@@ -162,7 +162,7 @@ class ProductInterestTelemetryTest :
         "successful play does not require opening a menu to count as engaged" {
             val now = Instant.parse("2026-08-16T12:00:00Z").toEpochMilli()
             val registry = PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
-            val telemetry = ProductInterestTelemetry(
+            val telemetry = ProductInterestProcessor(
                 registry, ProductInterestConfig(networkEnabled = false), "survival",
                 Files.createTempDirectory("product-direct-play-").resolve("state.json"), true,
                 clockMillis = { now },
@@ -178,7 +178,7 @@ class ProductInterestTelemetryTest :
 
         "first visit to a secondary backend does not create a network newcomer" {
             val now = Instant.parse("2026-08-16T12:00:00Z").toEpochMilli()
-            val telemetry = ProductInterestTelemetry(
+            val telemetry = ProductInterestProcessor(
                 PrometheusMeterRegistry(PrometheusConfig.DEFAULT), ProductInterestConfig(networkEnabled = true),
                 "survival", Files.createTempDirectory("product-backend-cohort-").resolve("state.json"), false,
                 clockMillis = { now },
@@ -194,7 +194,7 @@ class ProductInterestTelemetryTest :
             val registry = PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
             val redis = InMemoryRedis(ServerIdentity { "spawn" })
             val telemetry =
-                ProductInterestTelemetry(
+                ProductInterestProcessor(
                     registry,
                     ProductInterestConfig(networkEnabled = true, zoneId = ZoneId.of("UTC")),
                     "spawn",
@@ -215,9 +215,9 @@ class ProductInterestTelemetryTest :
                     detail = ProductDetail(ProductDetailType.WORLD, "vanilla"),
                 )
             val payload = ProductWireCodec.encode(signal, com.google.gson.Gson())
-            redis.simulateExternalMessage(ProductInterestTelemetry.CHANNEL, payload, "survival")
-            redis.simulateExternalMessage(ProductInterestTelemetry.CHANNEL, payload, "survival")
-            redis.simulateExternalMessage(ProductInterestTelemetry.CHANNEL, payload, "spawn")
+            redis.simulateExternalMessage(ProductInterestProcessor.CHANNEL, payload, "survival")
+            redis.simulateExternalMessage(ProductInterestProcessor.CHANNEL, payload, "survival")
+            redis.simulateExternalMessage(ProductInterestProcessor.CHANNEL, payload, "spawn")
 
             telemetry.report(1, 20, networkReady = true, now = now)["players"] shouldBe 1
             registry.get("arc_product_telemetry_transport").tag("result", "receive").counter().count() shouldBeExactly 1.0
