@@ -16,6 +16,7 @@ internal data class HomeMarker(
     val x: Double,
     val y: Double,
     val z: Double,
+    val isPublic: Boolean = false,
 ) {
     init {
         require(id.isNotBlank() && name.isNotBlank() && world.isNotBlank())

@@ -11,12 +11,50 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
+import net.william278.huskhomes.api.HuskHomesAPI
+import net.william278.huskhomes.position.Home
+import net.william278.huskhomes.position.World
+import net.william278.huskhomes.user.OnlineUser
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import ru.arc.xserver.playerlist.PlayerManager
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 
 class BukkitHelpCenterGatewayTest : StringSpec({
     afterTest { PlayerManager.readMessage("[]") }
+
+    "keeps provider visibility in each personal home snapshot" {
+        MockBukkitTestRuntime.open().use { paper ->
+            paper.createSimplePlugin("HuskHomes")
+            val player = paper.addPlayer("HomeOwner")
+            val api = mockk<HuskHomesAPI>()
+            val user = mockk<OnlineUser>()
+            val homes = listOf(false, true).map { public ->
+                mockk<Home> {
+                    every { name } returns if (public) "public-home" else "private-home"
+                    every { server } returns "spawn"
+                    every { world } returns World.from("world")
+                    every { x } returns 1.5
+                    every { y } returns 70.0
+                    every { z } returns -2.5
+                    every { isPublic } returns public
+                }
+            }
+            mockkStatic(HuskHomesAPI::class)
+            try {
+                every { HuskHomesAPI.getInstance() } returns api
+                every { api.adaptUser(player) } returns user
+                every { api.getMaxHomeSlots(user) } returns 5
+                every { api.getUserHomes(user) } returns CompletableFuture.completedFuture(homes)
+
+                val snapshots = BukkitHelpCenterGateway().loadHomes(player, 3).join().homes
+                snapshots.map { it.isPublic }.shouldContainExactly(false, true)
+                snapshots.map { it.z }.shouldContainExactly(-3, -3)
+            } finally {
+                unmockkStatic(HuskHomesAPI::class)
+            }
+        }
+    }
 
     "reads proxy-wide players with their server from the ARC player manager" {
         val survivalPlayer = UUID.fromString("00000000-0000-0000-0000-000000000021")

@@ -115,6 +115,11 @@ class HelpCenterPlannerTest : StringSpec({
         HelpCenterCommands.createHome("Дом-2") shouldBe "sethome Дом-2"
         HelpCenterCommands.deleteHome("Дом-2") shouldBe "delhome Дом-2"
         HelpCenterCommands.relocateHome("Дом-2") shouldBe "edithome Дом-2 relocate"
+        HelpCenterCommands.setHomePublic("Дом-2", true) shouldBe "huskhomes:edithome Дом-2 privacy public"
+        HelpCenterCommands.setHomePublic("Дом-2", false) shouldBe "huskhomes:edithome Дом-2 privacy private"
+        listOf("other.home", "bad argument", "home\nprivacy public", "/op").forEach { unsafeName ->
+            runCatching { HelpCenterCommands.setHomePublic(unsafeName, true) }.isFailure shouldBe true
+        }
 
         runCatching { HelpCenterCommands.home("bad argument") }.isFailure shouldBe true
         runCatching { HelpCenterCommands.deleteHome("/op") }.isFailure shouldBe true

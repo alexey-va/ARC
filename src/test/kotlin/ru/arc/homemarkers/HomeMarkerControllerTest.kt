@@ -57,6 +57,38 @@ class HomeMarkerControllerTest : StringSpec({
         }
     }
 
+    "a privacy change opens the fresh home state while a moved point is rejected" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val plugin = paper.createSimplePlugin("HomeMarkersTest")
+            val player = paper.addPlayer("Owner")
+            player.isSneaking = true
+            val scheduler = TestTaskScheduler()
+            val gateway = mockk<HomeMarkerGateway>()
+            val scene = mockk<HomeMarkerScene>(relaxed = true)
+            val marker = HomeMarker(HomeMarkerKind.HOME, "home", player.uniqueId, "Home", player.world.name, 0.0, 64.0, 0.0)
+            val publicMarker = marker.copy(isPublic = true)
+            every { gateway.load(player) } returnsMany listOf(
+                CompletableFuture.completedFuture(listOf(marker)),
+                CompletableFuture.completedFuture(listOf(publicMarker)),
+                CompletableFuture.completedFuture(listOf(publicMarker.copy(x = 2.0))),
+            )
+            every { gateway.openSettings(player, publicMarker) } returns true
+            Tasks.withScheduler(scheduler) {
+                HomeMarkerController(plugin, HomeMarkerSettings(), gateway, scene).use { controller ->
+                    scheduler.tick()
+                    scheduler.executeImmediate()
+                    controller.activate(player, marker)
+                    scheduler.executeImmediate()
+                    verify(exactly = 1) { gateway.openSettings(player, publicMarker) }
+
+                    controller.activate(player, publicMarker)
+                    scheduler.executeImmediate()
+                    verify(exactly = 1) { gateway.openSettings(any(), any()) }
+                }
+            }
+        }
+    }
+
     "accepted Shift click survives posture changes but still requires a fresh unchanged point" {
         MockBukkitTestRuntime.open().use { paper ->
             val plugin = paper.createSimplePlugin("HomeMarkersTest")

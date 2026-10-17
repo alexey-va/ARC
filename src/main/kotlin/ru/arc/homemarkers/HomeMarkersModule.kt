@@ -104,8 +104,11 @@ internal class HomeMarkerController(
             session.markers = markers.orEmpty()
             if (!render(session)) return@whenCompleteSync
             // The scene validated the click ray. Neither releasing Shift nor looking away cancels an accepted gesture.
-            if (expected !in session.markers || player.world.name != expected.world) return@whenCompleteSync
-            runCatching { gateway.openSettings(player, expected) }
+            // Privacy can change through this menu; retain point identity and position, but open its fresh state.
+            val currentMarker = session.markers.firstOrNull { it.copy(isPublic = expected.isPublic) == expected }
+                ?: return@whenCompleteSync
+            if (player.world.name != currentMarker.world) return@whenCompleteSync
+            runCatching { gateway.openSettings(player, currentMarker) }
                 .onFailure { failed(session, "open-settings", it) }
                 .getOrDefault(false)
                 .also { if (!it) player.sendMessage(settings.failureMessage) }

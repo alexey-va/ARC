@@ -149,6 +149,7 @@ data class HelpCenterHome(
     val x: Int,
     val y: Int,
     val z: Int,
+    val isPublic: Boolean = false,
 )
 
 data class HelpCenterHomes(
@@ -462,6 +463,9 @@ object HelpCenterCommands {
     fun deleteHome(name: String): String = "delhome ${safeHome(name)}"
 
     fun relocateHome(name: String): String = "edithome ${safeHome(name)} relocate"
+
+    fun setHomePublic(name: String, isPublic: Boolean): String =
+        "huskhomes:edithome ${safeHome(name)} privacy ${if (isPublic) "public" else "private"}"
 
     fun publicHome(identifier: String): String {
         require(PUBLIC_HOME_ID.matches(identifier)) { "Unsafe public home identifier" }

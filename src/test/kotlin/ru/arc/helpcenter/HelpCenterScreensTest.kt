@@ -59,6 +59,8 @@ class HelpCenterScreensTest {
             it.setPermission("arcgiveaways.use", true)
             it.setPermission("arcvotes.use", true)
             it.setPermission("pw.warp", true)
+            it.setPermission("huskhomes.command.edithome", true)
+            it.setPermission("huskhomes.command.edithome.privacy", true)
         }
         gateway = mockk()
         every { gateway.features() } returns HelpCenterFeature.entries.toSet()
@@ -979,6 +981,48 @@ class HelpCenterScreensTest {
         player.closeInventory()
         paper.performTicks(2)
         assertEquals("Игроки", plain(screen.title))
+    }
+
+    @Test
+    fun `own home visibility shows the current state and dispatches the explicit opposite`() {
+        for (isPublic in listOf(false, true)) {
+            val home = HelpCenterHome("Дом-2", "survival", "world", 10, 70, -20, isPublic)
+            controller.openHome(player, home)
+
+            assertEquals("help.home", screen.id)
+            assertEquals(2, screen.columns)
+            assertTrue(body().contains("Доступ"))
+            assertTrue(body().contains(if (isPublic) "Публичный" else "Личный"))
+            assertTrue(body().contains("телепортироваться"))
+            assertEquals(listOf("teleport", "relocate", "visibility", "delete"), screen.buttons.map { it.id.value })
+            val visibility = screen.buttons.single { it.id.value == "visibility" }
+            assertEquals(if (isPublic) "Сделать личным" else "Сделать публичным", plain(visibility.label))
+            assertEquals("#9bd48d", visibility.label.color()?.asHexString()?.lowercase())
+            assertEquals("#e8dfd2", visibility.tooltip.color()?.asHexString()?.lowercase())
+            assertTrue(plain(visibility.tooltip).contains("публичных домов"))
+            assertTrue(visibility.closeDialogBeforeAction)
+
+            click("visibility")
+            val target = if (isPublic) "private" else "public"
+            assertEquals("huskhomes:edithome Дом-2 privacy $target", executed.last())
+        }
+        assertEquals(2, executed.size)
+        verify(exactly = 0) { gateway.loadHomes(any(), any()) }
+    }
+
+    @Test
+    fun `home visibility action is hidden unless both provider permissions are granted`() {
+        val permissions = player.addAttachment(paper.createSimplePlugin("HomePermissions"))
+        for ((canEdit, canChangePrivacy) in listOf(false to false, true to false, false to true)) {
+            permissions.setPermission("huskhomes.command.edithome", canEdit)
+            permissions.setPermission("huskhomes.command.edithome.privacy", canChangePrivacy)
+            for (isPublic in listOf(false, true)) {
+                controller.openHome(player, HelpCenterHome("home", "survival", "world", 10, 70, -20, isPublic))
+                assertFalse(screen.buttons.any { it.id.value == "visibility" })
+                assertTrue(body().contains(if (isPublic) "Публичный" else "Личный"))
+            }
+        }
+        assertTrue(executed.isEmpty())
     }
 
     @Test

@@ -36,7 +36,7 @@ class HomeMarkerGatewayTest : StringSpec({
             val adaptedUser = mockk<OnlineUser>()
             val huskApi = mockk<HuskHomesAPI>()
             val homes = listOf(
-                testHome("current-home", player.uniqueId, "survival", "world"),
+                testHome("current-home", player.uniqueId, "survival", "world", isPublic = true),
                 testHome("remote-home", player.uniqueId, "spawn", "world"),
                 testHome("foreign-home", foreignOwner, "survival", "world"),
             )
@@ -66,6 +66,7 @@ class HomeMarkerGatewayTest : StringSpec({
                 )
                 markers.all { it.ownerId == player.uniqueId } shouldBe true
                 markers.all { it.world == "world" } shouldBe true
+                markers.map { it.isPublic }.shouldContainExactly(true, false)
                 Bukkit.getPluginManager().isPluginEnabled(huskPlugin.name) shouldBe true
             } finally {
                 unmockkStatic(HuskHomesAPI::class, PlayerWarpsAPI::class)
@@ -154,7 +155,7 @@ class HomeMarkerGatewayTest : StringSpec({
     }
 })
 
-private fun testHome(name: String, ownerId: UUID, server: String, worldName: String): Home {
+private fun testHome(name: String, ownerId: UUID, server: String, worldName: String, isPublic: Boolean = false): Home {
     val owner = User.of(ownerId, "owner-$name")
     return mockk<Home> {
         every { this@mockk.owner } returns owner
@@ -165,6 +166,7 @@ private fun testHome(name: String, ownerId: UUID, server: String, worldName: Str
         every { x } returns 1.5
         every { y } returns 70.0
         every { z } returns 2.5
+        every { this@mockk.isPublic } returns isPublic
     }
 }
 

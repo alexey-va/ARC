@@ -56,6 +56,7 @@ internal class HomeMarkerGateway {
                             x = home.x,
                             y = home.y,
                             z = home.z,
+                            isPublic = home.isPublic,
                         )
                     }
                     .toList()
@@ -107,6 +108,7 @@ internal class HomeMarkerGateway {
                 x = floor(marker.x).toInt(),
                 y = floor(marker.y).toInt(),
                 z = floor(marker.z).toInt(),
+                isPublic = marker.isPublic,
             ),
         )
     }

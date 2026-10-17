@@ -1055,6 +1055,8 @@ internal class HelpCenterController(
 
     fun openHome(player: Player, home: HelpCenterHome) {
         markNavigation(player)
+        val visibility = if (home.isPublic) "public" else "private"
+        val visibilityAction = if (home.isPublic) "private" else "public"
         showDialog(
             player,
             PaperDialogScreen(
@@ -1065,15 +1067,23 @@ internal class HelpCenterController(
                         text("table-server-label") to Component.text(home.server),
                         text("table-world-label") to Component.text(home.world),
                         text("table-coordinates-label") to Component.text("${home.x}, ${home.y}, ${home.z}"),
+                        text("table-home-visibility-label") to text("home-visibility-$visibility"),
                     ),
                     headers = text("table-label-heading") to text("table-value-heading"),
                     frame = DialogTables.Frame.EPIC,
-                )),
-                buttons = listOf(
+                ), PaperDialogBody(text("home-visibility-$visibility-body"))),
+                buttons = listOfNotNull(
                     button("teleport", text("home-teleport-label"), text("home-teleport-tooltip")) {
                         execute(player, HelpCenterCommands.home(home.name))
                     }.closing(),
                     button("relocate", text("home-relocate-label"), text("home-relocate-tooltip")) { openRelocateHome(player, home) },
+                    if (player.hasPermission("huskhomes.command.edithome") &&
+                        player.hasPermission("huskhomes.command.edithome.privacy")
+                    ) {
+                        button("visibility", text("home-$visibilityAction-label"), text("home-$visibilityAction-tooltip")) {
+                            execute(player, HelpCenterCommands.setHomePublic(home.name, !home.isPublic))
+                        }.closing()
+                    } else null,
                     button("delete", text("home-delete-label"), text("home-delete-tooltip")) { openDeleteHome(player, home) },
                 ),
                 exitButton = backButton("back", player, ::openTravel),

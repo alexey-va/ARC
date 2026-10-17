@@ -103,6 +103,7 @@ class BukkitHelpCenterGateway : HelpCenterGateway {
                             x = floor(home.x).toInt(),
                             y = floor(home.y).toInt(),
                             z = floor(home.z).toInt(),
+                            isPublic = home.isPublic,
                         )
                     }
                     val warpSlots = runCatching {
