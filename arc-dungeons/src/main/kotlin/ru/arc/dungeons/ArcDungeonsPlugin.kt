@@ -71,135 +71,94 @@ open class ArcDungeonsPlugin : JavaPlugin() {
     private var metrics: ArcMetricsScope? = null
     @Volatile private var health = RuntimeHealthContribution(state = RuntimeHealthState.STARTING)
     private val nativeListeners = mutableListOf<Listener>()
-    private class Generation(val lifecycle: PaperPluginRuntime, val previous: CompletableFuture<Unit>) {
-        val worker = BoundedAsyncExecutor("arc-dungeons-lifecycle")
-        val drain = CompletableFuture<Unit>()
-        @Volatile var pendingRedis: PaperRedisClient? = null
-        val retiredRedis = java.util.concurrent.ConcurrentLinkedQueue<Pair<CompletableFuture<Void>, PaperRedisClient>>()
-        var retirementFailure: Throwable? = null // lifecycle worker only
-        var installedGlobals = false
-    }
-    private var generation: Generation? = null
-    private val background get() = checkNotNull(generation).worker
+    private var background: BoundedAsyncExecutor? = null
+    private var installedGlobals = false
     private var lifecycleDrain = CompletableFuture.completedFuture(Unit)
-    private var stopped = false
+    private var lifecycleEpoch = 0L
+    private var stopped = true
     internal lateinit var nativeWork: BudgetedTaskQueue
         private set
 
     /** Captured lifecycle worker for detached preparation; callers own late candidates through drain. */
     internal fun <T> prepareBackground(operation: () -> T): CompletableFuture<T> =
-        generation?.worker?.submit(operation) ?: CompletableFuture.failedFuture(IllegalStateException("ArcDungeons is stopping"))
+        background?.takeUnless { stopped }?.submit(operation)
+            ?: CompletableFuture.failedFuture(IllegalStateException("ArcDungeons is stopping"))
 
-    internal fun closeCompletion(): CompletableFuture<Unit> = (generation?.drain ?: lifecycleDrain).copy()
+    internal fun closeCompletion(): CompletableFuture<Unit> = lifecycleDrain.copy()
 
     override fun onLoad() { instance = this }
 
     override fun onEnable() {
-        if (server.servicesManager.load(ArcDungeonConfiguration::class.java) == null) {
+        val host = server.servicesManager.load(ArcDungeonConfiguration::class.java)
+        if (host == null) {
             logger.warning("ArcDungeons requires the FULL ARC runtime profile; disabling before initialization")
             server.pluginManager.disablePlugin(this)
             return
         }
         stopped = false
+        installedGlobals = false
+        val epoch = ++lifecycleEpoch
         health = RuntimeHealthContribution(state = RuntimeHealthState.STARTING)
         val lifecycle = PaperPluginRuntime(this, scheduler = BukkitTaskScheduler(this)).also { runtime = it; it.start() }
-        val owner = Generation(lifecycle, lifecycleDrain)
-        generation = owner
-        owner.previous.whenCompleteSync(lifecycle.tasks) { _, failure ->
-            if (generation !== owner) return@whenCompleteSync
-            if (failure != null) {
-                logger.log(Level.SEVERE, "Previous ArcDungeons generation did not drain", failure)
-                server.pluginManager.disablePlugin(this)
-                return@whenCompleteSync
-            }
-            val host = server.servicesManager.load(ArcDungeonConfiguration::class.java)
-            if (host == null) {
-                logger.warning("ArcDungeons requires the FULL ARC runtime profile; disabling before initialization")
-                server.pluginManager.disablePlugin(this)
-                return@whenCompleteSync
-            }
+        fun start(failure: Throwable?) {
+            if (stopped || lifecycleEpoch != epoch) return
             try {
+                if (failure != null) throw failure
+                background = BoundedAsyncExecutor("arc-dungeons-background")
                 PaperArcRuntime.installScheduling(this)
-                owner.installedGlobals = true
+                installedGlobals = true
                 nativeWork = BudgetedTaskQueue(lifecycle.tasks)
                 lifecycle.registerHealth("modules") { health }
                 prepareHost(host, initial = true)
             } catch (startupFailure: Throwable) {
-                logger.log(Level.SEVERE, "Could not prepare ArcDungeons", startupFailure)
+                logger.log(Level.SEVERE, "Could not start ArcDungeons", startupFailure)
                 server.pluginManager.disablePlugin(this)
             }
         }
+        // Re-enable can wait for the old captured native tail; fresh startup never schedules a hop.
+        if (lifecycleDrain.isDone) start(runCatching { lifecycleDrain.join() }.exceptionOrNull())
+        else lifecycleDrain.whenCompleteSync(lifecycle.tasks) { _, failure -> start(failure) }
     }
 
     private fun prepareHost(host: ArcDungeonConfiguration, initial: Boolean) {
-        val owner = generation ?: return
-        val lifecycle = owner.lifecycle
-        val token = lifecycle.tasks.token()
+        val lifecycle = requireNotNull(runtime)
+        check(host.ready().isDone) { "ARC must finish installation before ArcDungeons enables" }
+        host.ready().join()
         health = RuntimeHealthContribution(state = RuntimeHealthState.STARTING)
-        host.ready().whenCompleteSync(lifecycle.tasks, token) { _, hostFailure ->
-            if (generation !== owner) return@whenCompleteSync
-            if (hostFailure != null) {
-                logger.log(Level.SEVERE, "ARC host is unavailable", hostFailure)
-                if (initial) server.pluginManager.disablePlugin(this)
-                return@whenCompleteSync
+        legacyDataPath = host.legacyDataPath()
+        serverName = host.serverName()
+        val redisGenerationId = host.sharedRedisGeneration()
+        val replaceRedis = redisGenerationId != redisGeneration
+        val redisAvailable = host.sharedRedisAvailable()
+        val service = server.servicesManager.load(ru.arc.paper.api.ArcRedisService::class.java)
+        val consumerName = name
+        val (menus, candidateRedis) = checkNotNull(background).submit {
+            if (!initial) ConfigManager.reloadAll()
+            mergeDefaults()
+            ConfigManager.of(legacyDataPath, "modules/logging.yml")
+            ConfigManager.of(legacyDataPath, "modules/misc.yml")
+            ConfigManager.of(legacyDataPath.resolve("lootchests"), "bosses.yml")
+            val menus = DungeonsMenuSchema.prepare(legacyDataPath)
+            menus to if (replaceRedis && redisAvailable) PaperRedisClient.openPrimary(checkNotNull(service), consumerName) else null
+        }.join()
+        if (replaceRedis) {
+            try {
+                closeNative()
+                retiredSync.join() // Native capture/cancellation is complete; this is storage-only.
+                redisManager?.close()
+            } catch (failure: Throwable) {
+                runCatching { candidateRedis?.close() }.exceptionOrNull()?.let(failure::addSuppressed)
+                throw failure
             }
-            legacyDataPath = host.legacyDataPath()
-            serverName = host.serverName()
-            val redisGenerationId = host.sharedRedisGeneration()
-            val replaceRedis = redisGenerationId != redisGeneration
-            val redisAvailable = host.sharedRedisAvailable()
-            val service = server.servicesManager.load(ru.arc.paper.api.ArcRedisService::class.java)
-            val consumerName = name
-            val candidate = owner.worker.submit {
-                owner.pendingRedis?.close()
-                owner.pendingRedis = null
-                if (!initial) ConfigManager.reloadAll()
-                mergeDefaults()
-                ConfigManager.of(legacyDataPath, "modules/logging.yml")
-                ConfigManager.of(legacyDataPath, "modules/misc.yml")
-                ConfigManager.of(legacyDataPath.resolve("lootchests"), "bosses.yml")
-                val menus = DungeonsMenuSchema.prepare(legacyDataPath)
-                if (replaceRedis && redisAvailable) {
-                    owner.pendingRedis = PaperRedisClient.openPrimary(checkNotNull(service), consumerName)
-                }
-                menus
-            }
-            candidate.whenComplete { _, failure ->
-                if (failure != null) logger.log(Level.SEVERE, "ArcDungeons preparation failed", failure)
-            }.whenCompleteSync(lifecycle.tasks, token) { menus, failure ->
-                if (generation !== owner) return@whenCompleteSync
-                if (failure != null || menus == null) {
-                    health = RuntimeHealthContribution(state = RuntimeHealthState.DEGRADED)
-                    if (initial) server.pluginManager.disablePlugin(this)
-                    return@whenCompleteSync
-                }
-                try {
-                    if (replaceRedis) {
-                        closeNative()
-                        val old = redisManager
-                        val drain = retiredSync
-                        redisManager = owner.pendingRedis
-                        owner.pendingRedis = null
-                        redisGeneration = redisGenerationId
-                        if (old != null) {
-                            // Keep the old client reachable even when an ordinary worker admission is rejected.
-                            owner.retiredRedis.add(drain to old)
-                            owner.worker.submit { drainRetiredRedis(owner) }
-                        }
-                    }
-                    if (initial) attachPreparedRuntime(menus)
-                    else {
-                        DungeonsMenus.reload(menus)
-                        reloadNative()
-                        ModuleRegistry.reloadAll()
-                        reportReadyAfterModules(lifecycle)
-                    }
-                } catch (attachFailure: Throwable) {
-                    health = RuntimeHealthContribution(state = RuntimeHealthState.DEGRADED)
-                    logger.log(Level.SEVERE, "ArcDungeons attachment failed", attachFailure)
-                    if (initial) server.pluginManager.disablePlugin(this)
-                }
-            }
+            redisManager = candidateRedis
+            redisGeneration = redisGenerationId
+        }
+        if (initial) attachPreparedRuntime(menus)
+        else {
+            DungeonsMenus.reload(menus)
+            reloadNative()
+            ModuleRegistry.reloadAll()
+            reportReadyAfterModules(lifecycle)
         }
     }
 
@@ -236,15 +195,11 @@ open class ArcDungeonsPlugin : JavaPlugin() {
     }
 
     private fun reportReadyAfterModules(lifecycle: PaperPluginRuntime) {
-        val owner = generation ?: return
-        val token = lifecycle.tasks.token()
-        LostLootModule.ready().whenCompleteSync(lifecycle.tasks, token) { _, failure ->
-            if (generation !== owner || runtime !== lifecycle) return@whenCompleteSync
-            if (failure != null) logger.log(Level.WARNING, "Lost loot mailbox is unavailable; local capture retains its outbox", failure)
-            publishModuleMetrics()
-            lifecycle.ready("modules" to effectiveModuleStatuses().count { it.ready })
-            lifecycle.reportHealthEvery(1_200L)
-        }
+        val failure = runCatching { LostLootModule.ready().join() }.exceptionOrNull()
+        if (failure != null) logger.log(Level.WARNING, "Lost loot mailbox is unavailable; local capture retains its outbox", failure)
+        publishModuleMetrics()
+        lifecycle.ready("modules" to effectiveModuleStatuses().count { it.ready })
+        lifecycle.reportHealthEvery(1_200L)
     }
 
     private fun mergeDefaults() {
@@ -460,37 +415,21 @@ open class ArcDungeonsPlugin : JavaPlugin() {
         )
     }
 
-    private fun drainRetiredRedis(owner: Generation) {
-        while (true) {
-            val (drain, client) = owner.retiredRedis.poll() ?: return
-            var failure: Throwable? = null
-            try { drain.join() } catch (error: Throwable) { failure = error }
-            try { client.close() } catch (error: Throwable) {
-                if (failure == null) failure = error else if (failure !== error) failure.addSuppressed(error)
-            }
-            failure?.let { error ->
-                if (owner.retirementFailure == null) owner.retirementFailure = error
-                else if (owner.retirementFailure !== error) owner.retirementFailure!!.addSuppressed(error)
-            }
-        }
-    }
-
     override fun onDisable() {
-        val owner = generation ?: return
-        generation = null
+        if (stopped) return
         stopped = true
-        lifecycleDrain = owner.drain
-        var nativeFailure: Throwable? = null
+        ++lifecycleEpoch
+        val lifecycle = runtime
+        var failure: Throwable? = null
         fun attempt(action: () -> Unit) {
-            try { action() } catch (failure: Throwable) {
-                if (nativeFailure == null) nativeFailure = failure else if (nativeFailure !== failure) nativeFailure!!.addSuppressed(failure)
+            try { action() } catch (problem: Throwable) {
+                if (failure == null) failure = problem else if (failure !== problem) failure!!.addSuppressed(problem)
             }
         }
-        attempt { owner.lifecycle.tasks.close() }
-        var oldRedis: PaperRedisClient? = null
-        var syncDrain = CompletableFuture.completedFuture<Void>(null)
-        var lostLootDrain = CompletableFuture.completedFuture<Void>(null)
-        if (owner.installedGlobals) {
+        attempt { lifecycle?.tasks?.close() }
+        var lostLootTail = CompletableFuture.completedFuture<Void>(null)
+        var lostLootStorage = CompletableFuture.completedFuture<Void>(null)
+        if (installedGlobals) {
             if (::nativeWork.isInitialized) attempt { nativeWork.close() }
             attempt { nativeInitializationListener?.let { HandlerList.unregisterAll(it) } }
             nativeInitializationListener = null
@@ -499,49 +438,37 @@ open class ArcDungeonsPlugin : JavaPlugin() {
             spells = null
             attempt { StaffSpellsModule.installDuelAccess(null) }
             attempt { ModuleRegistry.shutdownAll() }
-            lostLootDrain = LostLootModule.drained()
-            closeNative()?.let { failure -> attempt { throw failure } }
-            oldRedis = redisManager
-            syncDrain = retiredSync
-            redisManager = null
-            redisGeneration = Long.MIN_VALUE
+            lostLootTail = LostLootModule.drained()
+            lostLootStorage = LostLootModule.storageDrained()
+            closeNative()?.let { problem -> attempt { throw problem } }
             attempt { DungeonsMenus.close() }
             attempt { metrics?.close() }
             metrics = null
             attempt { ru.arc.core.Tasks.reset() }
         }
-        attempt { owner.lifecycle.close() }
+        attempt { lifecycle?.close() }
         runtime = null
-        val capturedRedis = oldRedis
-        val capturedSyncDrain = syncDrain
-        val capturedNativeFailure = nativeFailure
-        val actual = owner.worker.closeAsync {
-            var failure = capturedNativeFailure
-            fun attemptClose(action: () -> Unit) {
-                try { action() } catch (error: Throwable) {
-                    if (failure == null) failure = error else if (failure !== error) failure!!.addSuppressed(error)
-                }
-            }
-            attemptClose { capturedSyncDrain.join() }
-            attemptClose { drainRetiredRedis(owner) }
-            owner.retirementFailure?.let { error -> attemptClose { throw error } }
-            attemptClose { capturedRedis?.close() }
-            attemptClose { owner.pendingRedis?.close() }
-            owner.pendingRedis = null
-            failure?.let { throw it }
+        val oldRedis = redisManager
+        redisManager = null
+        redisGeneration = Long.MIN_VALUE
+        val syncDrain = retiredSync
+        val oldWorker = background
+        background = null
+        val storage = oldWorker?.closeAsync {
+            try { syncDrain.join() } finally { oldRedis?.close() }
+        } ?: CompletableFuture.completedFuture(Unit)
+        // No future in this wait can need another native tick. Ticket retirement is observed separately.
+        attempt { storage.join() }
+        attempt { lostLootStorage.join() }
+        val terminalFailure = failure
+        lifecycleDrain = CompletableFuture.allOf(lifecycleDrain, lostLootTail).thenApply {
+            terminalFailure?.let { throw it }
+            Unit
         }
-        val drains = listOf(owner.previous, actual, lostLootDrain)
-        CompletableFuture.allOf(*drains.toTypedArray()).whenComplete { _, _ ->
-            var failure: Throwable? = null
-            drains.forEach { drain -> runCatching { drain.join() }.exceptionOrNull()?.let { error ->
-                val cause = error.cause ?: error
-                if (failure == null) failure = cause else if (failure !== cause) failure!!.addSuppressed(cause)
-            } }
-            if (failure == null) owner.drain.complete(Unit) else {
-                owner.drain.completeExceptionally(failure)
-                logger.log(Level.SEVERE, "ArcDungeons drain failed", failure)
-            }
+        lifecycleDrain.whenComplete { _, problem ->
+            if (problem != null) logger.log(Level.SEVERE, "ArcDungeons cleanup failed", problem)
         }
+        installedGlobals = false
     }
 
 }

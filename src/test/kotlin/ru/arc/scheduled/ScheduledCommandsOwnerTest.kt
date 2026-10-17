@@ -14,29 +14,17 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 class ScheduledCommandsOwnerTest : FunSpec({
-    test("blocked configuration never runs inline and shutdown waits for its actual worker") {
+    test("maintenance startup returns with the durable configuration and native timer attached") {
         MockBukkitTestRuntime.open().use {
             ScheduleOwnerFixture().use { fixture ->
-                val entered = CountDownLatch(1)
-                val release = CountDownLatch(1)
                 val owner = fixture.owner(load = {
                     org.bukkit.Bukkit.isPrimaryThread() shouldBe false
-                    entered.countDown()
-                    check(release.await(10, TimeUnit.SECONDS))
                     ScheduledCommandsConfig.load(fixture.root)
                 })
-                try {
-                    check(entered.await(5, TimeUnit.SECONDS))
-                    owner.ready().isDone shouldBe false
-                    owner.commandIds("e") shouldBe emptyList()
-                    owner.ready().cancel(false)
-                    val drain = owner.close()
-                    owner.close().isDone shouldBe false
-                    drain.isDone shouldBe false
-                    release.countDown()
-                    fixture.await(drain)
-                    owner.ready().isCompletedExceptionally shouldBe true
-                } finally { release.countDown() }
+                owner.ready().isDone shouldBe true
+                owner.ready().join()
+                owner.commandIds("e") shouldBe listOf("existing")
+                owner.close().isDone shouldBe true
             }
         }
     }

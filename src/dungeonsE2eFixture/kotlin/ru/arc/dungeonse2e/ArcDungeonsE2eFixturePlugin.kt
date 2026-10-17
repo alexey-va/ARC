@@ -21,7 +21,6 @@ class ArcDungeonsE2eFixturePlugin : JavaPlugin(), CommandExecutor {
     private lateinit var registeredService: ArcDungeonsService
 
     override fun onEnable() {
-        verifyRuntimeState()
         requireNotNull(getCommand("arc-dungeons-e2e-check")).setExecutor(this)
     }
 

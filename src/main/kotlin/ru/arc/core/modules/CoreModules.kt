@@ -321,14 +321,16 @@ object LocationPoolModule : PluginModule {
     override fun reload() {
         val plugin = ARC.instance
         val config = plugin.locationPoolConfig ?: return init()
-        ready = config.prepareReload().thenCompose { pools ->
-            plugin.nativeWork.call({ plugin.locationPoolConfig === config }) {
-                config.bindReload(pools)
-                LocationPoolManager.clear()
-                pools.forEach(LocationPoolManager::addPool)
-                ru.arc.common.locationpools.LocationPoolEditor.reloadConfig()
-                null
-            }
+        try {
+            val pools = config.prepareReload().join()
+            config.bindReload(pools)
+            LocationPoolManager.clear()
+            pools.forEach(LocationPoolManager::addPool)
+            ru.arc.common.locationpools.LocationPoolEditor.reloadConfig()
+            ready = java.util.concurrent.CompletableFuture.completedFuture(null)
+        } catch (failure: Throwable) {
+            ready = java.util.concurrent.CompletableFuture.failedFuture(failure)
+            throw failure
         }
     }
 

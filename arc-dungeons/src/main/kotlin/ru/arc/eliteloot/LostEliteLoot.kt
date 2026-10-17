@@ -82,18 +82,15 @@ internal class LostEliteLoot(
         if (started) return ready.copy()
         started = true
         protection.starting()
-        outbox.start().whenCompleteSync(tasks) { _, failure ->
-            if (closed) return@whenCompleteSync
-            if (failure != null) {
-                ready.completeExceptionally(failure)
-                Logging.error("LostEliteLoot local journal unavailable; bound loot remains protected", failure)
-            } else {
-                protection.attach(outbox.index)
-                ready.complete(null)
-            }
-            // Failure still classifies ordinary items without freezing unrelated vanilla loot.
-            scanLoadedWorlds()
+        try {
+            outbox.start().join()
+            protection.attach(outbox.index)
+            ready.complete(null)
+        } catch (failure: Throwable) {
+            ready.completeExceptionally(failure)
+            Logging.error("LostEliteLoot local journal unavailable; bound loot remains protected", failure)
         }
+        scanLoadedWorlds()
         tasks.runTimer(20, 20) { scheduleSweep(false); outbox.publishPending() }
         tasks.runTimer(1, 1) { if (quick.isNotEmpty()) scheduleSweep(true) }
         return ready.copy()
@@ -361,6 +358,9 @@ internal class LostEliteLoot(
     }
     private fun recovered(key: String) { if (incidents.remove(key)) Logging.info("LostEliteLoot recovered operation={}", key) }
 
+    private var storageCompletion = CompletableFuture.completedFuture<Void>(null)
+    fun storageDrained(): CompletableFuture<Void> = storageCompletion.copy()
+
     /** Host-owned ticket retirement survives consumer disable and waits for accepted local writes. */
     fun closeAsync(finalizer: () -> Unit = {}): CompletableFuture<Void> {
         completion?.let { return it.copy() }
@@ -371,6 +371,7 @@ internal class LostEliteLoot(
         val old = tracked.values.iterator()
         tracked = ConcurrentHashMap(); quick = ConcurrentHashMap()
         val storage = outbox.closeAsync(finalizer)
+        storageCompletion = storage
         var releaseFailure: Throwable? = ticketFailure
         val native = try {
             nativeCleanup.submit("lost-loot-chunk-tickets") {

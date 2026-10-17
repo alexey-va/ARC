@@ -104,21 +104,18 @@ class InvestigationAsyncRuntimeTest : StringSpec({
         }
     }
 
-    "recovery and the predecessor drain wait actual history and never repeat a provider mutation" {
+    "maintenance recovery waits actual history and never repeats a provider mutation" {
         AsyncInvestigationFixture(recoverWithdrawal = true).use { f ->
             val history = CompletableFuture<InvestigationProviderEvidence>()
             f.wallet.history = history
-            f.runtime.start()
-            f.pump { f.wallet.historyStarted.count == 0L }
-            f.runtime.readiness().isDone shouldBe false
-            f.runtime.available shouldBe false
-            val heartbeat = f.heartbeats
-            f.scheduler.tick(20)
-            f.heartbeats - heartbeat shouldBe 20
-            f.runtime.close()
-            f.runtime.drained().isDone shouldBe false
-            history.complete(InvestigationProviderEvidence("proven-original-fee", true))
-            f.runtime.drained().get(5, TimeUnit.SECONDS)
+            val resolve = CompletableFuture.runAsync {
+                check(f.wallet.historyStarted.await(5, TimeUnit.SECONDS))
+                f.runtime.readiness().isDone shouldBe false
+                f.runtime.available shouldBe false
+                history.complete(InvestigationProviderEvidence("proven-original-fee", true))
+            }
+            f.startReady()
+            resolve.get(5, TimeUnit.SECONDS)
             f.journal.committed.get()?.status shouldBe InvestigationStatus.ACTIVE
             f.wallet.withdrawals shouldBe 0
             f.wallet.deposits shouldBe 0
@@ -161,7 +158,7 @@ private class AsyncInvestigationFixture(recoverWithdrawal: Boolean = false) : Au
         scheduler.runTimer(1, 1, Runnable { main(); heartbeats++ })
         runtime = InvestigationAsyncRuntime(tasks, worker,
             load = { _ ->
-                check(Thread.currentThread() !== owner)
+                main() // Configuration preparation is startup/manual maintenance.
                 val catalog = bundledInvestigationCatalogForTest
                 InvestigationRuntimeConfig(InvestigationConfig(Config(root, "modules/investigations.yml")).validated(catalog.witnessKeys), catalog)
             },
@@ -176,12 +173,12 @@ private class AsyncInvestigationFixture(recoverWithdrawal: Boolean = false) : Au
                 }
                 journal
             }, wallet = wallet, currentGeneration = { true }, canWithdraw = { main(); true },
-            onReady = { main() }, onFailure = { _, _ -> main() }, onManualReview = { check(Thread.currentThread() !== owner) },
+            onReady = { main() }, onFailure = { _, _ -> main() }, onManualReview = { main() },
             clock = now::get)
     }
 
     fun main() { check(Thread.currentThread() === owner) { "Native operation escaped the owning thread" } }
-    fun startReady() { runtime.start(); pump { runtime.readiness().isDone }; runtime.readiness().join() }
+    fun startReady() { runtime.start(); runtime.readiness().join(); journal.maintenance = false; wallet.maintenance = false }
     fun pump(done: () -> Boolean) {
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
         while (!done() && System.nanoTime() < deadline) { scheduler.tick(); Thread.sleep(1) }
@@ -201,6 +198,7 @@ private class AsyncInvestigationFixture(recoverWithdrawal: Boolean = false) : Au
 }
 
 private class GuardedInvestigationJournal(private val main: Thread) : InvestigationJournal {
+    var maintenance = true
     class Barrier(val status: InvestigationStatus) { val entered = CountDownLatch(1); val release = CountDownLatch(1) }
     private lateinit var delegate: InvestigationJournal
     private val waiting = AtomicReference<Barrier?>()
@@ -220,10 +218,11 @@ private class GuardedInvestigationJournal(private val main: Thread) : Investigat
         }
         return delegate.persist(record).also { if (it) committed.set(record) }
     }
-    private fun checkWorker() = check(Thread.currentThread() !== main) { "Journal operation ran on the owning thread" }
+    private fun checkWorker() = check(maintenance || Thread.currentThread() !== main) { "Gameplay journal operation ran on the owning thread" }
 }
 
 private class NativeTestInvestigationWallet(private val main: Thread) : InvestigationWallet {
+    var maintenance = true
     override val available: Boolean get() { native(); return true }
     var balance = 100_000L
     var withdrawals = 0
@@ -240,7 +239,7 @@ private class NativeTestInvestigationWallet(private val main: Thread) : Investig
         return InvestigationMoneyEvidence(true, true, balance)
     }
     override fun findTransaction(playerId: UUID, amountMinor: Long, reason: String, notBeforeMillis: Long): CompletableFuture<InvestigationProviderEvidence> {
-        check(Thread.currentThread() !== main); historyStarted.countDown(); return history
+        check(maintenance || Thread.currentThread() !== main); historyStarted.countDown(); return history
     }
     private fun native() = check(Thread.currentThread() === main) { "Wallet mutation escaped native affinity" }
 }

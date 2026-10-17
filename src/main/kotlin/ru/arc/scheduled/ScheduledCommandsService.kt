@@ -180,10 +180,7 @@ object ScheduledCommandsManager {
 
     @JvmStatic
     fun reload() {
-        val logger = ARC.instance.logger
-        reloadAsync().whenComplete { _, failure ->
-            if (failure != null) logger.log(java.util.logging.Level.SEVERE, "Scheduled command reload failed; previous settings remain active", failure)
-        }
+        requireOwner().reloadMaintenance()
     }
 
     @JvmStatic

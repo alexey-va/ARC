@@ -43,15 +43,24 @@ internal class ScheduledCommandsOwner(
         clock = clock,
         taskScheduler = scheduler,
     )
-    private val started: CompletableFuture<Void> = admit { worker.submit { publish(load()) }.thenCompose {
-        scope.callSync { restartTimer() }.thenApply<Void> { null }
-    } }
+    private val started: CompletableFuture<Void> = try {
+        worker.submit { publish(load()) }.join()
+        restartTimer()
+        CompletableFuture.completedFuture(null)
+    } catch (failure: Throwable) { CompletableFuture.failedFuture(failure) }
 
     @Volatile private var preparation: CompletableFuture<Void> = started
 
     fun ready(): CompletableFuture<Void> = preparation.copy()
     fun snapshot(): ScheduledCommandsSettings = checkNotNull(published) { "Scheduled commands are preparing" }
     fun commandIds(prefix: String): List<String> = published?.commandIds(prefix) ?: emptyList()
+
+    /** Manual reload owns the native thread; only its IO phase enters the worker. */
+    fun reloadMaintenance() {
+        afterReady { publish(load()) }.join()
+        restartTimer()
+        preparation = CompletableFuture.completedFuture(null)
+    }
 
     fun reloadAsync(): CompletableFuture<Void> {
         val result: CompletableFuture<Void> = admit {

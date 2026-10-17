@@ -49,11 +49,13 @@ object InvestigationModule : PluginModule {
     private var generation = 0L
     private var stopped = true
     private var predecessor = CompletableFuture.completedFuture(Unit)
+    private var storageDrain = CompletableFuture.completedFuture(Unit)
     private var ready = CompletableFuture<Void>()
 
     val available: Boolean get() = config?.enabled == true && service?.available == true
     fun readiness(): CompletableFuture<Void> = ready.copy()
     fun drained(): CompletableFuture<Unit> = predecessor.copy()
+    fun storageDrained(): CompletableFuture<Unit> = storageDrain.copy()
 
     override fun init() {
         stopped = false
@@ -64,17 +66,14 @@ object InvestigationModule : PluginModule {
     }
 
     override fun reload() {
-        val current = service ?: return
-        val expected = generation
-        current.prepareReload().whenComplete { loaded, failure ->
-            tasks?.callSync {
-                if (stopped || generation != expected || service !== current) return@callSync
-                if (failure != null) {
-                    current.rejectReload()
-                    warn("Investigations reload rejected; current runtime remains active: {}", failure.message ?: failure::class.java.simpleName)
-                } else begin(requireNotNull(loaded))
-            }
+        val previous = service ?: return
+        shutdownRuntime() // Cancels worker-to-native callbacks before waiting for accepted writes.
+        storageDrain.join()
+        val candidate = try { previous.maintenanceConfiguration() } catch (failure: Throwable) {
+            warn("Investigations reload rejected; retaining previous policy: {}", failure.message ?: failure::class.java.simpleName)
+            previous.currentConfiguration()
         }
+        begin(candidate)
     }
 
     override fun shutdown() {
@@ -320,8 +319,8 @@ object InvestigationModule : PluginModule {
         val completion = CompletableFuture<Void>()
         ready = completion
         val root = ARC.instance.dataPath
-        predecessor.whenComplete { _, failure ->
-            scope.callSync {
+        fun attach(failure: Throwable?) {
+            try {
                 if (stopped || generation != expected || tasks !== scope) throw CancellationException("Investigation bootstrap superseded")
                 if (failure != null) throw failure
                 val worker = BoundedAsyncExecutor("ARC-investigations", 1, 256)
@@ -353,10 +352,13 @@ object InvestigationModule : PluginModule {
                     if (preparationFailure == null) completion.complete(null) else completion.completeExceptionally(preparationFailure)
                 }
                 runtime.start(prepared)
-            }.whenComplete { _, attachFailure ->
-                if (attachFailure != null) completion.completeExceptionally(attachFailure)
-            }
+            } catch (attachFailure: Throwable) { completion.completeExceptionally(attachFailure) }
         }
+        // An old glow tail may need ticks, but it never holds the storage worker or blocks Main.
+        storageDrain.join()
+        if (predecessor.isDone) attach(runCatching { predecessor.join() }.exceptionOrNull())
+        else predecessor.whenComplete { _, failure -> scope.callSync { attach(failure) } }
+
         completion.whenComplete { _, failure ->
             if (failure != null && !stopped && generation == expected) warn("Investigations preparation failed; admission is closed: {}", failure.message ?: failure::class.java.simpleName)
         }
@@ -399,8 +401,8 @@ object InvestigationModule : PluginModule {
             if (old != null) old.close() else oldTasks?.close()
         }.exceptionOrNull()
         // A superseded bootstrap has no worker yet; it still owns the preceding generation's drain.
-        val workerDrain = old?.drained() ?: predecessor
-        predecessor = CompletableFuture.allOf(workerDrain, glowDrain,
+        storageDrain = old?.drained() ?: storageDrain
+        predecessor = CompletableFuture.allOf(storageDrain, glowDrain,
             closeFailure?.let { CompletableFuture.failedFuture<Void>(it) } ?: CompletableFuture.completedFuture(null))
             .thenApply { Unit }
     }

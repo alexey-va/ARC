@@ -126,20 +126,15 @@ class LostEliteLootTest : FreeSpec({
     }
     fun ready(loot: LostEliteLoot) { tickUntil { loot.ready().isDone }; loot.ready().get(1, TimeUnit.SECONDS) }
 
-    "blocked journal startup protects only bound native loot and manual drops stay excluded" {
-        val entered = CountDownLatch(1); val release = CountDownLatch(1)
+    "failed journal startup protects only bound native loot and manual drops stay excluded" {
         val player = paper.addPlayer("startup-owner")
-        val (loot, _) = service(open = { entered.countDown(); check(release.await(5, TimeUnit.SECONDS)); LostLootStore(root) })
-        try {
-            entered.await(5, TimeUnit.SECONDS) shouldBe true
-            val bound = entity(player)
-            paper.callEvent(EntityPickupItemEvent(player, bound, 0)).isCancelled shouldBe true
-            paper.callEvent(EntityPickupItemEvent(player, entity(player, ItemStack.of(Material.STONE)), 0)).isCancelled shouldBe false
-            paper.callEvent(PlayerDropItemEvent(player, bound))
-            paper.callEvent(EntityPickupItemEvent(player, bound, 0)).isCancelled shouldBe false
-            loot.ready().isDone shouldBe false
-        } finally { release.countDown() }
-        ready(loot)
+        val (loot, _) = service(open = { error("injected unreadable journal") })
+        val bound = entity(player)
+        paper.callEvent(EntityPickupItemEvent(player, bound, 0)).isCancelled shouldBe true
+        paper.callEvent(EntityPickupItemEvent(player, entity(player, ItemStack.of(Material.STONE)), 0)).isCancelled shouldBe false
+        paper.callEvent(PlayerDropItemEvent(player, bound))
+        paper.callEvent(EntityPickupItemEvent(player, bound, 0)).isCancelled shouldBe false
+        loot.ready().isCompletedExceptionally shouldBe true
     }
 
     "blocked capture keeps physical ownership frozen and close does not wait on IO" {

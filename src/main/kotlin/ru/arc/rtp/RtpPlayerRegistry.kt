@@ -1,7 +1,6 @@
 package ru.arc.rtp
 
 import ru.arc.core.BoundedAsyncExecutor
-import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 import java.nio.file.Path
 import java.util.UUID
@@ -53,9 +52,7 @@ object RtpPlayerRegistry {
             }
         }
         runtime = current
-        current.ready().whenComplete { _, failure ->
-            if (failure != null) error("Could not load first-RTP registry; routing remains unavailable", failure)
-        }
+        current.ready().join() // Startup/manual reload: no native callback is part of this future.
     }
 
     fun state(

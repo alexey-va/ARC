@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit
 
 class ARCGenerationLifecycleTest : TestBase() {
     @Test
-    fun `successful predecessor publishes stable providers before dependent enable`() {
+    fun `sequential startup publishes ready providers before dependent enable`() {
         server.pluginManager.disablePlugin(plugin)
         awaitMainThreadFuture(server, plugin.closeCompletion())
         assertNull(server.servicesManager.load(ArcDungeonConfiguration::class.java))
@@ -23,41 +23,38 @@ class ARCGenerationLifecycleTest : TestBase() {
         val mounts = requireNotNull(server.servicesManager.load(ArcMountConfiguration::class.java))
         val origin = requireNotNull(server.servicesManager.load(ArcOriginConfiguration::class.java))
         val contracts = requireNotNull(server.servicesManager.load(ArcContractsHostConfiguration::class.java))
-        assertFalse(plugin.readiness().isDone)
-        assertFalse(dungeons.ready().isDone)
-        assertFalse(mounts.ready().isDone)
-        assertFalse(origin.ready().isDone)
-        assertFalse(contracts.ready().isDone)
+        assertTrue(plugin.readiness().isDone)
+        assertTrue(dungeons.ready().isDone)
+        assertTrue(mounts.ready().isDone)
+        assertTrue(origin.ready().isDone)
+        assertTrue(contracts.ready().isDone)
         awaitMainThreadFuture(server, plugin.readiness())
     }
 
     @Test
-    fun `replacement and superseded waiting generation retain actual accepted worker fence`() {
+    fun `stop waits accepted storage before a replacement can start`() {
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
+        val returned = CountDownLatch(1)
         plugin.submitBackground { entered.countDown(); check(release.await(15, TimeUnit.SECONDS)) }
         assertTrue(entered.await(5, TimeUnit.SECONDS))
+        val releaseWorker = java.util.concurrent.CompletableFuture.runAsync {
+            try {
+                val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                while (!plugin.readiness().isCompletedExceptionally && System.nanoTime() < deadline) Thread.yield()
+                assertTrue(plugin.readiness().isCompletedExceptionally)
+                assertFalse(returned.await(50, TimeUnit.MILLISECONDS))
+            } finally { release.countDown() }
+        }
         try {
             server.pluginManager.disablePlugin(plugin)
-            val original = plugin.closeCompletion()
-            assertFalse(original.isDone)
-            val retiredScheduler = runCatching { Tasks.scheduler }.getOrNull()
-            server.pluginManager.enablePlugin(plugin)
-            repeat(3) { server.scheduler.performOneTick() }
-            assertFalse(plugin.readiness().isDone)
-            assertSame(retiredScheduler, runCatching { Tasks.scheduler }.getOrNull())
+            returned.countDown()
+            releaseWorker.get(5, TimeUnit.SECONDS)
+            awaitMainThreadFuture(server, plugin.closeCompletion())
             assertNull(server.servicesManager.load(ArcDungeonConfiguration::class.java))
-            server.pluginManager.disablePlugin(plugin)
-            plugin.onDisable()
-            val waiting = plugin.closeCompletion()
-            assertFalse(waiting.isDone)
             server.pluginManager.enablePlugin(plugin)
-            repeat(3) { server.scheduler.performOneTick() }
-            assertFalse(plugin.readiness().isDone)
-            release.countDown()
-            awaitMainThreadFuture(server, plugin.readiness())
-            original.get(5, TimeUnit.SECONDS)
-            waiting.get(5, TimeUnit.SECONDS)
+            assertTrue(plugin.readiness().isDone)
+            plugin.readiness().join()
             assertTrue(plugin.isEnabled)
         } finally { release.countDown() }
     }

@@ -40,13 +40,16 @@ internal class InvestigationAsyncRuntime(
     private var policy: InvestigationRuntimeConfig? = null
     private var debitIdentity: (() -> Boolean)? = null // Only this serial worker assigns an operation's native guard.
     private val token = tasks.token()
+    private var startupThread: Thread? = null
 
     val available: Boolean get() = !closed && ready.isDone && !ready.isCompletedExceptionally && policy?.config?.enabled == true
     fun readiness(): CompletableFuture<Void> = ready.copy()
     fun drained(): CompletableFuture<Unit> = terminal.copy()
 
+    /** Startup recovery is maintenance; gameplay continues on the serial worker afterwards. */
     fun start(prepared: InvestigationRuntimeConfig? = null) {
-        worker.submit {
+        startupThread = Thread.currentThread()
+        try {
             requireCurrent()
             val loaded = prepared ?: load(emptySet())
             policy = loaded
@@ -69,11 +72,24 @@ internal class InvestigationAsyncRuntime(
                 service = domain
                 domain.recover(onManualReview)
             }
-            onMain { onReady(loaded) }
-        }.whenComplete { _, failure ->
-            if (failure == null) ready.complete(null) else ready.completeExceptionally(failure)
-        }
+            onReady(loaded)
+        } catch (failure: Throwable) {
+            ready.completeExceptionally(failure)
+            throw failure
+        } finally { startupThread = null }
+        ready.complete(null)
     }
+
+    /** Called only after close and actual worker drain, so no journal access races a writer. */
+    fun maintenanceConfiguration(): InvestigationRuntimeConfig {
+        check(closed && terminal.isDone) { "Investigation writer must drain before maintenance" }
+        val witnesses = journal?.records().orEmpty().filterNot { it.status.resolved }
+            .flatMap { it.case.witnesses() }.map(InvestigationWitness::commandValue).toSet()
+        return load(witnesses)
+    }
+
+    fun currentConfiguration(): InvestigationRuntimeConfig = checkNotNull(policy)
+
 
     /** These getters never enter a journal, provider or IO-held monitor. */
     fun current(player: UUID): InvestigationJournalRecord? = view.current[player].also {
@@ -144,10 +160,13 @@ internal class InvestigationAsyncRuntime(
         if (closed || !currentGeneration()) throw CancellationException("Investigation generation is no longer current")
     }
 
-    private fun <T> onMain(operation: () -> T): T = tasks.callSync(token) {
-        requireCurrent()
-        operation()
-    }.join() // Only invoked by the owned worker.
+    private fun <T> onMain(operation: () -> T): T {
+        if (startupThread === Thread.currentThread()) {
+            requireCurrent()
+            return operation()
+        }
+        return tasks.callSync(token) { requireCurrent(); operation() }.join() // Gameplay worker only.
+    }
 
     private inner class NativeWallet(private val delegate: InvestigationWallet) : InvestigationWallet {
         override val available: Boolean get() = onMain { delegate.available }

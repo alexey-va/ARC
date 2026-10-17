@@ -8,8 +8,8 @@ McFine **Paper/Purpur** plugin — treasure hunts, board, and cross-server Redis
 
 - **Java 25** (Temurin)
 - **Gradle 9.2.1**
-- Published `arc-core 2.7.23` artifacts from the public RusCrafting repository
-- `ArcCore 0.1.1` installed alongside ARC (shared SQL, Redis and metrics host;
+- Published `arc-core 2.7.39` artifacts from the public RusCrafting repository
+- `ArcCore 0.1.13` installed alongside ARC (shared SQL, Redis and metrics host;
   published by [ArcCorePlugin](https://github.com/alexey-va/ArcCorePlugin))
 
 ## Build
@@ -22,7 +22,7 @@ export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-25.jdk/Contents/Home
 This repository builds ARC and ArcDungeons. ArcCore is an independently
 published runtime dependency from the [ArcCorePlugin repository](https://github.com/alexey-va/ArcCorePlugin);
 the build downloads its pinned JAR for ownership checks and Paper fixtures.
-Deployable outputs built here include `build/libs/ARC-1.4.395.jar` and the
+Deployable outputs built here include `build/libs/ARC-*.jar` and the
 independently versioned `arc-dungeons/build/libs/ArcDungeons-*.jar`. Archives
 ending in `-plain.jar` are not deployable. GitHub Actions verifies that shared
 APIs have one runtime owner. ArcCore and ArcDungeons versions live in
@@ -31,6 +31,12 @@ APIs have one runtime owner. ArcCore and ArcDungeons versions live in
 [ArcCore ownership and independent updates](docs/arc-domain-plugins.md#shared-provider-host).
 
 [ArcDungeons extraction and deployment contract](docs/arc-dungeons.md).
+
+Startup and explicit manual reload prepare storage and bind native services sequentially.
+Gameplay persistence still uses its existing workers, and native bulk work keeps its
+shared tick budget. Shutdown closes admission/native callbacks before waiting for
+accepted storage writes. Host-owned visual cleanup is a separate captured tail; an
+immediate re-enable waits for that tail without blocking the thread that must run it.
 
 Mounts, Origin and resource contracts now build in their own public repositories.
 See [independent domain plugins and rollout contract](docs/arc-domain-plugins.md).

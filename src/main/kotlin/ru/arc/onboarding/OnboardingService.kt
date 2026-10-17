@@ -57,22 +57,16 @@ object OnboardingService {
         }
         val current = Runtime(persistence, LifecycleTaskScope())
         runtime = current
-        persistence.ready.whenComplete { _, failure ->
-            if (failure != null) {
-                current.ready.completeExceptionally(failure)
-                error("Could not prepare onboarding; hints remain unavailable", failure)
-            }
-        }.whenCompleteSync(current.tasks) { prepared, failure ->
-            if (failure != null || prepared == null) return@whenCompleteSync
-            try {
-                current.config = prepared.config
-                onReady(prepared.particleColors)
-                current.ready.complete(null)
-                info("Configurable onboarding ready; enabled={}", prepared.config.enabled)
-            } catch (attachFailure: Throwable) {
-                current.ready.completeExceptionally(attachFailure)
-                error("Could not attach onboarding", attachFailure)
-            }
+        try {
+            // Startup/manual reload may wait for file IO; the native binding stays on this thread.
+            val prepared = persistence.ready.join()
+            current.config = prepared.config
+            onReady(prepared.particleColors)
+            current.ready.complete(null)
+            info("Configurable onboarding ready; enabled={}", prepared.config.enabled)
+        } catch (failure: Throwable) {
+            current.ready.completeExceptionally(failure)
+            error("Could not initialize onboarding", failure)
         }
     }
 

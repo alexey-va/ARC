@@ -10,7 +10,6 @@ import ru.arc.config.ConfigManager
 import ru.arc.core.BoundedAsyncExecutor
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.PluginModule
-import ru.arc.core.whenCompleteSync
 import ru.arc.dungeons.ArcDungeonsPlugin
 import ru.arc.dungeons.api.ArcDungeonConfiguration
 import ru.arc.paper.api.ArcNativeCleanupService
@@ -38,6 +37,7 @@ object LostLootModule : PluginModule {
     }
     private var current: Generation? = null
     private var drain = CompletableFuture.completedFuture<Void>(null)
+    private var storageDrain = CompletableFuture.completedFuture<Void>(null)
     private var continuity: LostLootProtection? = null
     private var continuityHost: Plugin? = null
     private var continuityService: ArcNativeCleanupService? = null
@@ -47,6 +47,7 @@ object LostLootModule : PluginModule {
     fun ready(): CompletableFuture<Void> = current?.ready?.copy()
         ?: CompletableFuture.failedFuture(initializationFailure ?: IllegalStateException("Lost loot is unavailable"))
     fun drained(): CompletableFuture<Void> = drain.copy()
+    fun storageDrained(): CompletableFuture<Void> = storageDrain.copy()
 
     override fun init() {
         shutdown()
@@ -74,7 +75,7 @@ object LostLootModule : PluginModule {
             val settings = server.servicesManager.load(ArcDungeonConfiguration::class.java)?.lostLootSqlSettings()
             val origin = requireNotNull(plugin.serverName).also { require(it.isNotBlank()) }
             val root = plugin.legacyDataPath
-            val predecessor = drain
+            val predecessor = storageDrain
             // This accepted future is retained even when disable precedes its completion. Cold
             // SQL never occupies the journal lane and never reads Bukkit services on the worker.
             val prepared = plugin.prepareBackground {
@@ -101,45 +102,39 @@ object LostLootModule : PluginModule {
             server.pluginManager.registerEvents(capture, plugin)
             val localReady = capture.start()
             val sqlReady = prepared.thenCompose { it.repository.ready() }
-            CompletableFuture.allOf(localReady, sqlReady).whenCompleteSync(owner.tasks) { _, failure ->
-                if (current !== owner) return@whenCompleteSync
-                if (failure != null) {
-                    owner.ready.completeExceptionally(failure)
-                    Logging.error("Shared lost loot unavailable; local capture remains independent and protected", failure)
-                    return@whenCompleteSync
-                }
-                try {
-                    val candidate = prepared.getNow(null) ?: error("Lost loot preparation did not complete")
-                    val localized = LocalizedMiniMessage(
-                        catalogs = mapOf("ru" to ConfigLocaleCatalog(candidate.config)), defaultLocale = { "ru" },
-                        prefixPath = "_arc_dungeons_no_prefix", missingMessage = { "" },
-                    )
-                    val gateway = object : LostLootCreditGateway {
-                        override fun ready(player: Player) = nativeAvailable() && NativeLostLootCredit.ready(player)
-                        override fun hasReceipt(player: Player, token: String) = ready(player) && NativeLostLootCredit.hasReceipt(player, token)
-                        override fun credit(player: Player, amount: Double, token: String): CompletableFuture<Unit> {
-                            check(ready(player)); return NativeLostLootCredit.credit(player, amount, token)
-                        }
-                        override fun persistReceipt(player: Player): CompletableFuture<Unit> {
-                            check(ready(player)); return NativeLostLootCredit.persistReceipt(player)
-                        }
+            try {
+                CompletableFuture.allOf(localReady, sqlReady).join()
+                val candidate = prepared.getNow(null) ?: error("Lost loot preparation did not complete")
+                val localized = LocalizedMiniMessage(
+                    catalogs = mapOf("ru" to ConfigLocaleCatalog(candidate.config)), defaultLocale = { "ru" },
+                    prefixPath = "_arc_dungeons_no_prefix", missingMessage = { "" },
+                )
+                val gateway = object : LostLootCreditGateway {
+                    override fun ready(player: Player) = nativeAvailable() && NativeLostLootCredit.ready(player)
+                    override fun hasReceipt(player: Player, token: String) = ready(player) && NativeLostLootCredit.hasReceipt(player, token)
+                    override fun credit(player: Player, amount: Double, token: String): CompletableFuture<Unit> {
+                        check(ready(player)); return NativeLostLootCredit.credit(player, amount, token)
                     }
-                    val mailbox = SharedLostLootMailbox(candidate.repository, origin,
-                        { player, key, fallback ->
-                            val path = "dungeon-qol.lost-loot.$key"
-                            val message = if (candidate.config.stringOrNull(path) == null) candidate.config.component(path, fallback)
-                            else localized.render(path, player.locale().toLanguageTag())
-                            message.decoration(TextDecoration.ITALIC, false)
-                        }, gateway, nativeWork = plugin.nativeWork, worker = worker)
-                    owner.mailbox = mailbox
-                    server.pluginManager.registerEvents(mailbox, plugin)
-                    mailbox.start()
-                    owner.ready.complete(null)
-                } catch (attachFailure: Throwable) {
-                    owner.ready.completeExceptionally(attachFailure)
-                    Logging.error("Shared lost loot mailbox attachment failed; local outbox retained", attachFailure)
+                    override fun persistReceipt(player: Player): CompletableFuture<Unit> {
+                        check(ready(player)); return NativeLostLootCredit.persistReceipt(player)
+                    }
                 }
+                val mailbox = SharedLostLootMailbox(candidate.repository, origin,
+                    { player, key, fallback ->
+                        val path = "dungeon-qol.lost-loot.$key"
+                        val message = if (candidate.config.stringOrNull(path) == null) candidate.config.component(path, fallback)
+                        else localized.render(path, player.locale().toLanguageTag())
+                        message.decoration(TextDecoration.ITALIC, false)
+                    }, gateway, nativeWork = plugin.nativeWork, worker = worker)
+                owner.mailbox = mailbox
+                server.pluginManager.registerEvents(mailbox, plugin)
+                mailbox.start()
+                owner.ready.complete(null)
+            } catch (attachFailure: Throwable) {
+                owner.ready.completeExceptionally(attachFailure)
+                Logging.error("Shared lost loot mailbox attachment failed; local outbox retained", attachFailure)
             }
+
         } catch (failure: Throwable) {
             initializationFailure = failure
             shutdown()
@@ -168,6 +163,7 @@ object LostLootModule : PluginModule {
             val prepared = try { owner.prepared.join() } catch (_: Throwable) { null }
             prepared?.repository?.close()
         }
+        storageDrain = owner.capture.storageDrained()
         drain.whenComplete { _, failure ->
             if (failure != null) Logging.error("Lost loot generation did not drain cleanly", failure)
         }
