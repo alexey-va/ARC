@@ -252,7 +252,8 @@ class ArcCommandTest : TestBase() {
         fun testLegacyLocpoolIsNotRegistered() {
             player.addAttachment(plugin, "arc.location.pool.admin", true)
 
-            assertNull(arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf("locpool", "")))
+            assertEquals(emptyList<String>(), arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf("locpool", "")))
+            assertFalse(arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf("loc")).contains("locpool"))
             assertFalse(plugin.description.commands.containsKey("locpool"))
         }
     }

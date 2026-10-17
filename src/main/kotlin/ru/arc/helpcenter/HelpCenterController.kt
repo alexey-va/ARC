@@ -1294,7 +1294,7 @@ internal class HelpCenterController(
 
     companion object {
         // These commands join Core's shared history while this callback is active.
-        private val NATIVE_DIALOG_COMMANDS = setOf("events", "farms", "giveaways", "jobs", "rank", "teams", "quests", "builder", "warps", "enchants")
+        private val NATIVE_DIALOG_COMMANDS = setOf("events", "farms", "civs", "giveaways", "jobs", "rank", "teams", "quests", "builder", "warps", "enchants")
         private const val PUBLIC_HOMES_PAGE_SIZE = 10
         private val SEARCH_INPUT = PaperDialogInputId.of("search")
         private val HOME_INPUT = PaperDialogInputId.of("home_name")
@@ -1342,6 +1342,7 @@ internal class HelpCenterController(
                 "arcfarms",
                 HelpCenterFeature.FARMS,
             ),
+            CommandDefinition("civs", HelpCenterCategory.ACTIVITIES, "civs", HelpCenterFeature.CIVS, "arccivs.use"),
             CommandDefinition("vote", HelpCenterCategory.ACTIVITIES, "vote", HelpCenterFeature.VOTES, "arcvotes.use"),
             CommandDefinition("parkour", HelpCenterCategory.ACTIVITIES, "pa joinall", HelpCenterFeature.PARKOUR,
                 "parkour.basic.joinall", opensInventory = true),

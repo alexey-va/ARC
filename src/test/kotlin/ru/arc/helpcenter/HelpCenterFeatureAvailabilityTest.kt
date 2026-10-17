@@ -10,6 +10,18 @@ import ru.arc.paper.testing.MockBukkitTestRuntime
 
 class HelpCenterFeatureAvailabilityTest {
     @Test
+    fun `settlements require an enabled ArcCivs provider`() {
+        MockBukkitTestRuntime.open().use { paper ->
+            val gateway = BukkitHelpCenterGateway()
+            assertFalse(HelpCenterFeature.CIVS in gateway.features())
+            val plugin = paper.createSimplePlugin("ArcCivs")
+            assertTrue(HelpCenterFeature.CIVS in gateway.features())
+            paper.server.pluginManager.disablePlugin(plugin)
+            assertFalse(HelpCenterFeature.CIVS in gateway.features())
+        }
+    }
+
+    @Test
     fun `mine lift requires an enabled plugin with its command executor installed`() {
         MockBukkitTestRuntime.open().use { paper ->
             val plugin = paper.createSimplePlugin("ArcFarms")

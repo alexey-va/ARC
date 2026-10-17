@@ -387,6 +387,39 @@ class HelpCenterScreensTest {
     }
 
     @Test
+    fun `settlements are discoverable only with their provider and permission and retain native navigation`() {
+        val permission = player.addAttachment(paper.createSimplePlugin("CivsAccess"), "arccivs.use", true)
+        open(HelpCenterPage.ACTIVITIES)
+        val destination = screen.buttons.single { it.id.value == "command_civs" }
+        assertEquals("Города с жителями", plain(destination.label))
+        assertFalse(destination.closeDialogBeforeAction)
+        click("command_civs")
+        assertEquals("civs", executed.last())
+
+        open(HelpCenterPage.COMMANDS)
+        click("search", "city")
+        click("result_civs")
+        assertFalse(screen.buttons.single { it.id.value == "run_action" }.closeDialogBeforeAction)
+        click("run_action")
+        assertEquals(listOf("civs", "civs"), executed)
+        assertEquals(0, dialogCloses)
+        click("back")
+        assertEquals("help.commands", screen.id)
+
+        every { gateway.features() } returns HelpCenterFeature.entries.toSet() - HelpCenterFeature.CIVS
+        open(HelpCenterPage.ACTIVITIES)
+        assertFalse(screen.buttons.any { it.id.value == "command_civs" })
+        open(HelpCenterPage.COMMANDS)
+        click("search", "civs")
+        assertFalse(screen.buttons.any { it.id.value == "result_civs" })
+
+        every { gateway.features() } returns HelpCenterFeature.entries.toSet()
+        permission.setPermission("arccivs.use", false)
+        open(HelpCenterPage.ACTIVITIES)
+        assertFalse(screen.buttons.any { it.id.value == "command_civs" })
+    }
+
+    @Test
     fun `progression hides absent plugins and daily quests open the current native provider`() {
         open(HelpCenterPage.ROOT)
         assertFalse(screen.buttons.any { it.id.value in setOf("root_progress", "rankup") })

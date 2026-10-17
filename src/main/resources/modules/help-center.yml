@@ -854,6 +854,7 @@ commands:
   giveaways: { label: 'Розыгрыши', description: 'Активные розыгрыши сервера', keywords: 'giveaway конкурс приз' }
   dungeons: { label: 'Данжи', description: 'Порталы, подробный гайд и журнал EliteMobs', keywords: 'данж подземелье боссы элитные мобы' }
   farms: { label: 'Фермы', description: 'Управление игровыми фермами', keywords: 'ферма урожай животные' }
+  civs: { label: 'Города с жителями', description: 'Основать город, строить здания и назначать жителей', keywords: 'город жители поселение строительство рабочие civs city' }
   shops: { label: 'Магазины', description: 'Магазины игроков и сервера', keywords: 'рынок купить продать' }
   loot: { label: 'Потерянная добыча', description: 'Забрать сохранённые вещи и продать ненужное', keywords: 'добыча лут потерял сундук продать' }
   sell: { label: 'Быстрая продажа', description: 'Продать подходящие предметы', keywords: 'деньги рынок' }

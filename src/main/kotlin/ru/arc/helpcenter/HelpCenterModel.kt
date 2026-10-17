@@ -65,6 +65,7 @@ enum class HelpCenterFeature(val pluginName: String?) {
     GIVEAWAYS("ArcGiveaways"),
     DUNGEONS("EliteMobs"),
     FARMS("ArcFarms"),
+    CIVS("ArcCivs"),
     MINE_LIFT("ArcFarms"),
     SLIMEFUN("Slimefun"),
     ITEMS("ItemsAdder"),

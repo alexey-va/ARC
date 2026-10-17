@@ -927,6 +927,7 @@ class HelpCenterConfig(private val config: Config) {
             "giveaways" to HelpCenterCommandText("Розыгрыши", "Активные розыгрыши сервера", "giveaway конкурс приз"),
             "dungeons" to HelpCenterCommandText("Данжи", "Порталы, подробный гайд и журнал EliteMobs", "данж подземелье боссы элитные мобы"),
             "farms" to HelpCenterCommandText("Фермы", "Управление игровыми фермами", "ферма урожай животные"),
+            "civs" to HelpCenterCommandText("Города с жителями", "Основать город, строить здания и назначать жителей", "город жители поселение строительство рабочие civs city"),
             "shops" to HelpCenterCommandText("Магазины", "Магазины игроков и сервера", "рынок купить продать"),
             "loot" to HelpCenterCommandText("Потерянная добыча", "Забрать сохранённые вещи и продать ненужное", "добыча лут потерял сундук продать"),
             "sell" to HelpCenterCommandText("Быстрая продажа", "Продать подходящие предметы", "деньги рынок"),
