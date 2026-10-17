@@ -94,13 +94,13 @@ presets:
       "arc:treasure_rolls_min": 6
       "arc:treasure_rolls_max": 7
   ae_lootbox:
-    description: Базовая шкатулка AdvancedEnchantments — 4–5 случайных наград из пула ae
+    description: "Базовая шкатулка AdvancedEnchantments — 1–2 случайные награды из пула ae"
     itemsadder: arc:scifichest_4
     display: <#df91ff>Таинственная шкатулка чар
     lore:
       - ''
       - <#b8b8b8>Смешанный набор AdvancedEnchantments.
-      - '<#8c8c8c>Внутри: <#fff2df>4–5 наград'
+      - '<#8c8c8c>Внутри: <#fff2df>1–2 награды'
       - <#8c8c8c>Пыль, свитки, сферы, самоцветы
       - <#8c8c8c>и книги элитных зачарований.
       - ''
@@ -108,16 +108,16 @@ presets:
     customData:
       ae_token: "true"
       "arc:treasure_key": ae
-      "arc:treasure_rolls_min": 4
-      "arc:treasure_rolls_max": 5
+      "arc:treasure_rolls_min": 1
+      "arc:treasure_rolls_max": 2
   ae_lootbox_enchanted:
-    description: Зачарованная шкатулка AE — гарантирует 5–6 случайных книг элитных чар
+    description: "Зачарованная шкатулка AE — гарантирует 2–3 случайные книги элитных чар"
     itemsadder: arc:scifichest_5
     display: <#e9a8ff>Зачарованная шкатулка AE
     lore:
       - ''
       - <#b8b8b8>Чистый набор без пыли и расходников.
-      - '<#8c8c8c>Внутри: <#fff2df>5–6 книг'
+      - '<#8c8c8c>Внутри: <#fff2df>2–3 книги'
       - <#8c8c8c>Каждая книга содержит случайное
       - <#8c8c8c>элитное зачарование и уровень.
       - ''
@@ -125,16 +125,16 @@ presets:
     customData:
       ae_token: "true"
       "arc:treasure_key": ae_enchanted
-      "arc:treasure_rolls_min": 5
-      "arc:treasure_rolls_max": 6
+      "arc:treasure_rolls_min": 2
+      "arc:treasure_rolls_max": 3
   ae_lootbox_master:
-    description: Мастерская шкатулка AE — гарантирует 6–7 случайных книг элитных чар
+    description: "Мастерская шкатулка AE — гарантирует 3–4 случайные книги элитных чар"
     itemsadder: arc:scifichest_6
     display: <#ff8edb>Мастерская шкатулка AE
     lore:
       - ''
       - <#b8b8b8>Высший набор без пыли и расходников.
-      - '<#8c8c8c>Внутри: <#fff2df>6–7 книг'
+      - '<#8c8c8c>Внутри: <#fff2df>3–4 книги'
       - <#8c8c8c>Каждая книга содержит случайное
       - <#8c8c8c>элитное зачарование и уровень.
       - ''
@@ -142,8 +142,8 @@ presets:
     customData:
       ae_token: "true"
       "arc:treasure_key": ae_master
-      "arc:treasure_rolls_min": 6
-      "arc:treasure_rolls_max": 7
+      "arc:treasure_rolls_min": 3
+      "arc:treasure_rolls_max": 4
   enchant_supply:
     description: Припасы чародея — одна награда за ежедневное задание
     itemsadder: arc:scifichest_4
@@ -186,39 +186,39 @@ presets:
       "arc:treasure_rolls_min": 1
       "arc:treasure_rolls_max": 1
   enchant_token:
-    description: Токен зачарования — 4–5 случайных ванильных книг
+    description: "Токен зачарования — одна случайная ванильная книга"
     material: IRON_INGOT
     customModelData: 12013
     display: <yellow>Токен зачарования
     lore:
       - ''
-      - <#b8b8b8>Набор ванильных зачарований.
-      - '<#8c8c8c>Внутри: <#fff2df>4–5 книг'
-      - <#8c8c8c>Чары и уровни выбираются случайно.
+      - "<#b8b8b8>Случайная ванильная книга."
+      - '<#8c8c8c>Внутри: <#fff2df>1 книга'
+      - "<#8c8c8c>Чары и уровень выбираются случайно."
       - ''
       - '<#8c8c8c>[<#ffd567>▶<#8c8c8c>] <#ffd567>ПКМ<#b8b8b8> — использовать'
     customData:
       enchant_token: "true"
       "arc:treasure_key": vanillaenchant_token
-      "arc:treasure_rolls_min": 4
-      "arc:treasure_rolls_max": 5
+      "arc:treasure_rolls_min": 1
+      "arc:treasure_rolls_max": 1
   potion_token:
-    description: Токен зелья — 4–5 случайных ванильных зелий
+    description: "Токен зелья — одно случайное ванильное зелье"
     material: IRON_INGOT
     customModelData: 12032
     display: <yellow>Токен зелья
     lore:
       - ''
-      - <#b8b8b8>Набор ванильной алхимии.
-      - '<#8c8c8c>Внутри: <#fff2df>4–5 зелий'
-      - <#8c8c8c>Эффекты и сила выбираются случайно.
+      - "<#b8b8b8>Случайное ванильное зелье."
+      - '<#8c8c8c>Внутри: <#fff2df>1 зелье'
+      - "<#8c8c8c>Эффект и сила выбираются случайно."
       - ''
       - '<#8c8c8c>[<#ffd567>▶<#8c8c8c>] <#ffd567>ПКМ<#b8b8b8> — использовать'
     customData:
       potion_token: "true"
       "arc:treasure_key": vanillapotion_token
-      "arc:treasure_rolls_min": 4
-      "arc:treasure_rolls_max": 5
+      "arc:treasure_rolls_min": 1
+      "arc:treasure_rolls_max": 1
   money_handful:
     description: Горсть монет (tier 1)
     itemsadder: iageneric:bronze_coin
