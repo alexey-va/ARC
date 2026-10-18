@@ -64,10 +64,7 @@ object OnboardingService : OnboardingBuildProgressService {
         current.menu = OnboardingQuestDialog(
             view = ::questView,
             accept = ::accept,
-            restart = ::enrollSelf,
-            stop = ::stop,
             openGoal = ::openGoal,
-            openTeleporter = { HelpCenterModule.open(it, HelpCenterPage.RTP) },
             text = config::questText,
         )
         if (Bukkit.getPluginManager().isPluginEnabled("Citizens")) {
@@ -111,7 +108,6 @@ object OnboardingService : OnboardingBuildProgressService {
             runId = progress?.runId ?: "new",
             accepted = progress?.status == OnboardingStatus.ACTIVE || progress?.status == OnboardingStatus.COMPLETED,
             milestones = progress?.milestones.orEmpty(),
-            canRestart = isTestAdmin(player),
         )
     }
 

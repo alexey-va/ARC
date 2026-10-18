@@ -38,10 +38,7 @@ class OnboardingQuestDialogTest : FreeSpec({
     val dialog = OnboardingQuestDialog(
         view = { current },
         accept = { _, run -> actions += "accept:$run" },
-        restart = { actions += "restart" },
-        stop = { _, run -> actions += "stop:$run" },
         openGoal = { _, goal -> actions += "goal:$goal" },
-        openTeleporter = { actions += "teleport" },
         showDialog = { _, screen, _, onDismiss -> shown = screen; dismiss = onDismiss },
     )
     fun plain(component: Component) = PlainTextComponentSerializer.plainText().serialize(component)
@@ -57,13 +54,13 @@ class OnboardingQuestDialogTest : FreeSpec({
         actions.clear()
     }
 
-    "offer uses the native table and exact run while hiding test controls from ordinary viewers" {
+    "offer is one short message and one action for the exact run" {
         val screen = dialog.screen(current)
         screen.id shouldBe "onboarding.quest"
-        screen.buttons.map { it.id.value } shouldContainExactly listOf("accept", "teleport")
+        screen.buttons.map { it.id.value } shouldContainExactly listOf("accept")
         screen.buttons.all { !it.closeDialogBeforeAction } shouldBe true
-        val body = screen.body.joinToString("\n") { plain(it.text) }
-        listOf("Мир выживания", "Точка дома", "Защита участка", "Первый дом").forEach { body shouldContain it }
+        screen.body.size shouldBe 1
+        plain(screen.body.single().text) shouldContain "первый дом"
         click(screen, "accept")
         actions shouldContainExactly listOf("accept:$runId")
     }
@@ -75,7 +72,7 @@ class OnboardingQuestDialogTest : FreeSpec({
         actions shouldBe emptyList()
         shown!!.id shouldBe "onboarding.quest"
         current = null
-        click(screen, "teleport")
+        click(screen, "accept")
         actions shouldBe emptyList()
         shown!!.buttons shouldBe emptyList()
     }
@@ -84,7 +81,7 @@ class OnboardingQuestDialogTest : FreeSpec({
         current = OnboardingQuestView(runId, true, base - OnboardingMilestone.FOOTHOLD_COMPLETE)
         current!!.goal shouldBe OnboardingQuestGoal.HOME
         val screen = dialog.screen(current)
-        screen.body.joinToString("\n") { plain(it.text) } shouldContain "Вне участка"
+        screen.body.joinToString("\n") { plain(it.text) } shouldContain "внутри своего привата"
         click(screen, "goal")
         actions shouldContainExactly listOf("goal:HOME")
     }
@@ -93,22 +90,37 @@ class OnboardingQuestDialogTest : FreeSpec({
         val building = OnboardingQuestView(runId, true, base + OnboardingMilestone.AUTOBUILD_STARTED)
         val complete = building.copy(milestones = building.milestones + OnboardingMilestone.AUTOBUILD_COMPLETE)
         for (view in listOf(building, complete)) {
-            dialog.screen(view).buttons.map { it.id.value } shouldContainExactly listOf("teleport")
+            dialog.screen(view).buttons shouldBe emptyList()
         }
         plain(dialog.screen(building).body.first().text) shouldContain "Дом строится"
-        plain(dialog.screen(complete).body.first().text) shouldContain "Первый дом готов"
+        plain(dialog.screen(complete).body.first().text) shouldContain "Дом готов"
+        current = OnboardingQuestView(runId, true, base)
+        val beforeConstruction = dialog.screen(current)
+        current = building
+        click(beforeConstruction, "goal")
+        actions shouldBe emptyList()
     }
 
-    "test controls recheck administrator access before invoking state changes" {
-        current = current!!.copy(canRestart = true)
-        val screen = dialog.screen(current)
-        current = current!!.copy(canRestart = false)
-        click(screen, "restart")
-        click(screen, "stop")
+    "only the current goal is actionable and an older goal cannot dispatch after progress changes" {
+        val stages = listOf(
+            emptySet<OnboardingMilestone>() to OnboardingQuestGoal.TRAVEL,
+            setOf(OnboardingMilestone.FIRST_RTP) to OnboardingQuestGoal.HOME,
+            setOf(OnboardingMilestone.FIRST_RTP, OnboardingMilestone.HOME_CREATED) to OnboardingQuestGoal.CLAIM,
+            base to OnboardingQuestGoal.BUILD,
+        )
+        for ((milestones, goal) in stages) {
+            current = OnboardingQuestView(runId, true, milestones)
+            val screen = dialog.screen(current)
+            screen.body.size shouldBe 1
+            screen.buttons.map { it.id.value } shouldContainExactly listOf("goal")
+            click(screen, "goal")
+            actions.last() shouldBe "goal:$goal"
+        }
+        actions.clear()
+        val oldBuild = dialog.screen(current)
+        current = OnboardingQuestView(runId, true, emptySet())
+        click(oldBuild, "goal")
         actions shouldBe emptyList()
-        current = current!!.copy(canRestart = true)
-        click(screen, "stop")
-        actions shouldContainExactly listOf("stop:$runId")
     }
 
     "pending work ignores dismissed or replaced visits and leaves a failed operation retryable" {
@@ -126,7 +138,7 @@ class OnboardingQuestDialogTest : FreeSpec({
         dialog.isCurrent(player, second) shouldBe true
         dialog.finish(player, second, "Не удалось сохранить квест. Попробуйте ещё раз.")
         plain(shown!!.body.first().text) shouldContain "Не удалось сохранить"
-        shown!!.buttons.map { it.id.value } shouldContainExactly listOf("accept", "teleport")
+        shown!!.buttons.map { it.id.value } shouldContainExactly listOf("accept")
         dialog.isCurrent(player, second) shouldBe false
     }
 
@@ -172,8 +184,9 @@ class OnboardingQuestDialogTest : FreeSpec({
 
     "exports representative actual renderer output for the native preview" {
         val views = linkedMapOf(
-            "offer" to OnboardingQuestView(runId, false, emptySet(), canRestart = true),
-            "travel" to OnboardingQuestView(runId, true, emptySet(), canRestart = true),
+            "offer" to OnboardingQuestView(runId, false, emptySet()),
+            "travel" to OnboardingQuestView(runId, true, emptySet()),
+            "home" to OnboardingQuestView(runId, true, setOf(OnboardingMilestone.FIRST_RTP)),
             "claim" to OnboardingQuestView(runId, true, setOf(OnboardingMilestone.FIRST_RTP, OnboardingMilestone.HOME_CREATED)),
             "mismatch" to OnboardingQuestView(runId, true, base - OnboardingMilestone.FOOTHOLD_COMPLETE),
             "building" to OnboardingQuestView(runId, true, base + OnboardingMilestone.AUTOBUILD_STARTED),

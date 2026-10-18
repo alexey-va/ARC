@@ -7,8 +7,8 @@ reader are removed; old files are not imported into the new opt-in state.
 - `/arc onboarding` opens the native journal.
 - `/arc onboarding test` and `restart` require `arc.admin` or operator and target
   only the sender. They create a fresh offer; the player explicitly accepts it.
-- `/arc onboarding stop` stops only the sender. The native admin controls expose
-  restart and stop without selecting another player.
+- `/arc onboarding stop` stops only the sender. Administrator test controls
+  stay in commands; the player screen shows only its current goal and action.
 - `quest.public-enabled` defaults to false, independently of legacy `enabled`.
   Joins load existing state and never create enrollment.
 - NPC 447 retains its normal command for everyone outside the quest audience.

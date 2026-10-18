@@ -6,7 +6,6 @@ import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.entity.Player
 import ru.arc.gui.ArcMenus
-import ru.arc.paper.menu.DialogTables
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
 import ru.arc.paper.menu.PaperDialogButton
@@ -17,7 +16,6 @@ internal data class OnboardingQuestView(
     val runId: String,
     val accepted: Boolean,
     val milestones: Set<OnboardingMilestone>,
-    val canRestart: Boolean = false,
     val notice: String? = null,
 ) {
     val completed: Boolean get() = OnboardingMilestone.AUTOBUILD_COMPLETE in milestones
@@ -39,10 +37,7 @@ internal enum class OnboardingQuestGoal { TRAVEL, HOME, CLAIM, BUILD }
 internal class OnboardingQuestDialog(
     private val view: (Player) -> OnboardingQuestView?,
     private val accept: (Player, String) -> Unit,
-    private val restart: (Player) -> Unit,
-    private val stop: (Player, String) -> Unit,
     private val openGoal: (Player, OnboardingQuestGoal) -> Unit,
-    private val openTeleporter: (Player) -> Unit,
     private val text: (String) -> Component = { MiniMessage.miniMessage().deserialize(DEFAULT_TEXT.getValue(it)) },
     private val showDialog: (Player, PaperDialogScreen, () -> Unit, () -> Unit) -> Unit = { player, screen, reopen, dismiss ->
         ArcMenus.openDialog(player, screen, reopen = reopen, onDismiss = dismiss)
@@ -100,56 +95,35 @@ internal class OnboardingQuestDialog(
         snapshot.notice?.takeIf(String::isNotBlank)?.let {
             add(literal(it))
         }
-        add(DialogTables.body(
-            rows = OnboardingQuestGoal.entries.map { goal ->
-                copy("row-${goal.name.lowercase()}") to copy(rowStatus(snapshot, goal))
-            },
-            frame = DialogTables.Frame.EPIC,
-            width = WIDTH,
-            columns = DialogTables.Columns.LABEL_WIDE,
-        ))
     }
 
     private fun buttons(snapshot: OnboardingQuestView): List<PaperDialogButton> = buildList {
         if (!snapshot.accepted) {
-            add(button("accept", "accept", "accept-tip", snapshot) { player, current ->
+            add(button("accept", "accept", snapshot) { player, current ->
                 if (!current.accepted) accept(player, snapshot.runId) else open(player)
             })
-        } else if (!snapshot.completed) {
-            snapshot.goal?.takeUnless {
-                it == OnboardingQuestGoal.TRAVEL ||
-                    it == OnboardingQuestGoal.BUILD && OnboardingMilestone.AUTOBUILD_STARTED in snapshot.milestones
-            }?.let { goal ->
-                add(button("goal", "action-${goal.name.lowercase()}", "action-${goal.name.lowercase()}-tip", snapshot,
-                    closes = goal == OnboardingQuestGoal.BUILD,
-                ) { player, current ->
-                    if (current.accepted && !current.completed && current.goal == goal) openGoal(player, goal)
-                    else open(player)
-                })
-            }
-        }
-        add(button("teleport", "teleport", "teleport-tip", snapshot) { player, _ -> openTeleporter(player) })
-        if (snapshot.canRestart) {
-            add(button("restart", "restart", "restart-tip", snapshot) { player, current ->
-                if (current.canRestart) restart(player) else open(player)
-            })
-            add(button("stop", "stop", "stop-tip", snapshot) { player, current ->
-                if (current.canRestart) stop(player, snapshot.runId) else open(player)
+        } else actionGoal(snapshot)?.let { goal ->
+            add(button("goal", "action-${goal.name.lowercase()}", snapshot,
+                closes = goal == OnboardingQuestGoal.BUILD,
+            ) { player, current ->
+                if (actionGoal(current) == goal) openGoal(player, goal) else open(player)
             })
         }
+    }
+
+    private fun actionGoal(snapshot: OnboardingQuestView): OnboardingQuestGoal? = snapshot.goal?.takeUnless {
+        it == OnboardingQuestGoal.BUILD && OnboardingMilestone.AUTOBUILD_STARTED in snapshot.milestones
     }
 
     private fun button(
         id: String,
         label: String,
-        tooltip: String,
         snapshot: OnboardingQuestView,
         closes: Boolean = false,
         action: (Player, OnboardingQuestView) -> Unit,
     ) = PaperDialogButton(
         id = PaperDialogActionId.of(id),
         label = copy(label),
-        tooltip = copy(tooltip),
         width = WIDTH,
         closeDialogBeforeAction = closes,
         onClick = { context ->
@@ -171,67 +145,32 @@ internal class OnboardingQuestDialog(
         null -> "complete"
     }
 
-    private fun rowStatus(snapshot: OnboardingQuestView, goal: OnboardingQuestGoal): String {
-        val done = when (goal) {
-            OnboardingQuestGoal.TRAVEL -> OnboardingMilestone.FIRST_RTP in snapshot.milestones
-            OnboardingQuestGoal.HOME -> OnboardingMilestone.HOME_CREATED in snapshot.milestones
-            OnboardingQuestGoal.CLAIM -> OnboardingMilestone.FOOTHOLD_COMPLETE in snapshot.milestones
-            OnboardingQuestGoal.BUILD -> snapshot.completed
-        }
-        return when {
-            goal == OnboardingQuestGoal.HOME && snapshot.goal == OnboardingQuestGoal.HOME && done -> "status-mismatch"
-            done -> "status-done"
-            !snapshot.accepted -> "status-ahead"
-            goal == OnboardingQuestGoal.BUILD && OnboardingMilestone.AUTOBUILD_STARTED in snapshot.milestones -> "status-building"
-            goal == snapshot.goal -> "status-current"
-            else -> "status-ahead"
-        }
-    }
-
     private fun copy(key: String) = text(key).colorIfAbsent(BODY).decoration(TextDecoration.ITALIC, false)
     private fun prose(key: String) = PaperDialogBody(copy(key), WIDTH)
     private fun literal(value: String) = PaperDialogBody(Component.text(value, BODY).decoration(TextDecoration.ITALIC, false), WIDTH)
 
     companion object {
-        private const val WIDTH = 320
+        private const val WIDTH = 270
         private val BODY = TextColor.color(0xE8DFD2)
 
         internal val DEFAULT_TEXT = linkedMapOf(
             "title" to "<#c4abff>Первый дом",
-            "offer" to "<#e8dfd2>Найдите место в мире выживания, защитите свой участок и постройте первый дом. Квест подскажет следующий шаг.",
-            "complete" to "<#9bd48d>Первый дом готов.<newline><#e8dfd2>Точка возвращения сохранена, а участок защищён.",
-            "unavailable" to "<#e8dfd2>Квест сейчас не запущен для вас.",
-            "pending" to "<#e8dfd2>Обновляю квест…",
-            "goal-travel" to "<#c4abff>Найдите место для дома<newline><#e8dfd2>Откройте телепортацию и выберите мир выживания.",
-            "goal-home" to "<#c4abff>Сохраните точку дома<newline><#e8dfd2>Выберите место для базы и создайте здесь точку возвращения в меню домов.",
-            "goal-match" to "<#c4abff>Совместите дом и участок<newline><#e8dfd2>Создайте точку дома внутри защищённого чанка. Дом и приват должны быть в одном месте.",
-            "goal-claim" to "<#c4abff>Защитите участок<newline><#e8dfd2>Поставьте блок привата в чанке с точкой дома. Он есть в стартовом наборе.",
-            "goal-build-book" to "<#c4abff>Откройте книгу «Первый дом»<newline><#e8dfd2>Возьмите её из стартового набора и откройте внутри своего защищённого участка.",
-            "goal-build-start" to "<#c4abff>Постройте первый дом<newline><#e8dfd2>Выберите место для постройки в книге «Первый дом» и запустите строительство на своём участке.",
-            "goal-building" to "<#c4abff>Дом строится<newline><#e8dfd2>Дождитесь завершения постройки. Квест отметит результат автоматически.",
-            "row-travel" to "<#e8dfd2>Мир выживания",
-            "row-home" to "<#e8dfd2>Точка дома",
-            "row-claim" to "<#e8dfd2>Защита участка",
-            "row-build" to "<#e8dfd2>Первый дом",
-            "status-ahead" to "<#e8dfd2>Впереди",
-            "status-current" to "<#c4abff>Текущая цель",
-            "status-done" to "<#9bd48d>✔ Готово",
-            "status-mismatch" to "<#ffb277>Вне участка",
-            "status-building" to "<#c4abff>Строится",
-            "accept" to "<#9bd48d>Начать квест",
-            "accept-tip" to "<#e8dfd2>Начать путь к своему первому дому. Прогресс сохраняется между серверами.",
-            "teleport" to "<#92bed8>Телепортация ›",
-            "teleport-tip" to "<#e8dfd2>Выбрать мир или открыть другие направления телепортации.",
-            "action-home" to "<#9bd48d>Мои дома ›",
-            "action-home-tip" to "<#e8dfd2>Создать точку возвращения в выбранном месте.",
-            "action-claim" to "<#9bd48d>Мой участок ›",
-            "action-claim-tip" to "<#e8dfd2>Открыть управление приватом и подсказку по защите земли.",
-            "action-build" to "<#9bd48d>Получить стартовый набор",
-            "action-build-tip" to "<#e8dfd2>Получить обычный стартовый набор с книгой «Первый дом». Доступность набора проверяется как обычно.",
-            "restart" to "<#c4a7e7>Начать заново",
-            "restart-tip" to "<#e8dfd2>Начать новую проверку квеста для себя. Сбрасываются только этапы квеста.",
-            "stop" to "<#ff6b61>Выключить тест",
-            "stop-tip" to "<#e8dfd2>Остановить свой тест квеста и убрать персональный знак над телепортатором.",
+            "offer" to "<#e8dfd2>Найдите место и постройте свой первый дом.",
+            "complete" to "<#9bd48d>Дом готов, участок защищён.",
+            "unavailable" to "<#e8dfd2>Квест не запущен.",
+            "pending" to "<#e8dfd2>Загрузка…",
+            "goal-travel" to "<#c4abff>1 / 4 · Найдите место<newline><#e8dfd2>Выберите мир выживания.",
+            "goal-home" to "<#c4abff>2 / 4 · Точка дома<newline><#e8dfd2>Встаньте на месте базы и сохраните дом.",
+            "goal-match" to "<#c4abff>2 / 4 · Точка дома<newline><#e8dfd2>Сохраните дом внутри своего привата.",
+            "goal-claim" to "<#c4abff>3 / 4 · Защитите участок<newline><#e8dfd2>Поставьте блок привата в чанке с точкой дома.",
+            "goal-build-book" to "<#c4abff>4 / 4 · Постройте дом<newline><#e8dfd2>Откройте книгу «Первый дом» на своём участке.",
+            "goal-build-start" to "<#c4abff>4 / 4 · Постройте дом<newline><#e8dfd2>Выберите место в книге и начните стройку.",
+            "goal-building" to "<#c4abff>4 / 4 · Дом строится<newline><#e8dfd2>Дождитесь окончания постройки.",
+            "accept" to "<#9bd48d>Начать",
+            "action-travel" to "<#9bd48d>Выбрать мир",
+            "action-home" to "<#9bd48d>Мои дома",
+            "action-claim" to "<#9bd48d>Мой участок",
+            "action-build" to "<#9bd48d>Стартовый набор",
             "close" to "<white>Закрыть",
         )
     }

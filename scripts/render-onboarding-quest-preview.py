@@ -25,7 +25,8 @@ def module(name, path):
 def main():
     root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--states", default="offer,mismatch,complete")
+    parser.add_argument("--states", default="offer,home")
+    parser.add_argument("--marker", action="store_true", help="Also render the unchanged NPC marker")
     parser.add_argument("--output", type=Path, default=root / "build/reports/onboarding-quest/preview")
     parser.add_argument("--ops-root", type=Path, default=root.parent / "ruscrafting-ops")
     parser.add_argument("--client-jar", type=Path)
@@ -35,9 +36,8 @@ def main():
     output.parent.mkdir(parents=True, exist_ok=True)
     exports = root / "build/reports/onboarding-quest"
     content = json.loads((exports / "content.json").read_text())
-    marker = json.loads((exports / "marker.json").read_text())
-    sources = [root / "src/main/kotlin/ru/arc/onboarding" / name for name in
-               ("OnboardingQuestDialog.kt", "OnboardingQuestNpc.kt")]
+    source_names = ["OnboardingQuestDialog.kt"] + (["OnboardingQuestNpc.kt"] if args.marker else [])
+    sources = [root / "src/main/kotlin/ru/arc/onboarding" / name for name in source_names]
     if any(path.stat().st_mtime > (exports / "content.json").stat().st_mtime for path in sources):
         raise SystemExit("Preview export is stale; run :test --tests ru.arc.onboarding.OnboardingQuestDialogTest")
     source_text, dialogs = {}, []
@@ -68,7 +68,7 @@ def main():
     manifest.update({"plugin": "ARC · Первый дом", "gallery-accent": "#c4abff",
                      "sources": {"rendered": {"path": str(resolved), "root": ""}},
                      "surfaces": {"dialogs": dialogs},
-                     "limitations": ["Actual compiled PaperDialogScreen and DialogTables export. Offline composition only; no native-client or runtime acceptance."]})
+                     "limitations": ["Actual compiled PaperDialogScreen export. Offline composition only; no native-client or runtime acceptance."]})
     characters = {char for values in source_text.values() for text in values.values() for char in text
                   if 0xE000 <= ord(char) <= 0xF8FF or 0xF0000 <= ord(char) <= 0xFFFFD}
     manifest["glyphs"] = [{"character": char, "provider": "minecraft:default"} for char in sorted(characters)]
@@ -82,8 +82,14 @@ def main():
         render_args += ["--resource-pack", str(args.resource_pack)]
     if surface.main(render_args):
         raise SystemExit("Native dialog preview failed")
+    (output / "source-evidence.json").write_text(json.dumps({str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
+                                                           for path in sources}, indent=2))
+    if not args.marker:
+        print(output / "index.html")
+        return
 
     # The same renderer paints the actual text. The existing atelier supplies 3D views.
+    marker = json.loads((exports / "marker.json").read_text())
     preview = output / "marker"
     preview.mkdir(exist_ok=True)
     client = surface.resolve_client_jar(manifest, args.client_jar, output.parent / ".surface-cache")
@@ -141,8 +147,6 @@ def main():
     subprocess.run(["node", str(atelier / "build-workshop-preview.mjs"), "--scene", str(preview / "scene.json"),
                     "--palette", str(preview / "palette.json"), "--template", str(preview / "template.html"),
                     "--output", str(preview / "index.html")], check=True)
-    (output / "source-evidence.json").write_text(json.dumps({str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
-                                                           for path in sources}, indent=2))
     print(output / "index.html")
 
 
