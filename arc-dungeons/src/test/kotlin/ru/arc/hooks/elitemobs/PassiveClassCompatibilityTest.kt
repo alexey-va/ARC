@@ -62,10 +62,11 @@ import java.util.logging.Logger
 
 class PassiveClassCompatibilityTest : FreeSpec({
     "unsupported versions fail before changing any native state" {
-        listOf("10.9.1", "10.9.8-ruscrafting.1", "10.9.9").forEach {
+        listOf("10.9.1", "10.9.8-ruscrafting.1", "10.9.9", "10.9.10-custom", "10.9.11").forEach {
             shouldThrow<IllegalStateException> { PassiveClassCompatibility.requireSupportedVersion(it) }
         }
         PassiveClassCompatibility.requireSupportedVersion("10.9.8")
+        PassiveClassCompatibility.requireSupportedVersion("10.9.10")
     }
 
     "install is idempotent and close restores exact native references and command contract" {
@@ -270,7 +271,7 @@ private class PassiveHostFixture : AutoCloseable {
     private val previousPlugin = MetadataHandler.PLUGIN
     val native = paper.createSimplePlugin("EliteMobs")
     val player = paper.addPlayer("PassiveClassTester")
-    val access: EliteMobs1098Access
+    val access: EliteMobsPassiveAccess
     val info = AdvancedClassInfoCommand()
     val manager: CommandManager
     val progression: ClassProgressionModule
@@ -281,9 +282,9 @@ private class PassiveHostFixture : AutoCloseable {
     init {
         var createdModule: AdvancedCombatModule? = null
         try {
-            access = EliteMobs1098Access()
+            access = EliteMobsPassiveAccess()
             PluginDescriptionFile::class.java.getDeclaredField("version").apply { isAccessible = true }
-                .set(native.description, "10.9.8")
+                .set(native.description, eliteMobsTestRuntimeVersion())
             MetadataHandler.PLUGIN = native
             val command = PluginCommand::class.java.getDeclaredConstructor(String::class.java, Plugin::class.java)
                 .apply { isAccessible = true }.newInstance("elitemobs", native)

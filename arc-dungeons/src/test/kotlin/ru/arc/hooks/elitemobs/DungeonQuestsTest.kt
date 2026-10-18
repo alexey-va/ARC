@@ -72,6 +72,7 @@ class DungeonQuestsTest : FreeSpec({
     }
 
     "local menu includes giver and turn-in NPCs but excludes even tracked quests from another dungeon" {
+        mockkObject(NativeQuestTracking)
         mockkStatic(PlayerData::class, QuestTracking::class, NPCsConfig::class,
             ContentPackagesConfig::class, DungeonInstance::class, ConfigurationLocation::class, CustomQuestsConfig::class)
         try {
@@ -123,7 +124,7 @@ class DungeonQuestsTest : FreeSpec({
             })
             every { PlayerData.isDataLoaded(owner) } returns true
             every { PlayerData.getQuests(owner) } returns arrayListOf(local, turnInHere, foreign, custom)
-            every { QuestTracking.getPlayerTrackingQuests() } returns hashMapOf(owner to mockk {
+            every { NativeQuestTracking.current() } returns hashMapOf(owner to mockk {
                 every { this@mockk.quest } returns foreign
             })
             every { ContentPackagesConfig.getDungeonPackages() } returns emptyMap()
@@ -139,6 +140,7 @@ class DungeonQuestsTest : FreeSpec({
             // The player's manually selected global tracker remains available to the scoreboard.
             readDungeonQuests(player)!!.first().name shouldBe "Чужой данж"
         } finally {
+            unmockkObject(NativeQuestTracking)
             unmockkStatic(PlayerData::class, QuestTracking::class, NPCsConfig::class,
                 ContentPackagesConfig::class, DungeonInstance::class, ConfigurationLocation::class, CustomQuestsConfig::class)
         }
@@ -161,6 +163,7 @@ class DungeonQuestsTest : FreeSpec({
     }
 
     "tracking action sets the requested state and stays idempotent" {
+        mockkObject(NativeQuestTracking)
         mockkStatic(PlayerData::class, QuestTracking::class)
         try {
             val owner = UUID.randomUUID()
@@ -179,7 +182,7 @@ class DungeonQuestsTest : FreeSpec({
 
             every { PlayerData.isInMemory(owner) } returns true
             every { PlayerData.getQuest(owner, targetId) } returns targetQuest
-            every { QuestTracking.getPlayerTrackingQuests() } returns tracking
+            every { NativeQuestTracking.current() } returns tracking
             every { oldTracking.stop() } answers { tracking.remove(owner); Unit }
             every { targetTracking.stop() } answers { tracking.remove(owner); Unit }
             every { QuestTracking.toggleTracking(player, targetQuest) } answers { tracking[owner] = targetTracking }
@@ -193,6 +196,7 @@ class DungeonQuestsTest : FreeSpec({
             changeDungeonQuestTracking(player, targetId, false) shouldBe DungeonQuestTrackingChange.UNTRACKED
             tracking shouldBe emptyMap()
         } finally {
+            unmockkObject(NativeQuestTracking)
             unmockkStatic(PlayerData::class, QuestTracking::class)
         }
     }

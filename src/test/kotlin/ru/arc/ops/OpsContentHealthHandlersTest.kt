@@ -3,10 +3,40 @@ package ru.arc.ops
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import io.mockk.every
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
 
 class OpsContentHealthHandlersTest :
     FreeSpec({
         "content health summary" - {
+            "health reads location pools on the calling HTTP worker without a native wrapper" {
+                mockkObject(OpsLocationPoolHandlers, OpsBukkitSync)
+                try {
+                    val worker = Thread.currentThread()
+                    every { OpsBukkitSync.call<Any?>(any(), any()) } answers {
+                        error("Catalog aggregation must not move onto the native thread")
+                    }
+                    every { OpsLocationPoolHandlers.list(any()) } answers {
+                        Thread.currentThread() shouldBe worker
+                        mapOf("count" to 0, "pools" to emptyList<Any>())
+                    }
+                    val result = OpsContentHealthHandlers.health(
+                        TestOpsHttpConfig(
+                            itemPresetsReadEnabled = false,
+                            itemsReadEnabled = false,
+                            scheduledCommandsReadEnabled = false,
+                            treasurePoolsReadEnabled = false,
+                        ),
+                    )
+                    @Suppress("UNCHECKED_CAST")
+                    val components = result["components"] as Map<String, Map<String, Any?>>
+                    components["locationPools"]?.get("available") shouldBe true
+                } finally {
+                    unmockkObject(OpsLocationPoolHandlers, OpsBukkitSync)
+                }
+            }
+
             "reports a complete healthy audit while listing intentionally disabled content" {
                 val result =
                     OpsContentHealthHandlers.collect(

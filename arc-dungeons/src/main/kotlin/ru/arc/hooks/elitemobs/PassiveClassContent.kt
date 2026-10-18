@@ -15,7 +15,9 @@ import java.security.MessageDigest
  * changing the EliteMobs dependency requires reviewing this small compatibility boundary too.
  */
 internal object PassiveClassContent {
-    const val NATIVE_VERSION = "10.9.8"
+    // Both audited releases contain byte-identical Advanced Combat classes and catalog data.
+    val SUPPORTED_NATIVE_VERSIONS = setOf("10.9.8", "10.9.10")
+    const val BALANCE_SOURCE_VERSION = "10.9.8"
     const val STOCK_FINGERPRINT = "3368a7461ea59e2ca62ae7facca481263f5876c77f7000fdda83dd2f523c1ead"
     const val BALANCE_FINGERPRINT = "9d4de8eb00f8fc4afea8a4d3784ae5ebb73eb7679e919b19e423679805587929"
 
@@ -25,10 +27,10 @@ internal object PassiveClassContent {
 
     private fun load(): FixedPassiveRegistry {
         val stock = BuiltInClassContent.passiveRegistry()
-        check(fingerprint(stock) == STOCK_FINGERPRINT) { "EliteMobs $NATIVE_VERSION passive catalog differs from the supported stock catalog" }
+        check(fingerprint(stock) == STOCK_FINGERPRINT) { "EliteMobs passive catalog differs from the audited $BALANCE_SOURCE_VERSION catalog" }
         val document = requireNotNull(javaClass.getResourceAsStream("/elitemobs/passive-classes-10.9.8.json"))
             .bufferedReader(Charsets.UTF_8).use { JsonParser.parseReader(it).asJsonObject }
-        check(document["schema"].asInt == 1 && document["nativeVersion"].asString == NATIVE_VERSION)
+        check(document["schema"].asInt == 1 && document["nativeVersion"].asString == BALANCE_SOURCE_VERSION)
         check(document["stockFingerprint"].asString == STOCK_FINGERPRINT)
         check(document["balanceFingerprint"].asString == BALANCE_FINGERPRINT)
         val overrides = document.getAsJsonObject("forms")
@@ -50,7 +52,7 @@ internal object PassiveClassContent {
             mechanics[id] = override?.getAsJsonArray("mechanics")?.map { gson.fromJson(it, PassiveMechanicTrait::class.java) }
                 ?: stock.mechanicTraits(id)
         }
-        return EliteMobs1098Access.newRegistry(profiles, traits, mechanics).also {
+        return EliteMobsPassiveAccess.newRegistry(profiles, traits, mechanics).also {
             check(fingerprint(it) == BALANCE_FINGERPRINT) { "Passive-only balance failed its complete catalog check" }
         }
     }

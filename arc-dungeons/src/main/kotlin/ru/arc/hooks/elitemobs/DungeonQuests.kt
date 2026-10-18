@@ -32,7 +32,7 @@ internal enum class DungeonQuestAbandonChange { ABANDONED, LOADING, MISSING, FAI
 internal fun readDungeonQuests(player: Player, currentDungeonOnly: Boolean = false): List<DungeonQuestInfo>? {
     // Avoid a synchronous database lookup or a partial snapshot while EliteMobs data loads.
     if (!PlayerData.isDataLoaded(player.uniqueId)) return null
-    val tracked = QuestTracking.getPlayerTrackingQuests()[player.uniqueId]?.quest?.questID
+    val tracked = NativeQuestTracking.current()[player.uniqueId]?.quest?.questID
     val quests = PlayerData.getQuests(player.uniqueId).orEmpty()
     val relevant = if (currentDungeonOnly) {
         val worlds = currentDungeonQuestWorlds(player)
@@ -120,7 +120,7 @@ internal fun changeDungeonQuestTracking(player: Player, questId: UUID, enabled: 
     val quest = PlayerData.getQuest(player.uniqueId, questId) ?: return DungeonQuestTrackingChange.MISSING
     if (!quest.isTrackable()) return DungeonQuestTrackingChange.UNTRACKABLE
 
-    val current = QuestTracking.getPlayerTrackingQuests()[player.uniqueId]
+    val current = NativeQuestTracking.current()[player.uniqueId]
     if (!enabled) {
         if (current?.quest?.questID == questId) current.stop()
         return DungeonQuestTrackingChange.UNTRACKED
@@ -132,7 +132,7 @@ internal fun changeDungeonQuestTracking(player: Player, questId: UUID, enabled: 
         current.stop()
     }
     QuestTracking.toggleTracking(player, quest)
-    return if (QuestTracking.getPlayerTrackingQuests()[player.uniqueId]?.quest?.questID == questId)
+    return if (NativeQuestTracking.current()[player.uniqueId]?.quest?.questID == questId)
         DungeonQuestTrackingChange.TRACKED else DungeonQuestTrackingChange.FAILED
 }
 

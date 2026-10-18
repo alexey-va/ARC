@@ -18,19 +18,20 @@ repositories {
 }
 dependencies {
     implementation(kotlin("stdlib"))
-    implementation("ru.ruscrafting.arc:arc-core:2.7.40")
-    implementation("ru.ruscrafting.arc:arc-core-logging:2.7.40")
-    implementation("ru.ruscrafting.arc:arc-core-paper:2.7.40")
-    implementation("ru.ruscrafting.arc:arc-core-menu:2.7.40")
-    implementation("ru.ruscrafting.arc:arc-core-paper-menu:2.7.40")
-    implementation("ru.ruscrafting.arc:arc-core-redis:2.7.40")
-    implementation("ru.ruscrafting.arc:arc-core-sql:2.7.40")
+    implementation("ru.ruscrafting.arc:arc-core:2.7.41")
+    implementation("ru.ruscrafting.arc:arc-core-logging:2.7.41")
+    implementation("ru.ruscrafting.arc:arc-core-paper:2.7.41")
+    implementation("ru.ruscrafting.arc:arc-core-menu:2.7.41")
+    implementation("ru.ruscrafting.arc:arc-core-paper-menu:2.7.41")
+    implementation("ru.ruscrafting.arc:arc-core-redis:2.7.41")
+    implementation("ru.ruscrafting.arc:arc-core-sql:2.7.41")
     implementation(libs.com.google.code.gson.gson)
     implementation(libs.de.tr7zw.item.nbt.api)
     compileOnly(project(":arc-dungeons-api"))
     compileOnly(project(":arc-staff-spells-api"))
-    compileOnly("ru.ruscrafting.arc:arc-core-paper-api:2.7.40")
+    compileOnly("ru.ruscrafting.arc:arc-core-paper-api:2.7.41")
     compileOnly(libs.io.papermc.paper.paper.api)
+    // Compile against the oldest supported API; the exact runtime matrix also covers 10.9.10.
     compileOnly("com.magmaguy:EliteMobs:10.9.8@jar") { isTransitive = false }
     compileOnly(libs.ru.ruscrafting.thirdparty.magmacore)
     compileOnly("com.magmaguy:FreeMinecraftModels:2.12.1") { isTransitive = false }
@@ -42,8 +43,8 @@ dependencies {
 
     testImplementation(project(":arc-dungeons-api"))
     testImplementation(project(":arc-staff-spells-api"))
-    testImplementation("ru.ruscrafting.arc:arc-core-paper-api:2.7.40")
-    testImplementation("ru.ruscrafting.arc:arc-core-paper-testing:2.7.40")
+    testImplementation("ru.ruscrafting.arc:arc-core-paper-api:2.7.41")
+    testImplementation("ru.ruscrafting.arc:arc-core-paper-testing:2.7.41")
     testImplementation("com.magmaguy:EliteMobs:10.9.8@jar") { isTransitive = false }
     testImplementation(libs.ru.ruscrafting.thirdparty.magmacore)
     testImplementation("com.magmaguy:FreeMinecraftModels:2.12.1") { isTransitive = false }
@@ -61,6 +62,10 @@ dependencies {
     testImplementation("org.mockito:mockito-core:5.14.2")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
 }
+// Swap only the runtime JAR so the same compiled consumer is checked against both native releases.
+configurations.named("testRuntimeClasspath") {
+    resolutionStrategy.force("com.magmaguy:EliteMobs:${providers.gradleProperty("eliteMobsTestVersion").orElse("10.9.10").get()}")
+}
 val integrationTestSourceSet = sourceSets.create("integrationTest") {
     kotlin.srcDir("src/integrationTest/kotlin")
     compileClasspath += sourceSets.main.get().output + sourceSets.test.get().output
@@ -70,7 +75,7 @@ kotlin.target.compilations.getByName("integrationTest").associateWith(kotlin.tar
 configurations["integrationTestImplementation"].extendsFrom(configurations["testImplementation"])
 configurations["integrationTestRuntimeOnly"].extendsFrom(configurations["testRuntimeOnly"])
 dependencies {
-    "integrationTestImplementation"("ru.ruscrafting.arc:arc-core-integration-testing:2.7.40")
+    "integrationTestImplementation"("ru.ruscrafting.arc:arc-core-integration-testing:2.7.41")
 }
 tasks.withType<Test>().configureEach {
     classpath = files(classpath.filter { it.name.startsWith("adventure-") }, classpath)

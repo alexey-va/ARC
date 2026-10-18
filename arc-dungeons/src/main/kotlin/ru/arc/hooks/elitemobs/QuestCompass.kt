@@ -100,7 +100,7 @@ internal class QuestCompass(
                 isAccessible = true
             }
             QuestCompass(trackedBars = {
-                QuestTracking.getPlayerTrackingQuests().mapNotNull { (id, tracker) ->
+                NativeQuestTracking.current().mapNotNull { (id, tracker) ->
                     (field.get(tracker) as? NativeBossBar)?.let { id to it }
                 }.toMap()
             })

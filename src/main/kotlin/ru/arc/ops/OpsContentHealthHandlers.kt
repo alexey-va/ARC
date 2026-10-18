@@ -11,11 +11,15 @@ import ru.arc.itemcatalog.ItemsCatalogModule
  * catalogs.
  */
 object OpsContentHealthHandlers {
+    // HTTP worker entry point: each catalog owns its native capture boundary.
+    // In particular, location-pool snapshots wait for asynchronous preparation.
     fun health(cfg: OpsHttpConfig): Map<String, Any?> =
-        OpsBukkitSync.call {
-            collect(cfg, ContentCatalogReaders()) +
-                if (cfg.treasurePoolsReadEnabled) mapOf("rewardCatalog" to ItemsCatalogModule.rewardHealthSnapshot()) else emptyMap()
-        }
+        collect(cfg, ContentCatalogReaders()) +
+            if (cfg.treasurePoolsReadEnabled) {
+                mapOf("rewardCatalog" to OpsBukkitSync.call { ItemsCatalogModule.rewardHealthSnapshot() })
+            } else {
+                emptyMap()
+            }
 
     internal fun collect(
         cfg: OpsHttpConfig,

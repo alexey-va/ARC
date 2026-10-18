@@ -248,6 +248,8 @@ open class ArcDungeonsPlugin : JavaPlugin() {
 
         attemptOptionalNativeIntegration(
             initialize = {
+                // Resolve the version-dependent third-party getter before any native mutations.
+                NativeQuestTracking.current()
                 // Keep the candidate reachable before reload so rollback owns partial state.
                 val hook = emHook ?: EMHook().also { emHook = it }
                 hook.reload()

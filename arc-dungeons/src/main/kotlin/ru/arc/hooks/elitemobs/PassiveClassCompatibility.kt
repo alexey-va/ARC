@@ -33,7 +33,7 @@ import java.util.Locale
 import java.util.function.Function
 
 /**
- * Main-thread, reversible adapter for the unmodified, pinned EliteMobs 10.9.8 runtime.
+ * Main-thread, reversible adapter for the audited stock EliteMobs 10.9.8 and 10.9.10 runtimes.
  * Native progression, trials, combat listeners and their scheduler remain the owners. Only the
  * engine interface, immutable balance data and menu renderer references lack public setters.
  * Validate every borrowed reference before changing any of them; never restore a previous module's
@@ -59,7 +59,7 @@ internal class PassiveClassCompatibility(
         restore()
         check(activeOwner == null) { "Passive class integration already has an owner" }
 
-        val access = EliteMobs1098Access()
+        val access = EliteMobsPassiveAccess()
         val registry = PassiveClassContent.registry()
         val originalRegistry = access.passiveRegistry.get(module) as FixedPassiveRegistry
         check(PassiveClassContent.fingerprint(originalRegistry) == PassiveClassContent.STOCK_FINGERPRINT) {
@@ -101,7 +101,7 @@ internal class PassiveClassCompatibility(
             manager.commands[manager.commands.indexOf(originalInfo)] = replacementInfo
             AdvancedCombatRuntime.installHudProvider(hud)
             activeOwner = this
-            plugin.logger.info("Passive-only classes installed for stock EliteMobs ${PassiveClassContent.NATIVE_VERSION}")
+            plugin.logger.info("Passive-only classes installed for stock EliteMobs ${native.description.version}")
         } catch (failure: Throwable) {
             runCatching(::restore).exceptionOrNull()?.let(failure::addSuppressed)
             throw failure
@@ -154,7 +154,7 @@ internal class PassiveClassCompatibility(
     private class Binding(
         val module: AdvancedCombatModule,
         val native: Plugin,
-        val access: EliteMobs1098Access,
+        val access: EliteMobsPassiveAccess,
         val originalRegistry: FixedPassiveRegistry,
         val registry: FixedPassiveRegistry,
         val originalEngine: ClassAbilityEngine,
@@ -188,8 +188,8 @@ internal class PassiveClassCompatibility(
         @Volatile private var activeOwner: PassiveClassCompatibility? = null
         fun isInstalled(): Boolean = activeOwner != null
 
-        internal fun requireSupportedVersion(version: String) = check(version == PassiveClassContent.NATIVE_VERSION) {
-            "Passive class integration supports only stock EliteMobs ${PassiveClassContent.NATIVE_VERSION}; found $version"
+        internal fun requireSupportedVersion(version: String) = check(version in PassiveClassContent.SUPPORTED_NATIVE_VERSIONS) {
+            "Passive class integration supports stock EliteMobs ${PassiveClassContent.SUPPORTED_NATIVE_VERSIONS.joinToString()}; found $version"
         }
 
         internal fun renderHud(module: AdvancedCombatModule, player: Player): String {
@@ -211,7 +211,7 @@ internal class PassiveOnlyAbilityEngine(private val native: ClassAbilityEngine) 
 }
 
 /** All private third-party access stays here; public native gameplay APIs are used everywhere else. */
-internal class EliteMobs1098Access {
+internal class EliteMobsPassiveAccess {
     val passiveRegistry = field(AdvancedCombatModule::class.java, "passiveRegistry", FixedPassiveRegistry::class.java)
     val abilityEngine = field(AdvancedCombatModule::class.java, "abilityEngine", ClassAbilityEngine::class.java)
     val hudProvider = field(AdvancedCombatRuntime::class.java, "hudProvider", Function::class.java, static = true, final = false)
