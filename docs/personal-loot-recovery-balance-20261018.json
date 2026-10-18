@@ -1,0 +1,295 @@
+{
+  "version": 1,
+  "title": "Personal loot UUID-group recovery without reward rerolls — 2026-10-18",
+  "assumptions": [
+    "Scope: restore access to double chests whose two valid original ploot UUIDs conflict. Preserve all original player:::UUID loot records; persist shared membership and claims. Existing paid/claimed rewards are never generated again.",
+    "Healthy chests retain max-players=5, 3–5 uniform common rolls (expected 4), one independent 10% special roll and up to four one-time debris items. Both live nodes have identical personalloot config. Common pool has 64 entries, total/selectable weight 100; special has five entries, total/selectable weight 100. These are loaded runtime observations, not issuance frequency measurements.",
+    "Low/base/high are explicitly illustrative cohorts: 1/3/5 participants each encounters 0.25/1/4 distinct broken eligible groups per active day. Before repair these groups cannot open. Every modeled after event is a new eligible viewer of a distinct group with capacity; repeated openings, repair retries and split/rejoin generate zero additional entitlement.",
+    "Existing unclaimed inventory is a restored entitlement, not a new mint. If the player had valid leftovers under both old IDs they remain independently withdrawable; an exhausted, expired or missing record with a surviving claim must not reroll. Claim union can already exceed five from historical separate chests: existing viewers retain access, new viewers are blocked at the unchanged cap.",
+    "common_selections and special_selections count weighted selections, not individual items or currency. Item quantities and special item construction remain unchanged. Debris model assumes four free slots; no reward price, multiplier or amount is changed.",
+    "Direct Vault, premium tokens, Elite Coins and XP issuance from this recovery is zero. Material resale, AE-item sale and potion-token redemption are downstream alternative flows, not included as cash income without measured item-specific prices and use. Current SELL availability is not assumed off; planned SELL-to-contract transition remains future. Selling and contracting the same item are mutually exclusive.",
+    "No price/progression cost changes; saving time is not applicable. Main abuse boundary is reconnect/retry/restart/split/rejoin, not a time cooldown. Group aliases and claim history must survive these operations. Malformed identities and storage errors fail closed.",
+    "Live shared ledger sample 2026-10-18: since=1791742650973 generatedAt=1792347450975, 12869 records, 66306 operations, 31 players; classified record ratio=0.989198849949491, 139 unknown/legacy records. It has no reliable counter for affected chest encounters and is not used to invent their frequency or a monetary loot EV."
+  ],
+  "participants": [
+    1,
+    3,
+    5
+  ],
+  "currencies": {
+    "vault": {
+      "minor_per_unit": 100,
+      "flows": [
+        {
+          "id": "recovery_direct_vault",
+          "kind": "mint",
+          "source": "ARC/src/main/kotlin/ru/arc/bschests/PersonalLootModule.kt; ChestGenerator.kt; live survival personalloot.yml 2026-10-18",
+          "basis": "Identity repair never grants this currency or XP. No conversion from item rewards is assumed.",
+          "before": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "4"
+            ],
+            "expected_rolls": "1",
+            "chance": "1"
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "4"
+            ],
+            "expected_rolls": "1",
+            "chance": "1"
+          }
+        }
+      ]
+    },
+    "tokens": {
+      "minor_per_unit": 1,
+      "flows": [
+        {
+          "id": "recovery_direct_tokens",
+          "kind": "mint",
+          "source": "ARC/src/main/kotlin/ru/arc/bschests/PersonalLootModule.kt; ChestGenerator.kt; live survival personalloot.yml 2026-10-18",
+          "basis": "Identity repair never grants this currency or XP. No conversion from item rewards is assumed.",
+          "before": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "4"
+            ],
+            "expected_rolls": "1",
+            "chance": "1"
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "4"
+            ],
+            "expected_rolls": "1",
+            "chance": "1"
+          }
+        }
+      ]
+    },
+    "elite_coins": {
+      "minor_per_unit": 1,
+      "flows": [
+        {
+          "id": "recovery_direct_elite_coins",
+          "kind": "mint",
+          "source": "ARC/src/main/kotlin/ru/arc/bschests/PersonalLootModule.kt; ChestGenerator.kt; live survival personalloot.yml 2026-10-18",
+          "basis": "Identity repair never grants this currency or XP. No conversion from item rewards is assumed.",
+          "before": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "4"
+            ],
+            "expected_rolls": "1",
+            "chance": "1"
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "4"
+            ],
+            "expected_rolls": "1",
+            "chance": "1"
+          }
+        }
+      ]
+    },
+    "xp": {
+      "minor_per_unit": 1,
+      "flows": [
+        {
+          "id": "recovery_direct_xp",
+          "kind": "mint",
+          "source": "ARC/src/main/kotlin/ru/arc/bschests/PersonalLootModule.kt; ChestGenerator.kt; live survival personalloot.yml 2026-10-18",
+          "basis": "Identity repair never grants this currency or XP. No conversion from item rewards is assumed.",
+          "before": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "4"
+            ],
+            "expected_rolls": "1",
+            "chance": "1"
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "4"
+            ],
+            "expected_rolls": "1",
+            "chance": "1"
+          }
+        }
+      ]
+    },
+    "common_selections": {
+      "minor_per_unit": 1,
+      "flows": [
+        {
+          "id": "recovered_common_draws",
+          "kind": "item",
+          "source": "ARC/src/main/kotlin/ru/arc/bschests/PersonalLootModule.kt; ChestGenerator.kt; live survival personalloot.yml 2026-10-18",
+          "basis": "Expected four weighted common selections per newly eligible group; unchanged healthy-chest rule.",
+          "before": {
+            "enabled": false,
+            "amount_per_event": {
+              "value": "1",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "4"
+            ],
+            "expected_rolls": "4",
+            "chance": "1"
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "1",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "4"
+            ],
+            "expected_rolls": "4",
+            "chance": "1"
+          }
+        }
+      ]
+    },
+    "special_selections": {
+      "minor_per_unit": 1,
+      "flows": [
+        {
+          "id": "recovered_special_draws",
+          "kind": "item",
+          "source": "ARC/src/main/kotlin/ru/arc/bschests/PersonalLootModule.kt; ChestGenerator.kt; live survival personalloot.yml 2026-10-18",
+          "basis": "One independent 10% special selection per newly eligible group; not one bonus per common draw.",
+          "before": {
+            "enabled": false,
+            "amount_per_event": {
+              "value": "1",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "4"
+            ],
+            "expected_rolls": "1",
+            "chance": "0.1"
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "1",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "4"
+            ],
+            "expected_rolls": "1",
+            "chance": "0.1"
+          }
+        }
+      ]
+    },
+    "debris_items": {
+      "minor_per_unit": 1,
+      "flows": [
+        {
+          "id": "recovered_debris_items",
+          "kind": "item",
+          "source": "ARC/src/main/kotlin/ru/arc/bschests/PersonalLootModule.kt; ChestGenerator.kt; live survival personalloot.yml 2026-10-18",
+          "basis": "Up to one each COBWEB, COBBLESTONE, DIRT, STICK, persisted once and only when slots are available.",
+          "before": {
+            "enabled": false,
+            "amount_per_event": {
+              "value": "4",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "4"
+            ],
+            "expected_rolls": "1",
+            "chance": "1"
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "4",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "4"
+            ],
+            "expected_rolls": "1",
+            "chance": "1"
+          }
+        }
+      ]
+    }
+  },
+  "decision": "Restore intended once-per-player access while preserving original rewards, historical claims and the existing player cap. Rates are unchanged; actual recovered item access increases from the broken state. Do not infer zero realized item impact from unchanged configured rates."
+}

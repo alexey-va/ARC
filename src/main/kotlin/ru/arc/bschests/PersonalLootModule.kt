@@ -6,6 +6,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.future.await
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.bukkit.Material
@@ -23,19 +24,22 @@ import org.bukkit.persistence.PersistentDataType
 import ru.arc.ARC
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
-import ru.arc.core.sync
 import ru.arc.network.repos.ItemList
 import ru.arc.protection.ContainerProtection
 import ru.arc.repository.CachedRepository
 import ru.arc.repository.Entity
 import ru.arc.repository.Mergeable
-import ru.arc.repository.redisRepo
+import ru.arc.repository.RepoConfig
+import ru.arc.repository.redis.RedisStorage
 import ru.arc.chestpreview.chestPartnerDirection
 import ru.arc.util.ItemUtils.extractInventory
 import ru.arc.util.ItemUtils.extractItems
 import ru.arc.util.Logging.error
+import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
+import ru.arc.util.Common
 import java.util.LinkedHashMap
+import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Duration.Companion.seconds
@@ -219,7 +223,18 @@ object PersonalLootModule {
 
     private var repo: CachedRepository<CustomLootData>? = null
     private var repositoryScope: CoroutineScope? = null
-    private var prepared: Pair<CachedRepository<CustomLootData>, CoroutineScope>? = null
+    private var identities: PersonalLootIdentities? = null
+    private var prepared: PreparedRepositories? = null
+
+    private data class PreparedRepositories(
+        val loot: CachedRepository<CustomLootData>,
+        val identities: PersonalLootIdentities,
+        val scope: CoroutineScope,
+    ) {
+        fun drain() {
+            ru.arc.repository.drainRepository(loot, scope)
+        }
+    }
     private lateinit var chestGenerator: ChestGenerator
     private val previewReadLock = Any()
     private val previewGeneration = AtomicLong()
@@ -251,8 +266,9 @@ object PersonalLootModule {
         val candidate = checkNotNull(prepared) { "Personal loot repository preparation is not ready" }
         prepared = null
         clearPreviewReads()
-        repo = candidate.first
-        repositoryScope = candidate.second
+        repo = candidate.loot
+        identities = candidate.identities
+        repositoryScope = candidate.scope
     }
 
     internal fun prepareOnWorker(redis: ru.arc.redis.RedisOperations, serverName: String) {
@@ -262,42 +278,55 @@ object PersonalLootModule {
         val updateChannel = "arc.$serverName-ploot-update"
 
         val newScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val timerScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         val newRepository =
             try {
-                redisRepo<CustomLootData>(
-                    id = "$serverName-ploot",
-                    storageKey = storageKey,
-                    updateChannel = updateChannel,
-                    scope = newScope,
-                    redis = redis,
-                ) {
-                    loadAllOnStart(true)
-                    saveInterval(1.seconds)
-                }
+                // This server-scoped hash has one Paper owner. ENTITY pub/sub can echo an older
+                // empty snapshot back into a newly filled reward; no cross-server sync is needed.
+                CachedRepository(
+                    config = RepoConfig<CustomLootData>(
+                        id = "$serverName-ploot", storageKey = storageKey, updateChannel = updateChannel,
+                        loadAllOnStart = true, saveInterval = 1.seconds,
+                    ),
+                    storage = RedisStorage<CustomLootData>(redis, storageKey, CustomLootData::class.java, Common.gson),
+                    scope = timerScope,
+                ).also { runBlocking { it.init().getOrThrow() } }
             } catch (failure: Throwable) {
                 newScope.cancel()
+                timerScope.cancel()
                 throw failure
             }
-        prepared = newRepository to newScope
+        val newIdentities = try {
+            PersonalLootIdentities(personalLootIdentityStorage(redis, "$storageKey-identities"))
+        } catch (failure: Throwable) {
+            newScope.cancel()
+            runBlocking { newRepository.shutdown() }
+            throw failure
+        }
+        prepared = PreparedRepositories(newRepository, newIdentities, newScope)
     }
 
     internal fun discardPreparedOnWorker() {
         val candidate = prepared ?: return
         prepared = null
-        ru.arc.repository.sealRepositoryOperations(candidate.second)
-        ru.arc.repository.drainRepository(candidate.first, candidate.second)
+        candidate.identities.tasks.close()
+        ru.arc.repository.sealRepositoryOperations(candidate.scope)
+        candidate.drain()
     }
 
     @JvmStatic
     fun shutdown() {
         val currentRepository = repo
         val currentScope = repositoryScope
+        val currentIdentities = identities
         clearPreviewReads()
         repo = null
         repositoryScope = null
-        if (currentRepository != null && currentScope != null) {
+        identities = null
+        currentIdentities?.tasks?.close()
+        if (currentRepository != null && currentScope != null && currentIdentities != null) {
             ru.arc.repository.sealRepositoryOperations(currentScope)
-            ARC.instance.retireInBackground { ru.arc.repository.drainRepository(currentRepository, currentScope) }
+            ARC.instance.retireInBackground { PreparedRepositories(currentRepository, currentIdentities, currentScope).drain() }
                 .whenComplete { _, failure -> if (failure != null) error("Could not drain personal loot", failure) }
         } else {
             currentScope?.cancel()
@@ -357,12 +386,22 @@ object PersonalLootModule {
         processChestOpen(event, ContainerProtection()::allows)
     }
 
+    private data class ContainerMarker(val uuid: UUID?, val players: Set<UUID>, val pool: String?)
+    private enum class OpenDenial { FULL, ALREADY_OPENED }
+    private data class PreparedOpen(
+        val markers: List<ContainerMarker>,
+        val group: PersonalLootGroup,
+        val loot: CustomLootData?,
+        val denial: OpenDenial? = null,
+    )
+
     internal fun processChestOpen(
         event: InventoryOpenEvent,
         protectionAllows: (Player, Block) -> Boolean,
     ) {
         if (event.isCancelled) return
         val repository = repo ?: return
+        val identityStore = identities ?: return
         val activeScope = repositoryScope ?: return
         if (event.inventory.type !in inventories) return
 
@@ -370,158 +409,166 @@ object PersonalLootModule {
         val blocks = physicalContainerBlocks(event) ?: return
         if (!isCurrentPhysicalContainer(player, blocks)) return
         val block = event.inventory.location?.block ?: blocks.firstOrNull() ?: return
-        if (block !in blocks) return
-        val anchorData = CustomBlockData(block, ARC.instance)
-        if (!anchorData.has(uuidKey)) return
+        if (block !in blocks || blocks.none { CustomBlockData(it, ARC.instance).has(uuidKey) }) return
         event.isCancelled = true
-
-        val chestUuid = parsePersonalLootUuid(anchorData.get(uuidKey, PersistentDataType.STRING))
-            ?: run {
-                warn("Personal loot chest has an invalid UUID at {}", block.location)
-                return
-            }
-        val markerUuid = resolvePersonalLootMarker(blocks)
-            ?: run {
-                warn("Personal loot chest has an invalid or conflicting UUID at {}", blocks.first().location)
-                return
-            }
-        if (markerUuid != chestUuid) return
         if (!containerAccessAllowed(player, blocks, protectionAllows)) return
-
-        val data = CustomBlockData(block, ARC.instance)
-        val playerListString = data.get(key, PersistentDataType.STRING)
-        if (playerListString == null) {
-            warn("Player list string is null")
-            return
-        }
-
-        val players = parsePersonalLootPlayers(playerListString).toMutableSet()
-
-        if (players.size >= maxPlayers && player.uniqueId !in players) {
-            player.sendMessage(
-                config.component(
-                    "messages.max-players",
-                    "<red>Слишком много игроков уже открыли этот сундук!",
-                ) { tag("amount", players.size) },
-            )
-            return
-        }
-
-        val poolName = data.get(poolKey, PersistentDataType.STRING)
-        // Preserve the existing extraction semantics: Chest#getInventory already exposes a double inventory.
-        val currentItems = if (useBsLoot) extractItems(block).map { it.clone() } else emptyList()
-
+        val markers = readContainerMarkers(blocks) ?: return
         val playerUuid = player.uniqueId
-        val lootId = "$playerUuid$PERSONAL_LOOT_SEPARATOR$chestUuid"
-        activeScope.launch {
+        if (!identityStore.admit(playerUuid)) return
+        val location = block.location.toString()
+        val useBetterStructuresLoot = useBsLoot
+        val currentItems = if (useBetterStructuresLoot) extractItems(block).map { it.clone() } else emptyList()
+        val token = identityStore.tasks.token()
+        val job = activeScope.launch {
             try {
-                val lootData =
-                    repository
-                        .getOrCreate(lootId) {
-                            CustomLootData.create(playerUuid, chestUuid)
-                        }.getOrThrow()
-                sync {
-                    finishChestOpen(
-                        player = player,
-                        block = block,
-                        physicalBlocks = blocks,
-                        expectedChestUuid = chestUuid,
-                        poolName = poolName,
-                        currentItems = currentItems,
-                        lootData = lootData,
-                        repository = repository,
-                        protectionAllows = protectionAllows,
-                    )
+                identityStore.serialized {
+                    val resolved = identityStore.resolve(markerClaims(markers))
+                    val linked = identityStore.tasks.callSync(token) {
+                        if (!canFinishOpen(player, blocks, markers, repository, identityStore, protectionAllows)) return@callSync null
+                        val currentMarkers = readContainerMarkers(blocks) ?: return@callSync null
+                        PreparedOpen(currentMarkers, resolved.withPlayers(currentMarkers.flatMap { it.players }), null)
+                    }.await() ?: return@serialized
+                    // Link every original UUID before making a reward. After a crash or a split,
+                    // either half must find the same canonical record even if claim commit was interrupted.
+                    identityStore.persist(linked.group)
+                    val group = linked.group
+                    val records = group.members.associateWith { chestUuid ->
+                        val id = "$playerUuid$PERSONAL_LOOT_SEPARATOR$chestUuid"
+                        val record = if (chestUuid == group.canonical) {
+                            repository.getOrCreate(id) { CustomLootData.create(playerUuid, chestUuid) }.getOrThrow()
+                        } else repository.get(id).getOrThrow()
+                        require(record == null || (record.playerUuid == playerUuid && record.chestUuid == chestUuid)) {
+                            "Personal loot record identity differs from its storage key"
+                        }
+                        record
+                    }
+                    val opening = identityStore.tasks.callSync(token) {
+                        if (!canFinishOpen(player, blocks, markers, repository, identityStore, protectionAllows)) return@callSync null
+                        val currentMarkers = readContainerMarkers(blocks) ?: return@callSync null
+                        var currentGroup = group.withPlayers(currentMarkers.flatMap { it.players })
+                        val existing = records.values.filterNotNull()
+                        // A persisted old record is also evidence of a claim if block metadata was stale.
+                        if (existing.any { !it.needsItems() }) currentGroup = currentGroup.withPlayers(listOf(playerUuid))
+                        if (currentGroup.players.size >= maxPlayers && playerUuid !in currentGroup.players) {
+                            return@callSync PreparedOpen(currentMarkers, currentGroup, null, OpenDenial.FULL)
+                        }
+                        val remaining = existing.firstOrNull { !it.needsItems() && !it.isExhausted() }
+                        if (remaining == null && playerUuid in currentGroup.players) {
+                            return@callSync PreparedOpen(currentMarkers, currentGroup, null, OpenDenial.ALREADY_OPENED)
+                        }
+                        val loot = remaining ?: checkNotNull(records[group.canonical]).also {
+                            val poolName = currentMarkers.firstOrNull { marker -> marker.uuid == group.canonical }?.pool
+                                ?: currentMarkers.firstOrNull { marker -> marker.uuid != null }?.pool
+                            val generated = if (useBetterStructuresLoot) ItemList().apply { addAll(currentItems) }
+                                else chestGenerator.generate(player, poolName)
+                            if (it.fillIfEmpty(generated)) repository.markDirty(it)
+                        }
+                        if (loot.addDebrisIfNeeded()) repository.markDirty(loot)
+                        PreparedOpen(currentMarkers, currentGroup.withPlayers(listOf(playerUuid)), loot)
+                    }.await() ?: return@serialized
+
+                    // Persist the reward first. If the following alias write has an unknown outcome,
+                    // retry finds this exact reward rather than rolling another one.
+                    if (opening.loot != null) {
+                        repository.saveDirty().getOrThrow()
+                        // Finish any older background snapshot before marking this stable, unopened
+                        // reward again; its mark must not be cleared by that older snapshot.
+                        repository.markDirty(opening.loot)
+                        repository.saveDirty().getOrThrow()
+                    }
+                    identityStore.persist(opening.group)
+                    identityStore.tasks.callSync(token) {
+                        if (!canFinishOpen(player, blocks, opening.markers, repository, identityStore, protectionAllows)) return@callSync
+                        if (readContainerMarkers(blocks) != opening.markers) return@callSync
+                        applyContainerIdentity(blocks, opening.markers, opening.group)
+                        when (opening.denial) {
+                            OpenDenial.FULL -> player.sendMessage(config.component(
+                                "messages.max-players", "<red>Слишком много игроков уже открыли этот сундук!",
+                            ) { tag("amount", opening.group.players.size) })
+                            OpenDenial.ALREADY_OPENED -> player.sendMessage(config.component(
+                                "messages.already-opened", "<red>Вы уже открывали этот сундук",
+                            ))
+                            null -> {
+                                if (!useBetterStructuresLoot) extractInventory(block)?.clear()
+                                LootGuiFactory.open(player, checkNotNull(opening.loot))
+                            }
+                        }
+                    }.await()
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
-                error("Failed to load personal loot {}", lootId, failure)
-                sync {
-                    if (player.isOnline) {
-                        player.sendMessage(
-                            config.component(
-                                "messages.load-error",
-                                "<red>Не удалось загрузить содержимое сундука. Попробуйте ещё раз.",
-                            ),
-                        )
+                error("Failed to prepare personal loot for {} at {}", playerUuid, location, failure)
+                identityStore.tasks.runSync(token) {
+                    if (repo === repository && identities === identityStore && player.isOnline) {
+                        player.sendMessage(config.component(
+                            "messages.load-error", "<red>Не удалось загрузить содержимое сундука. Попробуйте ещё раз.",
+                        ))
                     }
                 }
             }
         }
+        job.invokeOnCompletion { identityStore.release(playerUuid) }
     }
 
-    private fun finishChestOpen(
+    private fun canFinishOpen(
         player: Player,
-        block: Block,
-        physicalBlocks: List<Block>,
-        expectedChestUuid: UUID,
-        poolName: String?,
-        currentItems: List<ItemStack>,
-        lootData: CustomLootData,
+        blocks: List<Block>,
+        markers: List<ContainerMarker>,
         repository: CachedRepository<CustomLootData>,
+        identityStore: PersonalLootIdentities,
         protectionAllows: (Player, Block) -> Boolean,
-    ) {
-        if (repo !== repository || !player.isOnline || block.type !in chests) return
-        val currentData = CustomBlockData(block, ARC.instance)
-        val currentChestUuid = parsePersonalLootUuid(currentData.get(uuidKey, PersistentDataType.STRING))
-        if (currentChestUuid != expectedChestUuid) return
-        if (!isCurrentPhysicalContainer(player, physicalBlocks)) return
-        if (resolvePersonalLootMarker(physicalBlocks) != expectedChestUuid) return
-        if (!containerAccessAllowed(player, physicalBlocks, protectionAllows)) return
+    ): Boolean = repo === repository && identities === identityStore && player.isOnline &&
+        isCurrentPhysicalContainer(player, blocks) &&
+        readContainerMarkers(blocks)?.map { it.uuid } == markers.map { it.uuid } &&
+        containerAccessAllowed(player, blocks, protectionAllows)
 
-        val playerListString = currentData.get(key, PersistentDataType.STRING) ?: return
-        val players = parsePersonalLootPlayers(playerListString).toMutableSet()
-        if (players.size >= maxPlayers && player.uniqueId !in players) {
-            player.sendMessage(
-                config.component(
-                    "messages.max-players",
-                    "<red>Слишком много игроков уже открыли этот сундук!",
-                ) { tag("amount", players.size) },
-            )
-            return
-        }
-
-        // A surviving block marker must never turn a missing/expired player record into another roll.
-        if (lootData.isExhausted() || (player.uniqueId in players && lootData.needsItems())) {
-            player.sendMessage(
-                config.component("messages.already-opened", "<red>Вы уже открывали этот сундук"),
-            )
-            return
-        }
-
-        if (lootData.needsItems()) {
-            val generated = try {
-                if (useBsLoot) {
-                    ItemList().apply { addAll(currentItems) }
-                } else {
-                    chestGenerator.generate(player, poolName)
-                }
-            } catch (failure: Exception) {
-                error("Failed to generate personal loot {} from pool {}", lootData.id(), poolName, failure)
-                player.sendMessage(config.component(
-                    "messages.load-error",
-                    "<red>Не удалось загрузить содержимое сундука. Попробуйте ещё раз.",
-                ))
-                return
+    /** Missing or malformed markers fail closed; an unmarked legacy companion is safe to adopt. */
+    private fun readContainerMarkers(blocks: List<Block>): List<ContainerMarker>? = try {
+        blocks.map { block ->
+            val data = CustomBlockData(block, ARC.instance)
+            if (!data.has(uuidKey)) ContainerMarker(null, emptySet(), null)
+            else {
+                val uuid = requireNotNull(parsePersonalLootUuid(data.get(uuidKey, PersistentDataType.STRING)))
+                val rawPlayers = requireNotNull(data.get(key, PersistentDataType.STRING))
+                val players = if (rawPlayers.isEmpty()) emptySet() else rawPlayers.split(PERSONAL_LOOT_SEPARATOR).map {
+                    requireNotNull(parsePersonalLootUuid(it))
+                }.toSet()
+                ContainerMarker(uuid, players, data.get(poolKey, PersistentDataType.STRING))
             }
-            if (lootData.fillIfEmpty(generated)) repository.markDirty(lootData)
+        }.also { markers ->
+            val commonPool = config.string("loot.common-pool", "structures_common").trim().lowercase(Locale.ROOT)
+            val pools = markers.filter { it.uuid != null }.map { marker ->
+                when (val pool = marker.pool?.trim()?.lowercase(Locale.ROOT)) {
+                    null, "", "default", "generic_bs" -> commonPool
+                    else -> pool
+                }
+            }.distinct()
+            require(pools.size <= 1) { "Conflicting personal loot pools" }
         }
+    } catch (failure: Exception) {
+        warn("Personal loot chest has invalid identity or claims at {}: {}", blocks.firstOrNull()?.location, failure.message)
+        null
+    }
 
-        players.add(player.uniqueId)
-        for (connectedBlock in physicalBlocks) {
-            CustomBlockData(connectedBlock, ARC.instance).set(
-                key,
-                PersistentDataType.STRING,
-                players.joinToString(PERSONAL_LOOT_SEPARATOR) { it.toString() },
-            )
+    private fun markerClaims(markers: List<ContainerMarker>): Map<UUID, Set<UUID>> =
+        markers.filter { it.uuid != null }.groupBy { checkNotNull(it.uuid) }
+            .mapValues { (_, sameIdentity) -> sameIdentity.flatMap { it.players }.toSet() }
+
+    private fun applyContainerIdentity(blocks: List<Block>, markers: List<ContainerMarker>, group: PersonalLootGroup) {
+        val players = group.players.sortedBy(UUID::toString).joinToString(PERSONAL_LOOT_SEPARATOR)
+        val sourcePool = markers.firstOrNull { it.uuid == group.canonical }?.pool
+            ?: markers.firstOrNull { it.uuid != null }?.pool
+        for ((index, block) in blocks.withIndex()) {
+            val data = CustomBlockData(block, ARC.instance)
+            data.set(key, PersistentDataType.STRING, players)
+            data.set(uuidKey, PersistentDataType.STRING, group.canonical.toString())
+            if (markers[index].uuid == null && sourcePool != null) data.set(poolKey, PersistentDataType.STRING, sourcePool)
         }
-
-        if (!useBsLoot) {
-            extractInventory(block)?.clear()
+        if (markers.mapNotNull { it.uuid }.distinct().size > 1 || markers.any { it.uuid != group.canonical }) {
+            info("Repaired personal loot chest at {}: aliases={}, canonical={}, claims={}",
+                blocks.first().location, group.members, group.canonical, group.players.size)
         }
-
-        LootGuiFactory.open(player, lootData)
     }
 
     /** Resolves Bukkit's actual inventory holder and its physical chest halves without reading slots. */
@@ -546,10 +593,13 @@ object PersonalLootModule {
     }
 
     /** Validates that the captured holder still describes the player's current physical container. */
-    private fun isCurrentPhysicalContainer(player: Player, blocks: List<Block>): Boolean {
+    private fun isCurrentPhysicalContainer(player: Player, blocks: List<Block>): Boolean =
+        isCurrentPhysicalContainer(player.world.uid, blocks)
+
+    private fun isCurrentPhysicalContainer(worldUuid: UUID, blocks: List<Block>): Boolean {
         return try {
             if (blocks.isEmpty() || blocks.size > 2 || blocks.distinct().size != blocks.size) return false
-            if (blocks.any { it.world.uid != player.world.uid || !it.world.isChunkLoaded(it.x shr 4, it.z shr 4) || it.type !in chests }) return false
+            if (blocks.any { it.world.uid != worldUuid || !it.world.isChunkLoaded(it.x shr 4, it.z shr 4) || it.type !in chests }) return false
             if (blocks.size == 1) {
                 val block = blocks.single()
                 if (block.type == Material.BARREL) true
@@ -570,17 +620,6 @@ object PersonalLootModule {
         } catch (_: LinkageError) {
             false
         }
-    }
-
-    private fun resolvePersonalLootMarker(blocks: List<Block>): UUID? {
-        val markedBlocks = blocks.filter { CustomBlockData(it, ARC.instance).has(uuidKey) }
-        if (markedBlocks.isEmpty()) return null
-        val marked = markedBlocks.map { block ->
-            parsePersonalLootUuid(CustomBlockData(block, ARC.instance).get(uuidKey, PersistentDataType.STRING))
-        }
-        val chestUuid = marked.firstOrNull() ?: return null
-        if (marked.any { it != chestUuid }) return null
-        return chestUuid
     }
 
     private fun containerAccessAllowed(
@@ -604,7 +643,10 @@ object PersonalLootModule {
             ?.let { chestPartnerDirection(it.facing, it.type) }?.let(block::getRelative)
         val blocks = if (partner != null && partner.type == block.type) listOf(block, partner) else listOf(block)
         // BetterStructures may refill a container. Its identity and previous claims remain authoritative.
-        if (blocks.any { CustomBlockData(it, ARC.instance).has(uuidKey) }) return
+        if (blocks.any { CustomBlockData(it, ARC.instance).has(uuidKey) }) {
+            repairGeneratedContainer(blocks)
+            return
+        }
         val uuid = UUID.randomUUID().toString()
 
         for (b in blocks) {
@@ -614,6 +656,38 @@ object PersonalLootModule {
             val treasurePool = if (useBsLoot) "default" else "generic_bs"
             data.set(poolKey, PersistentDataType.STRING, treasurePool)
             data.set(breakKey, PersistentDataType.INTEGER, 0)
+        }
+    }
+
+    /** Generation can encounter halves marked independently before Bukkit joined the chest. */
+    private fun repairGeneratedContainer(blocks: List<Block>) {
+        val identityStore = identities ?: return
+        val repository = repo ?: return
+        val scope = repositoryScope ?: return
+        val markers = readContainerMarkers(blocks) ?: return
+        val location = blocks.first().location.toString()
+        val token = identityStore.tasks.token()
+        scope.launch {
+            try {
+                identityStore.serialized {
+                    val group = identityStore.resolve(markerClaims(markers))
+                    val valid = identityStore.tasks.callSync(token) {
+                        repo === repository && identities === identityStore &&
+                            isCurrentPhysicalContainer(blocks.first().world.uid, blocks) && readContainerMarkers(blocks) == markers
+                    }.await()
+                    if (!valid) return@serialized
+                    identityStore.persist(group)
+                    identityStore.tasks.callSync(token) {
+                        if (repo !== repository || identities !== identityStore || readContainerMarkers(blocks) != markers) return@callSync
+                        if (!isCurrentPhysicalContainer(blocks.first().world.uid, blocks)) return@callSync
+                        applyContainerIdentity(blocks, markers, group)
+                    }.await()
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                error("Failed to repair generated personal loot chest at {}", location, failure)
+            }
         }
     }
 
@@ -648,33 +722,48 @@ object PersonalLootModule {
                 } != expectedInventory
             }) return PersonalLootPreview.Unavailable
 
-        val playerSets = try {
-            val resolvedPlayers = mutableListOf<Set<UUID>>()
-            for (block in blocks) {
-                val data = CustomBlockData(block, ARC.instance)
-                if (!data.has(uuidKey) ||
-                    parsePersonalLootUuid(data.get(uuidKey, PersistentDataType.STRING)) != chestUuid
-                ) return PersonalLootPreview.Unavailable
-                val playerList = data.get(key, PersistentDataType.STRING)
-                    ?: return PersonalLootPreview.Unavailable
-                resolvedPlayers += parsePersonalLootPlayers(playerList)
+        val markers = readContainerMarkers(blocks) ?: return PersonalLootPreview.Unavailable
+        if (markers.any { it.uuid != chestUuid }) return PersonalLootPreview.Unavailable
+        val playerSets = markers.map { it.players }
+        if (playerSets.distinct().size != 1) return PersonalLootPreview.Unavailable
+        val identityStore = identities ?: return PersonalLootPreview.Unavailable
+        val group = try {
+            identityStore.cached(chestUuid) ?: run {
+                previewReadState("identity:$chestUuid", repository, scope) {
+                    identityStore.readForPreview(chestUuid)
+                    false
+                }
+                return PersonalLootPreview.Unavailable
             }
-            resolvedPlayers
         } catch (_: Exception) {
             return PersonalLootPreview.Unavailable
-        } catch (_: LinkageError) {
-            return PersonalLootPreview.Unavailable
         }
-        if (playerSets.distinct().size != 1) return PersonalLootPreview.Unavailable
-        val openedPlayers = playerSets.first()
+        val openedPlayers = playerSets.first() + group.players
         if (openedPlayers.size >= maxPlayers && viewer !in openedPlayers) {
             return PersonalLootPreview.Unavailable
         }
 
         val useBetterStructuresLoot = useBsLoot
-        val id = "$viewer$PERSONAL_LOOT_SEPARATOR$chestUuid"
-        repository.getNow(id)?.let { return previewStoredLoot(it, useBetterStructuresLoot) }
+        val stored = mutableListOf<CustomLootData>()
+        for (member in group.members) {
+            val id = "$viewer$PERSONAL_LOOT_SEPARATOR$member"
+            val record = repository.getNow(id)
+            if (record != null) stored += record
+            else if (previewReadState(id, repository, scope) != PreviewReadState.ABSENT) return PersonalLootPreview.Unavailable
+        }
+        stored.firstOrNull { !it.needsItems() && !it.isExhausted() }?.let {
+            return previewStoredLoot(it, useBetterStructuresLoot)
+        }
+        if (viewer in openedPlayers || stored.any { !it.needsItems() }) return PersonalLootPreview.Contents(emptyList())
+        return previewAbsent(useBetterStructuresLoot)
+    }
 
+    private fun previewReadState(
+        id: String,
+        repository: CachedRepository<CustomLootData>,
+        scope: CoroutineScope,
+        readAbsent: (suspend () -> Boolean)? = null,
+    ): PreviewReadState {
         val generation = previewGeneration.get()
         var startRead = false
         val readState = synchronized(previewReadLock) {
@@ -695,12 +784,9 @@ object PersonalLootModule {
                 }
             }
         }
-        if (startRead) startPreviewRead(id, repository, scope, generation)
+        if (startRead) startPreviewRead(id, repository, scope, generation, readAbsent)
 
-        return when (readState) {
-            PreviewReadState.ABSENT -> previewAbsent(useBetterStructuresLoot)
-            PreviewReadState.PENDING, PreviewReadState.FAILED -> PersonalLootPreview.Unavailable
-        }
+        return readState
     }
 
     private fun previewStoredLoot(data: CustomLootData, useBetterStructuresLoot: Boolean): PersonalLootPreview {
@@ -727,10 +813,11 @@ object PersonalLootModule {
         repository: CachedRepository<CustomLootData>,
         scope: CoroutineScope,
         generation: Long,
+        readAbsent: (suspend () -> Boolean)?,
     ) {
         val job = scope.launch {
             val state = try {
-                if (repository.get(id).getOrThrow() == null) {
+                if (readAbsent?.invoke() ?: (repository.get(id).getOrThrow() == null)) {
                     PreviewReadState.ABSENT
                 } else {
                     PreviewReadState.PENDING
@@ -792,7 +879,7 @@ internal sealed interface PersonalLootPreview {
 }
 
 internal fun parsePersonalLootUuid(raw: String?): UUID? =
-    raw?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+    raw?.let { value -> runCatching { UUID.fromString(value) }.getOrNull()?.takeIf { it.toString().equals(value, ignoreCase = true) } }
 
 internal fun parsePersonalLootPlayers(raw: String): Set<UUID> =
     raw
