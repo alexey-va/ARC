@@ -76,7 +76,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.428"
+version = "1.4.429"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.41"
@@ -153,6 +153,7 @@ repositories {
 }
 
 dependencies {
+    implementation(project(":arc-onboarding-api"))
     // Keep the server API ahead of HuskHomes' bundled older Adventure classes.
     compileOnly("net.kyori:adventure-api:4.26.1")
     // Kotlin coroutines

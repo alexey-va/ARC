@@ -1,264 +1,172 @@
 package ru.arc.onboarding
 
 import com.google.gson.Gson
+import com.google.gson.JsonElement
+import ru.arc.redis.RedisOperations
+import ru.arc.redis.safety.BoundedJsonCodec
+import ru.arc.redis.safety.JsonArrayContract
+import ru.arc.redis.safety.JsonObjectContract
+import ru.arc.redis.safety.JsonResourceBounds
+import ru.arc.redis.safety.JsonRootContract
+import ru.arc.redis.safety.RedisHashDecision
+import ru.arc.redis.safety.RedisHashUpdateResult
+import ru.arc.redis.safety.RedisHashUpdater
 import ru.arc.util.Common
-import java.nio.file.AtomicMoveNotSupportedException
-import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.StandardCopyOption
-import java.nio.file.StandardOpenOption
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 
-internal class OnboardingStore private constructor(
-    private val path: Path,
-    private val gson: Gson,
-    private val players: MutableMap<UUID, OnboardingPlayerProgress>,
-) {
-    internal class DeliveryReceipt internal constructor(
-        internal val playerId: UUID,
-        internal val owner: OnboardingPlayerProgress,
-        internal val before: OnboardingPlayerProgress,
-        internal val after: OnboardingPlayerProgress,
-    )
+/**
+ * Network-wide opt-in quest state. Every future completes after its Redis operation;
+ * no local cache, filesystem or gameplay-thread wait is involved. Missing state is
+ * never enrolled by observation. Corrupt state fails closed, including enrollment.
+ */
+internal class OnboardingStore(private val redis: RedisOperations, gson: Gson = Common.gson) {
+    private val codec = codec(gson)
+    private val updater = RedisHashUpdater(redis, HASH_KEY, codec)
 
-    @Synchronized
+    fun load(playerId: UUID): CompletableFuture<OnboardingProgress?> =
+        redis.loadMapEntries(HASH_KEY, playerId.toString()).thenApply { values ->
+            require(values.size == 1) { "Unexpected onboarding quest lookup result" }
+            values.single()?.let { codec.decode(it).toProgress() }
+        }
+
+    fun enroll(playerId: UUID): CompletableFuture<OnboardingProgress> {
+        val offered = OnboardingProgress.offered()
+        return update(playerId) { offered }.thenApply(::requireNotNull)
+    }
+
+    fun accept(playerId: UUID, expectedRunId: String): CompletableFuture<OnboardingProgress?> =
+        update(playerId) { current ->
+            current?.takeIf { it.runId == expectedRunId && it.status == OnboardingStatus.OFFERED }
+                ?.with(status = OnboardingStatus.ACTIVE)
+        }
+
+    fun stop(playerId: UUID, expectedRunId: String): CompletableFuture<OnboardingProgress?> =
+        update(playerId) { current ->
+            current?.takeIf { it.runId == expectedRunId }?.with(status = OnboardingStatus.STOPPED)
+        }
+
     fun observe(
         playerId: UUID,
+        expectedRunId: String,
         milestone: OnboardingMilestone,
-        now: Long,
         place: OnboardingPlace? = null,
         verifiedFoothold: Boolean = false,
-    ): OnboardingJourneyUpdate {
-        val existing = players[playerId]
-        if (existing == null && milestone != OnboardingMilestone.FIRST_RTP) {
-            return OnboardingJourneyUpdate(changed = false)
-        }
-        require(existing != null || players.size < MAX_PLAYERS) {
-            "Onboarding state reached its hard player cap of $MAX_PLAYERS"
-        }
-        val before = existing?.copyMutable()
-        val progress = existing ?: OnboardingPlayerProgress().also { players[playerId] = it }
-        val update = OnboardingJourney.observe(progress, milestone, now, place, verifiedFoothold)
-        if (!update.changed) {
-            if (existing == null) players.remove(playerId)
-            return update
+        operationId: String? = null,
+    ): CompletableFuture<OnboardingProgress?> =
+        update(playerId) { current ->
+            current?.takeIf { it.runId == expectedRunId && it.status == OnboardingStatus.ACTIVE }
+                ?.let { OnboardingJourney.observe(it, milestone, place, verifiedFoothold, operationId) }
         }
 
-        runCatching(::save).onFailure {
-            if (before == null) players.remove(playerId) else players[playerId] = before
-        }.getOrThrow()
-        return update
-    }
-
-    @Synchronized
-    fun nextHint(playerId: UUID): OnboardingHint? = players[playerId]?.pendingHints?.firstOrNull()
-
-    @Synchronized
-    fun pendingHints(): Map<UUID, OnboardingHint> = players.mapNotNull { (id, progress) ->
-        progress.pendingHints.firstOrNull()?.let { id to it }
-    }.toMap()
-
-    @Synchronized
-    fun markDelivered(
+    private fun update(
         playerId: UUID,
-        hint: OnboardingHint,
-        now: Long,
-    ): Boolean {
-        val progress = players[playerId] ?: return false
-        if (hint !in progress.pendingHints) return false
-        val before = progress.copyMutable()
-        progress.pendingHints.remove(hint)
-        progress.deliveredHints += hint
-        progress.updatedAt = now
-        runCatching(::save).onFailure { players[playerId] = before }.getOrThrow()
-        return true
-    }
-
-    @Synchronized
-    fun reserveDelivery(playerId: UUID, hint: OnboardingHint, now: Long): DeliveryReceipt? {
-        val owner = players[playerId] ?: return null
-        val before = owner.copyMutable()
-        if (!markDelivered(playerId, hint, now)) return null
-        return DeliveryReceipt(playerId, owner, before, owner.copyMutable())
-    }
-
-    /** A disconnected/stopped delivery may restore only the exact state it changed. */
-    @Synchronized
-    fun returnUndelivered(receipt: DeliveryReceipt) {
-        val current = players[receipt.playerId]
-        if (current !== receipt.owner || current != receipt.after) return
-        players[receipt.playerId] = receipt.before.copyMutable()
-        runCatching(::save).onFailure { players[receipt.playerId] = current }.getOrThrow()
-    }
-
-    @Synchronized
-    fun playerCount(): Int = players.size
-
-    @Synchronized
-    fun reset(playerId: UUID): Boolean {
-        val removed = players.remove(playerId) ?: return false
-        runCatching(::save).onFailure { players[playerId] = removed }.getOrThrow()
-        return true
-    }
-
-    private fun save() {
-        Files.createDirectories(path.parent)
-        val snapshot =
-            OnboardingStoreFile(
-                version = CURRENT_VERSION,
-                players =
-                    players
-                        .toSortedMap(compareBy(UUID::toString))
-                        .mapKeys { it.key.toString() }
-                        .mapValues { (_, progress) ->
-                            OnboardingPlayerFile(
-                                milestones = progress.milestones.map(OnboardingMilestone::id).sorted(),
-                                pendingHints = progress.pendingHints.map(OnboardingHint::id),
-                                deliveredHints = progress.deliveredHints.map(OnboardingHint::id).sorted(),
-                                homePlaces = progress.homePlaces.sortedWith(PLACE_COMPARATOR).map(::toFile),
-                                footholdPlaces = progress.footholdPlaces.sortedWith(PLACE_COMPARATOR).map(::toFile),
-                                updatedAt = progress.updatedAt,
-                            )
-                        },
-            )
-        val temp = Files.createTempFile(path.parent, ".${path.fileName}-", ".tmp")
-        try {
-            Files.writeString(temp, gson.toJson(snapshot), StandardOpenOption.TRUNCATE_EXISTING)
-            try {
-                Files.move(temp, path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
-            } catch (_: AtomicMoveNotSupportedException) {
-                Files.move(temp, path, StandardCopyOption.REPLACE_EXISTING)
+        transform: (OnboardingProgress?) -> OnboardingProgress?,
+    ): CompletableFuture<OnboardingProgress?> =
+        updater.update(playerId.toString()) { current ->
+            transform(current?.toProgress())?.let { RedisHashDecision.Write(OnboardingQuestWire.from(it)) }
+                ?: RedisHashDecision.Reject
+        }.thenApply { result ->
+            when (result) {
+                is RedisHashUpdateResult.Changed -> result.after?.toProgress()
+                is RedisHashUpdateResult.Unchanged -> result.current.toProgress()
+                is RedisHashUpdateResult.Rejected -> null
+                is RedisHashUpdateResult.Contended -> error("Onboarding quest update was contended after ${result.attempts} attempts")
             }
-        } finally {
-            Files.deleteIfExists(temp)
         }
-    }
 
     companion object {
-        const val CURRENT_VERSION = 2
-        const val MAX_PLAYERS = 100_000
-        const val MAX_FILE_BYTES = 64L * 1024L * 1024L
+        const val HASH_KEY = "arc.onboarding.quest.v1"
 
-        private val PLACE_COMPARATOR =
-            compareBy<OnboardingPlace>(OnboardingPlace::world, OnboardingPlace::chunkX, OnboardingPlace::chunkZ)
-
-        fun open(
-            path: Path,
-            gson: Gson = Common.prettyGson,
-        ): OnboardingStore {
-            if (!Files.exists(path)) return OnboardingStore(path, gson, linkedMapOf())
-            require(Files.size(path) <= MAX_FILE_BYTES) {
-                "Onboarding state exceeds its hard file-size cap of $MAX_FILE_BYTES bytes"
+        private fun codec(gson: Gson): BoundedJsonCodec<OnboardingQuestWire> {
+            val string = object : JsonRootContract {
+                override fun validate(value: JsonElement) {
+                    require(value.isJsonPrimitive && value.asJsonPrimitive.isString) { "Onboarding field must be a string" }
+                }
             }
-            val model =
-                requireNotNull(gson.fromJson(Files.readString(path), OnboardingStoreFile::class.java)) {
-                    "Onboarding state is empty: $path"
+            val integer = object : JsonRootContract {
+                override fun validate(value: JsonElement) {
+                    require(value.isJsonPrimitive && value.asJsonPrimitive.isNumber) { "Onboarding field must be an integer" }
+                    value.asBigDecimal.intValueExact()
                 }
-            require(model.version == CURRENT_VERSION) {
-                "Unsupported onboarding state version ${model.version}; expected $CURRENT_VERSION"
             }
-            require(model.players.size <= MAX_PLAYERS) {
-                "Onboarding state exceeds its hard player cap of $MAX_PLAYERS"
+            val nullableString = object : JsonRootContract {
+                override fun validate(value: JsonElement) {
+                    if (!value.isJsonNull) string.validate(value)
+                }
             }
-            val players = linkedMapOf<UUID, OnboardingPlayerProgress>()
-            model.players.forEach { (rawId, stored) ->
-                val playerId =
-                    runCatching { UUID.fromString(rawId) }
-                        .getOrElse { throw IllegalArgumentException("Invalid player UUID in onboarding state", it) }
-                require(stored.milestones.distinct().size == stored.milestones.size) {
-                    "Duplicate onboarding milestone for $playerId"
-                }
-                require(stored.pendingHints.distinct().size == stored.pendingHints.size) {
-                    "Duplicate pending onboarding hint for $playerId"
-                }
-                require(stored.deliveredHints.distinct().size == stored.deliveredHints.size) {
-                    "Duplicate delivered onboarding hint for $playerId"
-                }
-                require(stored.homePlaces.size <= OnboardingPlayerProgress.MAX_PLACES) {
-                    "Too many onboarding home places for $playerId"
-                }
-                require(stored.footholdPlaces.size <= OnboardingPlayerProgress.MAX_PLACES) {
-                    "Too many onboarding foothold places for $playerId"
-                }
-                require(stored.homePlaces.distinct().size == stored.homePlaces.size) {
-                    "Duplicate onboarding home place for $playerId"
-                }
-                require(stored.footholdPlaces.distinct().size == stored.footholdPlaces.size) {
-                    "Duplicate onboarding foothold place for $playerId"
-                }
-
-                val milestones = stored.milestones.mapTo(linkedSetOf(), OnboardingMilestone::fromId)
-                val pending = stored.pendingHints.map(OnboardingHint::fromId)
-                val delivered = stored.deliveredHints.mapTo(linkedSetOf(), OnboardingHint::fromId)
-                val homes = stored.homePlaces.mapTo(linkedSetOf(), ::fromFile)
-                val footholds = stored.footholdPlaces.mapTo(linkedSetOf(), ::fromFile)
-
-                require(milestones.size <= OnboardingMilestone.entries.size) { "Too many onboarding milestones for $playerId" }
-                require(pending.size <= OnboardingHint.entries.size) { "Too many pending onboarding hints for $playerId" }
-                require(delivered.size <= OnboardingHint.entries.size) { "Too many delivered onboarding hints for $playerId" }
-                require(pending.none(delivered::contains)) { "Onboarding hint is both pending and delivered for $playerId" }
-                require(stored.updatedAt >= 0L) { "Negative onboarding update timestamp for $playerId" }
-                require(milestones.isEmpty() || OnboardingMilestone.FIRST_RTP in milestones) {
-                    "Onboarding progress exists without first RTP for $playerId"
-                }
-                require(homes.isEmpty() == (OnboardingMilestone.HOME_CREATED !in milestones)) {
-                    "Onboarding home milestone and places disagree for $playerId"
-                }
-                require(footholds.all(homes::contains)) { "Onboarding foothold is missing its home for $playerId" }
-                require(footholds.isEmpty() == (OnboardingMilestone.FOOTHOLD_COMPLETE !in milestones)) {
-                    "Onboarding foothold milestone and places disagree for $playerId"
-                }
-                if (footholds.isNotEmpty()) {
-                    require(OnboardingMilestone.LAND_CLAIMED in milestones) {
-                        "Onboarding foothold exists without a land claim for $playerId"
-                    }
-                }
-                if (OnboardingMilestone.AUTOBUILD_STARTED in milestones) {
-                    require(footholds.isNotEmpty()) { "Onboarding build started without a foothold for $playerId" }
-                }
-                if (OnboardingMilestone.AUTOBUILD_COMPLETE in milestones) {
-                    require(OnboardingMilestone.AUTOBUILD_STARTED in milestones) {
-                        "Onboarding build completed without a start for $playerId"
-                    }
-                }
-
-                players[playerId] =
-                    OnboardingPlayerProgress(
-                        milestones = milestones,
-                        pendingHints = pending.toMutableList(),
-                        deliveredHints = delivered,
-                        homePlaces = homes,
-                        footholdPlaces = footholds,
-                        updatedAt = stored.updatedAt,
-                    )
-            }
-            return OnboardingStore(path, gson, players)
+            val place = JsonObjectContract(
+                setOf("world", "chunkX", "chunkZ"),
+                fieldContracts = mapOf("world" to string, "chunkX" to integer, "chunkZ" to integer),
+            )
+            return BoundedJsonCodec(
+                gson,
+                OnboardingQuestWire::class.java,
+                JsonObjectContract(
+                    allowedFields = setOf("version", "runId", "status", "milestones", "homePlaces", "landPlaces", "buildOperationId"),
+                    requiredFields = setOf("version", "runId", "status", "milestones", "homePlaces", "landPlaces"),
+                    fieldContracts = mapOf(
+                        "version" to integer,
+                        "runId" to string,
+                        "status" to string,
+                        "milestones" to JsonArrayContract(maxEntries = OnboardingMilestone.entries.size, elementContract = string),
+                        "homePlaces" to JsonArrayContract(maxEntries = OnboardingProgress.MAX_PLACES, elementContract = place),
+                        "landPlaces" to JsonArrayContract(maxEntries = OnboardingProgress.MAX_PLACES, elementContract = place),
+                        "buildOperationId" to nullableString,
+                    ),
+                ),
+                JsonResourceBounds(16_384, maxDepth = 4, maxContainerEntries = 16, maxTotalNodes = 256, maxStringCharacters = OnboardingPlace.MAX_WORLD_LENGTH),
+            ) { it.toProgress() }
         }
-
-        private fun toFile(place: OnboardingPlace): OnboardingPlaceFile =
-            OnboardingPlaceFile(place.world, place.chunkX, place.chunkZ)
-
-        private fun fromFile(place: OnboardingPlaceFile): OnboardingPlace =
-            OnboardingPlace.fromChunk(place.world, place.chunkX, place.chunkZ)
     }
 }
 
-private data class OnboardingStoreFile(
-    val version: Int = OnboardingStore.CURRENT_VERSION,
-    val players: Map<String, OnboardingPlayerFile> = emptyMap(),
-)
+/** Wire lists retain duplicates for rejection before creating immutable domain sets. */
+private data class OnboardingQuestWire(
+    val version: Int,
+    val runId: String?,
+    val status: String?,
+    val milestones: List<String>?,
+    val homePlaces: List<OnboardingPlaceWire>?,
+    val landPlaces: List<OnboardingPlaceWire>?,
+    val buildOperationId: String? = null,
+) {
+    fun toProgress(): OnboardingProgress {
+        val milestoneValues = requireNotNull(milestones).map(OnboardingMilestone::fromId)
+        val homes = requireNotNull(homePlaces).map(OnboardingPlaceWire::toPlace)
+        val lands = requireNotNull(landPlaces).map(OnboardingPlaceWire::toPlace)
+        require(milestoneValues.distinct().size == milestoneValues.size) { "Duplicate onboarding milestone" }
+        require(homes.distinct().size == homes.size && lands.distinct().size == lands.size) { "Duplicate onboarding place" }
+        return OnboardingProgress.create(
+            version,
+            requireNotNull(runId),
+            OnboardingStatus.valueOf(requireNotNull(status)),
+            milestoneValues.toSet(),
+            homes.toSet(),
+            lands.toSet(),
+            buildOperationId,
+        )
+    }
 
-private data class OnboardingPlayerFile(
-    val milestones: List<String> = emptyList(),
-    val pendingHints: List<String> = emptyList(),
-    val deliveredHints: List<String> = emptyList(),
-    val homePlaces: List<OnboardingPlaceFile> = emptyList(),
-    val footholdPlaces: List<OnboardingPlaceFile> = emptyList(),
-    val updatedAt: Long = 0L,
-)
+    companion object {
+        fun from(progress: OnboardingProgress): OnboardingQuestWire = OnboardingQuestWire(
+            progress.version,
+            progress.runId,
+            progress.status.name,
+            progress.milestones.map(OnboardingMilestone::id),
+            progress.homePlaces.map(OnboardingPlaceWire::from),
+            progress.landPlaces.map(OnboardingPlaceWire::from),
+            progress.buildOperationId,
+        )
+    }
+}
 
-private data class OnboardingPlaceFile(
-    val world: String = "",
-    val chunkX: Int = 0,
-    val chunkZ: Int = 0,
-)
+private data class OnboardingPlaceWire(val world: String, val chunkX: Int, val chunkZ: Int) {
+    fun toPlace(): OnboardingPlace = OnboardingPlace.fromChunk(world, chunkX, chunkZ).also {
+        require(it.world == world) { "Stored onboarding world must be normalized" }
+    }
+
+    companion object {
+        fun from(place: OnboardingPlace): OnboardingPlaceWire = OnboardingPlaceWire(place.world, place.chunkX, place.chunkZ)
+    }
+}

@@ -24,7 +24,7 @@ import ru.arc.observability.RuntimeHealthContribution
 import ru.arc.observability.RuntimeHealthProvider
 import ru.arc.observability.RuntimeHealthRegistry
 import ru.arc.observability.StructuredRuntimeHealthLine
-import ru.arc.onboarding.OnboardingStore
+import ru.arc.onboarding.OnboardingProgress
 import ru.arc.rtp.RtpPlayerStore
 import org.bukkit.boss.BarColor
 import org.bukkit.plugin.Plugin
@@ -696,7 +696,7 @@ private object ArcRuntimeHealth : RuntimeHealthProvider {
             schemas =
                 modules.schemas +
                     mapOf(
-                        "onboarding" to OnboardingStore.CURRENT_VERSION,
+                        "onboarding_quest" to OnboardingProgress.VERSION,
                         "rtp_players" to RtpPlayerStore.CURRENT_VERSION,
                         "product_interest" to ProductInterestStore.VERSION,
                     ) + (contractsService()?.let {

@@ -89,6 +89,7 @@ class HuskHomesHook internal constructor(
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun homeCreate(event: HomeCreateEvent) {
         val ownerId = event.owner.uuid
+        val questRun = OnboardingService.currentRunId(ownerId)
         val homeName = event.name
         val expected = HomePositionSnapshot.from(event.position)
         val setRespawn = homeName.endsWith("home")
@@ -135,6 +136,7 @@ class HuskHomesHook internal constructor(
                                 location.blockX,
                                 location.blockZ,
                                 verifiedFoothold,
+                                expectedRunId = questRun,
                             )
                         },
                     )

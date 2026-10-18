@@ -165,8 +165,9 @@ commands:
   onboarding:
     name: onboarding
     aliases: [ ]
-    permission: arc.admin
-    usage: /arc onboarding reset <player|uuid>
+    permission: ""
+    player-only: true
+    usage: /arc onboarding [test|restart|stop]
   originportals:
     name: originportals
     aliases: [origin-portals]

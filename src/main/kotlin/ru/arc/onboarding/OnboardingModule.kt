@@ -36,7 +36,7 @@ object OnboardingModule : PluginModule {
         OnboardingService.init { particleColors -> attachReady(particleColors) }
         register(OnboardingPlayerListener())
         registerOptional("Lands") { OnboardingLandsListener() }
-        info("Onboarding outcome listeners registered: {}; contextual hints preparing", listeners.size)
+        info("Onboarding outcome listeners registered: {}; initial quest preparing", listeners.size)
     }
 
     private fun attachReady(particleColors: Set<Int>) {

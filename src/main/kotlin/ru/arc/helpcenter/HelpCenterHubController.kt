@@ -200,8 +200,7 @@ internal class HelpCenterHubController(
                     PaperDialogBody(
                         text(
                             "requests-body",
-                            "hint" to (OnboardingService.nextPendingHintId(player.uniqueId)?.let { plain("onboarding-pending") }
-                                ?: plain("onboarding-clear")),
+                            "hint" to plain(if (OnboardingService.hasActiveQuest(player.uniqueId)) "onboarding-pending" else "onboarding-clear"),
                         ),
                         width = 500,
                     ),

@@ -1,8 +1,8 @@
 package ru.arc.onboarding
 
-import ru.arc.product.ProductOnboardingHint
-import java.util.LinkedHashSet
+import java.util.Collections
 import java.util.Locale
+import java.util.UUID
 
 internal enum class OnboardingMilestone(val id: String) {
     FIRST_RTP("first-rtp"),
@@ -20,29 +20,9 @@ internal enum class OnboardingMilestone(val id: String) {
     }
 }
 
-internal enum class OnboardingHint(
-    val id: String,
-    val productHint: ProductOnboardingHint,
-) {
-    FIRST_RTP("first-rtp", ProductOnboardingHint.FIRST_RTP),
-    HOME_CREATED("home-created", ProductOnboardingHint.HOME_CREATED),
-    LAND_CLAIMED("land-claimed", ProductOnboardingHint.LAND_CLAIMED),
-    FOOTHOLD_MISMATCH("foothold-mismatch", ProductOnboardingHint.FOOTHOLD_MISMATCH),
-    FOOTHOLD_COMPLETE("foothold-complete", ProductOnboardingHint.FOOTHOLD_COMPLETE),
-    BUILD_BOOK_MISSING_HOME("build-book-missing-home", ProductOnboardingHint.BUILD_BOOK_MISSING_HOME),
-    BUILD_BOOK_MISSING_LAND("build-book-missing-land", ProductOnboardingHint.BUILD_BOOK_MISSING_LAND),
-    BUILD_BOOK_MISSING_BOTH("build-book-missing-both", ProductOnboardingHint.BUILD_BOOK_MISSING_BOTH),
-    BUILD_BOOK_OUTSIDE_FOOTHOLD("build-book-outside-foothold", ProductOnboardingHint.BUILD_BOOK_OUTSIDE_FOOTHOLD),
-    AUTOBUILD_COMPLETE("autobuild-complete", ProductOnboardingHint.AUTOBUILD_COMPLETE);
+internal enum class OnboardingStatus { OFFERED, ACTIVE, COMPLETED, STOPPED }
 
-    companion object {
-        fun fromId(id: String): OnboardingHint =
-            entries.firstOrNull { it.id == id }
-                ?: throw IllegalArgumentException("Unknown onboarding hint: $id")
-    }
-}
-
-/** Chunk-level location retained only in local onboarding state. */
+/** Normalized chunk identity shared by home, land and construction observations. */
 @ConsistentCopyVisibility
 internal data class OnboardingPlace private constructor(
     val world: String,
@@ -53,262 +33,151 @@ internal data class OnboardingPlace private constructor(
         const val MAX_WORLD_LENGTH = 128
         const val MAX_ABS_CHUNK = 2_000_000
 
-        fun fromBlock(
-            world: String,
-            blockX: Int,
-            blockZ: Int,
-        ): OnboardingPlace =
+        fun fromBlock(world: String, blockX: Int, blockZ: Int): OnboardingPlace =
             fromChunk(world, Math.floorDiv(blockX, 16), Math.floorDiv(blockZ, 16))
 
-        fun fromChunk(
-            world: String,
-            chunkX: Int,
-            chunkZ: Int,
-        ): OnboardingPlace {
+        fun fromChunk(world: String, chunkX: Int, chunkZ: Int): OnboardingPlace {
             val normalized = world.trim().lowercase(Locale.ROOT)
-            require(normalized.isNotEmpty()) { "onboarding place world must not be blank" }
-            require(normalized.length <= MAX_WORLD_LENGTH) { "onboarding place world is too long" }
-            require(normalized.none(Char::isISOControl)) { "onboarding place world contains control characters" }
-            require(chunkX in -MAX_ABS_CHUNK..MAX_ABS_CHUNK) { "onboarding chunk X is out of bounds" }
-            require(chunkZ in -MAX_ABS_CHUNK..MAX_ABS_CHUNK) { "onboarding chunk Z is out of bounds" }
+            require(normalized.isNotEmpty()) { "Onboarding place world must not be blank" }
+            require(normalized.length <= MAX_WORLD_LENGTH) { "Onboarding place world is too long" }
+            require(normalized.none(Char::isISOControl)) { "Onboarding place world contains control characters" }
+            require(chunkX in -MAX_ABS_CHUNK..MAX_ABS_CHUNK) { "Onboarding chunk X is out of bounds" }
+            require(chunkZ in -MAX_ABS_CHUNK..MAX_ABS_CHUNK) { "Onboarding chunk Z is out of bounds" }
             return OnboardingPlace(normalized, chunkX, chunkZ)
         }
     }
 }
 
-internal data class OnboardingPlayerProgress(
-    val milestones: MutableSet<OnboardingMilestone> = linkedSetOf(),
-    val pendingHints: MutableList<OnboardingHint> = mutableListOf(),
-    val deliveredHints: MutableSet<OnboardingHint> = linkedSetOf(),
-    val homePlaces: MutableSet<OnboardingPlace> = linkedSetOf(),
-    val footholdPlaces: MutableSet<OnboardingPlace> = linkedSetOf(),
-    var updatedAt: Long = 0L,
+/** An explicit opt-in quest run. Collections are detached, immutable snapshots. */
+@ConsistentCopyVisibility
+internal data class OnboardingProgress private constructor(
+    val version: Int,
+    val runId: String,
+    val status: OnboardingStatus,
+    val milestones: Set<OnboardingMilestone>,
+    val homePlaces: Set<OnboardingPlace>,
+    val landPlaces: Set<OnboardingPlace>,
+    val buildOperationId: String? = null,
 ) {
-    fun copyMutable(): OnboardingPlayerProgress =
-        OnboardingPlayerProgress(
-            milestones = LinkedHashSet(milestones),
-            pendingHints = pendingHints.toMutableList(),
-            deliveredHints = LinkedHashSet(deliveredHints),
-            homePlaces = LinkedHashSet(homePlaces),
-            footholdPlaces = LinkedHashSet(footholdPlaces),
-            updatedAt = updatedAt,
-        )
+    val footholdPlaces: Set<OnboardingPlace> get() = immutableSet(homePlaces.intersect(landPlaces))
 
-    fun rememberHome(place: OnboardingPlace): Boolean {
-        val changed = homePlaces.add(place)
-        trimHomes()
-        return changed
-    }
+    fun isFoothold(place: OnboardingPlace): Boolean = place in homePlaces && place in landPlaces
 
-    fun rememberFoothold(place: OnboardingPlace): Boolean {
-        homePlaces.add(place)
-        val changed = footholdPlaces.add(place)
-        while (footholdPlaces.size > MAX_PLACES) {
-            footholdPlaces.remove(footholdPlaces.first())
-        }
-        trimHomes()
-        return changed
-    }
-
-    fun isFoothold(place: OnboardingPlace): Boolean = place in footholdPlaces
-
-    private fun trimHomes() {
-        while (homePlaces.size > MAX_PLACES) {
-            val removable = homePlaces.firstOrNull { it !in footholdPlaces } ?: homePlaces.first()
-            homePlaces.remove(removable)
-        }
-    }
+    internal fun with(
+        status: OnboardingStatus = this.status,
+        milestones: Set<OnboardingMilestone> = this.milestones,
+        homePlaces: Set<OnboardingPlace> = this.homePlaces,
+        landPlaces: Set<OnboardingPlace> = this.landPlaces,
+        buildOperationId: String? = this.buildOperationId,
+    ): OnboardingProgress = create(version, runId, status, milestones, homePlaces, landPlaces, buildOperationId)
 
     companion object {
+        const val VERSION = 1
         const val MAX_PLACES = 16
+
+        fun offered(runId: String = UUID.randomUUID().toString()): OnboardingProgress =
+            create(VERSION, runId, OnboardingStatus.OFFERED, emptySet(), emptySet(), emptySet())
+
+        internal fun create(
+            version: Int,
+            runId: String,
+            status: OnboardingStatus,
+            milestones: Set<OnboardingMilestone>,
+            homePlaces: Set<OnboardingPlace>,
+            landPlaces: Set<OnboardingPlace>,
+            buildOperationId: String? = null,
+        ): OnboardingProgress {
+            require(version == VERSION) { "Unsupported onboarding quest version" }
+            require(UUID.fromString(runId).toString() == runId) { "Invalid onboarding run identity" }
+            require(homePlaces.size <= MAX_PLACES && landPlaces.size <= MAX_PLACES) { "Too many onboarding places" }
+            require(milestones.isEmpty() || OnboardingMilestone.FIRST_RTP in milestones) { "Onboarding progress requires first RTP" }
+            require(homePlaces.isNotEmpty() == (OnboardingMilestone.HOME_CREATED in milestones)) { "Onboarding home state disagrees" }
+            require(landPlaces.isNotEmpty() == (OnboardingMilestone.LAND_CLAIMED in milestones)) { "Onboarding land state disagrees" }
+            val hasFoothold = homePlaces.any(landPlaces::contains)
+            require(hasFoothold == (OnboardingMilestone.FOOTHOLD_COMPLETE in milestones)) { "Onboarding foothold state disagrees" }
+            require(milestones.none { it in BUILD_MILESTONES } || hasFoothold) { "Onboarding construction requires a foothold" }
+            buildOperationId?.let(::validateBuildOperationId)
+            require((OnboardingMilestone.AUTOBUILD_STARTED in milestones) == (buildOperationId != null)) { "Onboarding construction operation disagrees" }
+            val complete = OnboardingMilestone.AUTOBUILD_COMPLETE in milestones
+            require(!complete || OnboardingMilestone.AUTOBUILD_STARTED in milestones) { "Onboarding completion requires a start" }
+            require(status != OnboardingStatus.OFFERED || milestones.isEmpty()) { "An offered quest cannot have progress" }
+            require(status != OnboardingStatus.COMPLETED || complete) { "A completed quest requires construction completion" }
+            require(!complete || status in setOf(OnboardingStatus.COMPLETED, OnboardingStatus.STOPPED)) { "Completed construction requires a terminal quest" }
+            return OnboardingProgress(version, runId, status, immutableSet(milestones), immutableSet(homePlaces), immutableSet(landPlaces), buildOperationId)
+        }
+
+        private val BUILD_MILESTONES = setOf(
+            OnboardingMilestone.BUILD_BOOK_OPENED,
+            OnboardingMilestone.AUTOBUILD_STARTED,
+            OnboardingMilestone.AUTOBUILD_COMPLETE,
+        )
     }
 }
 
-internal data class OnboardingJourneyUpdate(
-    val changed: Boolean,
-    val addedMilestones: Set<OnboardingMilestone> = emptySet(),
-    val queuedHints: List<OnboardingHint> = emptyList(),
-    val recoveredFoothold: Boolean = false,
-)
-
-/** Pure, non-linear onboarding state transitions. Plugin listeners only provide verified outcomes. */
+/** Pure quest transitions; completion requires the exact construction start persisted in this run. */
 internal object OnboardingJourney {
     fun observe(
-        progress: OnboardingPlayerProgress,
+        progress: OnboardingProgress,
         milestone: OnboardingMilestone,
-        now: Long,
         place: OnboardingPlace? = null,
         verifiedFoothold: Boolean = false,
-    ): OnboardingJourneyUpdate {
-        require(milestone != OnboardingMilestone.FOOTHOLD_COMPLETE) {
-            "foothold-complete is derived from a matching home and Lands chunk"
-        }
-        require(!verifiedFoothold || milestone == OnboardingMilestone.HOME_CREATED) {
-            "verifiedFoothold is only valid for a home observation"
-        }
-        if (milestone != OnboardingMilestone.FIRST_RTP && OnboardingMilestone.FIRST_RTP !in progress.milestones) {
-            return OnboardingJourneyUpdate(changed = false)
-        }
+        operationId: String? = null,
+    ): OnboardingProgress {
+        require(milestone != OnboardingMilestone.FOOTHOLD_COMPLETE) { "Foothold completion is derived from a matching home and land chunk" }
+        require(!verifiedFoothold || milestone == OnboardingMilestone.HOME_CREATED) { "Only a verified home can recover a foothold" }
+        if (progress.status != OnboardingStatus.ACTIVE) return progress
+        if (milestone != OnboardingMilestone.FIRST_RTP && OnboardingMilestone.FIRST_RTP !in progress.milestones) return progress
 
-        val before = progress.copyMutable()
+        val milestones = progress.milestones.toMutableSet()
+        var homes = progress.homePlaces
+        var lands = progress.landPlaces
+        var buildOperationId = progress.buildOperationId
         when (milestone) {
-            OnboardingMilestone.FIRST_RTP -> {
-                if (progress.milestones.add(milestone)) queue(progress, OnboardingHint.FIRST_RTP)
-            }
-
+            OnboardingMilestone.FIRST_RTP -> milestones += milestone
             OnboardingMilestone.HOME_CREATED -> {
-                val home = requirePlace(milestone, place)
-                val newHome = progress.rememberHome(home)
-                val newMilestone = progress.milestones.add(milestone)
-                when {
-                    verifiedFoothold -> completeFoothold(progress, home)
-                    progress.footholdPlaces.isNotEmpty() -> Unit
-                    OnboardingMilestone.LAND_CLAIMED in progress.milestones -> {
-                        supersedePending(progress, OnboardingHint.FIRST_RTP, OnboardingHint.LAND_CLAIMED)
-                        queue(progress, OnboardingHint.FOOTHOLD_MISMATCH)
-                    }
-                    newHome || newMilestone -> {
-                        supersedePending(progress, OnboardingHint.FIRST_RTP, OnboardingHint.LAND_CLAIMED)
-                        queue(progress, OnboardingHint.HOME_CREATED)
-                    }
+                val home = requireNotNull(place) { "${milestone.id} requires a chunk location" }
+                homes = remember(homes, home, progress.footholdPlaces)
+                milestones += milestone
+                if (verifiedFoothold) {
+                    lands = remember(lands, home, progress.footholdPlaces)
+                    milestones += OnboardingMilestone.LAND_CLAIMED
                 }
             }
-
             OnboardingMilestone.LAND_CLAIMED -> {
-                val land = requirePlace(milestone, place)
-                val newMilestone = progress.milestones.add(milestone)
-                when {
-                    land in progress.homePlaces -> completeFoothold(progress, land)
-                    progress.footholdPlaces.isNotEmpty() -> Unit
-                    OnboardingMilestone.HOME_CREATED in progress.milestones -> {
-                        supersedePending(progress, OnboardingHint.FIRST_RTP, OnboardingHint.HOME_CREATED)
-                        queue(progress, OnboardingHint.FOOTHOLD_MISMATCH)
-                    }
-                    newMilestone -> {
-                        supersedePending(progress, OnboardingHint.FIRST_RTP, OnboardingHint.HOME_CREATED)
-                        queue(progress, OnboardingHint.LAND_CLAIMED)
+                lands = remember(lands, requireNotNull(place) { "${milestone.id} requires a chunk location" }, progress.footholdPlaces)
+                milestones += milestone
+            }
+            OnboardingMilestone.BUILD_BOOK_OPENED, OnboardingMilestone.AUTOBUILD_STARTED, OnboardingMilestone.AUTOBUILD_COMPLETE -> {
+                val build = requireNotNull(place) { "${milestone.id} requires a chunk location" }
+                if (!progress.isFoothold(build)) return progress
+                if (milestone != OnboardingMilestone.BUILD_BOOK_OPENED) {
+                    val operation = operationId ?: return progress
+                    validateBuildOperationId(operation)
+                    if (milestone == OnboardingMilestone.AUTOBUILD_STARTED) {
+                        buildOperationId = operation
+                    } else if (OnboardingMilestone.AUTOBUILD_STARTED !in milestones || buildOperationId != operation) {
+                        return progress
                     }
                 }
+                milestones += milestone
             }
-
-            OnboardingMilestone.BUILD_BOOK_OPENED -> {
-                val build = requirePlace(milestone, place)
-                progress.milestones.add(milestone)
-                when {
-                    progress.isFoothold(build) -> supersedeRecovery(progress)
-                    progress.footholdPlaces.isNotEmpty() -> queue(progress, OnboardingHint.BUILD_BOOK_OUTSIDE_FOOTHOLD)
-                    OnboardingMilestone.HOME_CREATED in progress.milestones &&
-                        OnboardingMilestone.LAND_CLAIMED in progress.milestones ->
-                        queue(progress, OnboardingHint.FOOTHOLD_MISMATCH)
-                    OnboardingMilestone.HOME_CREATED in progress.milestones -> {
-                        supersedePending(progress, OnboardingHint.FIRST_RTP, OnboardingHint.HOME_CREATED)
-                        queue(progress, OnboardingHint.BUILD_BOOK_MISSING_LAND)
-                    }
-                    OnboardingMilestone.LAND_CLAIMED in progress.milestones -> {
-                        supersedePending(progress, OnboardingHint.FIRST_RTP, OnboardingHint.LAND_CLAIMED)
-                        queue(progress, OnboardingHint.BUILD_BOOK_MISSING_HOME)
-                    }
-                    else -> {
-                        supersedePending(progress, OnboardingHint.FIRST_RTP)
-                        queue(progress, OnboardingHint.BUILD_BOOK_MISSING_BOTH)
-                    }
-                }
-            }
-
-            OnboardingMilestone.AUTOBUILD_STARTED -> {
-                val build = requirePlace(milestone, place)
-                if (progress.isFoothold(build)) {
-                    progress.milestones.add(milestone)
-                    supersedeRecovery(progress)
-                }
-            }
-
-            OnboardingMilestone.AUTOBUILD_COMPLETE -> {
-                val build = requirePlace(milestone, place)
-                if (progress.isFoothold(build)) {
-                    progress.milestones.add(OnboardingMilestone.AUTOBUILD_STARTED)
-                    if (progress.milestones.add(milestone)) {
-                        supersedeRecovery(progress)
-                        queue(progress, OnboardingHint.AUTOBUILD_COMPLETE)
-                    }
-                }
-            }
-
-            OnboardingMilestone.FOOTHOLD_COMPLETE -> error("handled by precondition")
+            OnboardingMilestone.FOOTHOLD_COMPLETE -> error("Handled by precondition")
         }
-
-        val changed =
-            progress.milestones != before.milestones ||
-                progress.pendingHints != before.pendingHints ||
-                progress.deliveredHints != before.deliveredHints ||
-                progress.homePlaces != before.homePlaces ||
-                progress.footholdPlaces != before.footholdPlaces
-        if (!changed) return OnboardingJourneyUpdate(changed = false)
-
-        progress.updatedAt = now
-        val addedMilestones = progress.milestones - before.milestones
-        return OnboardingJourneyUpdate(
-            changed = true,
-            addedMilestones = addedMilestones,
-            queuedHints = progress.pendingHints.filterNot(before.pendingHints::contains),
-            recoveredFoothold =
-                OnboardingMilestone.FOOTHOLD_COMPLETE in addedMilestones &&
-                    before.deliveredHints.any(FOOTHOLD_RECOVERY_HINTS::contains),
-        )
+        if (homes.any(lands::contains)) milestones += OnboardingMilestone.FOOTHOLD_COMPLETE
+        val status = if (OnboardingMilestone.AUTOBUILD_COMPLETE in milestones) OnboardingStatus.COMPLETED else progress.status
+        return progress.with(status, milestones, homes, lands, buildOperationId)
     }
 
-    private fun completeFoothold(
-        progress: OnboardingPlayerProgress,
-        place: OnboardingPlace,
-    ) {
-        val firstCompletion = progress.milestones.add(OnboardingMilestone.FOOTHOLD_COMPLETE)
-        progress.milestones += OnboardingMilestone.HOME_CREATED
-        progress.milestones += OnboardingMilestone.LAND_CLAIMED
-        progress.rememberFoothold(place)
-        supersedeRecovery(progress)
-        if (firstCompletion) queue(progress, OnboardingHint.FOOTHOLD_COMPLETE)
+    private fun remember(places: Set<OnboardingPlace>, place: OnboardingPlace, footholds: Set<OnboardingPlace>): Set<OnboardingPlace> {
+        if (place in places) return places
+        val removable = places.firstOrNull { it !in footholds }
+        if (places.size == OnboardingProgress.MAX_PLACES && removable == null) return places
+        return (if (places.size == OnboardingProgress.MAX_PLACES) places - removable!! else places) + place
     }
+}
 
-    private fun supersedeRecovery(progress: OnboardingPlayerProgress) {
-        supersedePending(
-            progress,
-            OnboardingHint.FIRST_RTP,
-            OnboardingHint.HOME_CREATED,
-            OnboardingHint.LAND_CLAIMED,
-            OnboardingHint.FOOTHOLD_MISMATCH,
-            OnboardingHint.BUILD_BOOK_MISSING_HOME,
-            OnboardingHint.BUILD_BOOK_MISSING_LAND,
-            OnboardingHint.BUILD_BOOK_MISSING_BOTH,
-            OnboardingHint.BUILD_BOOK_OUTSIDE_FOOTHOLD,
-        )
-    }
+private fun <T> immutableSet(values: Set<T>): Set<T> = Collections.unmodifiableSet(LinkedHashSet(values))
 
-    private fun queue(
-        progress: OnboardingPlayerProgress,
-        hint: OnboardingHint,
-    ) {
-        if (hint !in progress.deliveredHints && hint !in progress.pendingHints) {
-            progress.pendingHints += hint
-        }
-    }
-
-    private fun supersedePending(
-        progress: OnboardingPlayerProgress,
-        vararg hints: OnboardingHint,
-    ) {
-        progress.pendingHints.removeAll(hints.toSet())
-    }
-
-    private fun requirePlace(
-        milestone: OnboardingMilestone,
-        place: OnboardingPlace?,
-    ): OnboardingPlace = requireNotNull(place) { "${milestone.id} requires a chunk location" }
-
-    private val FOOTHOLD_RECOVERY_HINTS =
-        setOf(
-            OnboardingHint.FOOTHOLD_MISMATCH,
-            OnboardingHint.BUILD_BOOK_MISSING_HOME,
-            OnboardingHint.BUILD_BOOK_MISSING_LAND,
-            OnboardingHint.BUILD_BOOK_MISSING_BOTH,
-        )
+private fun validateBuildOperationId(operationId: String) {
+    require(UUID.fromString(operationId).toString() == operationId) { "Invalid onboarding construction operation identity" }
 }

@@ -3,100 +3,63 @@ package ru.arc.onboarding
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.string.shouldStartWith
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import ru.arc.config.Config
 import java.nio.file.Files
 
 class OnboardingConfigTest : FreeSpec({
-    "loads configurable worlds and bounded delivery timing" {
+    fun config(yaml: String): OnboardingConfig {
         val root = Files.createTempDirectory("arc-onboarding-config-")
         Files.createDirectories(root.resolve("modules"))
-        Files.writeString(
-            root.resolve("modules/onboarding.yml"),
-            """
-            enabled: true
-            worlds: [Survival, Mining]
-            delivery:
-              first-delay-ticks: 0
-              resume-delay-ticks: 5000
-              between-messages-ticks: 1
-            claim-guide:
-              land-walls-enabled: false
-              grid-mode: nearby-grid
-            steps:
-              first-rtp:
-                enabled: false
-                message: '<green>ok'
-            """.trimIndent(),
-        )
-
-        val config = OnboardingConfig.load(Config(root, "modules/onboarding.yml"))
-
-        config.enabled shouldBe true
-        config.worlds shouldBe setOf("survival", "mining")
-        config.firstDelayTicks shouldBe 1L
-        config.resumeDelayTicks shouldBe 1_200L
-        config.betweenMessagesTicks shouldBe 20L
-        config.hintEnabled(OnboardingHint.FIRST_RTP) shouldBe false
-        config.claimGuideLandWallsEnabled shouldBe false
-        config.claimGuideGridMode shouldBe ClaimGuideGridMode.NEARBY_GRID
-        config.validate()
+        Files.writeString(root.resolve("modules/onboarding.yml"), yaml)
+        return OnboardingConfig.load(Config(root, "modules/onboarding.yml"))
     }
 
-    "fails closed when an enabled config has no target worlds" {
-        val root = Files.createTempDirectory("arc-onboarding-config-")
-        Files.createDirectories(root.resolve("modules"))
-        Files.writeString(root.resolve("modules/onboarding.yml"), "enabled: true\nworlds: []\n")
+    "old enabled flag never publishes the new quest" {
+        val value = config("enabled: true\nworlds: [Survival, Mining]\n")
+        value.publicEnabled shouldBe false
+        value.worlds shouldBe setOf("survival", "mining")
+        value.npcId shouldBe 447
+        value.validate()
+    }
 
-        shouldThrow<IllegalArgumentException> {
-            OnboardingConfig.load(Config(root, "modules/onboarding.yml"))
+    "public release requires the new explicit switch" {
+        config("quest:\n  public-enabled: true\n  npc-id: 12\n").apply {
+            publicEnabled shouldBe true
+            npcId shouldBe 12
+            validate()
         }
     }
 
-    "fails validation on a blank enabled message" {
-        val root = Files.createTempDirectory("arc-onboarding-config-")
-        Files.createDirectories(root.resolve("modules"))
-        Files.writeString(
-            root.resolve("modules/onboarding.yml"),
-            "enabled: true\nworlds: [survival]\nsteps:\n  first-rtp:\n    enabled: true\n    message: '   '\n",
-        )
-        val config = OnboardingConfig.load(Config(root, "modules/onboarding.yml"))
+    "empty worlds and invalid NPC fail validation" {
+        shouldThrow<IllegalArgumentException> { config("worlds: []\n").validate() }
+        shouldThrow<IllegalArgumentException> { config("quest:\n  npc-id: -1\n").validate() }
+    }
 
-        shouldThrow<IllegalArgumentException> { config.validate() }
+    "preserves the independent claim guide settings" {
+        val value = config("claim-guide:\n  land-walls-enabled: false\n  grid-mode: nearby-grid\n")
+        value.claimGuideLandWallsEnabled shouldBe false
+        value.claimGuideGridMode shouldBe ClaimGuideGridMode.NEARBY_GRID
+        value.validate()
     }
 
     "rejects an unknown grid mode instead of silently showing a different grid" {
-        val root = Files.createTempDirectory("arc-onboarding-config-")
-        Files.createDirectories(root.resolve("modules"))
-        Files.writeString(root.resolve("modules/onboarding.yml"), "claim-guide:\n  grid-mode: unknown\n")
-        val config = OnboardingConfig.load(Config(root, "modules/onboarding.yml"))
-
-        shouldThrow<IllegalArgumentException> { config.validate() }
+        shouldThrow<IllegalArgumentException> { config("claim-guide:\n  grid-mode: unknown\n").validate() }
     }
 
-    "default messages use the compact base identity and parse as MiniMessage" {
-        val root = Files.createTempDirectory("arc-onboarding-config-")
-        Files.createDirectories(root.resolve("modules"))
-        Files.writeString(root.resolve("modules/onboarding.yml"), "enabled: false\n")
-        val config = OnboardingConfig.load(Config(root, "modules/onboarding.yml"))
-        val plainText = PlainTextComponentSerializer.plainText()
-
-        OnboardingHint.entries.forEach { hint ->
-            plainText.serialize(config.message(hint)).shouldStartWith("Начало • ")
+    "quest and claim text parse with portable defaults" {
+        val value = config("enabled: false\n")
+        val plain = PlainTextComponentSerializer.plainText()
+        OnboardingQuestDialog.DEFAULT_TEXT.keys.forEach { key ->
+            plain.serialize(value.questText(key)).contains("<") shouldBe false
         }
-        plainText.serialize(config.message(OnboardingHint.FIRST_RTP)) shouldBe
-            "Начало • Место найдено. Сохраните точку возвращения: /sethome."
-        plainText.serialize(config.message(OnboardingHint.HOME_CREATED)) shouldBe
-            "Начало • Дом сохранён. Возврат: /home. Блоки привата: /kit start."
         OnboardingConfig.CLAIM_TEXT.keys.forEach { key ->
-            plainText.serialize(config.claimText(key)).contains("<") shouldBe false
+            plain.serialize(value.claimText(key)).contains("<") shouldBe false
         }
-        plainText.serialize(config.claimText("subtitle")) shouldBe "Снять защиту здесь: /unclaim"
-        config.claimGuideEnabled shouldBe true
-        config.claimGuideLandWallsEnabled shouldBe true
-        config.claimGuideGridMode shouldBe ClaimGuideGridMode.CURRENT_CHUNK
-        plainText.serialize(config.claimText("world-unavailable")) shouldBe "В этом мире приват недоступен"
-        config.validate()
+        value.claimGuideEnabled shouldBe true
+        value.claimGuideLandWallsEnabled shouldBe true
+        value.claimGuideGridMode shouldBe ClaimGuideGridMode.CURRENT_CHUNK
+        plain.serialize(value.claimText("world-unavailable")) shouldBe "В этом мире приват недоступен"
+        value.validate()
     }
 })

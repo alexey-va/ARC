@@ -7,9 +7,13 @@ import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerJoinEvent
+import org.bukkit.event.player.PlayerQuitEvent
 import ru.arc.core.Tasks
 
 internal class OnboardingPlayerListener : Listener {
+    @EventHandler(priority = EventPriority.MONITOR)
+    fun onQuit(event: PlayerQuitEvent) { OnboardingService.leave(event.player.uniqueId) }
+
     @EventHandler(priority = EventPriority.MONITOR)
     fun onJoin(event: PlayerJoinEvent) {
         OnboardingService.resume(event.player)
