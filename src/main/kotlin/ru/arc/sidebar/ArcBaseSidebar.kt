@@ -13,6 +13,8 @@ import org.bukkit.scheduler.BukkitTask
 import ru.arc.ARC
 import ru.arc.config.ConfigManager
 import ru.arc.hooks.HookRegistry
+import ru.arc.onboarding.OnboardingService
+import ru.arc.onboarding.onboardingGuideLines
 import ru.arc.paper.api.ArcSidebarFrame
 import ru.arc.paper.api.ArcSidebarHandle
 import ru.arc.paper.api.ArcSidebarPriorities
@@ -51,7 +53,9 @@ internal class ArcBaseSidebar(
         val serverId = ARC.serverName.orEmpty()
         val layout = if (serverId.equals("slimefun", ignoreCase = true)) "slimefun.sections" else "sections"
         fun enabled(section: SidebarSection) = section.enabled(HookRegistry.luckPermsHook?.getCachedMeta(player.uniqueId, section.metaKey))
-        val rows = composeSidebarSections(
+        val guide = OnboardingService.guideView(player)?.let(::onboardingGuideLines)?.takeIf(List<Component>::isNotEmpty)
+        val rows = composeBaseSidebarSections(
+            guide = guide,
             enabled = ::enabled,
             lines = { section -> sectionRows(player, section, layout, serverId) },
             separator = Component.empty(),
@@ -64,7 +68,7 @@ internal class ArcBaseSidebar(
         }
         val frame = ArcSidebarFrame(render(player, config.string("title", "&#B22222&lRus&f&lCrafting")), rows)
         source.show(player, frame)
-        service.present(player, frame, enabled(SidebarSection.ACTIVITY))
+        service.present(player, frame, guide == null && enabled(SidebarSection.ACTIVITY))
         shown += player.uniqueId
     }
 
@@ -185,6 +189,24 @@ internal class ArcBaseSidebar(
 
         private const val MEBIBYTE = 1024L * 1024L
     }
+}
+
+/** The onboarding projection changes displayed sections without writing personal preferences. */
+internal fun <T> composeBaseSidebarSections(
+    guide: List<T>?,
+    enabled: (SidebarSection) -> Boolean,
+    lines: (SidebarSection) -> List<T>,
+    separator: T,
+    isBlank: (T) -> Boolean,
+): List<T> {
+    val activeGuide = guide?.takeIf(List<T>::isNotEmpty)
+    return composeSidebarSections(
+        enabled = { section -> if (activeGuide == null) enabled(section) else
+            section == SidebarSection.QUESTS || section in setOf(SidebarSection.BALANCE, SidebarSection.LOCATION) && enabled(section) },
+        lines = { section -> if (activeGuide != null && section == SidebarSection.QUESTS) activeGuide else lines(section) },
+        separator = separator,
+        isBlank = isBlank,
+    )
 }
 
 internal fun isSidebarClientSupported(

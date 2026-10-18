@@ -54,7 +54,20 @@ class OnboardingStoreTest : FreeSpec({
         val completed = reopened.observe(playerId, offered.runId, OnboardingMilestone.AUTOBUILD_COMPLETE, home, operationId = operationId).join()!!
         completed.status shouldBe OnboardingStatus.COMPLETED
         completed.milestones shouldBe OnboardingMilestone.entries.toSet()
+        reopened.expireActive(playerId, offered.runId).join() shouldBe null
         OnboardingStore(redis, Gson()).load(playerId).join() shouldBe completed
+    }
+
+    "playtime expiry stops only the matching active run and cannot expire a new offer" {
+        val store = OnboardingStore(InMemoryRedis(), Gson())
+        val playerId = UUID.randomUUID()
+        val first = store.enroll(playerId).join()
+        store.expireActive(playerId, first.runId).join() shouldBe null
+        store.accept(playerId, first.runId).join()
+        store.expireActive(playerId, first.runId).join()?.status shouldBe OnboardingStatus.STOPPED
+        val next = store.enroll(playerId).join()
+        store.expireActive(playerId, first.runId).join() shouldBe null
+        store.load(playerId).join() shouldBe next
     }
 
     "restarting a quest does not inherit or complete the preceding construction operation" {

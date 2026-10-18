@@ -111,7 +111,7 @@ def main():
     pieces = [dict(key="floor", material="minecraft:stone_bricks", x=0, y=-.1, z=0, width=6, height=.2, depth=5),
               dict(key="height-reference-body", material="minecraft:gray_concrete", x=-1.7, y=.7, z=0, width=.6, height=1.4, depth=.3),
               dict(key="height-reference-head", material="minecraft:gray_concrete", x=-1.7, y=1.6, z=0, width=.4, height=.4, depth=.4),
-              dict(key="marker", material="preview:loot", x=0, y=exported["itemY"], z=0, width=exported["scale"], height=exported["scale"], depth=exported["scale"], rotationY=model["display"]["fixed"]["rotation"][1], billboard=True, fullBright=True, animatedLoot=True),
+              dict(key="marker", material="preview:loot", x=0, y=exported["itemY"], z=0, width=exported["scale"], height=exported["scale"], depth=exported["scale"], rotationY=model["display"]["fixed"]["rotation"][1], billboard=False, fullBright=True, animatedLoot=True),
               dict(key="label", material="preview:label", x=0, y=exported["labelY"] + label_height * label_scale / 2, z=0, width=label_width * label_scale, height=label_height * label_scale, depth=.01, rotationY=180, billboard=True, fullBright=True)]
     scene = {"camera": {"position": {"x": 0, "y": 1.27, "z": -2.6}, "target": {"x": 0, "y": exported["floorY"] + exported["height"] / 2, "z": 0}, "fovDegrees": 70},
              "states": [{"id": "home", "title": "Дом · приватный маркер", "role": "1.6 × 2.4 блока; рядом масштаб игрока 1.8 м. Камера игрока: приседание, 2.6 м до знака.", "pieces": pieces}],

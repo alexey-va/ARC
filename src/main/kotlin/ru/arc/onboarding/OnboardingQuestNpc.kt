@@ -10,6 +10,7 @@ import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.Color
 import org.bukkit.Location
 import org.bukkit.entity.Display
+import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
@@ -21,6 +22,8 @@ import org.bukkit.plugin.Plugin
 import org.bukkit.util.Transformation
 import org.joml.Quaternionf
 import org.joml.Vector3f
+import ru.arc.hooks.HookRegistry
+import ru.arc.hooks.packetevents.PacketEventsHook
 import ru.arc.paper.display.PacketDisplayAudienceGroup
 import ru.arc.paper.display.PaperPacketDisplays
 import ru.arc.paper.scene.PacketDisplayScene
@@ -30,14 +33,15 @@ import ru.arc.paper.scene.SceneFrame
 import ru.arc.paper.scene.ScenePart
 import ru.arc.paper.scene.ScenePose
 import ru.arc.paper.scene.SceneTextStyle
+import java.lang.ref.WeakReference
 import java.util.UUID
 
 /** One gold quest cue, above the NPC's own label, with no world entity or persisted NPC change. */
 internal fun onboardingQuestMarkerFrame(
     playerId: UUID,
     npcLocation: Location,
-    scale: Float = 2.5f,
-    height: Double = 3.2,
+    scale: Float = 4f,
+    height: Double = 2.65,
     range: Double = 40.0,
     audience: PacketDisplayAudienceGroup? = null,
 ): SceneFrame<String> {
@@ -71,12 +75,14 @@ internal class OnboardingQuestNpc(
     private val visible: (Player) -> Boolean,
     private val eligible: (Player) -> Boolean,
     private val open: (Player) -> Unit,
-    private val scale: Float = 2.5f,
-    private val height: Double = 3.2,
+    private val scale: Float = 4f,
+    private val height: Double = 2.65,
     private val range: Double = 40.0,
     private val displays: PaperPacketDisplays = PaperPacketDisplays(plugin, "onboarding-quest"),
 ) : Listener, AutoCloseable {
+    private data class GlowTarget(val entity: WeakReference<LivingEntity>, val packets: PacketEventsHook)
     private val scenes = mutableMapOf<UUID, PacketDisplayScene<String>>()
+    private val glowing = mutableMapOf<UUID, GlowTarget>()
     private val audience = displays.createAudienceGroup { eligible(it) && visible(it) }
     private var started = false
     private var closed = false
@@ -95,7 +101,8 @@ internal class OnboardingQuestNpc(
         val id = player.uniqueId
         if (!player.isOnline || !eligible(player) || !visible(player)) { clear(id); return }
         val npc = CitizensAPI.getNPCRegistry().getById(npcId)
-        val location = npc?.takeIf { it.isSpawned }?.entity?.location
+        val entity = npc?.takeIf { it.isSpawned }?.entity
+        val location = entity?.location
         if (location?.world == null || location.world != player.world) { clear(id); return }
         val scene = scenes.getOrPut(id) {
             PacketDisplayScene<String>(displays).also { fresh ->
@@ -105,6 +112,26 @@ internal class OnboardingQuestNpc(
             }
         }
         scene.apply(onboardingQuestMarkerFrame(id, location, scale, height, range, audience))
+        refreshGlow(player, entity as? LivingEntity)
+    }
+
+    private fun refreshGlow(player: Player, entity: LivingEntity?) {
+        val packets = HookRegistry.packetEventsHook
+        val previous = glowing[player.uniqueId]
+        if (previous != null && (previous.entity.get() !== entity || previous.packets !== packets)) {
+            clearGlow(player.uniqueId)
+        }
+        if (entity == null || packets == null) return
+        // The shared owner reapplies the private flag to native metadata and handles disconnects.
+        packets.setEntityGlowingFor(entity, player, true)
+        glowing[player.uniqueId] = GlowTarget(WeakReference(entity), packets)
+    }
+
+    private fun clearGlow(playerId: UUID) {
+        val target = glowing.remove(playerId) ?: return
+        val entity = target.entity.get() ?: return
+        val player = plugin.server.getPlayer(playerId) ?: return
+        target.packets.restoreEntityGlowingFor(entity, player)
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -133,17 +160,24 @@ internal class OnboardingQuestNpc(
 
     private fun refreshAll() { plugin.server.onlinePlayers.forEach(::refresh) }
 
-    fun clear(playerId: UUID) { scenes.remove(playerId)?.close() }
+    fun clear(playerId: UUID) {
+        try { clearGlow(playerId) } finally { scenes.remove(playerId)?.close() }
+    }
 
     override fun close() {
         if (closed) return
         closed = true
         HandlerList.unregisterAll(this)
         try {
-            scenes.values.forEach { it.close() }
+            glowing.keys.toList().forEach(::clearGlow)
         } finally {
-            scenes.clear()
-            try { audience.close() } finally { displays.close() }
+            try {
+                scenes.values.forEach { it.close() }
+            } finally {
+                glowing.clear()
+                scenes.clear()
+                try { audience.close() } finally { displays.close() }
+            }
         }
     }
 }

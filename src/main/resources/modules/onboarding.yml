@@ -10,6 +10,9 @@ quest:
   public-enabled: false
   # Существующий Проводник на спавне. Его обычный выбор мира сохраняется.
   npc-id: 447
+  rewards:
+    coins-per-step: 200
+    tokens-per-step: 1
   text:
     title: '<#c4abff>Первый дом'
     offer: '<#e8dfd2>Найдите место и постройте свой первый дом.'

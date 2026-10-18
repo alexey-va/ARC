@@ -13,8 +13,11 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Location
 import org.bukkit.World
 import org.bukkit.attribute.Attribute
+import org.bukkit.entity.Display
 import org.bukkit.entity.Interaction
+import org.bukkit.entity.ItemDisplay
 import org.bukkit.entity.Player
+import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.Plugin
 import org.bukkit.util.BoundingBox
 import org.bukkit.util.Vector
@@ -25,6 +28,7 @@ import ru.arc.core.TestTaskScheduler
 import ru.arc.paper.display.PaperPacketDisplays
 import ru.arc.paper.scene.PaperSpatialControls
 import ru.arc.paper.scene.SceneAudience
+import ru.arc.paper.scene.ScenePart
 import ru.arc.paper.scene.SpatialControl
 import ru.arc.paper.scene.SpatialControlController
 import ru.arc.paper.scene.SpatialControlFrame
@@ -76,6 +80,34 @@ class HomeMarkerSceneTest : StringSpec({
         shape.height shouldBe (1.6 plusOrMinus 0.00001)
         (shape.itemY - shape.height / 2.0) shouldBe (0.05 plusOrMinus 0.00001)
         shape.centerY shouldBe shape.itemY
+    }
+
+    "the actual item part is fixed in the world while its caption remains camera-facing" {
+        val world = mockk<World>()
+        val item = mockk<ItemStack>()
+        every { item.clone() } returns item
+        val settings = HomeMarkerSettings()
+        val marker = HomeMarker(HomeMarkerKind.HOME, "home", UUID(0, 1), "Дом", "world", 1.0, 64.0, 2.0)
+        listOf(true, false).forEach { textured ->
+            val parts = homeMarkerParts(marker, marker.location(world), settings, item, textured)
+            val body = parts[0] as ScenePart.Item<*>
+            val caption = parts[1] as ScenePart.Text<*>
+            body.style.billboard shouldBe Display.Billboard.FIXED
+            caption.style.billboard shouldBe Display.Billboard.VERTICAL
+            body.itemTransform shouldBe if (textured) ItemDisplay.ItemDisplayTransform.FIXED else ItemDisplay.ItemDisplayTransform.NONE
+            body.pose.location().yaw shouldBe 0f
+            body.pose.location().pitch shouldBe 0f
+            body.pose.location().y shouldBe (64.0 + homeMarkerGeometry(settings.scale, textured).itemY)
+            body.pose.transformation().scale.x shouldBe settings.scale
+            caption.pose.location().y shouldBe (64.0 + homeMarkerGeometry(settings.scale, textured).labelY)
+            caption.pose.transformation().scale.x shouldBe settings.labelScale
+        }
+        val anchor = marker.location(world)
+        val first = homeMarkerVisualHitPlanes(anchor, 0f, homeMarkerGeometry(settings.scale, true), settings.labelScale)
+        val turned = homeMarkerVisualHitPlanes(anchor, 67f, homeMarkerGeometry(settings.scale, true), settings.labelScale)
+        first[0] shouldBe turned[0]
+        first[2] shouldBe turned[2]
+        turned[1].center().yaw shouldBe 67f
     }
 
     "shared ray accepts the beam edges and caption from every side but retains reach and obstruction checks" {
@@ -137,13 +169,13 @@ class HomeMarkerSceneTest : StringSpec({
                     controls.captureNativeForTest(player)
                 }
                 fun target(x: Double, y: Double, yaw: Float = 0f, eyeHeight: Double = 1.27,
-                    distance: Double = 2.0, depth: Double = 0.0): String? {
+                    distance: Double = 2.0, depth: Double = 0.0, fixed: Boolean = false): String? {
                     val angle = Math.toRadians(yaw.toDouble())
                     val right = Vector(cos(angle), 0.0, sin(angle))
                     val forward = Vector(-sin(angle), 0.0, cos(angle))
-                    val point = anchor.toVector().add(right.clone().multiply(x)).add(Vector(0.0, y, 0.0))
-                        .add(forward.clone().multiply(depth))
-                    eye = anchor.clone().add(right.clone().multiply(x)).subtract(forward.clone().multiply(distance))
+                    val point = anchor.toVector().add((if (fixed) Vector(1, 0, 0) else right.clone()).multiply(x)).add(Vector(0.0, y, 0.0))
+                        .add((if (fixed) Vector(0, 0, 1) else forward.clone()).multiply(depth))
+                    eye = anchor.clone().add(right.clone().multiply(if (fixed) 0.0 else x)).subtract(forward.clone().multiply(distance))
                         .add(0.0, eyeHeight, 0.0)
                     eye.direction = point.clone().subtract(eye.toVector())
                     // Turning the camera must keep working without reapplying the shown scene.
@@ -167,13 +199,16 @@ class HomeMarkerSceneTest : StringSpec({
                 native.size shouldBe 2
                 for (yaw in listOf(0f, 37f, 90f, 180f, 270f)) {
                     for (eyeHeight in listOf(1.27, 1.62)) {
-                        for ((x, y) in listOf(0.0 to 1.25, -0.95 to 1.25, 0.95 to 1.25, 0.0 to 2.55,
-                            0.0 to 2.75, -1.75 to 2.75, 1.75 to 2.75, 0.0 to 3.05)) {
+                        for ((x, y) in listOf(0.0 to 2.55, 0.0 to 2.75, -1.75 to 2.75, 1.75 to 2.75, 0.0 to 3.05)) {
                             withClue("yaw=$yaw eye=$eyeHeight point=($x,$y)") {
                                 target(x, y, yaw, eyeHeight) shouldBe "settings"
                             }
                         }
-                        target(0.85, 0.05, yaw, eyeHeight, depth = -0.85) shouldBe "settings"
+                        for (x in listOf(-0.95, 0.0, 0.95)) {
+                            target(x, 1.25, yaw, eyeHeight, fixed = true) shouldBe
+                                if (yaw == 90f || yaw == 270f) null else "settings"
+                        }
+                        target(0.85, 0.05, yaw, eyeHeight, distance = 1.25, depth = -0.85, fixed = true) shouldBe "settings"
                         target(2.0, 1.25, yaw, eyeHeight) shouldBe null
                         target(3.0, 2.75, yaw, eyeHeight) shouldBe null
                     }
@@ -240,10 +275,11 @@ private fun PaperSpatialControls<*, *>.captureNativeForTest(player: Player) {
     val viewerType = Class.forName("ru.arc.paper.display.PacketDisplayViewer")
     val viewerConstructor = viewerType.getDeclaredConstructor(Player::class.java, UUID::class.java,
         UUID::class.java, Int::class.javaPrimitiveType, Set::class.java, Double::class.javaPrimitiveType,
-        Double::class.javaPrimitiveType, Double::class.javaPrimitiveType, Set::class.java, List::class.java)
+        Double::class.javaPrimitiveType, Double::class.javaPrimitiveType, Set::class.java, List::class.java,
+        Class.forName("ru.arc.paper.display.PacketDisplayView"))
     val eye = player.eyeLocation
     val viewer = viewerConstructor.newInstance(player, player.uniqueId, player.world.uid, player.entityId,
-        emptySet<UUID>(), eye.x, eye.y - player.eyeHeight, eye.z, emptySet<Long>(), emptyList<Int>())
+        emptySet<UUID>(), eye.x, eye.y - player.eyeHeight, eye.z, emptySet<Long>(), emptyList<Int>(), null)
     val steps = capture.invoke(participant, listOf(viewer)) as Iterator<*>
     val clock = TestTaskScheduler()
     LifecycleTaskScope(clock).use { scope ->

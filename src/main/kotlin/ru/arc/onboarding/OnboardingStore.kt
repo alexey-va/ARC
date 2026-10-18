@@ -46,6 +46,12 @@ internal class OnboardingStore(private val redis: RedisOperations, gson: Gson = 
             current?.takeIf { it.runId == expectedRunId }?.with(status = OnboardingStatus.STOPPED)
         }
 
+    fun expireActive(playerId: UUID, expectedRunId: String): CompletableFuture<OnboardingProgress?> =
+        update(playerId) { current ->
+            current?.takeIf { it.runId == expectedRunId && it.status == OnboardingStatus.ACTIVE }
+                ?.with(status = OnboardingStatus.STOPPED)
+        }
+
     fun observe(
         playerId: UUID,
         expectedRunId: String,

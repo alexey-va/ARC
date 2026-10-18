@@ -31,9 +31,32 @@ class OnboardingConfigTest : FreeSpec({
         }
     }
 
+    "mining is excluded from settlement progress without changing the claim guide worlds" {
+        config("worlds: [Survival, Mining, Vanilla]\n").apply {
+            allowsWorld("MINING") shouldBe true
+            allowsQuestWorld(" Mining ") shouldBe false
+            allowsQuestWorld(" Survival ") shouldBe true
+            allowsQuestWorld("VANILLA") shouldBe true
+            allowsQuestWorld("spawn") shouldBe false
+        }
+    }
+
     "empty worlds and invalid NPC fail validation" {
         shouldThrow<IllegalArgumentException> { config("worlds: []\n").validate() }
         shouldThrow<IllegalArgumentException> { config("quest:\n  npc-id: -1\n").validate() }
+    }
+
+    "step rewards keep separate positive coin and premium token units" {
+        config("enabled: false\n").apply {
+            coinsPerStep shouldBe 200L
+            tokensPerStep shouldBe 1L
+        }
+        config("quest:\n  rewards:\n    coins-per-step: 300\n    tokens-per-step: 2\n").apply {
+            coinsPerStep shouldBe 300L
+            tokensPerStep shouldBe 2L
+        }
+        shouldThrow<IllegalArgumentException> { config("quest:\n  rewards:\n    coins-per-step: 0\n").validate() }
+        shouldThrow<IllegalArgumentException> { config("quest:\n  rewards:\n    tokens-per-step: -1\n").validate() }
     }
 
     "preserves the independent claim guide settings" {

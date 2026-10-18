@@ -12,6 +12,8 @@ internal class OnboardingConfig private constructor(
     val npcId: Int,
     val worlds: Set<String>,
 ) {
+    val coinsPerStep: Long get() = source.int("quest.rewards.coins-per-step", 200).toLong()
+    val tokensPerStep: Long get() = source.int("quest.rewards.tokens-per-step", 1).toLong()
     val claimGuideEnabled: Boolean get() = source.bool("claim-guide.enabled", true)
     val claimGuideLandWallsEnabled: Boolean get() = source.bool("claim-guide.land-walls-enabled", true)
     val claimGuideGridMode: ClaimGuideGridMode
@@ -23,12 +25,17 @@ internal class OnboardingConfig private constructor(
 
     fun allowsWorld(worldName: String): Boolean = worldName.trim().lowercase(Locale.ROOT) in worlds
 
+    /** Mining remains available to the independent claim guide, but is not a home world. */
+    fun allowsQuestWorld(worldName: String): Boolean =
+        worldName.trim().lowercase(Locale.ROOT).let { it in worlds && it != "mining" }
+
     fun questText(key: String): Component =
         source.component("quest.text.$key", OnboardingQuestDialog.DEFAULT_TEXT.getValue(key))
 
     fun validate() {
         require(npcId >= 0) { "onboarding.quest.npc-id must be non-negative" }
         require(worlds.isNotEmpty()) { "onboarding.worlds must not be empty" }
+        require(coinsPerStep > 0 && tokensPerStep > 0) { "Onboarding step rewards must be positive" }
         if (claimGuideEnabled) {
             claimGuideGridMode
             CLAIM_TEXT.keys.forEach(::claimText)

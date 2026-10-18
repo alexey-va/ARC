@@ -78,7 +78,7 @@ internal data class HomeMarkerHitBox(val bottomY: Double, val width: Double, val
 /** Separate body and caption bands avoid a caption-wide target through the whole light column. */
 internal fun homeMarkerHitBox(geometry: HomeMarkerGeometry, labelScale: Float, label: Boolean): HomeMarkerHitBox {
     val margin = 0.2
-    // The floor rune rotates with the billboard: its diagonal is the fixed box's all-yaw envelope.
+    // Keep the existing conservative envelope for native capture; visual planes validate the hit.
     if (!label) return HomeMarkerHitBox(geometry.floorY, geometry.width * sqrt(2.0) + 2 * margin, geometry.height + margin)
     val pixel = 0.025 * labelScale
     // Two authored rows, full wrapping width and background edges, plus the same 20 cm allowance.
@@ -87,20 +87,44 @@ internal fun homeMarkerHitBox(geometry: HomeMarkerGeometry, labelScale: Float, l
 }
 
 /** Native boxes capture empty-hand clicks; these planes recheck reach and occlusion at the actual visual. */
-internal fun homeMarkerVisualHitPlanes(anchor: Location, yaw: Float, geometry: HomeMarkerGeometry,
+internal fun homeMarkerVisualHitPlanes(anchor: Location, cameraYaw: Float, geometry: HomeMarkerGeometry,
     labelScale: Float): List<SpatialHitPlane> {
-    val angle = Math.toRadians(yaw.toDouble())
+    val angle = Math.toRadians(anchor.yaw.toDouble())
     val right = Vector(cos(angle), 0.0, sin(angle))
     val forward = Vector(-sin(angle), 0.0, cos(angle))
     val label = homeMarkerHitBox(geometry, labelScale, true)
-    fun upright(y: Double, width: Double, height: Double) = SpatialHitPlane(
+    fun upright(y: Double, width: Double, height: Double, yaw: Float = anchor.yaw) = SpatialHitPlane(
         anchor.clone().add(0.0, y, 0.0).apply { this.yaw = yaw }, width, height, false,
     )
     return listOf(
         upright(geometry.centerY, geometry.width + 0.4, geometry.height + 0.4),
-        upright(label.bottomY + label.height / 2, label.width, label.height),
+        upright(label.bottomY + label.height / 2, label.width, label.height, cameraYaw),
         SpatialHitPlane(anchor.clone().add(0.0, geometry.floorY, 0.0), right, forward,
             geometry.width + 0.4, geometry.width + 0.4, false),
+    )
+}
+
+/** The authored item keeps its world orientation; only the caption follows the camera. */
+internal fun homeMarkerParts(marker: HomeMarker, anchor: Location, settings: HomeMarkerSettings,
+    item: ItemStack, lootModel: Boolean): List<ScenePart<String>> {
+    val geometry = homeMarkerGeometry(settings.scale, lootModel)
+    val id = "${marker.kind.name}:${marker.id}"
+    fun transform(scale: Float) = Transformation(Vector3f(), Quaternionf(), Vector3f(scale), Quaternionf())
+    fun style(textured: Boolean, billboard: Display.Billboard) = SceneDisplayStyle(
+        billboard, Display.Brightness(15, 15), 0, 0, (settings.viewDistance / 64.0).toFloat(),
+        0f, 0f, 0f, 0f, !textured, if (textured) null else settings.color(marker.kind),
+    )
+    return listOf(
+        ScenePart.Item(
+            "$id/item", ScenePose(anchor.clone().add(0.0, geometry.itemY, 0.0), transform(settings.scale)),
+            style(lootModel, Display.Billboard.FIXED), item,
+            if (lootModel) ItemDisplay.ItemDisplayTransform.FIXED else ItemDisplay.ItemDisplayTransform.NONE, true,
+        ),
+        ScenePart.Text(
+            "$id/label", ScenePose(anchor.clone().add(0.0, geometry.labelY, 0.0), transform(settings.labelScale)),
+            style(true, Display.Billboard.VERTICAL), settings.label(marker),
+            SceneTextStyle(HOME_MARKER_LABEL_LINE_WIDTH, Color.fromARGB(140, 15, 23, 30), 255.toByte(), true, false, false, TextDisplay.TextAlignment.CENTER), true,
+        ),
     )
 }
 
@@ -242,27 +266,9 @@ internal class HomeMarkerScene(
         )
     }
 
-    private fun parts(player: Player, markers: List<HomeMarker>): List<ScenePart<String>> = buildList {
-        markers.forEach { marker ->
-            val anchor = marker.location(player.world)
-            val id = markerKey(marker)
-            add(ScenePart.Item(
-                "$id/item", ScenePose(anchor.clone().add(0.0, geometry.itemY, 0.0), transform(settings.scale)),
-                style(marker, model != null), items.getValue(marker.kind),
-                if (model != null) ItemDisplay.ItemDisplayTransform.FIXED else ItemDisplay.ItemDisplayTransform.NONE, true,
-            ))
-            add(ScenePart.Text(
-                "$id/label", ScenePose(anchor.clone().add(0.0, geometry.labelY, 0.0), transform(settings.labelScale)),
-                style(marker, true), settings.label(marker),
-                SceneTextStyle(HOME_MARKER_LABEL_LINE_WIDTH, Color.fromARGB(140, 15, 23, 30), 255.toByte(), true, false, false, TextDisplay.TextAlignment.CENTER), true,
-            ))
-        }
+    private fun parts(player: Player, markers: List<HomeMarker>): List<ScenePart<String>> = markers.flatMap { marker ->
+        homeMarkerParts(marker, marker.location(player.world), settings, items.getValue(marker.kind), model != null)
     }
-
-    private fun style(marker: HomeMarker, textured: Boolean) = SceneDisplayStyle(
-        Display.Billboard.VERTICAL, Display.Brightness(15, 15), 0, 0, (settings.viewDistance / 64.0).toFloat(),
-        0f, 0f, 0f, 0f, !textured, if (textured) null else settings.color(marker.kind),
-    )
 
     private fun resolveModel(): ItemStack? {
         if (settings.modelId.isEmpty()) return null
@@ -300,7 +306,6 @@ internal class HomeMarkerScene(
     private fun key(playerId: UUID, label: Boolean) = SpatialSceneKey("home-markers:$playerId:${if (label) "label" else "body"}")
     private fun validationKey(playerId: UUID) = SpatialSceneKey("home-markers:$playerId:visual-check")
     private fun markerKey(marker: HomeMarker) = "${marker.kind.name}:${marker.id}"
-    private fun transform(scale: Float) = Transformation(Vector3f(), Quaternionf(), Vector3f(scale), Quaternionf())
 }
 
 /** ItemsAdder may publish its item registry after plugin enable and again on pack reload. */

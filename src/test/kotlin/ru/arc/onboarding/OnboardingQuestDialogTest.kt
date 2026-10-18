@@ -7,15 +7,29 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
+import io.mockk.verify
+import io.mockk.verifyOrder
+import net.citizensnpcs.api.CitizensAPI
+import net.citizensnpcs.api.event.NPCDespawnEvent
 import net.citizensnpcs.api.event.NPCRightClickEvent
 import net.citizensnpcs.api.npc.NPC
+import net.citizensnpcs.api.npc.NPCRegistry
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Location
+import org.bukkit.Server
 import org.bukkit.World
 import org.bukkit.entity.Player
+import org.bukkit.entity.LivingEntity
+import org.bukkit.event.player.PlayerChangedWorldEvent
+import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.plugin.Plugin
+import ru.arc.hooks.HookRegistry
+import ru.arc.hooks.packetevents.PacketEventsHook
+import ru.arc.paper.display.PacketTextDisplay
 import ru.arc.paper.display.PaperPacketDisplays
 import ru.arc.paper.menu.PaperDialogClickContext
 import ru.arc.paper.menu.PaperDialogScreen
@@ -167,7 +181,86 @@ class OnboardingQuestDialogTest : FreeSpec({
         actions.size shouldBe 1
     }
 
-    "quest marker is one private gold cue above an unchanged NPC anchor" {
+    "quest glow follows the offer audience and restores the exact old NPC and hook on lifecycle exits" {
+        val originalPackets = HookRegistry.packetEventsHook
+        mockkStatic(CitizensAPI::class)
+        val plugin = mockk<Plugin>()
+        val server = mockk<Server>()
+        val world = mockk<World>()
+        val otherWorld = mockk<World>()
+        val first = mockk<LivingEntity>()
+        val second = mockk<LivingEntity>()
+        val oldPackets = mockk<PacketEventsHook>(relaxed = true)
+        val newPackets = mockk<PacketEventsHook>(relaxed = true)
+        val npc = mockk<NPC>()
+        val registry = mockk<NPCRegistry>()
+        val displays = mockk<PaperPacketDisplays>(relaxed = true)
+        val marker = mockk<PacketTextDisplay>(relaxed = true)
+        var entity = first
+        var offered = true
+        var allowed = false
+        var viewerWorld = world
+        every { plugin.server } returns server
+        every { server.getPlayer(player.uniqueId) } returns player
+        every { player.isOnline } returns true
+        every { player.world } answers { viewerWorld }
+        every { first.location } returns Location(world, 10.324, 70.0, -3.4444)
+        every { second.location } returns Location(world, 10.324, 70.0, -3.4444)
+        every { CitizensAPI.getNPCRegistry() } returns registry
+        every { registry.getById(447) } returns npc
+        every { npc.id } returns 447
+        every { npc.isSpawned } returns true
+        every { npc.entity } answers { entity }
+        every { displays.spawnText(any(), any()) } returns marker
+        every { marker.isValid } returns true
+        val controller = OnboardingQuestNpc(plugin, 447, { offered }, { allowed }, {}, displays = displays)
+        try {
+            HookRegistry.packetEventsHook = oldPackets
+            controller.refresh(player)
+            verify(exactly = 0) { oldPackets.setEntityGlowingFor(any(), any(), any()) }
+            allowed = true
+            controller.refresh(player)
+            entity = second
+            controller.refresh(player)
+            HookRegistry.packetEventsHook = newPackets
+            controller.refresh(player)
+            offered = false
+            controller.refresh(player)
+            verifyOrder {
+                oldPackets.setEntityGlowingFor(first, player, true)
+                oldPackets.restoreEntityGlowingFor(first, player)
+                oldPackets.setEntityGlowingFor(second, player, true)
+                oldPackets.restoreEntityGlowingFor(second, player)
+                newPackets.setEntityGlowingFor(second, player, true)
+                newPackets.restoreEntityGlowingFor(second, player)
+            }
+
+            offered = true
+            controller.refresh(player)
+            viewerWorld = otherWorld
+            controller.onWorldChange(PlayerChangedWorldEvent(player, world))
+            viewerWorld = world
+            controller.refresh(player)
+            val despawn = mockk<NPCDespawnEvent>()
+            every { despawn.npc } returns npc
+            controller.onNpcDespawn(despawn)
+            controller.refresh(player)
+            val quit = mockk<PlayerQuitEvent>()
+            every { quit.player } returns player
+            controller.onQuit(quit)
+            controller.refresh(player)
+            controller.close()
+            verify(exactly = 5) { newPackets.restoreEntityGlowingFor(second, player) }
+            verify(exactly = 0) { first.isGlowing = any() }
+            verify(exactly = 0) { second.isGlowing = any() }
+        } finally {
+            controller.close()
+            HookRegistry.packetEventsHook = originalPackets
+            unmockkStatic(CitizensAPI::class)
+        }
+    }
+
+    "quest marker is one larger private gold cue close above the unchanged NPC anchor" {
         val viewer = UUID.randomUUID()
         val at = Location(mockk<World>(), 10.324, 70.0, -3.4444)
         val frame = onboardingQuestMarkerFrame(viewer, at)
@@ -175,8 +268,8 @@ class OnboardingQuestDialogTest : FreeSpec({
         frame.parts.size shouldBe 1
         val sign = frame.parts.single() as ScenePart.Text
         plain(sign.text) shouldBe "!"
-        sign.pose.location().y shouldBe 73.2
-        sign.pose.transformation().scale.x shouldBe 2.5f
+        sign.pose.location().y shouldBe 72.65
+        sign.pose.transformation().scale.x shouldBe 4f
         sign.textStyle.seeThrough shouldBe false
         sign.textStyle.background!!.alpha shouldBe 0
         at.y shouldBe 70.0

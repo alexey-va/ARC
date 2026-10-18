@@ -18,7 +18,8 @@ object OnboardingSubCommand : SubCommand {
         when {
             args.isEmpty() -> OnboardingService.open(player)
             args.size != 1 -> sendUsage(sender)
-            args[0].equals("test", true) || args[0].equals("restart", true) -> OnboardingService.enrollSelf(player)
+            args[0].equals("test", true) -> OnboardingService.enrollSelf(player)
+            args[0].equals("restart", true) -> OnboardingService.restartSelf(player)
             args[0].equals("stop", true) -> OnboardingService.stopSelf(player)
             else -> sendUsage(sender)
         }

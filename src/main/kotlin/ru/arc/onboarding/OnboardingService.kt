@@ -2,6 +2,7 @@ package ru.arc.onboarding
 
 import org.bukkit.Bukkit
 import org.bukkit.Location
+import org.bukkit.Statistic
 import org.bukkit.entity.Player
 import org.bukkit.plugin.ServicePriority
 import ru.ruscrafting.onboarding.api.OnboardingBuildProgressService
@@ -15,15 +16,21 @@ import ru.arc.core.whenCompleteSync
 import ru.arc.gui.ArcMenus
 import ru.arc.helpcenter.HelpCenterModule
 import ru.arc.helpcenter.HelpCenterPage
+import ru.arc.economy.RedisEconomyWallet
+import ru.arc.itemcatalog.PhysicalRewardStorageConfig
+import ru.arc.sql.onetime.MySqlOneTimeUseLedger
+import ru.arc.sql.onetime.MySqlOneTimeUsePartition
 import ru.arc.metrics.MetricsModule
 import ru.arc.metrics.ProductEntryPoint
 import ru.arc.metrics.ProductFeature
 import ru.arc.metrics.ProductOutcome
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
+import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.CancellationException
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 
@@ -31,11 +38,20 @@ import java.util.concurrent.ConcurrentHashMap
 object OnboardingService : OnboardingBuildProgressService {
     private class Runtime(val config: OnboardingConfig, val store: OnboardingStore?) {
         val tasks = LifecycleTaskScope()
-        val ready = CompletableFuture.completedFuture<Void>(null)
+        val starterInventory = OnboardingStarterInventory(ARC.instance.dataPath, ARC.instance.backgroundOwner(), tasks)
+        val ready = CompletableFuture<Void>()
         val players = mutableMapOf<UUID, OnboardingProgress>()
         val tails = mutableMapOf<UUID, CompletableFuture<OnboardingProgress?>>()
         val pending = ConcurrentHashMap.newKeySet<CompletableFuture<*>>()
         val requests = mutableMapOf<UUID, Long>()
+        val playtime = ARC.redisManager?.let(::OnboardingPlaytimeStore)
+        val played = mutableMapOf<UUID, Pair<String, OnboardingPlaytime>>()
+        val playtimeTails = ConcurrentHashMap<String, CompletableFuture<OnboardingPlaytime>>()
+        val playtimeFailures = mutableSetOf<UUID>()
+        val invalidPlaytimes = mutableMapOf<UUID, String>()
+        val expiring = mutableSetOf<String>()
+        var rewardLedger: MySqlOneTimeUseLedger? = null
+        var rewards: OnboardingRewards? = null
         lateinit var menu: OnboardingQuestDialog
         var npc: OnboardingQuestNpc? = null
     }
@@ -60,6 +76,22 @@ object OnboardingService : OnboardingBuildProgressService {
         config.validate()
         val current = Runtime(config, ARC.redisManager?.let(::OnboardingStore))
         runtime = current
+        runCatching {
+            val storage = PhysicalRewardStorageConfig.load(ARC.instance.dataPath)
+            check(storage.enabled) { "Network reward storage is disabled" }
+            val ledger = MySqlOneTimeUseLedger.open(
+                storage.sql(), "ARC-onboarding-rewards", "arc_onboarding_rewards",
+                listOf(MySqlOneTimeUseLedger.createTableMigration(1)),
+                MySqlOneTimeUsePartition("arc.onboarding-reward"),
+            )
+            current.rewardLedger = ledger
+            current.rewards = OnboardingRewards(ledger, RedisEconomyWallet(), current.tasks, valid = { player ->
+                runtime === current && player.isOnline && Bukkit.getPlayer(player.uniqueId) === player
+            })
+        }.onFailure { failure ->
+            current.ready.completeExceptionally(failure)
+            error("Initial quest reward storage is unavailable", failure)
+        }
         Bukkit.getServicesManager().register(OnboardingBuildProgressService::class.java, this, ARC.instance, ServicePriority.Normal)
         current.menu = OnboardingQuestDialog(
             view = ::questView,
@@ -79,24 +111,37 @@ object OnboardingService : OnboardingBuildProgressService {
         }
         val landsFile = Bukkit.getPluginManager().getPlugin("Lands")?.dataFolder?.let { File(it, "config.yml") }
         val colors = landsFile?.let { claimGuideParticleColors(YamlConfiguration.loadConfiguration(it)) }.orEmpty()
+        current.tasks.runTimer(20L, 100L) {
+            Bukkit.getOnlinePlayers().forEach { player ->
+                samplePlaytime(current, player)
+                current.players[player.uniqueId]?.let { reconcileRewards(current, player, it) }
+            }
+        }
+        current.ready.complete(null)
         onReady(colors)
         info("Initial quest ready; public-enabled={}, npc={}", config.publicEnabled, config.npcId)
     }
 
     fun shutdown() {
         val previous = runtime ?: return
+        Bukkit.getOnlinePlayers().forEach { samplePlaytime(previous, it, force = true) }
         runtime = null
         Bukkit.getServicesManager().unregister(OnboardingBuildProgressService::class.java, this)
         previous.menu.close()
         previous.npc?.close()
+        val rewardsDrained = previous.rewards?.closeAsync() ?: CompletableFuture.completedFuture(null)
         previous.tasks.close()
-        drained = CompletableFuture.allOf(*previous.pending.toTypedArray()).thenApply { Unit }
+        drained = CompletableFuture.allOf(*previous.pending.toTypedArray(), rewardsDrained).handle { _, failure ->
+            if (failure != null) error("Could not drain initial quest operations", failure)
+            Unit
+        }.thenCompose { previous.rewardLedger?.closeAsync() ?: CompletableFuture.completedFuture(Unit) }
         drained.whenComplete { _, failure -> if (failure != null) error("Could not drain initial quest operations", failure) }
     }
 
     fun canAccess(player: Player): Boolean {
         val current = runtime ?: return false
         val status = current.players[player.uniqueId]?.status
+        if (status == OnboardingStatus.ACTIVE && current.invalidPlaytimes[player.uniqueId] == current.players[player.uniqueId]?.runId) return false
         return current.store != null && status != OnboardingStatus.STOPPED && (current.config.publicEnabled || status != null)
     }
 
@@ -111,6 +156,19 @@ object OnboardingService : OnboardingBuildProgressService {
         )
     }
 
+    internal fun guideView(player: Player): OnboardingGuideView? {
+        val current = runtime ?: return null
+        val progress = current.players[player.uniqueId]?.takeIf { it.status == OnboardingStatus.ACTIVE } ?: return null
+        if (current.invalidPlaytimes[player.uniqueId] == progress.runId) return null
+        val clock = current.played[player.uniqueId]?.takeIf { it.first == progress.runId }?.second
+        if (clock?.expired == true) return null
+        return OnboardingGuideView(
+            OnboardingQuestView(progress.runId, true, progress.milestones),
+            clock?.remainingTicks ?: OnboardingPlaytime.LIMIT_TICKS,
+            OnboardingGuideReward(current.config.coinsPerStep, current.config.tokensPerStep),
+        )
+    }
+
     /** No join-time enrollment. Only an existing record is loaded here. */
     fun resume(player: Player) {
         request(player, { store, id -> store.load(id) }) { current, progress ->
@@ -121,7 +179,11 @@ object OnboardingService : OnboardingBuildProgressService {
 
     fun leave(playerId: UUID) {
         val current = runtime ?: return
+        Bukkit.getPlayer(playerId)?.let { samplePlaytime(current, it, force = true) }
         current.players.remove(playerId)
+        current.played.remove(playerId)
+        current.playtimeFailures.remove(playerId)
+        current.invalidPlaytimes.remove(playerId)
         current.menu.forget(playerId)
         current.requests.remove(playerId)
         current.npc?.clear(playerId)
@@ -141,7 +203,7 @@ object OnboardingService : OnboardingBuildProgressService {
         }
     }
 
-    /** Explicit self-only administrative enrollment/restart, never an implicit operator bypass. */
+    /** Enrollment only: the administrator's inventory stays intact. */
     fun enrollSelf(player: Player) {
         if (!isTestAdmin(player)) { message(player, "<red>Повторный запуск теста доступен администратору."); return }
         val active = runtime ?: return
@@ -150,6 +212,63 @@ object OnboardingService : OnboardingBuildProgressService {
         request(player, { store, id -> store.enroll(id).thenApply { state -> state } }, refreshOnReject = true, pendingToken = visit) { current, _ ->
             current.npc?.refresh(player)
             current.menu.finish(player, visit)
+        }
+    }
+
+    /** Explicit self-only reset with a durable inventory preimage before any item is replaced. */
+    fun restartSelf(player: Player) {
+        if (!isTestAdmin(player)) { message(player, "<red>Повторный запуск теста доступен администратору."); return }
+        val current = runtime ?: return
+        val store = current.store ?: run {
+            message(player, "<red>Хранилище начального квеста недоступно. Попробуй позже."); return
+        }
+        val playerId = player.uniqueId
+        if (current.starterInventory.isPending(playerId)) {
+            message(player, "<yellow>Повторный запуск уже готовится. Дождись завершения."); return
+        }
+        ArcMenus.beginDialogFlow(player)
+        val visit = current.menu.beginPending(player)
+        val sequence = (current.requests[playerId] ?: 0L) + 1L
+        current.requests[playerId] = sequence
+        var expectedRunId = current.players[playerId]?.runId
+        fun valid(): Boolean = runtime === current && current.requests[playerId] == sequence &&
+            current.players[playerId]?.runId == expectedRunId
+
+        val operation = current.starterInventory.replace(player, ::valid) {
+            enqueue(current, playerId) { store.enroll(playerId).thenApply { it } }.thenCompose { enrolled ->
+                current.tasks.callSync {
+                    if (!valid() || !player.isOnline || Bukkit.getPlayer(playerId) !== player) {
+                        throw CancellationException("Onboarding restart was superseded")
+                    }
+                    current.players[playerId] = requireNotNull(enrolled)
+                    expectedRunId = enrolled.runId
+                    Unit
+                }
+            }
+        }
+        current.pending += operation
+        operation.whenComplete { _, failure ->
+            current.pending.remove(operation)
+            if (failure != null && generateSequence(failure) { it.cause }.none {
+                it is CancellationException || it is OnboardingStarterInventory.InventoryChanged ||
+                    it is OnboardingStarterInventory.CraftingItemsPresent || it is OnboardingStarterInventory.AlreadyReplacing
+            }) error("Could not replace initial quest inventory for {}", playerId, failure)
+        }
+        operation.whenCompleteSync(current.tasks) { backup, failure ->
+            if (!valid() || !player.isOnline || Bukkit.getPlayer(playerId) !== player) return@whenCompleteSync
+            current.npc?.refresh(player)
+            val notice = when {
+                failure == null -> {
+                    info("Initial quest starter inventory applied for {}; backup={}", playerId, backup)
+                    null
+                }
+                generateSequence(failure) { it.cause }.any { it is OnboardingStarterInventory.CraftingItemsPresent } ->
+                    "Освободи ячейки создания предметов и повтори /arc onboarding restart."
+                generateSequence(failure) { it.cause }.any { it is OnboardingStarterInventory.InventoryChanged } ->
+                    "Инвентарь изменился во время подготовки. Предметы сохранены; повтори /arc onboarding restart."
+                else -> "Не удалось заменить инвентарь. Подробности сохранены в журнале сервера; попробуй ещё раз."
+            }
+            current.menu.finish(player, visit, notice)
         }
     }
 
@@ -163,7 +282,7 @@ object OnboardingService : OnboardingBuildProgressService {
         val current = runtime ?: return
         if (!canAccess(player)) return
         val visit = current.menu.beginPending(player)
-        val arrival = place(player, player.world.name, player.location.blockX, player.location.blockZ)?.takeIf { current.config.allowsWorld(it.world) }
+        val arrival = place(player, player.world.name, player.location.blockX, player.location.blockZ)?.takeIf { current.config.allowsQuestWorld(it.world) }
         request(player, { store, id ->
             val acceptance = if (runId == "new" && current.config.publicEnabled) {
                 store.enroll(id).thenCompose { store.accept(id, it.runId) }
@@ -175,7 +294,11 @@ object OnboardingService : OnboardingBuildProgressService {
         }, refreshOnReject = true, pendingToken = visit) { active, progress ->
             if (progress == null || progress.status !in setOf(OnboardingStatus.ACTIVE, OnboardingStatus.COMPLETED)) { active.menu.finish(player, visit, "Квест изменился. Открой журнал ещё раз."); return@request }
             active.npc?.refresh(player)
-            active.menu.finish(player, visit)
+            if (active.menu.isCurrent(player, visit)) {
+                active.menu.forget(player.uniqueId)
+                ArcMenus.closeDialog(player)
+                if (questView(player)?.goal == OnboardingQuestGoal.TRAVEL) openGoal(player, OnboardingQuestGoal.TRAVEL)
+            }
         }
     }
 
@@ -193,7 +316,16 @@ object OnboardingService : OnboardingBuildProgressService {
     private fun openGoal(player: Player, goal: OnboardingQuestGoal) {
         if (!canAccess(player)) return
         when (goal) {
-            OnboardingQuestGoal.TRAVEL -> HelpCenterModule.open(player, HelpCenterPage.RTP)
+            OnboardingQuestGoal.TRAVEL -> {
+                val current = runtime ?: return
+                val runId = current.players[player.uniqueId]?.runId ?: return
+                OnboardingWorldDialog { viewer, world ->
+                    if (runtime === current && current.players[viewer.uniqueId]?.runId == runId &&
+                        questView(viewer)?.goal == OnboardingQuestGoal.TRAVEL && current.config.allowsQuestWorld(world)) {
+                        viewer.performCommand("arc rtp $world")
+                    }
+                }.open(player)
+            }
             OnboardingQuestGoal.HOME -> HelpCenterModule.open(player, HelpCenterPage.TRAVEL)
             OnboardingQuestGoal.CLAIM -> ru.arc.landsui.LandsUiModule.open(player)
             OnboardingQuestGoal.BUILD -> { ArcMenus.closeDialog(player); player.performCommand("kit start") }
@@ -205,7 +337,7 @@ object OnboardingService : OnboardingBuildProgressService {
     private fun confirmArrival(player: Player, progress: OnboardingProgress?) {
         val current = runtime ?: return
         if (progress?.status == OnboardingStatus.ACTIVE && OnboardingMilestone.FIRST_RTP !in progress.milestones &&
-            current.config.allowsWorld(player.world.name)) {
+            current.config.allowsQuestWorld(player.world.name)) {
             observe(player, OnboardingMilestone.FIRST_RTP, place(player, player.world.name, player.location.blockX, player.location.blockZ))
         }
     }
@@ -274,7 +406,7 @@ object OnboardingService : OnboardingBuildProgressService {
         check(Bukkit.isPrimaryThread()) { "Book progress must be captured on the Paper thread" }
         val current = runtime ?: return CompletableFuture.completedFuture(null)
         val store = current.store ?: return CompletableFuture.failedFuture(IllegalStateException("Quest storage unavailable"))
-        if (!current.config.allowsWorld(world)) return CompletableFuture.completedFuture(null)
+        if (!current.config.allowsQuestWorld(world)) return CompletableFuture.completedFuture(null)
         val place = OnboardingPlace.fromBlock(world, blockX, blockZ)
         val milestone = when (stage) {
             OnboardingBuildProgressService.Stage.BOOK_OPENED -> OnboardingMilestone.BUILD_BOOK_OPENED
@@ -295,10 +427,8 @@ object OnboardingService : OnboardingBuildProgressService {
             } }
             return pending.thenApply { null }
         }
-        val before = current.players[playerId]?.milestones.orEmpty()
-        return request(player, operation, refreshOnReject = true) { active, updated ->
+        return request(player, operation, refreshOnReject = true) { active, _ ->
             active.npc?.refresh(player)
-            if (updated != null && updated.milestones != before) notifyProgress(player, updated)
         }.thenApply { null }
     }
 
@@ -310,7 +440,8 @@ object OnboardingService : OnboardingBuildProgressService {
     ) {
         val current = runtime ?: return
         val progress = current.players[player.uniqueId] ?: return
-        if (progress.status != OnboardingStatus.ACTIVE || !current.config.allowsWorld(place?.world ?: player.world.name)) return
+        if (current.invalidPlaytimes[player.uniqueId] == progress.runId) return
+        if (progress.status != OnboardingStatus.ACTIVE || !current.config.allowsQuestWorld(place?.world ?: player.world.name)) return
         val before = progress.milestones
         request(player, { store, id -> store.observe(id, progress.runId, milestone, place, verifiedFoothold) }, refreshOnReject = true) { active, updated ->
             if (updated == null || updated.runId != progress.runId) { active.npc?.refresh(player); return@request }
@@ -318,14 +449,7 @@ object OnboardingService : OnboardingBuildProgressService {
             if (OnboardingMilestone.FOOTHOLD_COMPLETE in updated.milestones && OnboardingMilestone.FOOTHOLD_COMPLETE !in before) {
                 MetricsModule.recordProductOutcome(player, ProductOutcome.FOOTHOLD_COMPLETE, ProductFeature.LANDS, ProductEntryPoint.GAMEPLAY)
             }
-            if (updated.milestones != before) notifyProgress(player, updated)
         }
-    }
-
-    private fun notifyProgress(player: Player, updated: OnboardingProgress) {
-        message(player, if (updated.status == OnboardingStatus.COMPLETED)
-            "<newline>  <#80e89b>Квест «Первый дом» завершён!<newline>  <#e8dfd2>Дом сохранён, участок защищён, постройка готова.<newline>"
-        else "<#80e89b>Квест обновлён. <white>/arc onboarding <#e8dfd2>— журнал и следующая цель.")
     }
 
     /** Serializes this player's Redis requests without blocking the gameplay thread. */
@@ -364,8 +488,77 @@ object OnboardingService : OnboardingBuildProgressService {
             }
             if (progress == null) current.players.remove(playerId) else current.players[playerId] = progress
             complete(current, progress)
+            current.players[playerId]?.let { updated ->
+                samplePlaytime(current, player)
+                reconcileRewards(current, player, updated)
+            }
         }
         return pending
+    }
+
+    /** Native counters advance only while playing; absolute high-water samples are safe to repeat. */
+    private fun samplePlaytime(current: Runtime, player: Player, force: Boolean = false) {
+        val store = current.playtime ?: return
+        val progress = current.players[player.uniqueId]?.takeIf { it.status == OnboardingStatus.ACTIVE } ?: return
+        if (current.invalidPlaytimes[player.uniqueId] == progress.runId) {
+            expireActiveRun(current, player, progress.runId)
+            return
+        }
+        val server = ARC.serverName?.takeIf(String::isNotBlank) ?: return
+        val key = "${player.uniqueId}:${progress.runId}"
+        val previous = current.playtimeTails[key]
+        if (!force && previous?.isDone == false) return
+        val counter = runCatching { player.getStatistic(Statistic.PLAY_ONE_MINUTE) }.getOrElse { failure ->
+            if (current.playtimeFailures.add(player.uniqueId)) warn("Initial quest native playtime unavailable for {}", player.uniqueId, failure)
+            return
+        }
+        val pending = (previous?.handle { _, _ -> Unit } ?: CompletableFuture.completedFuture(Unit))
+            .thenCompose { store.sample(player.uniqueId, progress.runId, server, counter) }
+        current.playtimeTails[key] = pending
+        current.pending += pending
+        pending.whenComplete { _, _ ->
+            current.playtimeTails.remove(key, pending)
+            current.pending.remove(pending)
+        }
+        pending.whenCompleteSync(current.tasks) { state, failure ->
+            if (runtime !== current || current.players[player.uniqueId]?.runId != progress.runId) return@whenCompleteSync
+            if (failure != null || state == null) {
+                if (current.playtimeFailures.add(player.uniqueId)) warn("Initial quest playtime was not confirmed for {}", player.uniqueId, failure)
+                if (current.players[player.uniqueId]?.status == OnboardingStatus.ACTIVE &&
+                    generateSequence(failure) { it.cause }.any { it is OnboardingPlaytime.CounterMovedBackwards }) {
+                    current.invalidPlaytimes[player.uniqueId] = progress.runId
+                    expireActiveRun(current, player, progress.runId)
+                }
+                return@whenCompleteSync
+            }
+            current.playtimeFailures.remove(player.uniqueId)
+            current.played[player.uniqueId] = progress.runId to state
+            if (state.expired) expireActiveRun(current, player, progress.runId)
+        }
+    }
+
+    private fun expireActiveRun(current: Runtime, player: Player, runId: String) {
+        val key = "${player.uniqueId}:$runId"
+        if (!current.expiring.add(key)) return
+        enqueue(current, player.uniqueId) { requireNotNull(current.store).expireActive(player.uniqueId, runId) }
+            .whenCompleteSync(current.tasks) { updated, failure ->
+                current.expiring.remove(key)
+                if (failure == null && runtime === current && updated != null && current.players[player.uniqueId]?.runId == runId) {
+                    current.players[player.uniqueId] = updated
+                    current.npc?.refresh(player)
+                }
+            }
+    }
+
+    private fun reconcileRewards(current: Runtime, player: Player, progress: OnboardingProgress) {
+        val rewards = current.rewards ?: return
+        val pending = rewards.reconcile(player, progress,
+            Math.multiplyExact(current.config.coinsPerStep, 100L), Math.multiplyExact(current.config.tokensPerStep, 100L))
+        current.pending += pending
+        pending.whenComplete { _, failure ->
+            current.pending.remove(pending)
+            if (failure != null) error("Initial quest reward settlement failed for {}", player.uniqueId, failure)
+        }
     }
 
     /** One durable FIFO shared by online actions and construction callbacks for offline owners. */
