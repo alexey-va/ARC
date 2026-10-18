@@ -8,6 +8,8 @@ import io.mockk.mockkObject
 import io.mockk.unmockkObject
 import io.mockk.verify
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.TextDecoration
+import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.entity.Player
 import ru.arc.config.ConfigManager
@@ -21,7 +23,7 @@ import java.nio.file.Files
 import java.util.UUID
 
 class LandsUiInspectionTest : StringSpec({
-    "visitor sees current members across pages without admin or mutation actions" {
+    "visitor sees current members without land mutations and shares the safe claim-block action with root" {
         MockBukkitTestRuntime.open().use {
             val data = Files.createTempDirectory("lands-inspection")
             val player = mockk<Player>(relaxed = true)
@@ -58,7 +60,8 @@ class LandsUiInspectionTest : StringSpec({
             every { player.hasPermission("lands.admin.command.edit") } returns false
             Tasks.install(mockk<TaskScheduler>(relaxed = true))
             ConfigManager.clear()
-            val controller = LandsUiController(LandsUiConfig.load(data).snapshot(), gateway)
+            val settings = LandsUiConfig.load(data).snapshot()
+            val controller = LandsUiController(settings, gateway)
             var screen: PaperDialogScreen? = null
             mockkObject(ArcMenus)
             try {
@@ -70,11 +73,8 @@ class LandsUiInspectionTest : StringSpec({
                 bodyText(checkNotNull(screen)).contains("Выбранное") shouldBe true
                 bodyText(checkNotNull(screen)).contains("Запривачено") shouldBe true
                 bodyText(checkNotNull(screen)).contains("/lands trust НИК") shouldBe true
-                every { gateway.giveClaimBlock(player) } returns LandsUiClaimBlockResult.GIVEN
                 val getBlock = checkNotNull(screen).buttons.single { it.id.value == "claim_get" }
                 getBlock.closeDialogBeforeAction shouldBe true
-                getBlock.onClick.handle(context)
-                verify(exactly = 1) { gateway.giveClaimBlock(player) }
 
                 every { gateway.inspectedLand(player) } returns land
                 controller.openRoot(player)
@@ -85,7 +85,27 @@ class LandsUiInspectionTest : StringSpec({
                 inspection.id shouldBe "lands.inspect"
                 bodyText(inspection).contains("HeadPlayer") shouldBe true
                 bodyText(inspection).contains("1234") shouldBe false
-                inspection.buttons.map { it.id.value } shouldBe listOf("members", "rules", "roles", "territory")
+                inspection.buttons.map { it.id.value } shouldBe listOf("members", "rules", "roles", "territory", "claim_get")
+                val cardBlock = inspection.buttons.single { it.id.value == "claim_get" }
+                cardBlock.label shouldBe getBlock.label
+                cardBlock.tooltip shouldBe getBlock.tooltip
+                cardBlock.closeDialogBeforeAction shouldBe true
+                verify(exactly = 0) { gateway.giveClaimBlock(player) }
+                mapOf(
+                    LandsUiClaimBlockResult.GIVEN to "claim-get-given",
+                    LandsUiClaimBlockResult.ALREADY_PRESENT to "claim-get-already-present",
+                    LandsUiClaimBlockResult.INVENTORY_FULL to "claim-get-inventory-full",
+                    LandsUiClaimBlockResult.COOLDOWN to "claim-get-cooldown",
+                    LandsUiClaimBlockResult.UNAVAILABLE to "claim-get-unavailable",
+                ).forEach { (result, key) ->
+                    every { gateway.giveClaimBlock(player) } returns result
+                    getBlock.onClick.handle(context)
+                    cardBlock.onClick.handle(context)
+                    val feedback = MiniMessage.miniMessage().deserialize(settings.text(key))
+                        .decoration(TextDecoration.ITALIC, false)
+                    verify(exactly = 2) { player.sendMessage(feedback) }
+                }
+                verify(exactly = 10) { gateway.giveClaimBlock(player) }
 
                 inspection.buttons.single { it.id.value == "members" }.onClick.handle(context)
                 val firstPage = checkNotNull(screen)
@@ -122,10 +142,10 @@ class LandsUiInspectionTest : StringSpec({
 
                 every { gateway.managementView(player, currentContext) } returns currentView
                 controller.openCurrent(player)
-                checkNotNull(screen).buttons.map { it.id.value } shouldBe listOf("members", "rules", "roles", "territory")
+                checkNotNull(screen).buttons.map { it.id.value } shouldBe listOf("members", "rules", "roles", "territory", "claim_get")
                 every { player.hasPermission("lands.admin.command.edit") } returns true
                 controller.openCurrent(player)
-                checkNotNull(screen).buttons.map { it.id.value } shouldBe listOf("members", "rules", "roles", "territory", "admin")
+                checkNotNull(screen).buttons.map { it.id.value } shouldBe listOf("members", "rules", "roles", "territory", "claim_get", "admin")
 
                 verify(exactly = 0) { gateway.select(any(), any()) }
                 verify(exactly = 0) { gateway.selectAndExecute(any(), any(), any()) }

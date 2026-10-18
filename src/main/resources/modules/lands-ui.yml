@@ -6,6 +6,7 @@ command-shortcuts:
   enabled: false
 
 limits:
+  # Page size for member lists and invite suggestions; no players are omitted.
   max-listed-players: 12
 
 text:
@@ -21,7 +22,7 @@ text:
   claim-get-already-present: '<#e8dfd2>У тебя уже есть блок привата в инвентаре.'
   claim-get-inventory-full: '<#ff8178>Освободи место в инвентаре для блока привата.'
   claim-get-unavailable: '<#ff8178>Сейчас блок привата недоступен. Попробуй ещё раз позже.'
-  claim-get-label: '<#9bd48d>Получить блок привата'
+  claim-get-label: '<#9bd48d>Выдать блок привата'
   claim-get-tooltip: '<#e8dfd2>Блок привата для расширения территории. Получение — раз в 30 минут.'
   root-command-heading: 'Команда'
   root-command-help-heading: 'Действие'
@@ -209,7 +210,7 @@ text:
   table-slots-value: '<#e6fff3><used> <#73808d>/ <#e8dfd2><maximum>'
   table-coins-value: '<#f4bd6a><value> <white>💰</white>'
   root-title: '<#9bd48d>Приват'
-  root-body: '<#e8dfd2>Создай <#9bd48d>поселение<#e8dfd2> — свой приват. Территория защищается <#86dcf1>чанками 16×16 блоков<#e8dfd2> на всю высоту мира: <#f4d87a>от бедрока до неба<#e8dfd2>.<newline><newline>Выбери поселение командой <white>/lands edit НАЗВАНИЕ<#e8dfd2> и расширяй его с помощью <#f4d87a>блока привата<#e8dfd2>. Кнопка <#9bd48d>«Получить блок привата»<#e8dfd2> находится ниже.<newline><newline>Приглашай <#f3a2c9>участников<#e8dfd2> командой <white>/lands trust НИК<#e8dfd2>, а их доступ настраивай через <#c4a7e7>роли<#e8dfd2>.'
+  root-body: '<#e8dfd2>Создай <#9bd48d>поселение<#e8dfd2> — свой приват. Территория защищается <#86dcf1>чанками 16×16 блоков<#e8dfd2> на всю высоту мира: <#f4d87a>от бедрока до неба<#e8dfd2>.<newline><newline>Выбери поселение командой <white>/lands edit НАЗВАНИЕ<#e8dfd2> и расширяй его с помощью <#f4d87a>блока привата<#e8dfd2>. Кнопка <#9bd48d>«Выдать блок привата»<#e8dfd2> находится ниже.<newline><newline>Приглашай <#f3a2c9>участников<#e8dfd2> командой <white>/lands trust НИК<#e8dfd2>, а их доступ настраивай через <#c4a7e7>роли<#e8dfd2>.'
   root-empty: '<#e8dfd2>Своих поселений пока нет. Для создания выберите свободный чанк.'
   selected-none: 'не выбрано'
   land-label: '<white>○ <land> <#c4a7e7>›'
@@ -295,7 +296,7 @@ text:
   member-label: '<#f3a2c9><player> ›'
   member-tooltip: '<#e8dfd2>Убрать <player> из этого поселения.'
   add-title: '<#c4a7e7>Добавить · <land>'
-  add-body: '<#e8dfd2>Выберите игрока онлайн <#86dcf1>на любом сервере сети<#e8dfd2> или введите точный ник.<newline><#e8dfd2>Показано до <limit> игроков, которых ещё нет в этом поселении.'
+  add-body: '<#e8dfd2>Выберите игрока онлайн <#86dcf1>на любом сервере сети<#e8dfd2> или введите точный ник.<newline><#e8dfd2>Здесь только игроки, которых ещё нет в этом поселении.<newline><#92bed8>Страница <page> из <pages> · до <limit> игроков на странице.'
   candidate-label: '<#9bd48d>Добавить <player>'
   remove-title: '<#ff6b61>Убрать участника'
   remove-body: '<#e8dfd2>Убрать <#d7b486><player> <#e8dfd2>из поселения <#d7b486><land><#e8dfd2>?'
@@ -315,7 +316,7 @@ text:
   unclaim-selection-active: '<#ff6b61>Сначала отключите выделение: <#d7b486>/lands selection'
   setspawn-label: '<#9bd48d>Поставить точку дома'
   setspawn-tooltip: '<#e8dfd2>Сохранить здесь точку дома поселения.'
-  spawn-label: '<#92bed8>Телепорт домой ›'
+  spawn-label: '<#92bed8>Спавн поселения ›'
   spawn-tooltip: '<#e8dfd2>Переместиться к точке дома поселения.'
   areas-label: '<#9bd48d>Дополнительные регионы ›'
   areas-tooltip: '<#e8dfd2>Открыть дополнительные регионы Lands.'

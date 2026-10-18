@@ -42,15 +42,19 @@ focused geometry and dialog-routing tests.
 - Overview: head, viewer role, selected region, chunks and online member count.
   The balance and chunk limit are shown in member/admin management, not public inspection.
   Buttons follow this order: «Участники», «Добавить игрока», «Разрешения», «Роли»,
-  «Территория», «Телепорт домой», «Управление», «Показать границы», explicit admin entry.
+  «Территория», «Спавн поселения», «Управление», «Выдать блок привата», explicit admin entry.
   Actions without the required permission are omitted. In the two-column layout,
   «Добавить игрока» sits to the right of «Участники» when invitations are allowed.
 - Members: paginated list, online status, actual regional role, player cards,
   invitations, permitted role assignments and removal confirmation.
+  Invite suggestions include the network online-player list and paginate all
+  eligible names; `limits.max-listed-players` is the page size (12 by default).
+  Self, existing area members and duplicate UUIDs are filtered before paging.
+  Manual nickname entry remains available on every page.
 - Rules: the viewer's permissions; role-specific flags for building, containers,
   doors, trapdoors, mechanisms, animals, PvP and villagers; natural flags for
   TNT, fire spread and creature spawning.
-- Territory: borders, home placement, current-chunk claim/unclaim and the existing
+- Territory: home placement, current-chunk claim/unclaim and the existing
   main-block guide. Home teleport is a separate overview action; this page has no
   teleport or additional-region selector.
 - Settings: rename, Lands' entry/title message, native advanced settings,
@@ -65,6 +69,12 @@ settlement-list entry starts with the main area. Losing membership makes the
 member lookup fail rather than falling back to broader authority. The explicit
 admin button remains available to authorized viewers; simply opening a card never
 enters admin mode.
+
+«Выдать блок привата» is the same action on the root and overview, including
+public inspection. Both use the existing gateway to issue the native item and
+report duplicate-item, full-inventory, cooldown and unavailable results; opening
+a page never issues an item. The dialogs no longer offer «Показать границы».
+Native boundary rendering and the held-block grid/wall guide remain unchanged.
 
 The root and settlement card no longer expose claim-radius or guide-display
 settings. Their screen handlers (`lands.claim-radius`, `lands.claim-display`) and

@@ -27,7 +27,7 @@ class LandsUiController(
     private val tasks = LifecycleTaskScope()
 
     private val management by lazy {
-        LandsManagementMenus(settings, gateway, ::openRoot)
+        LandsManagementMenus(settings, gateway, ::openRoot, ::claimBlockButton)
     }
 
     fun close() = tasks.close()
@@ -93,16 +93,7 @@ class LandsUiController(
                 ),
             ) { openDetails(player, land.id) }
         } + listOf(
-            button("claim_get", text("claim-get-label"), text("claim-get-tooltip")) {
-                val message = when (gateway.giveClaimBlock(player)) {
-                    LandsUiClaimBlockResult.GIVEN -> "claim-get-given"
-                    LandsUiClaimBlockResult.ALREADY_PRESENT -> "claim-get-already-present"
-                    LandsUiClaimBlockResult.INVENTORY_FULL -> "claim-get-inventory-full"
-                    LandsUiClaimBlockResult.COOLDOWN -> "claim-get-cooldown"
-                    LandsUiClaimBlockResult.UNAVAILABLE -> "claim-get-unavailable"
-                }
-                player.sendMessage(text(message))
-            }.closing(),
+            claimBlockButton(player),
             button("create", text("create-label"), text("create-tooltip")) { openCreate(player) },
             button("guide", text("guide-label"), text("guide-tooltip")) { openGuide(player) },
         ) + (if (player.hasPermission("lands.admin.command.edit")) listOf(
@@ -126,6 +117,18 @@ class LandsUiController(
 
     private fun openInspection(player: Player, landId: String) =
         management.openCurrent(player, landId)
+
+    private fun claimBlockButton(player: Player) =
+        button("claim_get", text("claim-get-label"), text("claim-get-tooltip")) {
+            val message = when (gateway.giveClaimBlock(player)) {
+                LandsUiClaimBlockResult.GIVEN -> "claim-get-given"
+                LandsUiClaimBlockResult.ALREADY_PRESENT -> "claim-get-already-present"
+                LandsUiClaimBlockResult.INVENTORY_FULL -> "claim-get-inventory-full"
+                LandsUiClaimBlockResult.COOLDOWN -> "claim-get-cooldown"
+                LandsUiClaimBlockResult.UNAVAILABLE -> "claim-get-unavailable"
+            }
+            player.sendMessage(text(message))
+        }.closing()
 
     fun openInvite(player: Player, target: LandsUiPlayer) {
         val lands = LandsUiPlanner.inviteableLands(target.id, gateway.lands(player))

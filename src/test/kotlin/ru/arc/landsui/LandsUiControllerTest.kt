@@ -139,7 +139,7 @@ class LandsUiControllerTest : StringSpec({
                     val detailsIds = details.buttons.map { it.id.value }
                     detailsIds shouldContain "add_member"
                     detailsIds shouldBe listOf(
-                        "members", "add_member", "rules", "roles", "territory", "settings",
+                        "members", "add_member", "rules", "roles", "territory", "settings", "claim_get",
                     )
                     ("region_tool" in detailsIds) shouldBe false
                     detailsIds.all { '-' !in it } shouldBe true
@@ -182,6 +182,95 @@ class LandsUiControllerTest : StringSpec({
                 unmockkObject(ArcMenus)
                 dataPath.toFile().deleteRecursively()
                 ConfigManager.clear()
+            }
+        }
+    }
+
+    "network invite suggestions paginate all eligible players and retain manual entry and access checks" {
+        MockBukkitTestRuntime.open().use {
+            val dataPath = Files.createTempDirectory("lands-ui-invite-pages")
+            val playerId = UUID.randomUUID()
+            val memberId = UUID.randomUUID()
+            val player = mockk<Player>(relaxed = true)
+            every { player.uniqueId } returns playerId
+            val land = LandsUiLand("invite-pages", "Дом", playerId, 1, 64, setOf(playerId, memberId), 32, 0.0, true)
+            val context = LandsUiContext(land.id, LandsUiAccess.MEMBER)
+            var view = landsUiTestView(context, land, permissions = setOf(LandsUiPermission.TRUST), members = listOf(
+                LandsUiMember(playerId, "Viewer", "owner", true, true, false, emptySet()),
+                LandsUiMember(memberId, "ExistingMember", "member", true, false, false, emptySet()),
+            ))
+            val localCandidates = (1..12).map { index ->
+                LandsUiPlayer(UUID.randomUUID(), "Local${index.toString().padStart(2, '0')}")
+            }
+            val remoteCandidate = LandsUiPlayer(UUID.randomUUID(), "SpawnRemote")
+            val gateway = mockk<LandsUiGateway>(relaxed = true)
+            every { gateway.managementView(player, context) } answers { view }
+            every { gateway.lands(player) } returns listOf(land)
+            every { gateway.inspectedLand(player) } returns null
+            every { gateway.onlinePlayers() } returns listOf(
+                LandsUiPlayer(playerId, "Viewer"), LandsUiPlayer(memberId, "ExistingMember"), remoteCandidate,
+            ) + localCandidates.reversed() + remoteCandidate.copy(name = "DuplicateRemote")
+            every { gateway.change(player, context, LandsUiChange.Trust(remoteCandidate.name)) } returns
+                LandsUiChangeResult.DISPATCHED
+            every { gateway.change(player, context, LandsUiChange.Trust("ManualRemote")) } returns
+                LandsUiChangeResult.DISPATCHED
+            ConfigManager.clear()
+            Tasks.install(mockk<TaskScheduler>(relaxed = true))
+            val controller = LandsUiController(LandsUiConfig.load(dataPath).snapshot(), gateway)
+            val click = mockk<PaperDialogClickContext>(relaxed = true)
+            every { click.player } returns player
+            val plain = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+            var screen: PaperDialogScreen? = null
+            mockkObject(ArcMenus)
+            try {
+                every { ArcMenus.openDialog(player, any(), any(), any(), any()) } answers { screen = secondArg() }
+                controller.openDetails(player, land.id)
+                checkNotNull(screen).buttons.single { it.id.value == "add_member" }.onClick.handle(click)
+                val firstPage = checkNotNull(screen)
+                firstPage.id shouldBe "lands.add"
+                plain.serialize(firstPage.body.single().text).contains("Страница 1 из 2") shouldBe true
+                firstPage.buttons.filter { it.id.value.startsWith("candidate_") }.map { plain.serialize(it.label) } shouldBe
+                    localCandidates.map { "Добавить ${it.name}" }
+                firstPage.buttons.none { it.id.value == "previous" } shouldBe true
+                firstPage.buttons.single { it.id.value == "next" }.onClick.handle(click)
+                val secondPage = checkNotNull(screen)
+                plain.serialize(secondPage.body.single().text).contains("Страница 2 из 2") shouldBe true
+                secondPage.buttons.map { it.id.value } shouldBe listOf("add_submit", "candidate_0", "previous")
+                secondPage.inputs.size shouldBe 1
+                plain.serialize(secondPage.buttons.single { it.id.value == "candidate_0" }.label) shouldBe "Добавить SpawnRemote"
+
+                secondPage.buttons.single { it.id.value == "previous" }.onClick.handle(click)
+                checkNotNull(screen).buttons.map { it.id to it.label } shouldBe firstPage.buttons.map { it.id to it.label }
+                firstPage.buttons.single { it.id.value == "next" }.onClick.handle(click)
+                secondPage.buttons.single { it.id.value == "candidate_0" }.onClick.handle(click)
+                verify(exactly = 1) { gateway.change(player, context, LandsUiChange.Trust("SpawnRemote")) }
+
+                every { click.text(any()) } returns "bad-name!"
+                secondPage.buttons.single { it.id.value == "add_submit" }.onClick.handle(click)
+                plain.serialize(checkNotNull(screen).body.single().text).contains("Страница 2 из 2") shouldBe true
+                every { click.text(any()) } returns "ManualRemote"
+                checkNotNull(screen).buttons.single { it.id.value == "add_submit" }.onClick.handle(click)
+                verify(exactly = 1) { gateway.change(player, context, LandsUiChange.Trust("ManualRemote")) }
+                verify(exactly = 2) { gateway.change(player, context, any()) }
+
+                secondPage.exitButton!!.onClick.handle(click)
+                checkNotNull(screen).id shouldBe "lands.members"
+                checkNotNull(screen).exitButton!!.onClick.handle(click)
+                checkNotNull(screen).id shouldBe "lands.details"
+                checkNotNull(screen).exitButton!!.onClick.handle(click)
+                checkNotNull(screen).id shouldBe "lands.home"
+
+                view = view.copy(permissions = emptySet())
+                firstPage.buttons.single { it.id.value == "next" }.onClick.handle(click)
+                checkNotNull(screen).id shouldBe "lands.details"
+                checkNotNull(screen).buttons.none { it.id.value == "add_member" } shouldBe true
+                verify(exactly = 0) { gateway.select(any(), any()) }
+            } finally {
+                controller.close()
+                Tasks.reset()
+                unmockkObject(ArcMenus)
+                ConfigManager.clear()
+                dataPath.toFile().deleteRecursively()
             }
         }
     }
@@ -250,12 +339,12 @@ class LandsUiControllerTest : StringSpec({
                     val card = checkNotNull(screen)
                     card.id shouldBe "lands.details"
                     card.buttons.map { it.id.value } shouldBe listOf(
-                        "members", "add_member", "rules", "roles", "territory", "spawn", "settings", "borders", "admin",
+                        "members", "add_member", "rules", "roles", "territory", "spawn", "settings", "claim_get", "admin",
                     )
                     val plain = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
                     card.buttons.map { plain.serialize(it.label) } shouldBe listOf(
                         "Участники ›", "Добавить игрока ›", "Разрешения ›", "Роли ›", "Территория ›",
-                        "Телепорт домой ›", "Управление ›", "Показать границы", "[Админ] Управление ›",
+                        "Спавн поселения ›", "Управление ›", "Выдать блок привата", "[Админ] Управление ›",
                     )
                     controller.openCurrent(player)
                     assertSameCard(card)
@@ -281,13 +370,13 @@ class LandsUiControllerTest : StringSpec({
                     card.buttons.single { it.id.value == "territory" }.onClick.handle(click)
                     checkNotNull(screen).id shouldBe "lands.territory"
                     checkNotNull(screen).buttons.map { it.id.value } shouldBe
-                        listOf("borders", "claim", "unclaim", "setspawn", "mainblock")
+                        listOf("claim", "unclaim", "setspawn", "mainblock")
 
                     mainView = mainView.copy(permissions = setOf(LandsUiPermission.BORDERS))
                     every { gateway.change(player, mainContext, LandsUiChange.Spawn) } returns LandsUiChangeResult.DENIED
                     teleport.onClick.handle(click)
                     checkNotNull(screen).buttons.map { it.id.value } shouldBe
-                        listOf("members", "rules", "roles", "territory", "borders", "admin")
+                        listOf("members", "rules", "roles", "territory", "claim_get", "admin")
                     verify(exactly = 2) { gateway.change(player, mainContext, LandsUiChange.Spawn) }
 
                     // A current-land entry keeps the actual subarea instead of silently using the default region.
@@ -302,7 +391,7 @@ class LandsUiControllerTest : StringSpec({
                     subareaText.contains("Ферма") shouldBe true
                     subareaText.contains("Участник") shouldBe true
                     subarea.buttons.map { it.id.value } shouldBe
-                        listOf("members", "rules", "roles", "territory", "borders", "admin")
+                        listOf("members", "rules", "roles", "territory", "claim_get", "admin")
                     controller.openPanelAction(player, land.id, LandsUiPanelAction.OVERVIEW)
                     assertSameCard(subarea)
                     subarea.buttons.single { it.id.value == "members" }.onClick.handle(click)

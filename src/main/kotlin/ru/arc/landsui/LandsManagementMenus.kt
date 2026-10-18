@@ -23,6 +23,7 @@ internal class LandsManagementMenus(
     private val settings: LandsUiSettings,
     private val gateway: LandsUiGateway,
     private val openRoot: (Player) -> Unit,
+    private val claimBlockButton: (Player) -> PaperDialogButton,
 ) {
     fun execute(player: Player, context: LandsUiContext, change: LandsUiChange) =
         apply(player, context, change) { open(player, context) }
@@ -78,9 +79,7 @@ internal class LandsManagementMenus(
             if (context.access != LandsUiAccess.CURRENT && view.permissions.any { it in SETTINGS_PERMISSIONS }) {
                 add(button("settings", "management-settings-label") { openSettings(player, context) })
             }
-            if (LandsUiPermission.BORDERS in view.permissions) {
-                add(actionButton(player, context, "borders", "borders-label", LandsUiChange.Borders))
-            }
+            add(claimBlockButton(player))
             if (context.access != LandsUiAccess.ADMIN && player.hasPermission(ADMIN_PERMISSION)) add(button("admin", "admin-panel-label") {
                 withView(player, context) { open(player, it.context.copy(access = LandsUiAccess.ADMIN)) }
             })
@@ -166,24 +165,27 @@ internal class LandsManagementMenus(
         )) { openAssignRole(player, context, memberId, page) }
     }
 
-    fun openAddMember(player: Player, context: LandsUiContext): Unit = withView(player, context) { view ->
+    fun openAddMember(player: Player, context: LandsUiContext, page: Int = 0): Unit = withView(player, context) { view ->
         if (LandsUiPermission.TRUST !in view.permissions) return@withView denied(player, context)
         val candidates = LandsUiPlanner.addablePlayers(player.uniqueId,
-            view.land.copy(memberIds = view.members.mapTo(linkedSetOf()) { it.id }), gateway.onlinePlayers()).take(settings.maxListedPlayers)
+            view.land.copy(memberIds = view.members.mapTo(linkedSetOf()) { it.id }), gateway.onlinePlayers())
+        val paging = page(candidates, page)
         show(player, PaperDialogScreen(
             id = "lands.add", title = text("add-title", "land" to view.land.name),
-            body = listOf(PaperDialogBody(text("add-body", "limit" to settings.maxListedPlayers.toString()))),
+            body = listOf(PaperDialogBody(text("add-body", "limit" to settings.maxListedPlayers.toString(),
+                "page" to (paging.index + 1).toString(), "pages" to paging.pages.toString()))),
             inputs = listOf(PaperDialogTextInput(INPUT, text("player-input"), maxLength = 16)),
             buttons = listOf(inputButton("add_submit", "add-submit-label") { click ->
                 val name = click.text(INPUT).orEmpty().trim()
                 if (runCatching { LandsUiCommands.member(name) }.isFailure) {
-                    player.sendMessage(text("invalid-player")); openAddMember(player, context)
+                    player.sendMessage(text("invalid-player")); openAddMember(player, context, paging.index)
                 } else apply(player, context, LandsUiChange.Trust(name)) { openMembers(player, context) }
-            }) + candidates.mapIndexed { index, candidate ->
+            }) + paging.items.mapIndexed { index, candidate ->
                 actionButton(player, context, "candidate_$index", text("candidate-label", "player" to candidate.name),
                     LandsUiChange.Trust(candidate.name)) { openMembers(player, context) }
-            }, exitButton = back { openMembers(player, context) }, columns = 2,
-        )) { openAddMember(player, context) }
+            } + pagination(paging) { openAddMember(player, context, it) },
+            exitButton = back { openMembers(player, context) }, columns = 2,
+        )) { openAddMember(player, context, paging.index) }
     }
 
     private fun openRules(player: Player, context: LandsUiContext): Unit = withView(player, context) { view ->
@@ -242,7 +244,6 @@ internal class LandsManagementMenus(
             body = listOf(PaperDialogBody(text("management-territory-body", "area" to view.areaName,
                 "chunks" to view.land.chunks.toString(), "max_chunks" to view.land.maxChunks.toString()))),
             buttons = buildList {
-                if (LandsUiPermission.BORDERS in view.permissions) add(actionButton(player, context, "borders", "borders-label", LandsUiChange.Borders))
                 if (LandsUiPermission.CLAIM in view.permissions) add(actionButton(player, context, "claim", "claim-label", LandsUiChange.Claim))
                 if (LandsUiPermission.UNCLAIM in view.permissions && view.currentClaim != null) add(button("unclaim", "unclaim-label") {
                     openUnclaim(player, context)
