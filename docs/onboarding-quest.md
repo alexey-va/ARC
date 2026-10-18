@@ -45,9 +45,9 @@ offline preview, not native client acceptance.
 
 ## Persistent guide and rewards
 
-An active participant sees a compact guide in the existing base sidebar. Only
-balance and location sections remain beside the current goal, one instruction,
-the step reward and journal shortcut. Player section preferences are preserved;
+An active participant sees a four-line guide in the existing base sidebar:
+the stage heading, current goal, one instruction and step reward. Only balance
+and location sections remain beside it. Player section preferences are preserved;
 completion, stopping or timeout restores their normal sidebar. More important
 activity panels retain their shared priority. Nothing opens a dialog on progress.
 

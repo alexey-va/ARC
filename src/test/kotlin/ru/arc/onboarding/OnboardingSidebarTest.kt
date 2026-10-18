@@ -29,7 +29,7 @@ class OnboardingSidebarTest : FreeSpec({
         OnboardingQuestView(run, true, milestones), OnboardingPlaytime.LIMIT_TICKS, OnboardingGuideReward(200, 1),
     )
 
-    "every current goal fits five short rows with a vivid action and no unrelated status" {
+    "every current goal fits four short rows with one starred action and aligned supporting text" {
         val states = listOf(
             emptySet<OnboardingMilestone>() to "Выберите мир",
             firstRtp to "Сохраните точку дома",
@@ -41,13 +41,16 @@ class OnboardingSidebarTest : FreeSpec({
         )
         states.forEach { (milestones, heading) ->
             val lines = onboardingGuideLines(view(milestones))
-            lines.size shouldBe 5
-            plain(lines[1]) shouldBe "| $heading"
+            lines.size shouldBe 4
+            plain(lines[1]) shouldBe "★ $heading"
             serializer.serialize(lines[1]) shouldContain "&#77ee94"
-            plain(lines[3]) shouldBe "| За шаг: 200 💰 + 1 "
-            plain(lines[4]) shouldBe "| Журнал: /arc onboarding"
-            lines.all { plain(it).length <= 32 && '\n' !in plain(it) } shouldBe true
+            plain(lines[2]).startsWith("   ") shouldBe true
+            plain(lines[2]).drop(3).first().isLowerCase() shouldBe true
+            plain(lines[3]) shouldBe "   Награда 200 💰 1 "
+            plain(lines[0]).startsWith("Первый дом · ") shouldBe true
+            lines.all { plain(it).length <= 32 && '\n' !in plain(it) && '|' !in plain(it) } shouldBe true
         }
+        plain(onboardingGuideLines(view(firstRtp))[2]) shouldBe "   на месте будущей базы"
     }
 
     "offered completed and expired views release the ordinary scoreboard" {
@@ -62,19 +65,19 @@ class OnboardingSidebarTest : FreeSpec({
         val reward = serializer.serialize(onboardingGuideLines(view())[3])
         reward shouldContain "&f💰"
         reward shouldContain "&f"
-        plain(onboardingGuideLines(view().copy(reward = OnboardingGuideReward(0, 3)))[3]) shouldBe "| За шаг: 3 "
-        plain(onboardingGuideLines(view().copy(reward = OnboardingGuideReward(50, 0)))[3]) shouldBe "| За шаг: 50 💰"
-        plain(onboardingGuideLines(view().copy(reward = null))[3]) shouldBe "| Подсказки: 3ч 0м"
-        plain(onboardingGuideLines(view().copy(reward = OnboardingGuideReward(0, 0), remainingTicks = 1))[3]) shouldBe "| Подсказки: 1м"
+        plain(onboardingGuideLines(view().copy(reward = OnboardingGuideReward(0, 3)))[3]) shouldBe "   Награда 3 "
+        plain(onboardingGuideLines(view().copy(reward = OnboardingGuideReward(50, 0)))[3]) shouldBe "   Награда 50 💰"
+        plain(onboardingGuideLines(view().copy(reward = null))[3]) shouldBe "   Подсказки: 3ч 0м"
+        plain(onboardingGuideLines(view().copy(reward = OnboardingGuideReward(0, 0), remainingTicks = 1))[3]) shouldBe "   Подсказки: 1м"
     }
 
     "active guide replaces all auxiliary sections while preserving basic visibility preferences" {
         val requested = mutableListOf<SidebarSection>()
-        val guide = listOf("goal", "action", "reward", "journal")
+        val guide = listOf("title", "goal", "action", "reward")
         fun rows(hidden: Set<SidebarSection> = emptySet()) = composeBaseSidebarSections(
             guide, { it !in hidden }, { requested += it; listOf(it.id) }, "", String::isBlank,
         )
-        rows() shouldContainExactly listOf("balance", "", "location", "", "goal", "action", "reward", "journal")
+        rows() shouldContainExactly listOf("balance", "", "location", "", "title", "goal", "action", "reward")
         requested shouldContainExactly listOf(SidebarSection.BALANCE, SidebarSection.LOCATION)
         rows(setOf(SidebarSection.BALANCE, SidebarSection.LOCATION, SidebarSection.QUESTS)) shouldContainExactly guide
     }
@@ -85,7 +88,7 @@ class OnboardingSidebarTest : FreeSpec({
         val default = composeSidebarSections(enabled, rows, "", String::isBlank)
         composeBaseSidebarSections(null, enabled, rows, "", String::isBlank) shouldBe default
         composeBaseSidebarSections(emptyList(), enabled, rows, "", String::isBlank) shouldBe default
-        val guide = (1..5).map { "guide $it" }
+        val guide = (1..4).map { "guide $it" }
         val crowded = composeBaseSidebarSections(guide, { true }, { (1..12).map { row -> "${it.id} $row" } }, "", String::isBlank)
         crowded shouldContainExactly guide
         (crowded.size <= 15) shouldBe true

@@ -15,30 +15,29 @@ internal data class OnboardingGuideView(
     val reward: OnboardingGuideReward? = null,
 )
 
-/** At most five short rows; an empty result immediately restores the ordinary sidebar. */
+/** At most four short rows; an empty result immediately restores the ordinary sidebar. */
 internal fun onboardingGuideLines(view: OnboardingGuideView): List<Component> {
     val quest = view.quest
     val goal = quest.goal
     if (!quest.accepted || quest.completed || goal == null || view.remainingTicks <= 0) return emptyList()
     val (step, heading, instruction) = when (goal) {
-        OnboardingQuestGoal.TRAVEL -> Triple(1, "Выберите мир", "Обычный или новые биомы")
+        OnboardingQuestGoal.TRAVEL -> Triple(1, "Выберите мир", "обычный или новые биомы")
         OnboardingQuestGoal.HOME -> if (OnboardingMilestone.HOME_CREATED in quest.milestones)
-            Triple(2, "Перенесите точку дома", "Внутрь своего привата")
-        else Triple(2, "Сохраните точку дома", "На месте будущей базы")
-        OnboardingQuestGoal.CLAIM -> Triple(3, "Защитите участок", "Поставьте блок привата")
+            Triple(2, "Перенесите точку дома", "внутрь своего привата")
+        else Triple(2, "Сохраните точку дома", "на месте будущей базы")
+        OnboardingQuestGoal.CLAIM -> Triple(3, "Защитите участок", "поставьте блок привата")
         OnboardingQuestGoal.BUILD -> when {
-            OnboardingMilestone.AUTOBUILD_STARTED in quest.milestones -> Triple(4, "Дом строится", "Дождитесь постройки")
-            OnboardingMilestone.BUILD_BOOK_OPENED in quest.milestones -> Triple(4, "Начните постройку", "Выберите место в книге")
-            else -> Triple(4, "Постройте дом", "Книга в стартовом наборе")
+            OnboardingMilestone.AUTOBUILD_STARTED in quest.milestones -> Triple(4, "Дом строится", "дождитесь постройки")
+            OnboardingMilestone.BUILD_BOOK_OPENED in quest.milestones -> Triple(4, "Начните постройку", "выберите место в книге")
+            else -> Triple(4, "Постройте дом", "книга в стартовом наборе")
         }
     }
     val reward = view.reward?.takeIf { it.coins > 0 || it.tokens > 0 }
     return listOf(
         text("Первый дом", PURPLE).append(text(" · $step / 4", BODY)),
-        row(heading, GREEN),
+        text("★ ", GOLD).append(text(heading, GREEN)),
         row(instruction),
         if (reward == null) row("Подсказки: ${remainingTime(view.remainingTicks)}") else rewardRow(reward),
-        row("Журнал: ").append(text("/arc onboarding", CYAN)),
     )
 }
 
@@ -47,7 +46,7 @@ private fun rewardRow(reward: OnboardingGuideReward): Component {
         if (reward.coins > 0) add(text("${reward.coins} ", GOLD).append(text("💰", WHITE)))
         if (reward.tokens > 0) add(text("${reward.tokens} ", PURPLE).append(text("", WHITE)))
     }
-    return row("За шаг: ").append(parts.reduce { first, second -> first.append(text(" + ", BODY)).append(second) })
+    return row("Награда ").append(parts.reduce { first, second -> first.append(text(" ", BODY)).append(second) })
 }
 
 private fun remainingTime(ticks: Long): String {
@@ -56,10 +55,10 @@ private fun remainingTime(ticks: Long): String {
 }
 
 private fun text(value: String, color: TextColor = BODY) = Component.text(value, color).decoration(TextDecoration.ITALIC, false)
-private fun row(value: String, color: TextColor = BODY) = text("| ", GOLD).append(text(value, color))
+// Vanilla ★ (8 px) plus one space (4 px) aligns with three ordinary spaces (12 px).
+private fun row(value: String, color: TextColor = BODY) = text("   ").append(text(value, color))
 private val BODY = TextColor.color(0xE8DFD2)
 private val WHITE = TextColor.color(0xFFFFFF)
 private val GREEN = TextColor.color(0x77EE94)
-private val CYAN = TextColor.color(0x6DE4F2)
 private val PURPLE = TextColor.color(0xC4ABFF)
 private val GOLD = TextColor.color(0xF4D87A)
