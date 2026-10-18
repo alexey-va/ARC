@@ -1,0 +1,321 @@
+{
+  "version": 1,
+  "title": "Legacy dungeon treasure item recovery — 2026-10-18",
+  "assumptions": [
+    "See legacy-treasure-migration-20261018.md for identities, exact live contracts, formerly functional baseline, exclusions and evidence.",
+    "Low/base/high: 1/5/20 participants redeem 0.25/1/8 existing formerly unusable units of EACH category per active day. This is restored stock sensitivity; acquisition rates and outstanding stock are unknown.",
+    "Conversion changes neither stack quantity nor currency balance. Only subsequent normal redemption pays once. Functional coin-token payout delta is zero. Keyed legacy AE/SF without roll metadata previously drew once; current presets draw 1–2 / 4–5 respectively.",
+    "Four money flows use actual uniform treasury pools, not obsolete Gaussian custom_data or tooltip means. AE/SF draws and vault are separate units. No new premium tokens, EliteMobs crystals or XP are directly granted.",
+    "No new prices, progression costs, taxes, multipliers, permissions or source of items. SELL availability and planned SELL-to-contract transition unchanged. Downstream sale and redemption of the same item are alternatives.",
+    "Repeat conversion must be idempotent and preserve count. Foreign PDC, decorations, conflicting identities and already-modern roll metadata are excluded. Invalid/missing factory result preserves original.",
+    "Shared-ledger read window1791747553216..1792352353218:12803 records,66222 operations,32 players,139 unknown/legacy records; no reliable legacy-stock counter. Mixed-currency totals excluded."
+  ],
+  "participants": [
+    1,
+    5,
+    20
+  ],
+  "currencies": {
+    "vault": {
+      "minor_per_unit": 100,
+      "flows": [
+        {
+          "id": "redeem_smallmoney",
+          "kind": "mint",
+          "source": "Live ARC native item_presets and treasure_pools on classic/classic_survival, 2026-10-18",
+          "basis": "Previously unusable bearer items recovered one-for-one; rates are sensitivity assumptions, not measured acquisition or new issuance.",
+          "before": {
+            "enabled": false,
+            "amount_per_event": {
+              "value": "2250",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "8"
+            ]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "2250",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "8"
+            ]
+          }
+        },
+        {
+          "id": "redeem_mediummoney",
+          "kind": "mint",
+          "source": "Live ARC native item_presets and treasure_pools on classic/classic_survival, 2026-10-18",
+          "basis": "Previously unusable bearer items recovered one-for-one; rates are sensitivity assumptions, not measured acquisition or new issuance.",
+          "before": {
+            "enabled": false,
+            "amount_per_event": {
+              "value": "4750",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "8"
+            ]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "4750",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "8"
+            ]
+          }
+        },
+        {
+          "id": "redeem_bigmoney",
+          "kind": "mint",
+          "source": "Live ARC native item_presets and treasure_pools on classic/classic_survival, 2026-10-18",
+          "basis": "Previously unusable bearer items recovered one-for-one; rates are sensitivity assumptions, not measured acquisition or new issuance.",
+          "before": {
+            "enabled": false,
+            "amount_per_event": {
+              "value": "7750",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "8"
+            ]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "7750",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "8"
+            ]
+          }
+        },
+        {
+          "id": "redeem_hugemoney",
+          "kind": "mint",
+          "source": "Live ARC native item_presets and treasure_pools on classic/classic_survival, 2026-10-18",
+          "basis": "Previously unusable bearer items recovered one-for-one; rates are sensitivity assumptions, not measured acquisition or new issuance.",
+          "before": {
+            "enabled": false,
+            "amount_per_event": {
+              "value": "8500",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "8"
+            ]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "8500",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "8"
+            ]
+          }
+        }
+      ]
+    },
+    "ae_selections": {
+      "minor_per_unit": 1,
+      "flows": [
+        {
+          "id": "redeem_ae",
+          "kind": "item",
+          "source": "Live ARC native item_presets and treasure_pools on classic/classic_survival, 2026-10-18",
+          "basis": "Previously unusable bearer items recovered one-for-one; rates are sensitivity assumptions, not measured acquisition or new issuance.",
+          "before": {
+            "enabled": false,
+            "amount_per_event": {
+              "value": "1.5",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "8"
+            ]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "1.5",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "8"
+            ]
+          }
+        }
+      ]
+    },
+    "sf_selections": {
+      "minor_per_unit": 1,
+      "flows": [
+        {
+          "id": "redeem_sf",
+          "kind": "item",
+          "source": "Live ARC native item_presets and treasure_pools on classic/classic_survival, 2026-10-18",
+          "basis": "Previously unusable bearer items recovered one-for-one; rates are sensitivity assumptions, not measured acquisition or new issuance.",
+          "before": {
+            "enabled": false,
+            "amount_per_event": {
+              "value": "4.5",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "8"
+            ]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "4.5",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "8"
+            ]
+          }
+        }
+      ]
+    },
+    "tokens": {
+      "minor_per_unit": 1,
+      "flows": [
+        {
+          "id": "direct_tokens",
+          "kind": "mint",
+          "source": "Live ARC native item_presets and treasure_pools on classic/classic_survival, 2026-10-18",
+          "basis": "Previously unusable bearer items recovered one-for-one; rates are sensitivity assumptions, not measured acquisition or new issuance.",
+          "before": {
+            "enabled": false,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "8"
+            ]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "8"
+            ]
+          }
+        }
+      ]
+    },
+    "elite_crystals": {
+      "minor_per_unit": 1,
+      "flows": [
+        {
+          "id": "direct_elite_crystals",
+          "kind": "mint",
+          "source": "Live ARC native item_presets and treasure_pools on classic/classic_survival, 2026-10-18",
+          "basis": "Previously unusable bearer items recovered one-for-one; rates are sensitivity assumptions, not measured acquisition or new issuance.",
+          "before": {
+            "enabled": false,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "8"
+            ]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "8"
+            ]
+          }
+        }
+      ]
+    },
+    "xp": {
+      "minor_per_unit": 1,
+      "flows": [
+        {
+          "id": "direct_xp",
+          "kind": "mint",
+          "source": "Live ARC native item_presets and treasure_pools on classic/classic_survival, 2026-10-18",
+          "basis": "Previously unusable bearer items recovered one-for-one; rates are sensitivity assumptions, not measured acquisition or new issuance.",
+          "before": {
+            "enabled": false,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "8"
+            ]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "0.25",
+              "1",
+              "8"
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "prices": []
+}

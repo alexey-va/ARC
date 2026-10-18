@@ -72,10 +72,17 @@ class BlockListener : Listener {
     }
 
     private fun processTreasureItemUse(event: PlayerInteractEvent) {
-        val item = event.item ?: return
+        var item = event.item ?: return
         if (item.type == Material.AIR) return
         if (event.action != Action.RIGHT_CLICK_AIR && event.action != Action.RIGHT_CLICK_BLOCK) return
         if (event.hand != EquipmentSlot.HAND) return
+
+        LegacyTreasureItems.replacement(item)?.let { replacement ->
+            // PlayerInteractEvent retains the old stack; consume and read the new main-hand stack on this click.
+            if (event.player.inventory.itemInMainHand != item) return
+            event.player.inventory.setItemInMainHand(replacement)
+            item = replacement
+        }
 
         val playerId = event.player.uniqueId
         val now = System.currentTimeMillis()
