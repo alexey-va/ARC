@@ -20,6 +20,9 @@ reader are removed; old files are not imported into the new opt-in state.
 - The quest world picker has two balanced table rows and routes ordinary world
   to `arc rtp vanilla`, new biomes to `arc rtp survival`. Mining stays in the
   general teleport menu and independent claim guide, and never advances this quest.
+- Accepting an offer immediately replaces the live quest dialog with the world
+  picker while travel is still the current goal. The asynchronous completion
+  must not clear dialog history before opening its successor.
 - Progress and completion are silent in chat; their state remains in the journal.
 
 Progress is a bounded Redis CAS record in `arc.onboarding.quest.v1`, shared by

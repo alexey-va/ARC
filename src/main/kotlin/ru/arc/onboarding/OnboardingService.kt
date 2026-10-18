@@ -296,8 +296,9 @@ object OnboardingService : OnboardingBuildProgressService {
             active.npc?.refresh(player)
             if (active.menu.isCurrent(player, visit)) {
                 active.menu.forget(player.uniqueId)
-                ArcMenus.closeDialog(player)
+                // Keep the native visit alive so the asynchronous chooser replaces it.
                 if (questView(player)?.goal == OnboardingQuestGoal.TRAVEL) openGoal(player, OnboardingQuestGoal.TRAVEL)
+                else ArcMenus.closeDialog(player)
             }
         }
     }
