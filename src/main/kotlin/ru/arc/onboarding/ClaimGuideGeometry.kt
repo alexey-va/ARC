@@ -7,6 +7,8 @@ import net.kyori.adventure.text.Component
 internal data class GuideChunk(val x: Int, val z: Int)
 internal data class GuideEdge(val x: Int, val z: Int, val alongX: Boolean)
 
+internal enum class ClaimGuideGridMode { CURRENT_CHUNK, NEARBY_GRID }
+
 internal fun claimGuideEdges(chunks: Set<GuideChunk>): List<GuideEdge> = buildList {
     chunks.forEach { (x, z) ->
         if (GuideChunk(x, z - 1) !in chunks) add(GuideEdge(x * 16, z * 16, true))
@@ -50,6 +52,13 @@ internal fun claimGuideChunks(center: GuideChunk, radius: Int): Set<GuideChunk> 
     }
 }
 
+/** The personal chunk highlight is independent of nearby land boundaries and the item's claim radius. */
+internal fun claimGuideGridChunks(center: GuideChunk, radius: Int, mode: ClaimGuideGridMode): Set<GuideChunk> =
+    when (mode) {
+        ClaimGuideGridMode.CURRENT_CHUNK -> setOf(center)
+        ClaimGuideGridMode.NEARBY_GRID -> claimGuideChunks(center, radius)
+    }
+
 /** Thin grid edges for free chunks; internal free separators are retained once. */
 internal fun claimGuideWildernessEdges(
     chunks: Set<GuideChunk>,
@@ -71,9 +80,13 @@ internal fun claimGuideWildernessEdges(
 /** A free separator stays thin; only a real land perimeter gets a thicker stroke. */
 internal data class GuideBorder(val edge: GuideEdge, val landId: String?)
 
-internal fun claimGuideBorders(visible: Set<GuideChunk>, claims: Map<GuideChunk, String?>): List<GuideBorder> {
+internal fun claimGuideBorders(
+    visible: Set<GuideChunk>,
+    claims: Map<GuideChunk, String?>,
+    grid: Set<GuideChunk> = visible,
+): List<GuideBorder> {
     val borders = linkedMapOf<GuideEdge, GuideBorder>()
-    claimGuideGridEdges(visible).forEach {
+    claimGuideGridEdges(grid).forEach {
         borders[it] = GuideBorder(it, null)
     }
     visible.filter { claims[it] != null }.groupBy { claims.getValue(it)!! }.forEach { (land, chunks) ->

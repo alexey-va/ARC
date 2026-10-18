@@ -17,6 +17,11 @@ internal class OnboardingConfig private constructor(
     val claimGuideEnabled: Boolean get() = source.bool("claim-guide.enabled", true)
     val claimGuideLandWallsEnabled: Boolean get() = source.bool("claim-guide.land-walls-enabled", true)
 
+    val claimGuideGridMode: ClaimGuideGridMode
+        get() = ClaimGuideGridMode.valueOf(
+            source.string("claim-guide.grid-mode", "CURRENT_CHUNK").trim().uppercase(Locale.ROOT).replace('-', '_'),
+        )
+
     fun claimText(key: String): Component = source.component("claim-guide.text.$key", CLAIM_TEXT.getValue(key))
 
     fun allowsWorld(worldName: String): Boolean = worldName.trim().lowercase(Locale.ROOT) in worlds
@@ -27,7 +32,10 @@ internal class OnboardingConfig private constructor(
         source.component("steps.${hint.id}.message", DEFAULT_MESSAGES.getValue(hint))
 
     fun validate() {
-        if (claimGuideEnabled) CLAIM_TEXT.keys.forEach(::claimText)
+        if (claimGuideEnabled) {
+            claimGuideGridMode
+            CLAIM_TEXT.keys.forEach(::claimText)
+        }
         OnboardingHint.entries.filter(::hintEnabled).forEach { hint ->
             require(source.string("steps.${hint.id}.message", DEFAULT_MESSAGES.getValue(hint)).isNotBlank()) {
                 "onboarding step ${hint.id} has a blank message"
@@ -46,6 +54,7 @@ internal class OnboardingConfig private constructor(
             "action-expand" to "<white>Расширить «{land}» — поставь блок на ничейной земле",
             "own" to "<#80e89b>Этот чанк уже защищен<newline><white>Для расширения поставь блок за границей",
             "occupied" to "<#ff8178>Здесь уже занято<newline><white>Выбери другое место",
+            "world-unavailable" to "<#ff8178>В этом мире приват недоступен",
             "success-title" to "<#80e89b>Участок защищён",
             "success-subtitle" to "<white>Здесь твои постройки под защитой",
             "success" to "<#92bed8>Готово! Этот участок защищён",

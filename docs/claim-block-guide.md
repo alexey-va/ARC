@@ -1,8 +1,9 @@
 # Claim block guidance
 
-`OnboardingModule` owns the transient `ClaimBlockGuide`. It runs only when
-onboarding and `claim-guide.enabled` are enabled, in the configured onboarding
-worlds, and with Lands available. All visible text lives in
+`OnboardingModule` owns the transient `ClaimBlockGuide`. It runs when
+`claim-guide.enabled` is enabled, in the configured onboarding worlds, and
+with the Lands plugin enabled. The general onboarding `enabled` flag controls
+outcome hints independently. All visible guide text lives in
 `modules/onboarding.yml` under `claim-guide.text`.
 
 Holding a native Lands claim block in either hand starts a personal guide:
@@ -10,33 +11,45 @@ Holding a native Lands claim block in either hand starts a personal guide:
 On owned or member land, the independent Lands UI tool now provides a six-action personal
 world menu and suppresses the old placement label. This menu also works when
 onboarding is disabled; its lifecycle and settings are documented in
-[Lands UI](lands-ui.md). The guide's grid and its existing onboarding/world gates
-remain unchanged. Outside eligible land the placement guidance below remains active. Looking at
-the close panel temporarily hides the grid, walls and posts; looking away restores
-them. A member land uses the protected-area hint rather than «Здесь уже занято».
+[Lands UI](lands-ui.md). Outside eligible land the placement guidance below
+remains active. Looking at the close panel temporarily suppresses the glow of
+the grid, walls and posts; the geometry remains visible. A member land uses the
+protected-area hint rather than «Здесь уже занято».
 
-- A short title explains placement; its subtitle and a retained chat line give
-  `/unclaim` for removing protection from the chunk the player stands in.
 - The ray-traced placement block (including the clicked face and replaceable
-  blocks) determines the target when available; otherwise the player's current chunk is previewed immediately.
+  blocks) determines the claim target when available; otherwise the player's
+  current chunk determines it. The thin chunk highlight is independent of this target.
 - The hologram appears four blocks ahead of the eyes immediately, follows the
   gaze every tick with two-tick client interpolation, and names the selected
   land when expanding. Land names are inserted as literal text.
-- Green outlines mean unclaimed land, cyan means the player's claimed land,
-  and red means another owner's land. Wording accompanies each state.
-- The item's radius determines the complete target footprint. The selected
-  land's nearby outer borders are also cyan; internal edges and artificial
-  edges at the local view cutoff are omitted.
+- `claim-guide.grid-mode: CURRENT_CHUNK` is the default experiment to reduce
+  visual noise: only the four thin edges of the 16 × 16 chunk under the player
+  are drawn. Optional vertical corner posts are restricted to its four corners.
+  `NEARBY_GRID` restores the previous nearby lattice and corner posts. Both modes
+  use the existing personal color, height and snapping settings.
+- Chunk lines are light blue by default. Real owned/member land borders are
+  green; other owners' borders are red. `claim-guide.land-walls-enabled` keeps
+  the existing translucent walls above those real boundaries in either grid
+  mode. Internal edges and artificial edges at the local view cutoff never become walls.
+- The item's radius still determines the complete target footprint for the
+  placement message. Nearby land boundaries are queried independently of the
+  thin-grid mode, using the greater of the item's radius and the display radius.
+  Display settings label this radius as the minimum boundary-view area.
+- If Lands is enabled but `LandsIntegration.getWorld(world)` returns `null`,
+  the guide remains visible and displays `В этом мире приват недоступен` ahead
+  of the player. It skips claim/selected-land queries in that world; the neutral
+  chunk highlight never implies that claiming is allowed. The existing Lands
+  UI menu hint remains available. A missing/disabled Lands plugin still prevents
+  the guide from being attached at all.
 - Only `ChunkPostClaimEvent` produces successful protection feedback. A batch
-  of radius claims shares one title; separate targets reset confirmations.
+  of radius claims shares a confirmation; separate targets reset confirmations.
   The final consumed block retains the result for five seconds.
 - Removing the held item, death, world change, quit, reload and shutdown clean
-  up displays. Titles are short-lived and pickup notices have a 30-second
-  cooldown. The action bar alternates contextual help with removal guidance.
+  up displays. Grid and text changes add no titles, action bars or chat messages.
 
 The guide is read-only: Lands remains responsible for permissions, placement,
-claims, region selection, limits and all monetary effects. Green means no Lands
-claim exists there; it does not bypass other placement restrictions. `/unclaim`
+claims, region selection, limits and all monetary effects. A chunk highlight
+does not bypass other placement restrictions. `/unclaim`
 removes the current chunk, not the whole settlement.
 
 ## Compatibility evidence, 2026-09-09
@@ -59,17 +72,24 @@ nonpersistent, full-bright, and bounded to loaded terrain.
 
 ## Deliberate bounds and verification
 
-Item radii 0–4 are recognized (at most 81 queried chunks). The additional
-selected-land view is a 3 × 3 neighborhood. Each border edge is a bright ribbon 0.60 blocks high and 0.35 blocks thick,
-centered at the player's eye height, with 2.40-block end posts for visibility.
-Height changes move existing displays instead of respawning them; entity origins
-stay inside the represented chunks. Terrain height is never sampled. Existing region data is rechecked every five ticks while
-holding the item; unchanged geometry is reused.
+Item radii 0–4 are recognized (at most 81 target chunks). The personal display
+radius defaults to two chunks in each direction and is bounded to 1–5. Lands
+lookups include one extra neighbor ring so the visible cutoff cannot produce
+false perimeter walls. Thin lines are 0.05 blocks wide and 0.045 blocks high;
+real perimeter strokes are 0.14 wide and 0.20 high. Existing walls are 3 blocks
+high and 0.04 thick, while optional posts are 8 blocks high and 0.05 wide.
+Height changes move existing displays instead of respawning them. Terrain
+height is never sampled. Existing region data is rechecked every five ticks
+while holding the item; unchanged geometry is reused. Module reload reconstructs
+the guide and rereads its mode and messages.
 
 Legacy material-only claim items and special radii above four do not activate
 this preview. Ordinary renamed blocks never activate it. This avoids presenting
 an incorrect area for items without a supported native radius contract.
 
-Focused checks: `ClaimBlockIdentityTest`, `ClaimGuideGeometryTest`, and
-`OnboardingConfigTest`. A package/compatibility check does not establish actual
+Focused checks: `ClaimBlockGuideTest` covers the scheduled unavailable-world
+guide and item-removal cleanup; `ClaimGuideGeometryTest` covers both grid modes,
+negative/positive chunk boundaries and unchanged real-land walls.
+`ClaimBlockIdentityTest`, `ClaimGuideDisplayTest` and `OnboardingConfigTest`
+cover item identity, display movement and configuration. A package check does not establish actual
 client appearance; an in-game visual check must be reported separately.

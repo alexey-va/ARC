@@ -23,6 +23,7 @@ class OnboardingConfigTest : FreeSpec({
               between-messages-ticks: 1
             claim-guide:
               land-walls-enabled: false
+              grid-mode: nearby-grid
             steps:
               first-rtp:
                 enabled: false
@@ -39,6 +40,8 @@ class OnboardingConfigTest : FreeSpec({
         config.betweenMessagesTicks shouldBe 20L
         config.hintEnabled(OnboardingHint.FIRST_RTP) shouldBe false
         config.claimGuideLandWallsEnabled shouldBe false
+        config.claimGuideGridMode shouldBe ClaimGuideGridMode.NEARBY_GRID
+        config.validate()
     }
 
     "fails closed when an enabled config has no target worlds" {
@@ -58,6 +61,15 @@ class OnboardingConfigTest : FreeSpec({
             root.resolve("modules/onboarding.yml"),
             "enabled: true\nworlds: [survival]\nsteps:\n  first-rtp:\n    enabled: true\n    message: '   '\n",
         )
+        val config = OnboardingConfig.load(Config(root, "modules/onboarding.yml"))
+
+        shouldThrow<IllegalArgumentException> { config.validate() }
+    }
+
+    "rejects an unknown grid mode instead of silently showing a different grid" {
+        val root = Files.createTempDirectory("arc-onboarding-config-")
+        Files.createDirectories(root.resolve("modules"))
+        Files.writeString(root.resolve("modules/onboarding.yml"), "claim-guide:\n  grid-mode: unknown\n")
         val config = OnboardingConfig.load(Config(root, "modules/onboarding.yml"))
 
         shouldThrow<IllegalArgumentException> { config.validate() }
@@ -83,6 +95,8 @@ class OnboardingConfigTest : FreeSpec({
         plainText.serialize(config.claimText("subtitle")) shouldBe "Снять защиту здесь: /unclaim"
         config.claimGuideEnabled shouldBe true
         config.claimGuideLandWallsEnabled shouldBe true
+        config.claimGuideGridMode shouldBe ClaimGuideGridMode.CURRENT_CHUNK
+        plainText.serialize(config.claimText("world-unavailable")) shouldBe "В этом мире приват недоступен"
         config.validate()
     }
 })

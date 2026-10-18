@@ -96,9 +96,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig, particleCol
     private fun update(player: Player, glowing: Boolean = !LandsUiModule.isLookingAtClaimMenu(player)) {
         if (player.uniqueId in failedViewers) return
         if (RegionToolItem.matches(player.inventory.itemInMainHand)) { clear(player); return }
-        if (!config.allowsWorld(player.world.name) || player.isDead || player.gameMode == GameMode.SPECTATOR ||
-            integration.getWorld(player.world) == null
-        ) {
+        if (!config.allowsWorld(player.world.name) || player.isDead || player.gameMode == GameMode.SPECTATOR) {
             clear(player)
             return
         }
@@ -125,12 +123,15 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig, particleCol
             session.confirmed.clear()
             session.successUntil = 0
         }
-        val hit = player.rayTraceBlocks(5.0, FluidCollisionMode.NEVER)
+        val world = player.world
+        // Lands may be enabled while this world is excluded from claiming. Keep the guide visible.
+        val claimsAvailable = integration.getWorld(world) != null
+        val hit = if (claimsAvailable) player.rayTraceBlocks(5.0, FluidCollisionMode.NEVER) else null
         val hitBlock = hit?.hitBlock
         val placement = hitBlock?.let { block ->
             if (block.isReplaceable) block else hit.hitBlockFace?.let(block::getRelative)
         }?.takeIf { it.y in player.world.minHeight until player.world.maxHeight }
-        val success = tick < session.successUntil && (!holding || placement == null ||
+        val success = claimsAvailable && tick < session.successUntil && (!holding || placement == null ||
             GuideChunk(placement.x shr 4, placement.z shr 4) in session.confirmed)
         val target = if (success) session.aimed?.takeIf { it in session.confirmed } ?: session.confirmed.first()
             else claimGuideTarget(placement?.x, placement?.z, player.location.blockX, player.location.blockZ)
@@ -139,14 +140,15 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig, particleCol
             session.confirmed.clear()
             session.successUntil = 0
         }
-        val world = player.world
         if (!world.isChunkLoaded(target.x, target.z)) {
             clearVisuals(session)
             return
         }
         val footprint = if (success) session.confirmed.toSet() else claimGuideChunks(target, session.radius)
-        val claims = footprint.associateWith { integration.getLandByUnloadedChunk(world, it.x, it.z) }
-        val selected = integration.getLandPlayer(player.uniqueId)?.getEditLand(false)
+        val claims = if (claimsAvailable) footprint.associateWith {
+            integration.getLandByUnloadedChunk(world, it.x, it.z)
+        } else emptyMap()
+        val selected = if (claimsAvailable) integration.getLandPlayer(player.uniqueId)?.getEditLand(false) else null
         val own = claims.values.all {
             it != null && (it.ownerUID == player.uniqueId || player.uniqueId in it.trustedPlayers)
         }
@@ -154,6 +156,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig, particleCol
             it != null && it.ownerUID != player.uniqueId && player.uniqueId !in it.trustedPlayers
         }
         val state = when {
+            !claimsAvailable -> "world-unavailable"
             success -> "success"
             own -> "own"
             occupied -> "occupied"
@@ -165,13 +168,14 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig, particleCol
         val gridY = claimGuideBorderY(player.eyeLocation.y, view.snapBlocks, view.gridOffset)
         val visibleRadius = maxOf(session.radius, view.gridRadius)
         val visible = claimGuideChunks(currentChunk, visibleRadius)
-        val nearby = buildMap {
+        val grid = claimGuideGridChunks(currentChunk, visibleRadius, config.claimGuideGridMode)
+        val nearby = if (claimsAvailable) buildMap {
             for (x in currentChunk.x - visibleRadius - 1..currentChunk.x + visibleRadius + 1)
                 for (z in currentChunk.z - visibleRadius - 1..currentChunk.z + visibleRadius + 1) {
                     put(GuideChunk(x, z), integration.getLandByUnloadedChunk(world, x, z))
                 }
-        }
-        val plan = claimGuideBorders(visible, nearby.mapValues { it.value?.ulid?.toString() }).toSet()
+        } else emptyMap()
+        val plan = claimGuideBorders(visible, nearby.mapValues { it.value?.ulid?.toString() }, grid).toSet()
         val iterator = session.borders.iterator()
         while (iterator.hasNext()) {
             val (key, display) = iterator.next()
@@ -185,7 +189,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig, particleCol
                 wallIterator.remove()
             }
         }
-        val corners = claimGuideIntersections(visible)
+        val corners = claimGuideIntersections(grid)
         val postIterator = session.posts.iterator()
         while (postIterator.hasNext()) {
             val (corner, display) = postIterator.next()

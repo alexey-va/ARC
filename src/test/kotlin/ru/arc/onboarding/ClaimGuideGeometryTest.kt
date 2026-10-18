@@ -7,6 +7,45 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 
 class ClaimGuideGeometryTest : FreeSpec({
+    "current chunk mode draws only four edges and four corners at positive and negative boundaries" {
+        for ((block, chunk) in listOf(0 to 0, 15 to 0, 16 to 1, -1 to -1, -16 to -1, -17 to -2)) {
+            val current = claimGuideTarget(null, null, block, block)
+            current shouldBe GuideChunk(chunk, chunk)
+            val grid = claimGuideGridChunks(current, 5, ClaimGuideGridMode.CURRENT_CHUNK)
+            grid shouldBe setOf(current)
+            claimGuideGridEdges(grid).toSet() shouldBe setOf(
+                GuideEdge(chunk * 16, chunk * 16, true),
+                GuideEdge(chunk * 16, chunk * 16 + 16, true),
+                GuideEdge(chunk * 16, chunk * 16, false),
+                GuideEdge(chunk * 16 + 16, chunk * 16, false),
+            )
+            claimGuideIntersections(grid).size shouldBe 4
+        }
+    }
+    "nearby grid mode preserves the configured neighborhood" {
+        val current = GuideChunk(-1, 2)
+        val grid = claimGuideGridChunks(current, 2, ClaimGuideGridMode.NEARBY_GRID)
+        grid shouldBe claimGuideChunks(current, 2)
+        grid.size shouldBe 25
+        claimGuideGridEdges(grid).size shouldBe 60
+        claimGuideIntersections(grid).size shouldBe 36
+    }
+    "current chunk grid keeps nearby real land walls and never invents a wall at the view cutoff" {
+        val current = GuideChunk(-1, -1)
+        val visible = claimGuideChunks(current, 2)
+        val claims = mapOf(GuideChunk(0, -1) to "home", GuideChunk(1, -1) to "home")
+        val legacy = claimGuideBorders(visible, claims)
+        val focused = claimGuideBorders(visible, claims,
+            claimGuideGridChunks(current, 2, ClaimGuideGridMode.CURRENT_CHUNK))
+        focused.filter { it.landId != null }.toSet() shouldBe legacy.filter { it.landId != null }.toSet()
+        focused.count { it.landId == "home" } shouldBe 6
+        focused.filter { it.landId == null }.all { it.edge in claimGuideGridEdges(setOf(current)) } shouldBe true
+
+        val largerLand = claimGuideChunks(current, 3).associateWith { "home" }
+        val inside = claimGuideBorders(visible, largerLand, setOf(current))
+        inside.size shouldBe 4
+        inside.all { it.landId == null } shouldBe true
+    }
     "button gesture accepts either mouse button only while sneaking with the main hand" {
         for (action in org.bukkit.event.block.Action.entries) {
             claimGuideButtonGesture(action, org.bukkit.inventory.EquipmentSlot.HAND, false) shouldBe false
