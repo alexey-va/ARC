@@ -34,7 +34,8 @@ protected-area hint rather than «Здесь уже занято».
 - The item's radius still determines the complete target footprint for the
   placement message. Nearby land boundaries are queried independently of the
   thin-grid mode, using the greater of the item's radius and the display radius.
-  Display settings label this radius as the minimum boundary-view area.
+  This display radius remains a guide preference; the privats menu no longer
+  exposes radius or guide-display controls.
 - If Lands is enabled but `LandsIntegration.getWorld(world)` returns `null`,
   the guide remains visible and displays `В этом мире приват недоступен` ahead
   of the player. It skips claim/selected-land queries in that world; the neutral

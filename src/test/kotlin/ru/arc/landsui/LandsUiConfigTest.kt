@@ -22,6 +22,21 @@ class LandsUiConfigTest : StringSpec({
             settings.text("guide-commands-body").contains("/lands edit НАЗВАНИЕ") shouldBe true
             settings.text("guide-commands-body").contains("/lands menu") shouldBe true
             settings.text("guide-body").contains("Выбранное поселение", ignoreCase = true) shouldBe true
+            settings.text("guide-body").contains("Открытие карточки сохраняет этот выбор") shouldBe true
+            listOf("root-body", "guide-body", "guide-expand-body", "region-select-land").forEach { key ->
+                withClue(key) { settings.text(key).contains("/lands edit НАЗВАНИЕ") shouldBe true }
+            }
+            mapOf(
+                "rules-label" to "<#86dcf1>Разрешения ›",
+                "roles-label" to "<#c4a7e7>Роли ›",
+                "territory-label" to "<#9bd48d>Территория ›",
+                "management-settings-label" to "<#f4d87a>Управление ›",
+            ).forEach { (key, label) ->
+                withClue(key) {
+                    MiniMessage.miniMessage().deserialize(settings.text(key)).compact() shouldBe
+                        MiniMessage.miniMessage().deserialize(label).compact()
+                }
+            }
             settings.text("created-body").contains("первый чанк") shouldBe true
             listOf(
                 "land-label",

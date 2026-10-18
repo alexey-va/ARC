@@ -38,7 +38,7 @@ class LandsUiControllerTest : StringSpec({
             every { gateway.currentLandId(player) } returns land.id
             every { gateway.land(player, land.id) } returns land
             every { gateway.managementView(player, context) } returns landsUiTestView(
-                context, land, permissions = setOf(LandsUiPermission.TRUST),
+                context, land, permissions = setOf(LandsUiPermission.TRUST, LandsUiPermission.NATIVE_MENU),
             )
             every { gateway.managementView(player, currentContext) } returns landsUiTestView(currentContext, land)
             val settings = try {
@@ -61,7 +61,7 @@ class LandsUiControllerTest : StringSpec({
                         LandsUiPanelAction.RULES to "lands.rules",
                         LandsUiPanelAction.TERRITORY to "lands.territory",
                         LandsUiPanelAction.SETTINGS to "lands.settings",
-                        LandsUiPanelAction.OVERVIEW to "lands.inspect",
+                        LandsUiPanelAction.OVERVIEW to "lands.details",
                     ).forEach { (action, expectedScreen) ->
                         controller.openPanelAction(player, land.id, action)
                         checkNotNull(screen).id shouldBe expectedScreen
@@ -76,7 +76,7 @@ class LandsUiControllerTest : StringSpec({
                     controller.openPanelAction(player, land.id, LandsUiPanelAction.MEMBERS)
                     checkNotNull(screen).id shouldBe "lands.home"
 
-                    verify(exactly = 5) { gateway.managementView(player, context) }
+                    verify(exactly = 6) { gateway.managementView(player, context) }
                     verify(exactly = 1) { gateway.managementView(player, currentContext) }
                     verify(exactly = 0) { gateway.select(player, any()) }
                     verify(exactly = 0) { gateway.change(player, any(), any()) }
@@ -115,7 +115,7 @@ class LandsUiControllerTest : StringSpec({
             val memberContext = LandsUiContext(land.id, LandsUiAccess.MEMBER)
             val currentContext = LandsUiContext(land.id, LandsUiAccess.CURRENT)
             every { gateway.managementView(player, memberContext) } returns landsUiTestView(
-                memberContext, land, permissions = setOf(LandsUiPermission.TRUST),
+                memberContext, land, permissions = setOf(LandsUiPermission.TRUST, LandsUiPermission.NATIVE_MENU),
             )
             every { gateway.managementView(player, currentContext) } returns landsUiTestView(currentContext, land)
             val settings = try {
@@ -139,7 +139,7 @@ class LandsUiControllerTest : StringSpec({
                     val detailsIds = details.buttons.map { it.id.value }
                     detailsIds shouldContain "add_member"
                     detailsIds shouldBe listOf(
-                        "members", "rules", "roles", "territory", "add_member", "settings",
+                        "members", "add_member", "rules", "roles", "territory", "settings",
                     )
                     ("region_tool" in detailsIds) shouldBe false
                     detailsIds.all { '-' !in it } shouldBe true
@@ -156,7 +156,7 @@ class LandsUiControllerTest : StringSpec({
 
                     every { gateway.currentLandId(player) } returns land.id
                     controller.openCurrent(player)
-                    checkNotNull(screen).id shouldBe "lands.inspect"
+                    checkNotNull(screen).id shouldBe "lands.details"
                     checkNotNull(screen).exitButton!!.onClick.handle(context)
                     checkNotNull(screen).id shouldBe "lands.home"
                     every { gateway.currentLandId(player) } returns null
@@ -186,24 +186,39 @@ class LandsUiControllerTest : StringSpec({
         }
     }
 
-    "details radius flow updates the held claim block and preserves its amount" {
+    "list current and held-block overview compose the same member card without selecting land or item settings" {
         MockBukkitTestRuntime.open().use { paper ->
-            val dataPath = Files.createTempDirectory("lands-ui-radius")
-            val player = paper.addPlayer("RadiusViewer")
+            val dataPath = Files.createTempDirectory("lands-ui-card")
+            val player = paper.addPlayer("CardViewer")
+            player.isOp = true
             val playerId = player.uniqueId
             val item = ItemStack(Material.GOLD_BLOCK, 6).apply {
                 editMeta { meta ->
                     meta.displayName(Component.text("Claim block"))
                     meta.persistentDataContainer.set(NamespacedKey("lands", "type"), PersistentDataType.STRING, "CLAIM_BLOCK")
-                    meta.persistentDataContainer.set(NamespacedKey("lands", "radius"), PersistentDataType.INTEGER, 0)
+                    meta.persistentDataContainer.set(NamespacedKey("lands", "radius"), PersistentDataType.INTEGER, 2)
                 }
             }
             player.inventory.setItemInMainHand(item)
-            val land = LandsUiLand("land-radius", "Дом", playerId, 1, 64, setOf(playerId), 12, 0.0, true)
+            val owner = UUID.randomUUID()
+            val land = LandsUiLand("land-card", "Дом", owner, 1, 64, setOf(owner, playerId), 12, 0.0, false)
             val gateway = mockk<LandsUiGateway>(relaxed = true)
+            every { gateway.lands(player) } returns listOf(land)
             every { gateway.land(player, land.id) } returns land
+            every { gateway.inspectedLand(player) } returns land
+            every { gateway.currentLandId(player) } returns land.id
             val memberContext = LandsUiContext(land.id, LandsUiAccess.MEMBER)
-            every { gateway.managementView(player, memberContext) } returns landsUiTestView(memberContext, land)
+            val mainContext = memberContext.copy(areaId = "main")
+            val currentContext = LandsUiContext(land.id, LandsUiAccess.CURRENT)
+            var mainView = landsUiTestView(mainContext, land, permissions = setOf(
+                LandsUiPermission.TRUST, LandsUiPermission.SPAWN, LandsUiPermission.BORDERS,
+                LandsUiPermission.CLAIM, LandsUiPermission.UNCLAIM, LandsUiPermission.SET_SPAWN,
+                LandsUiPermission.NATIVE_MENU,
+            )).copy(currentClaim = LandsUiClaim(land.id, player.world.uid, 0, 0))
+            var currentView = landsUiTestView(currentContext.copy(areaId = "main"), land)
+            every { gateway.managementView(player, memberContext) } answers { mainView }
+            every { gateway.managementView(player, mainContext) } answers { mainView }
+            every { gateway.managementView(player, currentContext) } answers { currentView }
             val settings = try {
                 ConfigManager.clear()
                 LandsUiConfig.load(dataPath).snapshot()
@@ -217,30 +232,87 @@ class LandsUiControllerTest : StringSpec({
             try {
                 every { ArcMenus.openDialog(player, any(), any(), any(), any()) } answers { screen = secondArg() }
                 val controller = LandsUiController(settings, gateway)
+                val click = mockk<PaperDialogClickContext>(relaxed = true)
+                every { click.player } returns player
+                fun assertSameCard(expected: PaperDialogScreen) {
+                    val actual = checkNotNull(screen)
+                    actual.id shouldBe expected.id
+                    actual.title shouldBe expected.title
+                    actual.body shouldBe expected.body
+                    actual.columns shouldBe expected.columns
+                    actual.buttons.map { it.id to it.label } shouldBe expected.buttons.map { it.id to it.label }
+                }
                 try {
-                    controller.openDetails(player, land.id)
-                    val details = checkNotNull(screen)
-                    details.buttons.map { it.id.value } shouldContain "claim_radius"
-                    details.buttons.map { it.id.value } shouldContain "claim_display"
-                    val context = mockk<PaperDialogClickContext>(relaxed = true)
-                    every { context.player } returns player
-                    details.buttons.single { it.id.value == "claim_display" }.onClick.handle(context)
-                    val display = checkNotNull(screen)
-                    display.id shouldBe "lands.claim-display"
-                    display.buttons.map { it.id.value } shouldBe
-                        listOf(
-                            "grid_down", "grid_up", "label_down", "label_up", "snap",
-                            "radius_down", "radius_up", "color", "posts", "reset",
-                        )
+                    controller.openRoot(player)
+                    val root = checkNotNull(screen)
+                    root.buttons.none { it.id.value in setOf("claim_radius", "claim_display") } shouldBe true
+                    root.buttons.single { it.id.value == "land_0" }.onClick.handle(click)
+                    val card = checkNotNull(screen)
+                    card.id shouldBe "lands.details"
+                    card.buttons.map { it.id.value } shouldBe listOf(
+                        "members", "add_member", "rules", "roles", "territory", "spawn", "settings", "borders", "admin",
+                    )
+                    val plain = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+                    card.buttons.map { plain.serialize(it.label) } shouldBe listOf(
+                        "Участники ›", "Добавить игрока ›", "Разрешения ›", "Роли ›", "Территория ›",
+                        "Телепорт домой ›", "Управление ›", "Показать границы", "[Админ] Управление ›",
+                    )
+                    controller.openCurrent(player)
+                    assertSameCard(card)
+                    controller.openPanelAction(player, land.id, LandsUiPanelAction.OVERVIEW)
+                    assertSameCard(card)
+                    root.buttons.single { it.id.value == "inspect" }.onClick.handle(click)
+                    assertSameCard(card)
+                    verify(exactly = 0) { gateway.change(player, any(), any()) }
 
-                    controller.openDetails(player, land.id)
-                    details.buttons.single { it.id.value == "claim_radius" }.onClick.handle(context)
+                    val adminContext = mainContext.copy(access = LandsUiAccess.ADMIN)
+                    every { gateway.managementView(player, adminContext) } returns mainView.copy(context = adminContext)
+                    verify(exactly = 0) { gateway.managementView(player, adminContext) }
+                    card.buttons.single { it.id.value == "admin" }.onClick.handle(click)
+                    checkNotNull(screen).id shouldBe "lands.admin"
+                    checkNotNull(screen).buttons.none { it.id.value == "admin" } shouldBe true
 
-                    val radius = checkNotNull(screen)
-                    radius.id shouldBe "lands.claim-radius"
-                    radius.buttons.size shouldBe 5
-                    radius.buttons.single { it.id.value == "radius_2" }.onClick.handle(context)
+                    every { gateway.change(player, mainContext, LandsUiChange.Spawn) } returns LandsUiChangeResult.DISPATCHED
+                    val teleport = card.buttons.single { it.id.value == "spawn" }
+                    teleport.closeDialogBeforeAction shouldBe true
+                    teleport.onClick.handle(click)
+                    verify(exactly = 1) { gateway.change(player, mainContext, LandsUiChange.Spawn) }
 
+                    card.buttons.single { it.id.value == "territory" }.onClick.handle(click)
+                    checkNotNull(screen).id shouldBe "lands.territory"
+                    checkNotNull(screen).buttons.map { it.id.value } shouldBe
+                        listOf("borders", "claim", "unclaim", "setspawn", "mainblock")
+
+                    mainView = mainView.copy(permissions = setOf(LandsUiPermission.BORDERS))
+                    every { gateway.change(player, mainContext, LandsUiChange.Spawn) } returns LandsUiChangeResult.DENIED
+                    teleport.onClick.handle(click)
+                    checkNotNull(screen).buttons.map { it.id.value } shouldBe
+                        listOf("members", "rules", "roles", "territory", "borders", "admin")
+                    verify(exactly = 2) { gateway.change(player, mainContext, LandsUiChange.Spawn) }
+
+                    // A current-land entry keeps the actual subarea instead of silently using the default region.
+                    val subareaContext = memberContext.copy(areaId = "farm")
+                    currentView = currentView.copy(context = currentContext.copy(areaId = "farm"), areaName = "Ферма")
+                    every { gateway.managementView(player, subareaContext) } returns mainView.copy(
+                        context = subareaContext, areaName = "Ферма", viewerRole = "Участник",
+                    )
+                    controller.openCurrent(player)
+                    val subarea = checkNotNull(screen)
+                    val subareaText = subarea.body.joinToString("\n") { plain.serialize(it.text) }
+                    subareaText.contains("Ферма") shouldBe true
+                    subareaText.contains("Участник") shouldBe true
+                    subarea.buttons.map { it.id.value } shouldBe
+                        listOf("members", "rules", "roles", "territory", "borders", "admin")
+                    controller.openPanelAction(player, land.id, LandsUiPanelAction.OVERVIEW)
+                    assertSameCard(subarea)
+                    subarea.buttons.single { it.id.value == "members" }.onClick.handle(click)
+                    verify(exactly = 3) { gateway.managementView(player, subareaContext) }
+
+                    every { gateway.managementView(player, memberContext) } returns null
+                    root.buttons.single { it.id.value == "land_0" }.onClick.handle(click)
+                    checkNotNull(screen).id shouldBe "lands.home"
+                    verify(exactly = 0) { gateway.select(player, any()) }
+                    verify(exactly = 0) { gateway.selectAndExecute(any(), any(), any()) }
                     player.inventory.itemInMainHand.amount shouldBe 6
                     player.inventory.itemInMainHand.itemMeta.persistentDataContainer.get(
                         NamespacedKey("lands", "radius"), PersistentDataType.INTEGER,

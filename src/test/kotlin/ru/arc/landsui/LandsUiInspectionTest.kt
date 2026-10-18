@@ -111,6 +111,9 @@ class LandsUiInspectionTest : StringSpec({
                 checkNotNull(screen).id shouldBe "lands.inspect"
                 controller.openCurrent(player)
                 checkNotNull(screen).id shouldBe "lands.inspect"
+                checkNotNull(screen).body shouldBe inspection.body
+                checkNotNull(screen).buttons.map { it.id to it.label } shouldBe
+                    inspection.buttons.map { it.id to it.label }
 
                 // A current-view lookup can expire after a page was opened (for example, the player moved).
                 every { gateway.managementView(player, currentContext) } returns null
@@ -129,6 +132,9 @@ class LandsUiInspectionTest : StringSpec({
                 verify(exactly = 0) { gateway.execute(any(), any()) }
                 verify(exactly = 0) { gateway.administerCurrent(any(), any(), any()) }
                 verify(exactly = 0) { gateway.change(any(), any(), any()) }
+                verify(exactly = 0) {
+                    gateway.managementView(player, match { it.access != LandsUiAccess.CURRENT })
+                }
             } finally {
                 controller.close()
                 Tasks.reset()

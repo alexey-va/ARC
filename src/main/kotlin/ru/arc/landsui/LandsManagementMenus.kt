@@ -23,7 +23,6 @@ internal class LandsManagementMenus(
     private val settings: LandsUiSettings,
     private val gateway: LandsUiGateway,
     private val openRoot: (Player) -> Unit,
-    private val extraButtons: (Player, LandsUiContext) -> List<PaperDialogButton>,
 ) {
     fun execute(player: Player, context: LandsUiContext, change: LandsUiChange) =
         apply(player, context, change) { open(player, context) }
@@ -39,7 +38,19 @@ internal class LandsManagementMenus(
         }
     }
 
+    fun openCurrent(player: Player, landId: String): Unit =
+        withView(player, LandsUiContext(landId, LandsUiAccess.CURRENT)) { view ->
+            // Retain the actual subarea while resolving the member's existing authority.
+            if (gateway.land(player, landId) == null) showOverview(player, view)
+            else open(player, view.context.copy(access = LandsUiAccess.MEMBER))
+        }
+
     fun open(player: Player, context: LandsUiContext): Unit = withView(player, context) { view ->
+        showOverview(player, view)
+    }
+
+    private fun showOverview(player: Player, view: LandsUiManagementView) {
+        val context = view.context
         val land = view.land
         val rows = listOf(
             text("table-owner-label") to value(gateway.playerName(land.ownerId) ?: land.ownerId.toString()),
@@ -55,27 +66,24 @@ internal class LandsManagementMenus(
         )
         val buttons = buildList {
             add(button("members", "members-label") { openMembers(player, context) })
-            add(button("rules", "rules-label") { openRules(player, context) })
-            add(button("roles", "roles-label") { openRoles(player, context) })
-            add(button("territory", "territory-label") { openTerritory(player, context) })
             if (LandsUiPermission.TRUST in view.permissions) {
                 add(button("add_member", "add-member-label") { openAddMember(player, context) })
             }
-            if (context.access != LandsUiAccess.CURRENT) {
+            add(button("rules", "rules-label") { openRules(player, context) })
+            add(button("roles", "roles-label") { openRoles(player, context) })
+            add(button("territory", "territory-label") { openTerritory(player, context) })
+            if (LandsUiPermission.SPAWN in view.permissions) {
+                add(actionButton(player, context, "spawn", "spawn-label", LandsUiChange.Spawn))
+            }
+            if (context.access != LandsUiAccess.CURRENT && view.permissions.any { it in SETTINGS_PERMISSIONS }) {
                 add(button("settings", "management-settings-label") { openSettings(player, context) })
             }
             if (LandsUiPermission.BORDERS in view.permissions) {
                 add(actionButton(player, context, "borders", "borders-label", LandsUiChange.Borders))
             }
-            if (context.access == LandsUiAccess.CURRENT) {
-                if (gateway.land(player, land.id) != null) add(button("manage", "manage-label") {
-                    open(player, context.copy(access = LandsUiAccess.MEMBER))
-                })
-                if (player.hasPermission(ADMIN_PERMISSION)) add(button("admin", "admin-panel-label") {
-                    withView(player, context) { open(player, it.context.copy(access = LandsUiAccess.ADMIN)) }
-                })
-            }
-            addAll(extraButtons(player, context))
+            if (context.access != LandsUiAccess.ADMIN && player.hasPermission(ADMIN_PERMISSION)) add(button("admin", "admin-panel-label") {
+                withView(player, context) { open(player, it.context.copy(access = LandsUiAccess.ADMIN)) }
+            })
         }
         show(player, PaperDialogScreen(
             id = when (context.access) {
@@ -235,7 +243,6 @@ internal class LandsManagementMenus(
                 "chunks" to view.land.chunks.toString(), "max_chunks" to view.land.maxChunks.toString()))),
             buttons = buildList {
                 if (LandsUiPermission.BORDERS in view.permissions) add(actionButton(player, context, "borders", "borders-label", LandsUiChange.Borders))
-                if (LandsUiPermission.SPAWN in view.permissions) add(actionButton(player, context, "spawn", "spawn-label", LandsUiChange.Spawn))
                 if (LandsUiPermission.CLAIM in view.permissions) add(actionButton(player, context, "claim", "claim-label", LandsUiChange.Claim))
                 if (LandsUiPermission.UNCLAIM in view.permissions && view.currentClaim != null) add(button("unclaim", "unclaim-label") {
                     openUnclaim(player, context)
@@ -245,7 +252,6 @@ internal class LandsManagementMenus(
                         text("setspawn-confirm-body", "land" to view.land.name), text("save-label"), LandsUiChange.SetSpawn,
                         backTo = { openTerritory(player, context) })
                 })
-                add(button("areas", "areas-label") { openAreas(player, context) })
                 if (LandsUiPermission.NATIVE_MENU in view.permissions) add(button("mainblock", "mainblock-label") {
                     show(player, PaperDialogScreen(id = "lands.mainblock", title = text("mainblock-title", "land" to view.land.name),
                         body = listOf(PaperDialogBody(text("mainblock-body"))),
@@ -266,22 +272,10 @@ internal class LandsManagementMenus(
             text("unclaim-confirm-label"), LandsUiChange.Unclaim(claim), backTo = { openTerritory(player, context) })
     }
 
-    private fun openAreas(player: Player, context: LandsUiContext, page: Int = 0): Unit = withView(player, context) { view ->
-        val paging = page(view.areas, page)
-        show(player, PaperDialogScreen(
-            id = "lands.areas", title = text("region-list-title", "land" to view.land.name),
-            body = listOf(PaperDialogBody(text("management-areas-body"))),
-            buttons = paging.items.mapIndexed { index, area ->
-                button("area_$index", text(if (area.main) "main-area-entry" else "region-entry", "area" to area.name)) {
-                    open(player, context.copy(areaId = area.id))
-                }
-            } + pagination(paging) { openAreas(player, context, it) },
-            exitButton = back { openTerritory(player, context) }, columns = 2,
-        )) { openAreas(player, context, paging.index) }
-    }
-
     private fun openSettings(player: Player, context: LandsUiContext): Unit = withView(player, context) { view ->
-        if (context.access == LandsUiAccess.CURRENT) return@withView denied(player, context)
+        if (context.access == LandsUiAccess.CURRENT || view.permissions.none { it in SETTINGS_PERMISSIONS }) {
+            return@withView denied(player, context)
+        }
         show(player, PaperDialogScreen(
             id = "lands.settings", title = text("management-settings-title", "land" to view.land.name),
             body = listOf(PaperDialogBody(text("management-settings-body"))),
@@ -452,5 +446,9 @@ internal class LandsManagementMenus(
     companion object {
         private val INPUT = PaperDialogInputId.of("value")
         private const val ADMIN_PERMISSION = "lands.admin.command.edit"
+        private val SETTINGS_PERMISSIONS = setOf(
+            LandsUiPermission.RENAME, LandsUiPermission.DESCRIPTION, LandsUiPermission.TRANSFER,
+            LandsUiPermission.NATIVE_MENU, LandsUiPermission.LEAVE, LandsUiPermission.DELETE,
+        )
     }
 }

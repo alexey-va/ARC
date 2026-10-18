@@ -8,10 +8,6 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import org.bukkit.entity.Player
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.gui.ArcMenus
-import ru.arc.onboarding.ClaimBlockIdentity
-import ru.arc.onboarding.ClaimGuideGridColor
-import ru.arc.onboarding.ClaimGuideView
-import ru.arc.onboarding.OnboardingModule
 import ru.arc.paper.menu.DialogTables
 import ru.arc.gui.MenuEscapeBehavior
 import ru.arc.paper.menu.PaperDialogActionId
@@ -31,11 +27,7 @@ class LandsUiController(
     private val tasks = LifecycleTaskScope()
 
     private val management by lazy {
-        LandsManagementMenus(settings, gateway, ::openRoot) { player, context ->
-            if (context.access == LandsUiAccess.MEMBER) {
-                listOfNotNull(claimRadiusButton(player), claimDisplayButton(player, context.landId))
-            } else emptyList()
-        }
+        LandsManagementMenus(settings, gateway, ::openRoot)
     }
 
     fun close() = tasks.close()
@@ -99,7 +91,7 @@ class LandsUiController(
                     "max_members" to land.maxMembers.toString(),
                     "balance" to amountFormat.format(land.balance),
                 ),
-            ) { selectAndOpenDetails(player, land.id) }
+            ) { openDetails(player, land.id) }
         } + listOf(
             button("claim_get", text("claim-get-label"), text("claim-get-tooltip")) {
                 val message = when (gateway.giveClaimBlock(player)) {
@@ -117,7 +109,7 @@ class LandsUiController(
             button("admin_search", text("admin-search-label"), text("admin-search-tooltip")) {
                 management.openSearch(player)
             },
-        ) else emptyList()) + listOfNotNull(claimRadiusButton(player)) + listOfNotNull(claimDisplayButton(player, null))
+        ) else emptyList())
         show(
             player,
             PaperDialogScreen(
@@ -133,7 +125,7 @@ class LandsUiController(
     }
 
     private fun openInspection(player: Player, landId: String) =
-        management.open(player, LandsUiContext(landId, LandsUiAccess.CURRENT))
+        management.openCurrent(player, landId)
 
     fun openInvite(player: Player, target: LandsUiPlayer) {
         val lands = LandsUiPlanner.inviteableLands(target.id, gateway.lands(player))
@@ -160,15 +152,6 @@ class LandsUiController(
         )
     }
 
-    private fun selectAndOpenDetails(player: Player, landId: String) {
-        if (!gateway.select(player, landId)) {
-            player.sendMessage(text("land-gone"))
-            openRoot(player)
-            return
-        }
-        openDetails(player, landId)
-    }
-
     fun openDetails(player: Player, landId: String) =
         management.open(player, LandsUiContext(landId, LandsUiAccess.MEMBER))
 
@@ -183,126 +166,6 @@ class LandsUiController(
             return
         }
         management.openPanelAction(player, LandsUiContext(landId, LandsUiAccess.MEMBER), action)
-    }
-
-    private fun claimRadiusButton(player: Player): PaperDialogButton? =
-        ClaimBlockIdentity.heldRadius(player)?.let { radius ->
-            button("claim_radius", text("claim-radius-label", "size" to (radius * 2 + 1).toString()),
-                text("claim-radius-tooltip")) { openClaimRadius(player) }
-        }
-
-    private fun claimDisplayButton(player: Player, returnLandId: String?): PaperDialogButton? =
-        ClaimBlockIdentity.heldRadius(player)?.let {
-            button("claim_display", text("claim-display-label"), text("claim-display-tooltip")) {
-                openClaimDisplay(player, returnLandId)
-            }
-        }
-
-    private fun openClaimDisplay(player: Player, returnLandId: String?) {
-        if (ClaimBlockIdentity.heldRadius(player) == null) return openRoot(player)
-        val view = OnboardingModule.claimGuideView(player)
-        show(player, PaperDialogScreen(
-            id = "lands.claim-display",
-            title = text("claim-display-title"),
-            body = listOf(PaperDialogBody(text("claim-display-body",
-                "grid" to offsetText(view.gridOffset),
-                "label" to offsetText(view.labelOffset),
-                "snap" to snapText(view),
-                "radius" to gridRadiusText(view.gridRadius),
-                "color" to colorText(view.gridColor),
-                "posts" to settings.text(if (view.showPosts) "claim-display-enabled" else "claim-display-disabled"),
-            ))),
-            buttons = listOf(
-                button("grid_down", text("claim-display-grid-down")) {
-                    OnboardingModule.adjustClaimGuideView(player, gridSteps = -1)
-                    openClaimDisplay(player, returnLandId)
-                },
-                button("grid_up", text("claim-display-grid-up")) {
-                    OnboardingModule.adjustClaimGuideView(player, gridSteps = 1)
-                    openClaimDisplay(player, returnLandId)
-                },
-                button("label_down", text("claim-display-label-down")) {
-                    OnboardingModule.adjustClaimGuideView(player, labelSteps = -1)
-                    openClaimDisplay(player, returnLandId)
-                },
-                button("label_up", text("claim-display-label-up")) {
-                    OnboardingModule.adjustClaimGuideView(player, labelSteps = 1)
-                    openClaimDisplay(player, returnLandId)
-                },
-                button("snap", text("claim-display-snap", "snap" to snapText(view))) {
-                    OnboardingModule.adjustClaimGuideView(player, cycleSnap = true)
-                    openClaimDisplay(player, returnLandId)
-                },
-                button("radius_down", text("claim-display-radius-down")) {
-                    OnboardingModule.adjustClaimGuideView(player, radiusSteps = -1)
-                    openClaimDisplay(player, returnLandId)
-                },
-                button("radius_up", text("claim-display-radius-up")) {
-                    OnboardingModule.adjustClaimGuideView(player, radiusSteps = 1)
-                    openClaimDisplay(player, returnLandId)
-                },
-                button("color", text("claim-display-color", "color" to colorText(view.gridColor))) {
-                    OnboardingModule.adjustClaimGuideView(player, cycleColor = true)
-                    openClaimDisplay(player, returnLandId)
-                },
-                button("posts", text("claim-display-posts",
-                    "state" to settings.text(if (view.showPosts) "claim-display-enabled" else "claim-display-disabled"))) {
-                    OnboardingModule.adjustClaimGuideView(player, togglePosts = true)
-                    openClaimDisplay(player, returnLandId)
-                },
-                button("reset", text("claim-display-reset")) {
-                    OnboardingModule.adjustClaimGuideView(player, reset = true)
-                    openClaimDisplay(player, returnLandId)
-                },
-            ),
-            exitButton = back("back") {
-                if (returnLandId == null) openRoot(player) else openDetails(player, returnLandId)
-            },
-            columns = 2,
-        ), reopen = { openClaimDisplay(player, returnLandId) })
-    }
-
-    private fun offsetText(value: Double): String =
-        if (value == 0.0) settings.text("claim-display-default")
-        else (if (value > 0) "+" else "") + amountFormat.format(value) + " " + settings.text("claim-display-blocks")
-
-    private fun snapText(view: ClaimGuideView): String =
-        if (view.snapBlocks == 0) settings.text("claim-display-snap-smooth")
-        else settings.text("claim-display-snap-blocks").replace("<blocks>", view.snapBlocks.toString())
-
-    private fun gridRadiusText(radius: Int): String = "${radius * 2 + 1}×${radius * 2 + 1}"
-
-    private fun colorText(color: ClaimGuideGridColor): String = settings.text(
-        when (color) {
-            ClaimGuideGridColor.ICE -> "claim-display-color-ice"
-            ClaimGuideGridColor.WHITE -> "claim-display-color-white"
-            ClaimGuideGridColor.PURPLE -> "claim-display-color-purple"
-            ClaimGuideGridColor.GOLD -> "claim-display-color-gold"
-            ClaimGuideGridColor.GRAY -> "claim-display-color-gray"
-        },
-    )
-
-    private fun openClaimRadius(player: Player) {
-        val current = ClaimBlockIdentity.heldRadius(player) ?: return openRoot(player)
-        show(player, PaperDialogScreen(
-            id = "lands.claim-radius",
-            title = text("claim-radius-title"),
-            body = listOf(PaperDialogBody(text("claim-radius-body"))),
-            buttons = (0..4).map { radius ->
-                val size = (radius * 2 + 1).toString()
-                val chunks = ((radius * 2 + 1) * (radius * 2 + 1)).toString()
-                button("radius_$radius", text(if (radius == current) "claim-radius-selected" else "claim-radius-option",
-                    "size" to size, "chunks" to chunks)) {
-                    val lore = listOf(Component.empty(),
-                        text("claim-block-size", "size" to size, "chunks" to chunks),
-                        text("claim-block-reusable"), Component.empty(), text("claim-block-shortcut"))
-                        .map { it.decoration(TextDecoration.ITALIC, false) }
-                    if (!ClaimBlockIdentity.setHeldRadius(player, radius, lore)) player.sendMessage(text("claim-block-missing"))
-                }.closing()
-            },
-            exitButton = back("back") { openRoot(player) },
-            columns = 2,
-        ))
     }
 
     private fun openCreate(player: Player) {
