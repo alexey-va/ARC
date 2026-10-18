@@ -289,6 +289,7 @@ open class ArcDungeonsPlugin : JavaPlugin() {
 
         dungeonQol = qol
         listen(EMListener())
+        listen(EliteMobsEventAnnouncementGuard())
         val progressionOwner = DungeonProgression(sync = { emSync },
             text = { key, fallback -> qol.text("progression.$key", fallback) },
         ).also { progression = it }

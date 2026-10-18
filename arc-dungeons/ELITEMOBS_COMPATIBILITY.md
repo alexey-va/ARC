@@ -31,6 +31,20 @@ All quest menu and compass reads use that adapter. The borrowed `compassBar`,
 chest timer/blacklist fields and wormhole destination/arrival-radius fields retain
 their audited types. No native storage, weapon ability or progression is replaced.
 
+## Empty event announcements
+
+Both supported releases convert an absent event message from `null` to `""`
+through `TranslationsConfig.add` and `ChatColorConverter.convert`. Native
+`CustomEvent.start/end` check only for null; announcement priority zero still
+sends the resulting empty string to every player in the event world.
+
+`EliteMobsEventAnnouncementGuard` handles the public `CustomEventStartEvent`
+before either timed or action events start. It restores null only for visually
+empty start/end messages, retaining visible text and all gameplay state. The
+normal native-listener lifecycle owns registration and cleanup. The focused
+`EliteMobsEventAnnouncementGuardTest` exercises the native announcement sender
+against both runtime versions with the same compiled addon.
+
 ## Focused verification
 
 Run `:arc-dungeons:test` with the five filters `PassiveClassContentTest`,
