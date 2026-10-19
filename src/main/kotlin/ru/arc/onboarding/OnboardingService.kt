@@ -50,6 +50,7 @@ object OnboardingService : OnboardingBuildProgressService {
         val playtimeFailures = mutableSetOf<UUID>()
         val invalidPlaytimes = mutableMapOf<UUID, String>()
         val expiring = mutableSetOf<String>()
+        val hud = OnboardingHud()
         var rewardLedger: MySqlOneTimeUseLedger? = null
         var rewards: OnboardingRewards? = null
         lateinit var menu: OnboardingQuestDialog
@@ -114,6 +115,7 @@ object OnboardingService : OnboardingBuildProgressService {
         current.tasks.runTimer(20L, 100L) {
             Bukkit.getOnlinePlayers().forEach { player ->
                 samplePlaytime(current, player)
+                refreshHud(current, player)
                 current.players[player.uniqueId]?.let { reconcileRewards(current, player, it) }
             }
         }
@@ -129,6 +131,7 @@ object OnboardingService : OnboardingBuildProgressService {
         Bukkit.getServicesManager().unregister(OnboardingBuildProgressService::class.java, this)
         previous.menu.close()
         previous.npc?.close()
+        previous.hud.close()
         val rewardsDrained = previous.rewards?.closeAsync() ?: CompletableFuture.completedFuture(null)
         previous.tasks.close()
         drained = CompletableFuture.allOf(*previous.pending.toTypedArray(), rewardsDrained).handle { _, failure ->
@@ -169,6 +172,12 @@ object OnboardingService : OnboardingBuildProgressService {
         )
     }
 
+    private fun refreshHud(current: Runtime, player: Player) {
+        if (runtime === current && player.isOnline && Bukkit.getPlayer(player.uniqueId) === player) {
+            current.hud.refresh(player, guideView(player))
+        }
+    }
+
     /** No join-time enrollment. Only an existing record is loaded here. */
     fun resume(player: Player) {
         request(player, { store, id -> store.load(id) }) { current, progress ->
@@ -185,6 +194,7 @@ object OnboardingService : OnboardingBuildProgressService {
         current.playtimeFailures.remove(playerId)
         current.invalidPlaytimes.remove(playerId)
         current.menu.forget(playerId)
+        current.hud.clear(playerId)
         current.requests.remove(playerId)
         current.npc?.clear(playerId)
         // Keep an accepted operation's tail until its Redis write has completed.
@@ -241,6 +251,7 @@ object OnboardingService : OnboardingBuildProgressService {
                         throw CancellationException("Onboarding restart was superseded")
                     }
                     current.players[playerId] = requireNotNull(enrolled)
+                    refreshHud(current, player)
                     expectedRunId = enrolled.runId
                     Unit
                 }
@@ -488,6 +499,7 @@ object OnboardingService : OnboardingBuildProgressService {
                 return@whenCompleteSync
             }
             if (progress == null) current.players.remove(playerId) else current.players[playerId] = progress
+            refreshHud(current, player)
             complete(current, progress)
             current.players[playerId]?.let { updated ->
                 samplePlaytime(current, player)
@@ -528,12 +540,14 @@ object OnboardingService : OnboardingBuildProgressService {
                 if (current.players[player.uniqueId]?.status == OnboardingStatus.ACTIVE &&
                     generateSequence(failure) { it.cause }.any { it is OnboardingPlaytime.CounterMovedBackwards }) {
                     current.invalidPlaytimes[player.uniqueId] = progress.runId
+                    refreshHud(current, player)
                     expireActiveRun(current, player, progress.runId)
                 }
                 return@whenCompleteSync
             }
             current.playtimeFailures.remove(player.uniqueId)
             current.played[player.uniqueId] = progress.runId to state
+            refreshHud(current, player)
             if (state.expired) expireActiveRun(current, player, progress.runId)
         }
     }
@@ -546,6 +560,7 @@ object OnboardingService : OnboardingBuildProgressService {
                 current.expiring.remove(key)
                 if (failure == null && runtime === current && updated != null && current.players[player.uniqueId]?.runId == runId) {
                     current.players[player.uniqueId] = updated
+                    refreshHud(current, player)
                     current.npc?.refresh(player)
                 }
             }

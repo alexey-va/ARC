@@ -54,6 +54,18 @@ and location sections remain beside it. Player section preferences are preserved
 completion, stopping or timeout restores their normal sidebar. More important
 activity panels retain their shared priority. Nothing opens a dialog on progress.
 
+A personal bossbar names the current command or gesture. Home uses the native
+`/cmi sethome` route (the short CMI alias is disabled in the runtime mirror).
+Claim and build hints offer `/kit start` only while the appropriate usable item
+is absent; modern ArcBuilder books are identified by their BOOK material and
+stable PDC ID/schema, never display name. The book hint is the single gesture
+`ПКМ книгой строительства по земле`; a historical preview milestone does not change it.
+The Runtime owns one bar per player, refreshes it after durable progress and
+inside the existing five-second main-thread loop, and hides it on every guide
+exit, quit, timer invalidation and shutdown. It never executes a command or
+changes inventory, rewards, sidebar rows, enrollment or expiry.
+
+
 The guide lasts three hours of native `PLAY_ONE_MINUTE` ticks (216000). A bounded
 Redis CAS record in `arc.onboarding.playtime.v1` retains per-backend baseline and
 high-water counters per run. Sampling starts after acceptance, repeats every
