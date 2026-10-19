@@ -58,12 +58,14 @@ object OnboardingService : OnboardingBuildProgressService {
     }
 
     @Volatile private var runtime: Runtime? = null
+    @Volatile private var disabledConfig: OnboardingConfig? = null
     private var drained = CompletableFuture.completedFuture(Unit)
 
     internal fun closeCompletion(): CompletableFuture<Unit> = drained.copy()
     internal fun readiness(): CompletableFuture<Void> = runtime?.ready?.copy()
-        ?: CompletableFuture.failedFuture(IllegalStateException("Onboarding is unavailable"))
-    internal fun guideConfig(): OnboardingConfig? = runtime?.config
+        ?: if (disabledConfig != null) CompletableFuture.completedFuture(null)
+        else CompletableFuture.failedFuture(IllegalStateException("Onboarding is unavailable"))
+    internal fun guideConfig(): OnboardingConfig? = runtime?.config ?: disabledConfig
     fun isEnabled(): Boolean = runtime != null
     fun currentRunId(playerId: UUID): String? = runtime?.players?.get(playerId)?.takeIf { it.status == OnboardingStatus.ACTIVE }?.runId
     fun hasActiveQuest(playerId: UUID): Boolean = runtime?.players?.get(playerId)?.status == OnboardingStatus.ACTIVE
@@ -75,11 +77,19 @@ object OnboardingService : OnboardingBuildProgressService {
         val config = OnboardingConfig.load(Config(ARC.instance.dataPath,
             ConfigManager.moduleYamlRelative(ARC.instance.dataPath, "onboarding.yml")))
         config.validate()
+        val storage = PhysicalRewardStorageConfig.load(ARC.instance.dataPath)
+        val landsFile = Bukkit.getPluginManager().getPlugin("Lands")?.dataFolder?.let { File(it, "config.yml") }
+        val colors = landsFile?.let { claimGuideParticleColors(YamlConfiguration.loadConfiguration(it)) }.orEmpty()
+        if (!storage.enabled) {
+            // Backends without network rewards still keep the independent claim guide and outcome listeners.
+            disabledConfig = config
+            onReady(colors)
+            info("Initial quest disabled: network reward storage is disabled; claim guide remains available")
+            return
+        }
         val current = Runtime(config, ARC.redisManager?.let(::OnboardingStore))
         runtime = current
         runCatching {
-            val storage = PhysicalRewardStorageConfig.load(ARC.instance.dataPath)
-            check(storage.enabled) { "Network reward storage is disabled" }
             val ledger = MySqlOneTimeUseLedger.open(
                 storage.sql(), "ARC-onboarding-rewards", "arc_onboarding_rewards",
                 listOf(MySqlOneTimeUseLedger.createTableMigration(1)),
@@ -110,8 +120,6 @@ object OnboardingService : OnboardingBuildProgressService {
                 open = ::open,
             ).also { it.start() }
         }
-        val landsFile = Bukkit.getPluginManager().getPlugin("Lands")?.dataFolder?.let { File(it, "config.yml") }
-        val colors = landsFile?.let { claimGuideParticleColors(YamlConfiguration.loadConfiguration(it)) }.orEmpty()
         current.tasks.runTimer(20L, 100L) {
             Bukkit.getOnlinePlayers().forEach { player ->
                 samplePlaytime(current, player)
@@ -125,6 +133,7 @@ object OnboardingService : OnboardingBuildProgressService {
     }
 
     fun shutdown() {
+        disabledConfig = null
         val previous = runtime ?: return
         Bukkit.getOnlinePlayers().forEach { samplePlaytime(previous, it, force = true) }
         runtime = null
