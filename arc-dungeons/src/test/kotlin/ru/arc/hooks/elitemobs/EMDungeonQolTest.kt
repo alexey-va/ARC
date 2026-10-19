@@ -12,6 +12,7 @@ import io.mockk.unmockkObject
 import io.mockk.verify
 import net.kyori.adventure.bossbar.BossBar
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import net.kyori.adventure.title.Title
 import org.bukkit.Location
 import org.bukkit.entity.Player
@@ -193,12 +194,17 @@ class EMDungeonQolTest : FreeSpec({
             player.teleport(hub.spawnLocation)
             var portal: (() -> Unit)? = null
             val moved = mutableListOf<Location>()
+            val audience = RecordingAudience()
             val qol = EMDungeonQol(config(), { if (it == dungeon) DungeonVisit("open") else null }, { true },
-                clock = { 100L }, openPortal = { _, action -> portal = action }, returnMove = { _, location -> moved += location })
+                clock = { 100L }, openPortal = { _, action -> portal = action }, returnMove = { _, location -> moved += location },
+                audience = audience)
             val exit = Location(dungeon, 14.25, 73.0, -9.5, 110f, -20f)
             qol.rememberDeparture(teleport(player, exit, hub.spawnLocation))
             val expected = qol.lastReturn(player)!!
             qol.returnToLast(player, expected)
+            qol.returnToLast(player, expected)
+            PlainTextComponentSerializer.plainText().serialize(audience.messages.single().second) shouldBe
+                " Сначала войдите в открытый портал или дождитесь его закрытия."
             moved shouldBe emptyList()
             portal!!()
             portal!!()
@@ -261,14 +267,20 @@ class EMDungeonQolTest : FreeSpec({
             val checkpoint = Location(dungeon, 12.0, 70.0, 4.0)
             var portal: (() -> Unit)? = null
             val moved = mutableListOf<Location>()
+            val audience = RecordingAudience()
             val qol = EMDungeonQol(config(), { world -> if (world == dungeon) DungeonVisit("run") else null }, { true }, clock = { 100L },
-                move = { _, destination, _ -> moved += destination; true }, openPortal = { _, action -> portal = action })
+                move = { _, destination, _ -> moved += destination; true }, openPortal = { _, action -> portal = action }, audience = audience)
             qol.rememberDeparture(teleport(player, checkpoint, Location(hub, 1.0, 70.0, 1.0)))
             val entry = teleport(player, Location(hub, 1.0, 70.0, 1.0), Location(dungeon, 0.0, 70.0, 0.0))
             dispatchTeleport(paper, qol, entry)
             entry.to shouldBe Location(dungeon, 0.0, 70.0, 0.0)
             player.teleport(entry.to)
             qol.action(player, "resume")
+            qol.action(player, "resume")
+            PlainTextComponentSerializer.plainText().serialize(audience.messages.single().second) shouldBe
+                " Сначала войдите в открытый портал или дождитесь его закрытия."
+            PlainTextComponentSerializer.plainText().serialize(qol.saveBlockReason(player, qol.continuation(player))!!) shouldBe
+                "Сначала войдите в открытый портал или дождитесь его закрытия."
             moved shouldBe emptyList()
             portal!!()
             portal!!()

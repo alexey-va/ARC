@@ -343,13 +343,13 @@ internal class EMDungeonQol(
     }
 
     internal fun returnToLast(player: Player, expected: DungeonDeparture? = lastReturn(player)) {
-        val unavailable = text("panel.return-unavailable", "<#e8dfd2>Нет доступного места выхода из обычного данжа. Сначала посетите данж и выйдите из него.")
+        val unavailable = text("panel.return-unavailable", "<white></white> <#e8dfd2>Нет доступного места выхода из обычного данжа. Сначала посетите данж и выйдите из него.")
         if (expected == null || lastReturn(player) != expected) { audience.sendMessage(player, unavailable); return }
         if (inCombat(player)) { audience.sendMessage(player, combatMessage()); return }
         val origin = player.world.uid
         val token = UUID.randomUUID()
         if (pending.putIfAbsent(player.uniqueId, token) != null) {
-            audience.sendMessage(player, text("saves.messages.pending", "<#e8dfd2>Сначала войдите в открытый портал или дождитесь его закрытия.")); return
+            audience.sendMessage(player, text("saves.messages.travel-pending", "<white></white> <#e8dfd2>Сначала войдите в открытый портал или дождитесь его закрытия.")); return
         }
         tasks.runLater(420) { pending.remove(player.uniqueId, token) }
         runCatching { openPortal(player) portal@{
@@ -360,16 +360,16 @@ internal class EMDungeonQol(
             }
             if (inCombat(player)) { audience.sendMessage(player, combatMessage()); return@portal }
             if (player.isInsideVehicle || player.isFlying || player.isGliding) {
-                audience.sendMessage(player, text("saves.messages.travel-ground", "<#e8dfd2>Войдите в портал пешком, без транспорта и полёта.")); return@portal
+                audience.sendMessage(player, text("saves.messages.travel-ground", "<white></white> <#e8dfd2>Войдите в портал пешком, без транспорта и полёта.")); return@portal
             }
             if (!safe(expected.location)) {
-                audience.sendMessage(player, text("saves.messages.unavailable-point", "<red>Эта точка больше не подходит для безопасного перехода. Выберите другую или выйдите через меню: Shift + F → «Выйти из данжа».")); return@portal
+                audience.sendMessage(player, text("saves.messages.unavailable-point", "<white></white> <red>Эта точка больше не подходит для безопасного перехода. Выберите другую или выйдите через меню: Shift + F → «Выйти из данжа».")); return@portal
             }
             returnMove(player, expected.location.clone())
         } }.onFailure {
             pending.remove(player.uniqueId, token)
             Logging.error("Unable to return to last dungeon", it)
-            audience.sendMessage(player, text("saves.messages.blocked", "<red>Перемещение отменено защитой. Для выхода нажмите Shift + F → «Выйти из данжа»."))
+            audience.sendMessage(player, text("saves.messages.blocked", "<white></white> <red>Перемещение отменено защитой. Для выхода нажмите Shift + F → «Выйти из данжа»."))
         }
     }
 
@@ -391,7 +391,7 @@ internal class EMDungeonQol(
             "return", "вернуться" -> returnToLast(player)
             "resume", "продолжить" -> {
                 val expected = continuation(player)
-                if (expected == null) audience.sendMessage(player, text("saves.messages.resume-unavailable", "<#e8dfd2>В этом данже нет безопасного места прошлого выхода. Начало и другие точки доступны в меню: Shift + F → «Сохранения»."))
+                if (expected == null) audience.sendMessage(player, text("saves.messages.resume-unavailable", "<white></white> <#e8dfd2>В этом данже нет безопасного места прошлого выхода. Начало и другие точки доступны в меню: Shift + F → «Сохранения»."))
                 else travel(player, expected, "exit")
             }
             "main" -> if (Bukkit.getServicesManager().load(ArcDungeonNavigation::class.java)?.openMain(player) != true)
@@ -510,7 +510,7 @@ internal class EMDungeonQol(
         if (!matches(player, expected)) { audience.sendMessage(player, changed().message); return }
         if (inCombat(player)) { audience.sendMessage(player, combatMessage()); return }
         val token = UUID.randomUUID()
-        if (pending.putIfAbsent(player.uniqueId, token) != null) { audience.sendMessage(player, text("saves.messages.pending", "<#e8dfd2>Сначала войдите в открытый портал или дождитесь его закрытия.")); return }
+        if (pending.putIfAbsent(player.uniqueId, token) != null) { audience.sendMessage(player, text("saves.messages.travel-pending", "<white></white> <#e8dfd2>Сначала войдите в открытый портал или дождитесь его закрытия.")); return }
         // Expire only this request; an old portal must not consume a later one.
         tasks.runLater(420) { pending.remove(player.uniqueId, token) }
         runCatching { openPortal(player) portal@{
@@ -518,7 +518,7 @@ internal class EMDungeonQol(
             if (!matches(player, expected)) { if (player.isOnline) audience.sendMessage(player, changed().message); return@portal }
             if (inCombat(player)) { audience.sendMessage(player, combatMessage()); return@portal }
             if (player.isInsideVehicle || player.isFlying || player.isGliding) {
-                audience.sendMessage(player, text("saves.messages.travel-ground", "<#e8dfd2>Войдите в портал пешком, без транспорта и полёта.")); return@portal
+                audience.sendMessage(player, text("saves.messages.travel-ground", "<white></white> <#e8dfd2>Войдите в портал пешком, без транспорта и полёта.")); return@portal
             }
             val visit = current(player) ?: return@portal
             val destination = when (id) {
@@ -528,17 +528,17 @@ internal class EMDungeonQol(
                     .firstOrNull { it.id == id && it == expected.points.firstOrNull { point -> point.id == id } }?.location
             }
             if (destination == null || destination.world.uid != player.world.uid || !safe(destination)) {
-                audience.sendMessage(player, text("saves.messages.unavailable-point", "<red>Эта точка больше не подходит для безопасного перехода. Выберите другую или выйдите через меню: Shift + F → «Выйти из данжа».")); return@portal
+                audience.sendMessage(player, text("saves.messages.unavailable-point", "<white></white> <red>Эта точка больше не подходит для безопасного перехода. Выберите другую или выйдите через меню: Shift + F → «Выйти из данжа».")); return@portal
             }
             val moved = runCatching { move(player, destination.clone(), visit.instanced) }.getOrElse {
                 Logging.error("Dungeon checkpoint teleport failed", it); false
             }
-            if (!moved) audience.sendMessage(player, text("saves.messages.blocked", "<red>Перемещение отменено защитой. Для выхода нажмите Shift + F → «Выйти из данжа»."))
+            if (!moved) audience.sendMessage(player, text("saves.messages.blocked", "<white></white> <red>Перемещение отменено защитой. Для выхода нажмите Shift + F → «Выйти из данжа»."))
             else if (id == "exit") show(player, "resumed", "<green>Продолжаем", "<white>Shift + F <gray>— меню данжа")
         } }.onFailure {
             pending.remove(player.uniqueId, token)
             Logging.error("Unable to open dungeon checkpoint portal", it)
-            audience.sendMessage(player, text("saves.messages.blocked", "<red>Перемещение отменено защитой. Для выхода нажмите Shift + F → «Выйти из данжа»."))
+            audience.sendMessage(player, text("saves.messages.blocked", "<white></white> <red>Перемещение отменено защитой. Для выхода нажмите Shift + F → «Выйти из данжа»."))
         }
     }
 
@@ -550,7 +550,7 @@ internal class EMDungeonQol(
         val now = clock()
         if (lastHint[event.player.uniqueId]?.let { now - it < 3_000 } == true) return
         lastHint[event.player.uniqueId] = now
-        audience.sendMessage(event.player, text("messages.teleport-blocked", "<gold>Вы внутри данжа.</gold> <gray>Для выхода:</gray> <click:run_command:'/dungeon quit'><green>[Выйти из данжа]</green></click><gray>. Начало данжа и сохранения:</gray> <click:run_command:'/данж'><white>[Shift + F — меню]</white></click>"))
+        audience.sendMessage(event.player, text("messages.teleport-blocked", "<white></white> <gold>Вы внутри данжа.</gold> <gray>Для выхода:</gray> <click:run_command:'/dungeon quit'><green>[Выйти из данжа]</green></click><gray>. Начало данжа и сохранения:</gray> <click:run_command:'/данж'><white>[Shift + F — меню]</white></click>"))
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)

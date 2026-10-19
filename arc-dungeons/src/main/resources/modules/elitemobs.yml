@@ -171,8 +171,7 @@ dungeon-qol:
     complete: <gold>Данж</gold> <gray>·</gray> <white>Заберите добычу.</white> <click:run_command:'/dungeon quit'><green>[Выйти из данжа]</green></click>
     already-started: <gray>Этот данж уже идёт или не требует запуска. <white>Shift + F</white> → «Сохранения» — ваши места.
     outside: <gray>Это действие доступно в данже. После входа нажмите <white>Shift + F</white> — откроется меню данжа.
-    teleport-blocked: <gold>Вы внутри данжа.</gold> <gray>Для выхода:</gray> <click:run_command:'/dungeon quit'><green>[Выйти из данжа]</green></click><gray>. Начало данжа и сохранения:</gray>
-      <click:run_command:'/данж'><white>[Shift + F — меню]</white></click>
+    teleport-blocked: <white></white> <gold>Вы внутри данжа.</gold> <gray>Для выхода:</gray> <click:run_command:'/dungeon quit'><green>[Выйти из данжа]</green></click><gray>. Начало данжа и сохранения:</gray> <click:run_command:'/данж'><white>[Shift + F — меню]</white></click>
   titles:
     entry:
       title: <gold>Готовы к данжу?
@@ -207,7 +206,7 @@ dungeon-qol:
       seconds: <value> с
       unavailable: <#e8dfd2>Настройка автосохранения сейчас недоступна.
     messages:
-      resume-unavailable: '<#e8dfd2>В этом данже нет безопасного места прошлого выхода. Начало и другие точки доступны в меню: Shift + F → «Сохранения».'
+      resume-unavailable: '<white></white> <#e8dfd2>В этом данже нет безопасного места прошлого выхода. Начало и другие точки доступны в меню: Shift + F → «Сохранения».'
       changed: <red>Данж или сохранение изменились. Нажмите Shift + F и откройте «Сохранения» заново.
       combat: '<red>Во время боя сохраняться и перемещаться нельзя. Подождите 15 секунд без боя. <#e8dfd2>Для выхода: Shift + F → «Выйти из данжа».'
       cooldown: <#e8dfd2>Подождите 5 секунд между сохранениями.
@@ -218,8 +217,10 @@ dungeon-qol:
       write-failed: <red>Не удалось записать сохранение на диск. Повторите попытку позже.
       removed: <#e8dfd2>Сохранение удалено.
       pending: <#e8dfd2>Сначала войдите в открытый портал или дождитесь его закрытия.
-      unavailable-point: '<red>Эта точка больше не подходит для безопасного перехода. Выберите другую или выйдите через меню: Shift + F → «Выйти из данжа».'
-      blocked: <red>Перемещение отменено защитой. Для выхода нажмите Shift + F → «Выйти из данжа».
+      travel-pending: "<white></white> <#e8dfd2>Сначала войдите в открытый портал или дождитесь его закрытия."
+      travel-ground: "<white></white> <#e8dfd2>Войдите в портал пешком, без транспорта и полёта."
+      unavailable-point: '<white></white> <red>Эта точка больше не подходит для безопасного перехода. Выберите другую или выйдите через меню: Shift + F → «Выйти из данжа».'
+      blocked: <white></white> <red>Перемещение отменено защитой. Для выхода нажмите Shift + F → «Выйти из данжа».
       auto-saved: <#e8dfd2>Место сохранено автоматически · Shift + F
       vehicle: <#e8dfd2>Чтобы сохраниться, выйдите из транспорта или слезьте с ездового животного.
       flying: <#e8dfd2>Чтобы сохраниться, приземлитесь и выключите полёт.
@@ -280,7 +281,7 @@ dungeon-qol:
     return-label: '<#92bed8>Вернуться в данж ›'
     return-tooltip: Вернуться в последний обычный данж на место выхода
     return-disabled: '<#e8dfd2>[Недоступно] Вернуться в данж'
-    return-unavailable: <#e8dfd2>Нет доступного места выхода из обычного данжа. Сначала посетите данж и выйдите из него.
+    return-unavailable: <white></white> <#e8dfd2>Нет доступного места выхода из обычного данжа. Сначала посетите данж и выйдите из него.
     shops-label: '<#92bed8>К магазинам ›'
     shops-tooltip: Перейти к торговцам данжей в Гильдии
     crystals-unavailable: '<#e8dfd2>Кристаллы: баланс сейчас недоступен'
