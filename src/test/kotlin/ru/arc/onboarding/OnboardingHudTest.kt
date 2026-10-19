@@ -36,8 +36,8 @@ class OnboardingHudTest : FreeSpec({
         data class Case(val id: String, val guide: OnboardingGuideView, val claim: Boolean, val book: Boolean, val expected: String)
         val cases = listOf(
             Case("travel", view(), false, false, "Выберите мир у Проводника"),
-            Case("home", view(firstRtp), false, false, "/cmi sethome — сохранить точку дома"),
-            Case("move-home", view(home + OnboardingMilestone.LAND_CLAIMED), false, false, "/cmi sethome — перенести точку в свой приват"),
+            Case("home", view(firstRtp), false, false, "/sethome — сохранить точку дома"),
+            Case("move-home", view(home + OnboardingMilestone.LAND_CLAIMED), false, false, "/sethome — перенести точку в свой приват"),
             Case("claim-kit", view(home), false, false, "/kit start — получить блок привата"),
             Case("claim", view(home), true, false, "ПКМ блоком привата по земле — защитить участок"),
             Case("build-kit", view(foothold), false, false, "/kit start — получить книгу дома"),

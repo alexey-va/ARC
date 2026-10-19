@@ -54,8 +54,8 @@ and location sections remain beside it. Player section preferences are preserved
 completion, stopping or timeout restores their normal sidebar. More important
 activity panels retain their shared priority. Nothing opens a dialog on progress.
 
-A personal bossbar names the current command or gesture. Home uses the native
-`/cmi sethome` route (the short CMI alias is disabled in the runtime mirror).
+A personal bossbar names the current command or gesture. Home uses HuskHomes
+`/sethome`, consistent with the existing HelpCenterCommands route.
 Claim and build hints offer `/kit start` only while the appropriate usable item
 is absent; modern ArcBuilder books are identified by their BOOK material and
 stable PDC ID/schema, never display name. The book hint is the single gesture

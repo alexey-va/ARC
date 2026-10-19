@@ -60,7 +60,7 @@ internal fun onboardingHudTitle(
     if (guide.remainingTicks <= 0) return null
     val (action, explanation) = when (guide.quest.goal ?: return null) {
         OnboardingQuestGoal.TRAVEL -> "Выберите мир" to " у Проводника"
-        OnboardingQuestGoal.HOME -> "/cmi sethome" to if (OnboardingMilestone.HOME_CREATED in guide.quest.milestones)
+        OnboardingQuestGoal.HOME -> "/sethome" to if (OnboardingMilestone.HOME_CREATED in guide.quest.milestones)
             " — перенести точку в свой приват" else " — сохранить точку дома"
         OnboardingQuestGoal.CLAIM -> if (hasClaimBlock)
             "ПКМ блоком привата по земле" to " — защитить участок"
