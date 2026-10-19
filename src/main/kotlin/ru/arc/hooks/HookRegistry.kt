@@ -40,6 +40,7 @@ import ru.arc.listeners.JoinListener
 import ru.arc.listeners.PickupListener
 import ru.arc.listeners.RespawnListener
 import ru.arc.listeners.SpawnerListener
+import ru.arc.misc.BuilderSurvivalSyncListener
 import ru.arc.paper.api.ArcSidebarPriorities
 import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error
@@ -216,6 +217,7 @@ class HookRegistry(
         cleanup(failures) { packetDrain = oldPackets?.closeAsync() ?: packetDrain }
         cleanup(failures) { chatGlyphProtection?.close() }
         chatGlyphProtection = null
+        cleanup(failures) { joinListener?.close() }
         cleanup(failures) { papiHook?.clearPlaceholderCache() }
         cleanup(failures) { papiHook?.unregister() }
         if (jobsEnabled) {
@@ -468,7 +470,11 @@ class HookRegistry(
             spawnerListener = registerListener(SpawnerListener())
         }
         if (joinListener == null) {
-            joinListener = registerListener(JoinListener())
+            val listener = JoinListener()
+            joinListener = registerListener(listener)
+            if (ARC.serverName == "survival" && Bukkit.getPluginManager().isPluginEnabled("HuskSync")) {
+                registerListener(BuilderSurvivalSyncListener(listener::checkBuilderSurvivalLater))
+            }
         }
         if (blockListener == null) {
             blockListener = registerListener(BlockListener())

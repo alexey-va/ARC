@@ -15,6 +15,7 @@ import ru.arc.config.ConfigManager
 import ru.arc.core.delayed
 import ru.arc.core.ticks
 import ru.arc.jobs.JobsModule
+import ru.arc.misc.BuilderSurvivalGuard
 import ru.arc.rtp.RtpRespawnTracker
 import ru.arc.sync.SyncManager
 import ru.arc.treasurechests.TreasureHuntManager
@@ -22,7 +23,7 @@ import ru.arc.util.Logging.info
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
-class JoinListener : Listener {
+class JoinListener : Listener, AutoCloseable {
 
     private companion object {
         val HEALTH_TRACE_TICKS = longArrayOf(1, 2, 5, 10, 20, 40, 100, 200, 300)
@@ -31,9 +32,11 @@ class JoinListener : Listener {
     private val config = ConfigManager.of(ARC.instance.dataFolder.toPath(), "modules/misc.yml")
     private val invMap: MutableMap<UUID, String> = ConcurrentHashMap()
     private val healthTraceSessions: MutableMap<UUID, UUID> = ConcurrentHashMap()
+    private val builderSurvivalGuard = BuilderSurvivalGuard()
 
     @EventHandler
     fun onPlayerJoin(event: PlayerJoinEvent) {
+        builderSurvivalGuard.checkLater(event.player)
         traceHealthAfterJoin(event.player)
         ARC.pluginMessenger?.sendBackendRtpReady(event.player)
         ChatModeService.track(event.player.uniqueId)
@@ -42,6 +45,14 @@ class JoinListener : Listener {
         invulnerable(event.player)
         fullHeal(event.player)
         AuditManager.join(event.player)
+    }
+
+    internal fun checkBuilderSurvivalLater(playerId: UUID) {
+        ARC.instance.server.getPlayer(playerId)?.let(builderSurvivalGuard::checkLater)
+    }
+
+    override fun close() {
+        builderSurvivalGuard.close()
     }
 
     @EventHandler(priority = EventPriority.LOW)
