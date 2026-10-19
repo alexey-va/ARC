@@ -5,6 +5,7 @@ import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import net.kyori.adventure.text.Component
 import ru.arc.paper.api.ArcSidebarFrame
 import ru.arc.paper.api.ArcSidebarHandle
@@ -14,6 +15,32 @@ import ru.arc.paper.api.ArcSidebarService
 import ru.arc.paper.testing.MockBukkitTestRuntime
 
 class SectionedSidebarServiceTest : StringSpec({
+    "hiding an absent activity keeps native cleanup without refreshing the base sidebar" {
+        MockBukkitTestRuntime.open().use { runtime ->
+            val host = runtime.createSimplePlugin("ARC")
+            val owner = runtime.createSimplePlugin("ArcCasino")
+            val player = runtime.addPlayer("Viewer")
+            val nativeHandle = mockk<ArcSidebarHandle>(relaxed = true)
+            val native = mockk<ArcSidebarService> {
+                every { register(any(), any(), any()) } returns nativeHandle
+            }
+            SectionedSidebarService(host, native).use { service ->
+                var refreshes = 0
+                service.refreshPlayer = { refreshes++ }
+                val handle = service.register(owner, "casino", ArcSidebarPriorities.ACTIVITY)
+                handle.hide(player.uniqueId)
+                refreshes shouldBe 0
+                handle.show(player, ArcSidebarFrame(Component.text("Game"), emptyList()))
+                refreshes shouldBe 1
+                handle.hide(player.uniqueId)
+                refreshes shouldBe 2
+                repeat(40) { handle.hide(player.uniqueId) }
+                refreshes shouldBe 2
+                verify(exactly = 42) { nativeHandle.hide(player.uniqueId) }
+            }
+        }
+    }
+
     "activity composition follows Core selection and preserves names before restoring original frames" {
         MockBukkitTestRuntime.open().use { runtime ->
             val host = runtime.createSimplePlugin("ARC")

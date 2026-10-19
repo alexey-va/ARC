@@ -41,8 +41,9 @@ internal class SectionedSidebarService(
                 if (!source.base) refreshPlayer?.invoke(player)
             }
             override fun hide(playerId: UUID) {
-                source.frames.remove(playerId)
+                val removed = source.frames.remove(playerId)
                 source.handle.hide(playerId)
+                if (removed == null) return
                 Bukkit.getPlayer(playerId)?.let { player ->
                     if (source.base) restoreActivity(player) else refreshPlayer?.invoke(player)
                 }
