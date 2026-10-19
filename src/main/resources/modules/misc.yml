@@ -45,8 +45,8 @@ portal:
   teleport-observation:
     # Deadline for observing local HuskHomes arrival; this never retries or cancels transport.
     timeout-ticks: 200
-    cancelled-message: "<yellow>Телепортация отменена."
-    unconfirmed-message: "<yellow>Прибытие не подтверждено. Сообщите администрации."
+    cancelled-message: "<white></white> <yellow>Телепортация отменена."
+    unconfirmed-message: "<white></white> <yellow>Прибытие не подтверждено. Сообщите администрации."
   # Включить обработку «портальных» команд
   command-portals: true
   # Подкоманды, которые не открывают портал
@@ -84,7 +84,7 @@ portal:
   # Выполнять commands-only CMI portal, если игрок подключился уже внутри cuboid
   cmi-command-only-on-join: false
   # Сообщение при появлении портала (MiniMessage)
-  message: <dark_green>Недалеко появляется портал...
+  message: <white></white> <dark_green>Недалеко появляется портал...
   # Дистанция отображения частиц
   particle-distance: 50.0
   # Новые настройки animation и origin-gate добавляются сюда при запуске
@@ -151,9 +151,9 @@ portal:
   radius-initial: 3
   radius-secondary: 6
   tp-other-disabled:
-    message: <red>Этот игрок не разрешил другим игрокам телепортироваться через его порталы!
+    message: <white></white> <red>Этот игрок не разрешил другим игрокам телепортироваться через его порталы!
   tp-by-other-disabled:
-    message: <red>Вы не можете телепортироваться через порталы других игроков!
+    message: <white></white> <red>Вы не можете телепортироваться через порталы других игроков!
 # --- Пасека (если используется связанная фича) ---
 bees:
   enabled: false
@@ -317,4 +317,4 @@ rtp-respawn:
   - survival
   - mining
   - vanilla
-  set-spawn-message: <green>Ваша точка возрождения установлена здесь! <gray>После смерти вы вернётесь сюда.
+  set-spawn-message: <white></white> <green>Ваша точка возрождения установлена здесь! <gray>После смерти вы вернётесь сюда.
