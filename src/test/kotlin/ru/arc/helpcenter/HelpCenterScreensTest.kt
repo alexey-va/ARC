@@ -1,9 +1,17 @@
 package ru.arc.helpcenter
 
+import com.google.gson.GsonBuilder
+import io.kotest.assertions.withClue
+import io.kotest.matchers.shouldBe
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
+import java.nio.file.Path
+import org.bukkit.plugin.Plugin
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.spyk
 import io.mockk.verify
+import ru.arc.gui.MenuEscapeBehavior
+import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Bukkit
@@ -103,17 +111,29 @@ class HelpCenterScreensTest {
               rtp-biomes: 'arc rtp survival'
             """.trimIndent(),
         )
-        val inventoryReturn = HelpCenterInventoryReturnRuntime(plugin, returnOnClose = { true })
         legacy = spyk(HelpCenterLegacySettings())
         every { legacy.flightSnapshot(any()) } returns HelpCenterFlightSnapshot(50_000.0, 100_000, false)
-        controller = HelpCenterController(
-            HelpCenterConfig.load(directory).snapshot(), gateway, {}, inventoryReturn,
-            { _, _ -> }, HelpCenterNavigation(plugin, inventoryReturn::cancel), { _, value -> screen = value; screenCount++ }, legacy,
+        controller = newController(plugin)
+    }
+
+    private fun newController(plugin: Plugin, font: String = "", closeEscape: Boolean = false): HelpCenterController {
+        val inventoryReturn = HelpCenterInventoryReturnRuntime(plugin, returnOnClose = { true })
+        val settings = HelpCenterConfig.load(directory).snapshot().copy(decorationFont = font)
+        val presentation = HelpCenterPresentation(settings)
+        return HelpCenterController(
+            settings, gateway, {}, inventoryReturn,
+            { _, _ -> }, HelpCenterNavigation(plugin, inventoryReturn::cancel), { _, value ->
+                screen = if (closeEscape) MenuEscapeBehavior.apply(value, false,
+                    presentation.closeButton(MiniMessage.miniMessage().deserialize(settings.text("menu-close-label"))) { },
+                ) else value
+                screenCount++
+            }, legacy,
             closeDialog = { dialogCloses++ },
             enchantmentsGuide = HelpCenterEnchantmentsGuideConfig.load(directory).snapshot(),
             enchantmentsCatalog = { HelpCenterEnchantmentsCatalog.unavailable() },
             activeGraveCount = { if (gravesUnavailable) error("Graves unavailable") else gravesCount },
             openGraves = { gravesOpenCalls++; true },
+            escapeGoesBack = if (closeEscape) ({ false }) else MenuEscapeBehavior::goesBack,
         )
     }
 
@@ -135,6 +155,64 @@ class HelpCenterScreensTest {
     }
     private fun plain(component: Component) = PlainTextComponentSerializer.plainText().serialize(component)
     private fun body() = screen.body.joinToString("\n") { plain(it.text) }
+
+    @Test
+    fun `decorated actual screens retain actions and export native preview content`() {
+        controller.close()
+        val plugin = paper.createSimplePlugin("DecoratedHelpScreens")
+        controller = newController(plugin, "arc:dialog_ui", closeEscape = true)
+        val closeSettings = legacy.entries(player).map { if (it.id == "escape") it.copy(state = "close") else it }
+        every { legacy.entries(player) } returns closeSettings
+        player.addAttachment(plugin, "arcjustteams.use", true)
+        gravesCount = 2
+        val screens = linkedMapOf<String, PaperDialogScreen>()
+        open(HelpCenterPage.ROOT)
+        screens["root"] = screen
+        screen.buttons.size shouldBe 15
+        open(HelpCenterPage.NOW)
+        screens["profile"] = screen
+        open(HelpCenterPage.TRAVEL)
+        screens["travel"] = screen
+        open(HelpCenterPage.SETTINGS)
+        screens["settings"] = screen
+        body().contains("Escape: закрыть всё") shouldBe true
+        click("settings_interface")
+        screens["interface"] = screen
+        open(HelpCenterPage.SETTINGS)
+        click("settings_world")
+        click("legacy_flight")
+        screens["flight"] = screen
+        // The decorated action still dispatches the same player command.
+        click("legacy_flight_recharge")
+        executed.last() shouldBe "cmi flightcharge recharge"
+        val serializer = LegacyComponentSerializer.builder().character('&').hexColors().build()
+        fun serialize(component: Component) = serializer.serialize(component)
+        val export = screens.mapValues { (_, view) -> mapOf(
+            "title" to serialize(view.title), "columns" to view.columns,
+            "body" to view.body.map { mapOf("text" to serialize(it.text), "width" to it.width) },
+            "buttons" to view.buttons.map { mapOf("id" to it.id.value, "text" to serialize(it.label),
+                "tooltip" to serialize(it.tooltip), "width" to it.width) },
+            "exit" to view.exitButton?.let { mapOf("text" to serialize(it.label), "width" to it.width) },
+        ) }
+        val output = Path.of("build/reports/help-center-decoration/content.json")
+        Files.createDirectories(output.parent)
+        Files.writeString(output, GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create().toJson(export))
+        val checkedScreens = screens.toMutableMap()
+        for (page in listOf(HelpCenterPage.HELP, HelpCenterPage.COMMANDS, HelpCenterPage.RTP,
+            HelpCenterPage.TECHNOLOGY, HelpCenterPage.ACTIVITIES, HelpCenterPage.GUIDE)) {
+            open(page)
+            checkedScreens[page.name] = screen
+        }
+        open(HelpCenterPage.ROOT)
+        click("root_trade")
+        checkedScreens["TRADE"] = screen
+        val missing = checkedScreens.flatMap { (name, view) ->
+            (view.buttons + listOfNotNull(view.exitButton)).filterNot { button ->
+                plain(button.label).codePoints().anyMatch { it in 0xF9000..0xF908F }
+            }.map { "$name/${it.id.value}: ${plain(it.label)}" }
+        }
+        withClue(missing.joinToString("\n")) { missing shouldBe emptyList() }
+    }
 
     @Test
     fun `request response buttons exist only for current incoming requests`() {

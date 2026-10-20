@@ -1,5 +1,6 @@
 package ru.arc.helpcenter
 
+import net.kyori.adventure.key.Key
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import java.nio.file.Path
@@ -25,6 +26,7 @@ data class HelpCenterSettings(
     private val actions: Map<String, String>,
     private val commands: Map<String, HelpCenterCommandText>,
     private val intents: Map<String, HelpCenterIntentText>,
+    val decorationFont: String = "",
 ) {
     fun text(key: String): String = text.getValue(key)
 
@@ -43,11 +45,14 @@ class HelpCenterConfig(private val config: Config) {
         require(maxHomes in 1..32) { "Help center max-homes must be in 1..32" }
         require(maxSearchResults in 1..32) { "Help center max-search-results must be in 1..32" }
         require(loadTimeoutSeconds in 1..10) { "Help center load-timeout-seconds must be in 1..10" }
+        val decorationFont = config.string("presentation.font", "").trim()
+        require(decorationFont.isEmpty() || Key.parseable(decorationFont)) { "Help center presentation.font must be a namespaced font key or empty" }
         return HelpCenterSettings(
             enabled = config.bool("enabled", true),
             maxHomes = maxHomes,
             maxSearchResults = maxSearchResults,
             loadTimeoutSeconds = loadTimeoutSeconds,
+            decorationFont = decorationFont,
             text = DEFAULT_TEXT.mapValues { (key, fallback) -> required("text.$key", fallback) },
             actions = DEFAULT_ACTIONS.mapValues { (id, fallback) -> required("actions.$id", fallback) },
             commands = COMMANDS.mapValues { (id, fallback) ->

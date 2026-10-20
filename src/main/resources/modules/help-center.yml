@@ -1,4 +1,7 @@
 enabled: true
+presentation:
+  # Empty keeps portable native labels. Set only when this font is installed in the server pack.
+  font: ''
 
 limits:
   max-homes: 12

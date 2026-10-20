@@ -10,7 +10,6 @@ import org.bukkit.entity.ItemDisplay
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.whenCompleteSync
 import ru.arc.gui.MenuShortcutAction
-import ru.arc.paper.menu.DialogTables
 import ru.arc.misc.JoinMessageGuiFactory
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
@@ -48,6 +47,7 @@ internal class HelpCenterSettingsController(
         SOCIAL("social", listOf("chat", "notifications", "tpa")),
         WORLD("world", listOf("trails", "flight", "lands", "portal-style", "portal-by-other", "portal-for-other")),
     }
+    private val presentation = HelpCenterPresentation(settings)
     private val miniMessage = MiniMessage.miniMessage()
     private val plain = PlainTextComponentSerializer.plainText()
     private val tasks = LifecycleTaskScope()
@@ -681,7 +681,7 @@ internal class HelpCenterSettingsController(
             val ratio = (valid.charge / valid.maximum).coerceIn(0.0, 1.0)
             val filled = (ratio * 16).toInt()
             val numbers = NumberFormat.getIntegerInstance(Locale.forLanguageTag("ru-RU"))
-            DialogTables.body(
+            presentation.facts(
                 rows = listOf(
                     text("table-flight-charge-label") to text("table-slots-value",
                         "used" to Component.text(numbers.format(valid.charge.toLong())),
@@ -690,10 +690,9 @@ internal class HelpCenterSettingsController(
                         "percent" to Component.text((ratio * 100).toInt()),
                         "filled" to Component.text("■".repeat(filled)), "empty" to Component.text("□".repeat(16 - filled))),
                     text("table-flight-state-label") to booleanState(valid.enabled),
-                ),
-                headers = text("table-label-heading") to text("table-value-heading"),
-                frame = DialogTables.Frame.RARE,
-                width = 320,
+                ).map { listOf(it) },
+                width = 468,
+                corners = true,
             )
         }
         showDialog(player, PaperDialogScreen(

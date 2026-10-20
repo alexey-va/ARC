@@ -12,6 +12,7 @@ import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.whenCompleteSync
 import ru.arc.graves.GravesModule
 import ru.arc.gui.ArcMenus
+import ru.arc.gui.MenuEscapeBehavior
 import ru.arc.paper.menu.DialogTables
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
@@ -30,10 +31,10 @@ internal class HelpCenterController(
     private val inviteToLand: (Player, HelpCenterPlayer) -> Unit,
     private val navigation: HelpCenterNavigation = HelpCenterNavigation(ru.arc.ARC.instance, inventoryReturn::cancel),
     private val showDialog: (Player, PaperDialogScreen) -> Unit = { player, screen ->
-        ArcMenus.openDialog(player, screen, PaperDialogButton(
-            PaperDialogActionId.of("close_menu"), MiniMessage.miniMessage().deserialize(settings.text("menu-close-label")),
-            width = 200, closeDialogBeforeAction = true, onClick = { navigation.visit(player) },
-        ), reopen = navigation.returnTarget(player), onDismiss = { navigation.visit(player) })
+        val close = HelpCenterPresentation(settings).closeButton(
+            MiniMessage.miniMessage().deserialize(settings.text("menu-close-label")),
+        ) { navigation.visit(player) }
+        ArcMenus.openDialog(player, screen, close, reopen = navigation.returnTarget(player), onDismiss = { navigation.visit(player) })
     },
     private val legacySettings: HelpCenterLegacySettings = HelpCenterLegacySettings(),
     private val closeDialog: (Player) -> Unit = ArcMenus::closeDialog,
@@ -41,7 +42,12 @@ internal class HelpCenterController(
     private val enchantmentsCatalog: () -> HelpCenterEnchantmentsCatalog = HelpCenterEnchantmentsCatalog::fromAeApi,
     private val activeGraveCount: (Player) -> Int = { player -> GravesModule.activeCount(player) },
     private val openGraves: (Player) -> Boolean = { player -> GravesModule.open(player) },
+    private val escapeGoesBack: (Player) -> Boolean = MenuEscapeBehavior::goesBack,
 ) {
+    private val presentation = HelpCenterPresentation(settings)
+    private val present: (Player, PaperDialogScreen) -> Unit = { player, screen ->
+        showDialog(player, presentation.screen(screen, escapeGoesBack(player)))
+    }
     private val miniMessage = MiniMessage.miniMessage()
     private val plainText = PlainTextComponentSerializer.plainText()
     private val tasks = LifecycleTaskScope()
@@ -103,21 +109,21 @@ internal class HelpCenterController(
             executeRaw = ::execute,
             openPage = ::open,
             navigation = navigation,
-            showDialog = showDialog,
+            showDialog = present,
             executeInventory = ::executeInventory,
         )
     }
 
     private val dungeons by lazy {
-        HelpCenterDungeonsController(settings, navigation, showDialog, ::executeInventory, ::execute)
+        HelpCenterDungeonsController(settings, navigation, present, ::executeInventory, ::execute)
     }
 
     private val enchantments by lazy {
-        HelpCenterEnchantmentsController(settings, enchantmentsGuide, navigation, showDialog, ::executeInventory, enchantmentsCatalog)
+        HelpCenterEnchantmentsController(settings, enchantmentsGuide, navigation, present, ::executeInventory, enchantmentsCatalog)
     }
 
     private val personalSettings by lazy {
-        HelpCenterSettingsController(settings, gateway, legacySettings, navigation, showDialog,
+        HelpCenterSettingsController(settings, gateway, legacySettings, navigation, present,
             ::executeCatalog, ::executeInventory, ::openSettingsRoot)
     }
 
@@ -174,8 +180,7 @@ internal class HelpCenterController(
             body += PaperDialogBody(text("my-error"), width = 506)
         } else {
             val unavailable = settings.text("not-available")
-            body += DialogTables.body(
-                rows = listOf(
+            val rows = listOf(
                     text("table-player-label") to Component.text(profile.playerName),
                     text("table-online-label") to Component.text(profile.onlinePlayers),
                     text("table-rank-label") to text("table-rank-value", "value" to (profile.rank ?: unavailable)),
@@ -195,12 +200,10 @@ internal class HelpCenterController(
                         "server" to profile.server,
                         "world" to worldLabel(profile.worldKind, profile.world),
                     ),
-                ),
-                frame = DialogTables.Frame.EPIC,
-                width = 320,
-            )
+                )
+            body += presentation.facts(listOf(rows.take(2), rows.slice(2..3), rows.slice(4..5), rows.takeLast(1)), 506, corners = true)
         }
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.root",
@@ -243,7 +246,7 @@ internal class HelpCenterController(
 
     private fun openHelp(player: Player) {
         markNavigation(player) { openHelp(player) }
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.help",
@@ -287,7 +290,7 @@ internal class HelpCenterController(
 
     private fun openNow(player: Player) {
         val token = markNavigation(player) { openNow(player) }
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.now",
@@ -325,14 +328,17 @@ internal class HelpCenterController(
             text("table-coordinates-label") to Component.text("${profile.x}, ${profile.y}, ${profile.z}"),
             text("table-chat-label") to text(if (profile.chatMode == HelpCenterChatMode.GLOBAL) "table-chat-global" else "table-chat-local"),
         )
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.now",
                 title = text("now-title"),
-                body = listOf(DialogTables.body(rows,
-                    headers = text("table-label-heading") to text("table-value-heading"),
-                    frame = DialogTables.Frame.EPIC, width = 320)),
+                body = buildList {
+                    add(presentation.facts(listOf(rows.take(2)), 468, corners = true))
+                    add(presentation.facts(listOf(rows.slice(2..3), rows.slice(4..5)), 468))
+                    presentation.separator(468)?.let(::add)
+                    add(presentation.facts(rows.drop(6).map { listOf(it) }, 468))
+                },
                 buttons = recommendationButtons(player, profile) + listOf(
                     button("now_homes", text("my-homes-label"), text("my-homes-tooltip")) { openTravel(player) },
                     button("now_lands", text("my-lands-label"), text("my-lands-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
@@ -360,7 +366,7 @@ internal class HelpCenterController(
         }
 
     private fun showMyFailure(player: Player) {
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.now.failure",
@@ -386,7 +392,7 @@ internal class HelpCenterController(
 
     private fun openGuide(player: Player, returnTo: () -> Unit = { openRoot(player) }) {
         markNavigation(player) { openGuide(player, returnTo) }
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.guide",
@@ -407,7 +413,7 @@ internal class HelpCenterController(
 
     private fun openCommands(player: Player) {
         markNavigation(player) { openCommands(player) }
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.commands",
@@ -449,7 +455,7 @@ internal class HelpCenterController(
         ), width = 420))
         if (result.items.isEmpty()) body += PaperDialogBody(text("players-empty"))
         val returnToList = { openPlayers(player, query, result.page, localOnly) }
-        showDialog(player, PaperDialogScreen(
+        present(player, PaperDialogScreen(
             id = "help.players",
             title = text("players-title"), body = body,
             inputs = listOf(PaperDialogTextInput(PLAYER_SEARCH_INPUT, text("players-input"), initial = query, maxLength = 16)),
@@ -495,7 +501,7 @@ internal class HelpCenterController(
         if (HelpCenterFeature.LANDS in gateway.features()) {
             buttons += button("invite", text("player-invite-label")) { inviteToLand(player, target) }
         }
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.player",
@@ -521,7 +527,7 @@ internal class HelpCenterController(
 
     private fun openPlayerMessage(player: Player, target: HelpCenterPlayer, returnToList: () -> Unit = { openPlayers(player) }) {
         markNavigation(player)
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.message",
@@ -542,7 +548,7 @@ internal class HelpCenterController(
 
     private fun openPlayerPayment(player: Player, target: HelpCenterPlayer, returnToList: () -> Unit = { openPlayers(player) }) {
         markNavigation(player)
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.pay",
@@ -564,7 +570,7 @@ internal class HelpCenterController(
 
     private fun openPaymentConfirmation(player: Player, target: HelpCenterPlayer, amount: String, command: String, returnToList: () -> Unit = { openPlayers(player) }) {
         markNavigation(player)
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.pay.confirm",
@@ -589,7 +595,7 @@ internal class HelpCenterController(
 
     private fun openRecovery(player: Player, returnTo: HelpCenterPage = HelpCenterPage.COMMANDS) {
         markNavigation(player) { openRecovery(player, returnTo) }
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.recovery",
@@ -610,7 +616,7 @@ internal class HelpCenterController(
     private fun openSearch(player: Player, rawQuery: String) {
         val token = markNavigation(player) { openSearch(player, rawQuery) }
         val query = rawQuery.trim()
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.search",
@@ -639,7 +645,7 @@ internal class HelpCenterController(
             ),
         )
         if (results.isEmpty()) body += PaperDialogBody(text("search-empty"))
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.search",
@@ -692,7 +698,7 @@ internal class HelpCenterController(
                 "category-${category.configId}-body"
             else -> "category-body"
         }
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.category.${category.configId}",
@@ -712,7 +718,7 @@ internal class HelpCenterController(
 
     private fun openTravel(player: Player) {
         val token = markNavigation(player) { openTravel(player) }
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.travel",
@@ -733,8 +739,8 @@ internal class HelpCenterController(
             .take(settings.maxHomes)
         val unavailable = settings.text("not-available")
         val body = mutableListOf(
-            DialogTables.body(
-                rows = listOf(
+            presentation.facts(
+                rows = listOf(listOf(
                     text("table-homes-label") to text(
                         "table-slots-value",
                         "used" to snapshot.usedSlots.toString(),
@@ -745,9 +751,9 @@ internal class HelpCenterController(
                         "used" to (snapshot.usedWarps?.toString() ?: unavailable),
                         "maximum" to (snapshot.maxWarps?.toString() ?: unavailable),
                     ),
-                ),
-                frame = DialogTables.Frame.RARE,
-                width = 320,
+                )),
+                width = 468,
+                corners = true,
             ),
             PaperDialogBody(text("travel-body"), width = 500),
         )
@@ -772,7 +778,7 @@ internal class HelpCenterController(
         } else {
             emptyList()
         }
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.travel",
@@ -786,7 +792,7 @@ internal class HelpCenterController(
     }
 
     private fun showTravelFailure(player: Player) {
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.travel.failure",
@@ -802,7 +808,7 @@ internal class HelpCenterController(
     private fun openWarps(player: Player, requestedPage: Int = 0) {
         markNavigation(player) { openWarps(player, requestedPage) }
         if (availableCatalog(player).none { it.id == "warps" }) {
-            showDialog(player, PaperDialogScreen(
+            present(player, PaperDialogScreen(
                 id = "help.travel.warps",
                 title = text("warps-title"),
                 body = listOf(PaperDialogBody(text("action-unavailable"), width = 500)),
@@ -813,7 +819,7 @@ internal class HelpCenterController(
         }
         val warps = runCatching { gateway.loadWarps(player) }.getOrElse { failure ->
             ru.arc.util.Logging.error("Could not load native warp catalog for {}", player.name, failure)
-            showDialog(player, PaperDialogScreen(
+            present(player, PaperDialogScreen(
                 id = "help.travel.warps",
                 title = text("warps-title"),
                 body = listOf(PaperDialogBody(text("warps-error"), width = 500)),
@@ -825,7 +831,7 @@ internal class HelpCenterController(
         val pages = maxOf(1, (warps.size + PUBLIC_HOMES_PAGE_SIZE - 1) / PUBLIC_HOMES_PAGE_SIZE)
         val page = requestedPage.coerceIn(0, pages - 1)
         val visible = warps.drop(page * PUBLIC_HOMES_PAGE_SIZE).take(PUBLIC_HOMES_PAGE_SIZE)
-        showDialog(player, PaperDialogScreen(
+        present(player, PaperDialogScreen(
             id = "help.travel.warps",
             title = text("warps-title"),
             body = listOf(PaperDialogBody(text(
@@ -859,7 +865,7 @@ internal class HelpCenterController(
             PaperDialogBody(text("warp-conditions"), width = 500),
         )
         if (changed) body += PaperDialogBody(text("warp-changed"), width = 500)
-        showDialog(player, PaperDialogScreen(
+        present(player, PaperDialogScreen(
             id = "help.travel.warp",
             title = text("warp-title", "warp" to warp.name),
             body = body,
@@ -877,7 +883,7 @@ internal class HelpCenterController(
 
     private fun openPublicHomes(player: Player, page: Int = 0) {
         val token = markNavigation(player) { openPublicHomes(player, page) }
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.travel.public-homes",
@@ -919,7 +925,7 @@ internal class HelpCenterController(
             ),
         )
         if (visible.isEmpty()) body += PaperDialogBody(text("public-homes-empty"), width = 500)
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.travel.public-homes",
@@ -934,7 +940,7 @@ internal class HelpCenterController(
 
     private fun openPublicHome(player: Player, home: HelpCenterPublicHome, page: Int) {
         markNavigation(player) { openPublicHome(player, home, page) }
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.travel.public-home",
@@ -967,7 +973,7 @@ internal class HelpCenterController(
     }
 
     private fun showPublicHomesFailure(player: Player) {
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.travel.public-homes.failure",
@@ -981,7 +987,7 @@ internal class HelpCenterController(
 
     private fun openRtp(player: Player) {
         markNavigation(player) { openRtp(player) }
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.travel.rtp",
@@ -1006,7 +1012,7 @@ internal class HelpCenterController(
 
     private fun openBuilder(player: Player) {
         markNavigation(player) { openBuilder(player) }
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.builder",
@@ -1028,7 +1034,7 @@ internal class HelpCenterController(
 
     private fun openCreateHome(player: Player) {
         markNavigation(player)
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.home.create",
@@ -1057,7 +1063,7 @@ internal class HelpCenterController(
         markNavigation(player)
         val visibility = if (home.isPublic) "public" else "private"
         val visibilityAction = if (home.isPublic) "private" else "public"
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.home",
@@ -1094,7 +1100,7 @@ internal class HelpCenterController(
 
     private fun openRelocateHome(player: Player, home: HelpCenterHome) {
         markNavigation(player)
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.home.relocate",
@@ -1112,7 +1118,7 @@ internal class HelpCenterController(
 
     private fun openDeleteHome(player: Player, home: HelpCenterHome) {
         markNavigation(player)
-        showDialog(
+        present(
             player,
             PaperDialogScreen(
                 id = "help.home.delete",

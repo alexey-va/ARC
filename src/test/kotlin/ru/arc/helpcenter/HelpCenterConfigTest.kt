@@ -23,6 +23,7 @@ class HelpCenterConfigTest : StringSpec({
             val settings = HelpCenterConfig.load(root).snapshot()
 
             settings.enabled shouldBe true
+            settings.decorationFont shouldBe ""
             settings.maxHomes shouldBe 12
             settings.maxSearchResults shouldBe 8
             settings.text("root-title").contains("Главное меню") shouldBe true
