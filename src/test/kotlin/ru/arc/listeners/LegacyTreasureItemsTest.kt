@@ -1,7 +1,11 @@
 package ru.arc.listeners
 
+import de.tr7zw.changeme.nbtapi.NBTType
+import de.tr7zw.changeme.nbtapi.iface.ReadableNBT
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.every
+import io.mockk.mockk
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
@@ -22,6 +26,7 @@ class LegacyTreasureItemsTest : StringSpec({
             legacy(Material.IRON_INGOT, 12033, "Шкатулка с чарами") to "ae_lootbox",
             legacy(Material.IRON_INGOT, 12033, "Токен элитных чар") to "ae_lootbox",
             legacy(Material.IRON_INGOT, 73026, "Лутбокс слаймфана") to "sf_lootbox",
+            legacy(Material.SEA_LANTERN, 10000, "Сундук Слаймфана") to "sf_lootbox",
             legacy(Material.STICK, 11135, "Горсть монет") to "money_handful",
             legacy(Material.STICK, 11136, "Кучка монет") to "money_pile",
             legacy(Material.STICK, 11137, "Куча монет") to "money_heap",
@@ -65,11 +70,95 @@ class LegacyTreasureItemsTest : StringSpec({
             ?.preset shouldBe "money_pile"
     }
 
-    "markerless sea lanterns are excluded while historical native SF sea lanterns remain eligible" {
+    "unknown markerless sea lanterns are excluded while historical native SF sea lanterns remain eligible" {
         val lantern = legacy(Material.SEA_LANTERN, 10000, "Лутбокс слаймфана")
         LegacyTreasureItems.target(lantern) shouldBe null
         LegacyTreasureItems.target(lantern.copy(customData = mapOf("arc:treasure_key" to "sf")))
             ?.preset shouldBe "sf_lootbox"
+    }
+
+    "BetterStructures SF lantern accepts its exact presentation with tagged or markerless empty IA data" {
+        val lantern = legacy(Material.SEA_LANTERN, 10000, "Сундук Слаймфана")
+        listOf(false, true).forEach { tagged ->
+            val data = LegacyTreasureItems.readCustomData(lantern, sfLanternData(tagged = tagged))
+            ("itemsadder" in data) shouldBe false
+            LegacyTreasureItems.target(lantern.copy(customData = data))?.preset shouldBe "sf_lootbox"
+        }
+    }
+
+    "nonempty unreadable and scalar IA tags are never treated as the historical empty compound" {
+        val lantern = legacy(Material.SEA_LANTERN, 10000, "Сундук Слаймфана")
+        val foreign = listOf(
+            sfLanternData(compoundKeys = setOf("id")),
+            sfLanternData(compoundKeys = null),
+            sfLanternData(itemsAdderType = NBTType.NBTTagString),
+            sfLanternData(itemsAdderType = NBTType.NBTTagInt),
+            sfLanternData(itemsAdderType = NBTType.NBTTagList),
+        )
+        foreign.forEach { nbt ->
+            val data = LegacyTreasureItems.readCustomData(lantern, nbt)
+            ("itemsadder" in data) shouldBe true
+            LegacyTreasureItems.target(lantern.copy(customData = data)) shouldBe null
+        }
+    }
+
+    "empty IA exemption requires the exact BS lantern and preserves all foreign reward guards" {
+        val lantern = legacy(Material.SEA_LANTERN, 10000, "Сундук Слаймфана")
+        val otherItems = listOf(
+            lantern.copy(name = "Другой сундук"),
+            lantern.copy(lore = emptyList()),
+            lantern.copy(lore = lantern.lore + "Чужое описание"),
+            lantern.copy(model = 10001),
+            lantern.copy(material = Material.IRON_INGOT),
+            lantern.copy(foreignMetadata = true),
+        )
+        otherItems.forEach { item ->
+            val data = LegacyTreasureItems.readCustomData(item, sfLanternData())
+            LegacyTreasureItems.target(item.copy(customData = data)) shouldBe null
+        }
+        val data = LegacyTreasureItems.readCustomData(lantern, sfLanternData())
+        listOf(
+            "arc:treasure_key" to "sf_advanced",
+            "slimefun_token" to "0",
+            "arc:treasure_rolls_min" to "4",
+            "arc:treasure_rolls_max" to "5",
+            "arc:reward_id" to "special",
+            "arc:voucher" to "special",
+            "PublicBukkitValues" to null,
+        ).forEach { conflicting ->
+            LegacyTreasureItems.target(lantern.copy(customData = data + conflicting)) shouldBe null
+        }
+    }
+
+    "tagged and markerless BS lanterns preserve nineteen units and modern output is not migrated again" {
+        MockBukkitTestRuntime.open().use {
+            listOf(false, true).forEach { tagged ->
+                val original = oldStack(Material.SEA_LANTERN, 10000, "Сундук Слаймфана", 19)
+                val snapshot = original.clone()
+                val fingerprint = requireNotNull(LegacyTreasureItems.fingerprint(original, emptyMap()))
+                val data = LegacyTreasureItems.readCustomData(fingerprint, sfLanternData(tagged = tagged))
+                val target = requireNotNull(LegacyTreasureItems.target(fingerprint.copy(customData = data)))
+                val canonical = ItemStack(Material.IRON_INGOT, 19).withCustomModelData(73026).apply {
+                    editMeta { meta -> meta.displayName(Component.text("Тайник инженера Slimefun")) }
+                }
+                val replacement = requireNotNull(LegacyTreasureItems.replacement(original, target, { preset, amount ->
+                    preset shouldBe "sf_lootbox"
+                    amount shouldBe 19
+                    Result.success(listOf(canonical.clone()))
+                }) { "sf" })
+                replacement shouldBe canonical
+                replacement.amount shouldBe 19
+                original shouldBe snapshot
+                val modern = requireNotNull(LegacyTreasureItems.fingerprint(replacement, mapOf(
+                    "arc:treasure_key" to "sf", "slimefun_token" to "1",
+                    "arc:treasure_rolls_min" to "4", "arc:treasure_rolls_max" to "5",
+                )))
+                LegacyTreasureItems.target(modern) shouldBe null
+                LegacyTreasureItems.replacement(replacement, target, { _, _ ->
+                    Result.success(listOf(canonical.clone()))
+                }) { "sf" } shouldBe null
+            }
+        }
     }
 
     "decorative ItemsAdder models renamed ordinary items and foreign metadata remain untouched" {
@@ -172,6 +261,25 @@ class LegacyTreasureItemsTest : StringSpec({
 
 private fun legacy(material: Material, model: Int, name: String) =
     LegacyTreasureFingerprint(material, model, name, listOf("Нажмите ПКМ для использования"))
+
+private fun sfLanternData(
+    tagged: Boolean = true,
+    itemsAdderType: NBTType = NBTType.NBTTagCompound,
+    compoundKeys: Set<String>? = emptySet(),
+): ReadableNBT {
+    val nbt = mockk<ReadableNBT>()
+    every { nbt.keys } returns if (tagged) setOf("arc:treasure_key", "slimefun_token", "itemsadder") else setOf("itemsadder")
+    every { nbt.getType("arc:treasure_key") } returns NBTType.NBTTagString
+    every { nbt.getString("arc:treasure_key") } returns "sf"
+    every { nbt.getType("slimefun_token") } returns NBTType.NBTTagInt
+    every { nbt.getInteger("slimefun_token") } returns 1
+    every { nbt.getType("itemsadder") } returns itemsAdderType
+    every { nbt.getString("itemsadder") } returns "{}"
+    every { nbt.getInteger("itemsadder") } returns 0
+    val compound = compoundKeys?.let { keys -> mockk<ReadableNBT>().also { every { it.keys } returns keys } }
+    every { nbt.getCompound("itemsadder") } returns compound
+    return nbt
+}
 
 private fun oldStack(material: Material, model: Int, name: String, amount: Int) =
     ItemStack(material, amount).withCustomModelData(model).apply {

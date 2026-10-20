@@ -10,6 +10,7 @@ boxes and coin bundles. On 2026-10-18 the live plugin registry confirmed Denizen
 | --- | --- | --- |
 | IRON_INGOT / 12033, `Шкатулка с чарами` or `Токен элитных чар` | `ae_lootbox` | `ae` |
 | IRON_INGOT / 73026, `Лутбокс слаймфана` | `sf_lootbox` | `sf` |
+| SEA_LANTERN / 10000, `Сундук Слаймфана` | `sf_lootbox` | `sf` |
 | STICK / 11135, `Горсть монет` | `money_handful` | `smallmoney` |
 | STICK / 11136, `Кучка монет` | `money_pile` | `mediummoney` |
 | STICK / 11137, `Куча монет` | `money_heap` | `bigmoney` |
@@ -19,8 +20,10 @@ Material/model alone is insufficient: ItemsAdder uses the same models for
 decorations. Markerless matching requires the historical name and use lore;
 compatible native reward data can identify already-tagged legacy stacks.
 Foreign custom data, PDC, conflicting reward identities and modern roll metadata
-are excluded. The old SEA_LANTERN / 10000 fallback has no verified markerless
-name; that shape is accepted only with compatible native SF identity.
+are excluded. The old SEA_LANTERN / 10000 shape also matches the exact
+BetterStructures name and use lore. Only that historical presentation may carry
+an empty `itemsadder:{}` compound; nonempty compounds and scalar lookalikes
+remain excluded.
 
 The native `ItemPresets` factory is authoritative. One valid replacement must
 retain the exact stack amount and expected treasure key before replacing the
@@ -83,3 +86,33 @@ observed player behavior. Matching, collisions, amount preservation, missing
 factory results and repeated conversion are the focused regression boundaries.
 The relevant Paper event contract is documented by
 [PlayerInventorySlotChangeEvent](https://jd.papermc.io/paper/26.1.2/io/papermc/paper/event/player/PlayerInventorySlotChangeEvent.html).
+
+## BetterStructures recovery — 2026-10-20
+
+The live Survival files `plugins/BetterStructures/treasures/treasure_end.yml`,
+`treasure_nether.yml`, `treasure_overworld_surface.yml` and
+`treasure_overworld_underground.yml` contain the same historical SF chest:
+SEA_LANTERN / 10000, `Сундук Слаймфана`, one use-lore line, and
+`{"arc:treasure_key":"sf",itemsadder:{},slimefun_token:1}`.
+The first migration excluded the empty ItemsAdder compound and did not know
+the lantern's name. Both tagged and markerless versions now use the same
+native preset resolver. Actual ItemsAdder identities and explicit roll counts
+still retain their own contracts.
+
+This extends the already assessed one-for-one recovery; reward pools, rates,
+prices and current preset values are unchanged. A stack of 19 remains 19
+containers, with zero direct vault, premium-token, crystal or XP issuance.
+The live SF preset still gives 4–5 draws per redeemed container: all 19 yield
+76–95 draws, expected 85.5, only if their owner later redeems every container.
+For a previously usable keyed legacy stack without roll metadata the baseline
+is 19 draws, so normalization adds an expected 66.5 draws; a markerless broken
+stack had no native redemption. These are alternative baselines, not additive
+flows, and draws are not assigned a currency value. The stock and consumption
+rate beyond the reported stack remain unknown. The existing low/base/high
+assessment remains a sensitivity scenario, not measured recurring income.
+
+The focused regression checks include exact BS presentation, real empty NBT
+compound versus nonempty/scalar lookalikes, stack size 19, and idempotence.
+No player data is edited offline. Once the updated code is active, normal
+inventory events and main-hand use perform the conversion. Server activation
+does not by itself prove that Atyamova's unobserved inventory was converted.

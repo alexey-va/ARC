@@ -2,6 +2,8 @@
   "version": 1,
   "title": "Legacy dungeon treasure item recovery — 2026-10-18",
   "assumptions": [
+    "2026-10-20: extend SF recognition to the verified BetterStructures SEA_LANTERN/CMD10000 chest, exact name/lore and actual empty itemsadder compound. Rates, pools and one-for-one quantities are unchanged; the sensitivity scenarios below already model recovered SF containers.",
+    "Reported stock example is 19 containers, preserved as 19. Later full redemption gives 76–95 SF draws (EV 85.5); previously functional keyed legacy baseline is 19 draws (EV delta 66.5), while markerless broken baseline is zero. These alternative baselines must not be added. There is no direct vault/tokens/crystals/XP issuance and no assumed resale rate.",
     "See legacy-treasure-migration-20261018.md for identities, exact live contracts, formerly functional baseline, exclusions and evidence.",
     "Low/base/high: 1/5/20 participants redeem 0.25/1/8 existing formerly unusable units of EACH category per active day. This is restored stock sensitivity; acquisition rates and outstanding stock are unknown.",
     "Conversion changes neither stack quantity nor currency balance. Only subsequent normal redemption pays once. Functional coin-token payout delta is zero. Keyed legacy AE/SF without roll metadata previously drew once; current presets draw 1–2 / 4–5 respectively.",

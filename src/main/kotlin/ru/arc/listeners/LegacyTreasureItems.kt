@@ -2,6 +2,7 @@ package ru.arc.listeners
 
 import de.tr7zw.changeme.nbtapi.NBT
 import de.tr7zw.changeme.nbtapi.NBTType
+import de.tr7zw.changeme.nbtapi.iface.ReadableNBT
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Material
 import org.bukkit.inventory.ItemStack
@@ -14,6 +15,7 @@ import ru.arc.util.customModelDataOrNull
 internal object LegacyTreasureItems {
     private const val TREASURE_KEY = "arc:treasure_key"
     private const val USE_LORE = "Нажмите ПКМ для использования"
+    private const val SF_LANTERN_NAME = "Сундук Слаймфана"
     private val plain = PlainTextComponentSerializer.plainText()
     private val whitespace = Regex("\\s+")
     private val failures = mutableMapOf<String, Long>()
@@ -22,9 +24,8 @@ internal object LegacyTreasureItems {
             setOf("Шкатулка с чарами", "Токен элитных чар"), mapOf("ae_token" to "true")),
         LegacyTreasureTarget(Material.IRON_INGOT, 73026, "sf_lootbox", "sf",
             setOf("Лутбокс слаймфана"), mapOf("slimefun_token" to "1")),
-        // The historical script repaired this shape, but no markerless name/lore sample is known.
         LegacyTreasureTarget(Material.SEA_LANTERN, 10000, "sf_lootbox", "sf",
-            emptySet(), mapOf("slimefun_token" to "1")),
+            setOf(SF_LANTERN_NAME), mapOf("slimefun_token" to "1")),
         money(11135, "money_handful", "smallmoney", "Горсть монет", 2000, 500, 500),
         money(11136, "money_pile", "mediummoney", "Кучка монет", 6500, 2000, 3000),
         money(11137, "money_heap", "bigmoney", "Куча монет", 10000, 3000, 5000),
@@ -37,14 +38,7 @@ internal object LegacyTreasureItems {
         val operation = "read:${original.type}:${fingerprint.model}"
         val data = try {
             NBT.get<Map<String, String?>>(original) { nbt ->
-                nbt.keys.associateWith { key ->
-                    when (nbt.getType(key)) {
-                        NBTType.NBTTagString -> nbt.getString(key)
-                        NBTType.NBTTagInt -> nbt.getInteger(key).toString()
-                        NBTType.NBTTagByte -> nbt.getByte(key).toString()
-                        else -> null
-                    }
-                }
+                readCustomData(fingerprint, nbt)
             }
         } catch (failure: Exception) {
             failed(operation, failure)
@@ -54,6 +48,21 @@ internal object LegacyTreasureItems {
         val target = target(fingerprint.copy(customData = data)) ?: return null
         return replacement(original, target)
     }
+
+    internal fun readCustomData(item: LegacyTreasureFingerprint, nbt: ReadableNBT): Map<String, String?> =
+        nbt.keys.filterNot { key ->
+            // BetterStructures' historical SF chest carried an empty IA compound, not an IA identity.
+            key == "itemsadder" && item.material == Material.SEA_LANTERN && item.model == 10000 &&
+                item.name == SF_LANTERN_NAME && item.lore == listOf(USE_LORE) &&
+                nbt.getType(key) == NBTType.NBTTagCompound && nbt.getCompound(key)?.keys?.isEmpty() == true
+        }.associateWith { key ->
+            when (nbt.getType(key)) {
+                NBTType.NBTTagString -> nbt.getString(key)
+                NBTType.NBTTagInt -> nbt.getInteger(key).toString()
+                NBTType.NBTTagByte -> nbt.getByte(key).toString()
+                else -> null
+            }
+        }
 
     internal fun fingerprint(item: ItemStack, customData: Map<String, String?>): LegacyTreasureFingerprint? {
         val model = item.customModelDataOrNull ?: return null
