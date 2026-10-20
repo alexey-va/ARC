@@ -14,6 +14,7 @@ object EliteEnchantingModule : PluginModule {
     internal var bookText = EliteEnchantmentBookPresentationText()
         private set
     private var controller: EliteEnchantingController? = null
+    private var grindstone: EliteGrindstoneController? = null
 
     override fun init() {
         val config = EliteEnchantingConfig.load(ArcDungeonsPlugin.instance.legacyDataPath)
@@ -24,11 +25,16 @@ object EliteEnchantingModule : PluginModule {
         controller = EliteEnchantingController(config).also {
             Bukkit.getPluginManager().registerEvents(it, ArcDungeonsPlugin.instance)
         }
+        grindstone = EliteGrindstoneController().also {
+            Bukkit.getPluginManager().registerEvents(it, ArcDungeonsPlugin.instance)
+        }
     }
     override fun reload() = init()
     override fun shutdown() {
         controller?.let { HandlerList.unregisterAll(it); it.close() }
         controller = null
+        grindstone?.let(HandlerList::unregisterAll)
+        grindstone = null
         clearEliteEnchantmentCatalog()
     }
 }

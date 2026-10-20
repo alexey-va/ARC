@@ -45,6 +45,26 @@ normal native-listener lifecycle owns registration and cleanup. The focused
 `EliteMobsEventAnnouncementGuardTest` exercises the native announcement sender
 against both runtime versions with the same compiled addon.
 
+## Grindstone enchantment removal
+
+`EliteEnchantingModule` registers `EliteGrindstoneController`. The native
+`ItemSettings.yml` setting `preventEliteItemDisenchantment` must be false on the
+target runtime; changing it requires native listener re-registration at restart.
+The addon prepares one elite item's result through `PrepareGrindstoneEvent`,
+removes noncurse native enchantments and their exact PDC mirrors, replaces
+noncurse custom records through `EliteEnchantmentItems.ITEMS.previewCustom`,
+and refreshes native value before presentation. Curses and item identity remain.
+Two-input elite repairs, enchanted books, and native scrolls have no result.
+
+Result clicks validate the saved input snapshots and exact prepared output;
+they must not regenerate presentation because legacy staff migration can choose
+a random spell. Native inventory handling owns consumption, movement and XP.
+The focused `ru.arc.enchanting.EliteGrindstoneControllerTest` covers this path.
+Its fixture mocks only `ItemTagger.isEliteItem`, whose legacy tag-container
+operation is unsupported by MockBukkit. Native enchantment reads, custom record
+replacement and vanilla/PDC cleanup execute against the actual runtime JAR.
+Native identity detection, item extraction and XP still need player acceptance.
+
 ## Focused verification
 
 Run `:arc-dungeons:test` with the five filters `PassiveClassContentTest`,
