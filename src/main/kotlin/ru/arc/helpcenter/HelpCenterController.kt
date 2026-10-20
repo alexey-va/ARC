@@ -300,7 +300,7 @@ internal class HelpCenterController(
                     button("now_homes", text("my-homes-label")) { openTravel(player) },
                     button("now_lands", text("my-lands-label")) { open(player, HelpCenterPage.PRIVAT) },
                     button("now_guide", text("guide-label")) { openGuide(player) },
-                ),
+                ).map { it.copy(width = 230) },
                 exitButton = rootButton(player),
                 columns = 2,
             ),
@@ -339,13 +339,13 @@ internal class HelpCenterController(
                     presentation.separator(468)?.let(::add)
                     add(presentation.facts(rows.drop(6).map { listOf(it) }, 468))
                 },
-                buttons = recommendationButtons(player, profile) + listOf(
+                buttons = (recommendationButtons(player, profile) + listOf(
                     button("now_homes", text("my-homes-label"), text("my-homes-tooltip")) { openTravel(player) },
                     button("now_lands", text("my-lands-label"), text("my-lands-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
                     button("now_requests", text("requests-short-label"), text("requests-tooltip")) { hub.openRequests(player) },
                     button("now_context", text("context-short-label"), text("context-tooltip")) { hub.openContext(player) },
                     button("now_guide", text("guide-label"), text("guide-tooltip")) { openGuide(player) },
-                ),
+                )).map { it.copy(width = 230) },
                 exitButton = rootButton(player),
                 columns = 2,
             ),
@@ -709,7 +709,8 @@ internal class HelpCenterController(
                         add(button("held_item", text("context-item-label"), text("item-tooltip")) { hub.openItem(player) })
                     }
                     addAll(entries.map { commandButton(player, it) })
-                }.ifEmpty { listOf(button("empty_search", text("commands-label")) { openCommands(player) }) },
+                }.ifEmpty { listOf(button("empty_search", text("commands-label")) { openCommands(player) }) }
+                    .map { if (category == HelpCenterCategory.TECHNOLOGY) it.copy(width = 230) else it },
                 exitButton = backButton("back", player, if (returnToRoot) ::openRoot else ::openCommands),
                 columns = 2,
             ),

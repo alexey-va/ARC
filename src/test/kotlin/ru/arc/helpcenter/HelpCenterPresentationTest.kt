@@ -61,6 +61,24 @@ class HelpCenterPresentationTest : FreeSpec({
         native shouldBe 5
     }
 
+    "long iconless captions use plain A while preserving their words and the action family" {
+        val theme = presentation("arc:dialog_ui")
+        val words = "Инструменты строителя ›"
+        val original = button("home_0", 150).copy(label = Component.text(words))
+        fun points(value: PaperDialogButton) = PlainTextComponentSerializer.plainText()
+            .serialize(theme.screen(screen.copy(buttons = listOf(value)), true).buttons.single().label)
+            .codePoints().toArray()
+        val long = points(original)
+        long.contains(0xF9024) shouldBe true
+        long.any { it in 0xF9080..0xF908F || it in 0xF9060..0xF9073 } shouldBe false
+        buildString {
+            long.filter { it !in 0xF9000..0xF9FFF && it !in 0xF0F01..0xF0F0A }.forEach { appendCodePoint(it) }
+        } shouldBe words
+        points(original.copy(label = Component.text("Дом"))).contains(0xF9088) shouldBe true
+        // A functional button keeps its own plain frame even when its optional icon cannot fit.
+        points(original.copy(id = PaperDialogActionId.of("search"))).contains(0xF9018) shouldBe true
+    }
+
     "functional glyphs replace only the known static ornamental arrows" {
         val examples = listOf("next" to ("Следующая →" to "Следующая"),
             "previous" to ("← Предыдущая" to "Предыдущая"),

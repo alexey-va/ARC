@@ -4,10 +4,13 @@ import net.kyori.adventure.key.Key
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextColor
 import ru.arc.paper.menu.DialogDecoration
+import ru.arc.paper.menu.DialogTextLayout
 import ru.arc.paper.menu.PaperDialogBody
 import ru.arc.paper.menu.PaperDialogButton
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogScreen
+import ru.arc.text.TextAlignment
+import ru.arc.text.TextLayoutResult
 
 /** HelpCenter alone opts into the installed dialog-ui library; domain actions and labels remain unchanged. */
 internal class HelpCenterPresentation(settings: HelpCenterSettings) {
@@ -57,7 +60,6 @@ internal class HelpCenterPresentation(settings: HelpCenterSettings) {
             screenId.startsWith("help.settings") || id.startsWith("settings_") -> 0xF9088
             else -> 0xF9080
         }
-        val frame = DialogDecoration.ButtonFrame(glyph(base, 16), glyph(base + 1, 17), glyph(base + 3, 15))
         val icon = action?.let { glyph(0xF9060 + it - 21, if (it in setOf(29, 33, 37, 38, 40)) 10 else 11) }
         // These are old configured ornamental prefixes, not part of the action's name.
         val prefix = legacyPrefixes[id] ?: when {
@@ -73,6 +75,13 @@ internal class HelpCenterPresentation(settings: HelpCenterSettings) {
         if (suffix != null) label = label.replaceText {
             it.match(Regex.escape(suffix) + "$").replacement(Component.empty()).once()
         }
+        // Side ornaments and their native shadow use 16px; leave another 2px of breathing room.
+        val ornamentLayout = if (action == null) {
+            DialogTextLayout.layout(label, TextAlignment.LEFT, button.width - 36 + 8) as? TextLayoutResult.Aligned
+        } else null
+        // Plain A30 is a neutral steel frame, without an icon or a second inner border.
+        val frameBase = if (ornamentLayout != null && ornamentLayout.lineCount > 1) 0xF9024 else base
+        val frame = DialogDecoration.ButtonFrame(glyph(frameBase, 16), glyph(frameBase + 1, 17), glyph(frameBase + 3, 15))
         return button.copy(label = decoration.buttonLabel(label, button.width, frame, icon, action == 25))
     }
 

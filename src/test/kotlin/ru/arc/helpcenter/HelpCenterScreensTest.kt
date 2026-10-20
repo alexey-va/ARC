@@ -171,6 +171,10 @@ class HelpCenterScreensTest {
         screen.buttons.size shouldBe 15
         open(HelpCenterPage.NOW)
         screens["profile"] = screen
+        // Long recommendations need room between the native side ornaments.
+        screen.columns shouldBe 2
+        screen.buttons.map { it.width }.distinct() shouldBe listOf(230)
+        screen.body.map { it.width }.distinct() shouldBe listOf(468)
         open(HelpCenterPage.TRAVEL)
         screens["travel"] = screen
         open(HelpCenterPage.SETTINGS)
@@ -185,6 +189,15 @@ class HelpCenterScreensTest {
         // The decorated action still dispatches the same player command.
         click("legacy_flight_recharge")
         executed.last() shouldBe "cmi flightcharge recharge"
+        player.addAttachment(plugin, "arcbuild.use", true)
+        open(HelpCenterPage.TECHNOLOGY)
+        screens["technology"] = screen
+        screen.buttons.any { it.id.value == "command_builder" } shouldBe true
+        screen.buttons.map { it.width }.distinct() shouldBe listOf(230)
+        open(HelpCenterPage.REQUESTS)
+        screens["long-caption"] = screen
+        plain(screen.buttons.single { it.id.value == "request_vote" }.label)
+            .codePoints().anyMatch { it == 0xF9024 } shouldBe true
         val serializer = LegacyComponentSerializer.builder().character('&').hexColors().build()
         fun serialize(component: Component) = serializer.serialize(component)
         val export = screens.mapValues { (_, view) -> mapOf(
