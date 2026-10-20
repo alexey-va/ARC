@@ -12,7 +12,7 @@ import org.bukkit.persistence.PersistentDataType
 import java.util.UUID
 
 /** One main-thread instruction bar per participating player; no task or inventory mutations. */
-internal class OnboardingHud : AutoCloseable {
+internal class OnboardingHud(private val config: OnboardingConfig) : AutoCloseable {
     private val bars = mutableMapOf<UUID, Pair<Player, BossBar>>()
 
     fun refresh(player: Player, guide: OnboardingGuideView?) {
@@ -23,10 +23,13 @@ internal class OnboardingHud : AutoCloseable {
         val goal = guide.quest.goal
         val needsBook = goal == OnboardingQuestGoal.BUILD &&
             OnboardingMilestone.AUTOBUILD_STARTED !in guide.quest.milestones
-        val items = if (goal == OnboardingQuestGoal.CLAIM || needsBook) player.inventory.contents.filterNotNull() else emptyList()
+        val worldHint = config.questWorldHint(player.world.name)
+        val items = if (worldHint == null && (goal == OnboardingQuestGoal.CLAIM || needsBook))
+            player.inventory.contents.filterNotNull() else emptyList()
         val title = onboardingHudTitle(guide,
             hasClaimBlock = goal == OnboardingQuestGoal.CLAIM && items.any { ClaimBlockIdentity.matches(it) && ClaimBlockIdentity.usableBy(it, player) },
             hasBuildBook = needsBook && items.any(::isOnboardingBuildBook),
+            worldHint = worldHint,
         ) ?: return
         if (bars[player.uniqueId]?.first?.let { it !== player } == true) clear(player.uniqueId)
         val bar = bars.getOrPut(player.uniqueId) {
@@ -56,9 +59,13 @@ internal fun onboardingHudTitle(
     guide: OnboardingGuideView,
     hasClaimBlock: Boolean = false,
     hasBuildBook: Boolean = false,
+    worldHint: Component? = null,
 ): Component? {
     if (guide.remainingTicks <= 0) return null
-    val (action, explanation) = when (guide.quest.goal ?: return null) {
+    val goal = guide.quest.goal ?: return null
+    val building = goal == OnboardingQuestGoal.BUILD && OnboardingMilestone.AUTOBUILD_STARTED in guide.quest.milestones
+    if (worldHint != null && goal != OnboardingQuestGoal.TRAVEL && !building) return worldHint
+    val (action, explanation) = when (goal) {
         OnboardingQuestGoal.TRAVEL -> "Выберите мир" to " у Проводника"
         OnboardingQuestGoal.HOME -> "/sethome" to if (OnboardingMilestone.HOME_CREATED in guide.quest.milestones)
             " — перенести точку в свой приват" else " — сохранить точку дома"

@@ -41,6 +41,24 @@ class OnboardingConfigTest : FreeSpec({
         }
     }
 
+    "world hints follow the configured quest gate and never expose an unknown world ID" {
+        val plain = PlainTextComponentSerializer.plainText()
+        config("worlds: [Vanilla, Mining, CustomHome]\n").apply {
+            questWorldHint(" VANILLA ") shouldBe null
+            questWorldHint("customhome") shouldBe null
+            plain.serialize(requireNotNull(questWorldHint(" MINING "))) shouldBe "Перейдите из Мира добычи в Мир выживания"
+            for (world in listOf("survival", "spawn", "rc_origin_spawn", "lobby", "world_nether", "world_the_end", "private_instance_42")) {
+                allowsQuestWorld(world) shouldBe false
+                plain.serialize(requireNotNull(questWorldHint(world))) shouldBe "Перейдите в Мир выживания"
+            }
+            validate()
+        }
+        config("quest:\n  hud:\n    enter-survival: '<white>Вернитесь в Мир выживания'\n").apply {
+            plain.serialize(requireNotNull(questWorldHint("spawn"))) shouldBe "Вернитесь в Мир выживания"
+            validate()
+        }
+    }
+
     "empty worlds and invalid NPC fail validation" {
         shouldThrow<IllegalArgumentException> { config("worlds: []\n").validate() }
         shouldThrow<IllegalArgumentException> { config("quest:\n  npc-id: -1\n").validate() }

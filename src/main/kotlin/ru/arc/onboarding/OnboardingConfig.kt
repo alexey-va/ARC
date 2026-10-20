@@ -1,6 +1,7 @@
 package ru.arc.onboarding
 
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.TextDecoration
 import ru.arc.ARC
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
@@ -29,6 +30,15 @@ internal class OnboardingConfig private constructor(
     fun allowsQuestWorld(worldName: String): Boolean =
         worldName.trim().lowercase(Locale.ROOT).let { it in worlds && it != "mining" }
 
+    /** A presentation prerequisite only; the same world gate still owns every quest credit. */
+    fun questWorldHint(worldName: String): Component? {
+        if (allowsQuestWorld(worldName)) return null
+        return hudWorldText(if (worldName.trim().equals("mining", ignoreCase = true)) "leave-mining" else "enter-survival")
+    }
+
+    private fun hudWorldText(key: String): Component =
+        source.component("quest.hud.$key", HUD_WORLD_TEXT.getValue(key)).decoration(TextDecoration.ITALIC, false)
+
     fun questText(key: String): Component =
         source.component("quest.text.$key", OnboardingQuestDialog.DEFAULT_TEXT.getValue(key))
 
@@ -41,9 +51,15 @@ internal class OnboardingConfig private constructor(
             CLAIM_TEXT.keys.forEach(::claimText)
         }
         OnboardingQuestDialog.DEFAULT_TEXT.keys.forEach(::questText)
+        HUD_WORLD_TEXT.keys.forEach(::hudWorldText)
     }
 
     companion object {
+        internal val HUD_WORLD_TEXT = linkedMapOf(
+            "leave-mining" to "<#e8dfd2>Перейдите из Мира добычи <#77ee94>в Мир выживания",
+            "enter-survival" to "<#e8dfd2>Перейдите <#77ee94>в Мир выживания",
+        )
+
         internal val CLAIM_TEXT = linkedMapOf(
             "title" to "<#92bed8>Поставь блок на землю",
             "subtitle" to "<white>Снять защиту здесь: <#ff9f0f>/unclaim",

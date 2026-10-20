@@ -8,6 +8,7 @@ import org.bukkit.event.Listener
 import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerQuitEvent
+import org.bukkit.event.player.PlayerTeleportEvent
 import ru.arc.core.Tasks
 
 internal class OnboardingPlayerListener : Listener {
@@ -22,6 +23,11 @@ internal class OnboardingPlayerListener : Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     fun onWorldChanged(event: PlayerChangedWorldEvent) {
         OnboardingService.resume(event.player)
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onTeleport(event: PlayerTeleportEvent) {
+        OnboardingService.refreshAfterTeleport(event.player)
     }
 }
 

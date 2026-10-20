@@ -50,7 +50,7 @@ object OnboardingService : OnboardingBuildProgressService {
         val playtimeFailures = mutableSetOf<UUID>()
         val invalidPlaytimes = mutableMapOf<UUID, String>()
         val expiring = mutableSetOf<String>()
-        val hud = OnboardingHud()
+        val hud = OnboardingHud(config)
         var rewardLedger: MySqlOneTimeUseLedger? = null
         var rewards: OnboardingRewards? = null
         lateinit var menu: OnboardingQuestDialog
@@ -189,10 +189,17 @@ object OnboardingService : OnboardingBuildProgressService {
 
     /** No join-time enrollment. Only an existing record is loaded here. */
     fun resume(player: Player) {
+        runtime?.let { refreshHud(it, player) }
         request(player, { store, id -> store.load(id) }) { current, progress ->
             current.npc?.refresh(player)
             confirmArrival(player, progress)
         }
+    }
+
+    internal fun refreshAfterTeleport(player: Player) {
+        val current = runtime ?: return
+        // The event fires before the destination is applied; read the actual world on the next tick.
+        current.tasks.runLater(1L) { refreshHud(current, player) }
     }
 
     fun leave(playerId: UUID) {

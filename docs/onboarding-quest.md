@@ -29,7 +29,12 @@ Progress is a bounded Redis CAS record in `arc.onboarding.quest.v1`, shared by
 Spawn and Survival. Home and land must refer to the same chunk. Existing world
 presence counts as arrival for repeatable admin testing. Quest controls do not
 reset RTP, homes or land; only administrative `restart` replaces inventory as
-described above. Async home verification captures the run.
+described above. Async home verification captures the run. HuskHomes 4.9.10
+emits `HomeCreateEvent` before starting persistence; ARC confirms the exact named
+home with at most 20 serial async reads, 10 ticks between completed reads and a
+3-second timeout per read. A newer same-name event replaces the pending attempt;
+quit, player replacement and adapter shutdown discard late results. Exhaustion
+logs one diagnostic. Legacy home respawn remains independent of quest enrollment.
 
 The Java-shaped `arc-onboarding-api` service is owned and registered by ARC.
 ArcBuilder compiles against that API without packaging it and reports book
@@ -60,8 +65,16 @@ Claim and build hints offer `/kit start` only while the appropriate usable item
 is absent; modern ArcBuilder books are identified by their BOOK material and
 stable PDC ID/schema, never display name. The book hint is the single gesture
 `ПКМ книгой строительства по земле`; a historical preview milestone does not change it.
+Before home, claim, or unstarted build instructions, the bar uses the same
+`allowsQuestWorld` rule as quest credit. In the resource world it says
+`Перейдите из Мира добычи в Мир выживания`; in other ineligible worlds it says
+`Перейдите в Мир выживания`. Unknown world IDs never enter player-facing text.
+Returning to an eligible world restores the current instruction without changing
+progress. A construction already in progress retains its completion-wait hint.
+These two prerequisite messages are configurable under `quest.hud`.
 The Runtime owns one bar per player, refreshes it after durable progress and
-inside the existing five-second main-thread loop, and hides it on every guide
+inside the existing five-second main-thread loop, immediately on world change,
+and on the tick after a non-cancelled teleport. It hides it on every guide
 exit, quit, timer invalidation and shutdown. It never executes a command or
 changes inventory, rewards, sidebar rows, enrollment or expiry.
 

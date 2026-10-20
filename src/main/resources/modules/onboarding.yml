@@ -13,6 +13,9 @@ quest:
   rewards:
     coins-per-step: 200
     tokens-per-step: 1
+  hud:
+    leave-mining: '<#e8dfd2>Перейдите из Мира добычи <#77ee94>в Мир выживания'
+    enter-survival: '<#e8dfd2>Перейдите <#77ee94>в Мир выживания'
   text:
     title: '<#c4abff>Первый дом'
     offer: '<#e8dfd2>Найдите место и постройте свой первый дом.'
