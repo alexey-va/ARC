@@ -54,10 +54,18 @@ class MenuShortcutController(
      * listener is moved after this one when startup timing registered it first, so cancelling
      * Shift+F here makes EliteMobs' ignoreCancelled listener skip it, even when the player cannot
      * open a dungeon panel (for example, a spectator). Dungeon and claim shortcuts retain their
-     * already-cancelled fallback; personal shortcuts respect other cancellations. Plain F is untouched.
+     * already-cancelled fallback; personal shortcuts respect other cancellations. ArcBuilder's
+     * active display editor owns both F variants; plain F is otherwise untouched.
      */
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
     fun onSwapHands(event: PlayerSwapHandItemsEvent) {
+        if (event.player.getMetadata("arcbuilder-display-editor").any {
+            val owner = it.owningPlugin
+            owner?.name == "ArcBuilder" && owner.isEnabled && it.asBoolean()
+        }) {
+            event.isCancelled = true
+            return
+        }
         if (!event.player.isSneaking) return
         if (isClaimBlockShortcut(event.player)) {
             openClaimBlockMenu(event)
