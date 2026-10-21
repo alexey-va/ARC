@@ -35,6 +35,7 @@ import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerRespawnEvent
 import org.bukkit.event.player.PlayerSwapHandItemsEvent
 import org.bukkit.event.player.PlayerTeleportEvent
+import org.bukkit.event.player.PlayerToggleSneakEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
@@ -67,6 +68,7 @@ internal class TreasureHuntGrapple(
     private companion object {
         const val SPAWN_WORLD = "rc_origin_spawn"
         const val MAX_SHOT_LIFETIME_TICKS = 120
+        const val ARRIVAL_HOLD_TICKS = 20
         const val ACTIVE_REDIRECT_COOLDOWN_TICKS = 4L
         const val BODY_CENTER_Y = 0.9
         const val CABLE_WIDTH = 0.075f
@@ -84,6 +86,8 @@ internal class TreasureHuntGrapple(
         val cable: List<PacketBlockDisplay>,
         var ageTicks: Int = 0,
         var pulling: Boolean = false,
+        var holdUntilTick: Int? = null,
+        var gravityBeforeHold: Boolean? = null,
     )
 
     private val hookKey = NamespacedKey(plugin, "treasure_hunt_grapple")
@@ -232,19 +236,25 @@ internal class TreasureHuntGrapple(
             removeTaggedItems(player)
             return
         }
+        if (player.isSneaking) return
         val now = player.ticksLived.toLong()
         val playerId = player.uniqueId
         val activeShot = shots[playerId]
         if (activeShot != null) {
             val redirectCooldown = minOf(config.cooldownTicks, ACTIVE_REDIRECT_COOLDOWN_TICKS)
-            if (activeShot.ageTicks.toLong() < redirectCooldown) return
-            // Retargeting replaces packet visuals only; preserve any velocity from an active pull.
+            if (activeShot.holdUntilTick == null && activeShot.ageTicks.toLong() < redirectCooldown) return
+            // Release the old hook without discarding the player's momentum.
             stopShot(playerId, dampVelocity = false)
         } else if (now < (nextAllowedTick[playerId] ?: Long.MIN_VALUE)) {
             return
         }
         nextAllowedTick[playerId] = now + config.cooldownTicks
         shoot(player, session, config)
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onSneak(event: PlayerToggleSneakEvent) {
+        if (event.isSneaking) stopShot(event.player.uniqueId, dampVelocity = false)
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
@@ -409,7 +419,8 @@ internal class TreasureHuntGrapple(
         if (closed) return
         for (shot in shots.values.toList()) {
             val player = plugin.server.getPlayer(shot.playerId)
-            if (player == null || !isShotValid(player, shot) || shot.ageTicks >= MAX_SHOT_LIFETIME_TICKS) {
+            val expired = shot.ageTicks >= MAX_SHOT_LIFETIME_TICKS && shot.holdUntilTick == null
+            if (player == null || !isShotValid(player, shot) || expired) {
                 val damp = player != null && player.isOnline && !player.isDead && shot.pulling
                 val worldChanged = player?.world?.uid != shot.worldId
                 stopShot(shot.playerId, dampVelocity = damp, allowWorldMismatch = worldChanged)
@@ -465,7 +476,22 @@ internal class TreasureHuntGrapple(
         val center = player.location.toVector().add(Vector(0.0, BODY_CENTER_Y, 0.0))
         val delta = shot.target.clone().subtract(center)
         val distance = delta.length()
-        if (distance <= config.stopDistance || shot.ageTicks - shot.travelTicks >= config.maxPullTicks) {
+        if (shot.holdUntilTick == null && distance <= config.stopDistance) {
+            shot.holdUntilTick = shot.ageTicks + ARRIVAL_HOLD_TICKS
+            shot.gravityBeforeHold = player.hasGravity()
+            player.setGravity(false)
+        }
+        val holdUntil = shot.holdUntilTick
+        if (holdUntil != null) {
+            if (shot.ageTicks >= holdUntil) {
+                stopShot(player.uniqueId, dampVelocity = true)
+            } else {
+                player.velocity = Vector()
+                updateVisuals(shot, player.eyeLocation.toVector(), shot.target, player.world)
+            }
+            return
+        }
+        if (shot.ageTicks - shot.travelTicks >= config.maxPullTicks) {
             stopShot(player.uniqueId, dampVelocity = true)
             return
         }
@@ -524,10 +550,12 @@ internal class TreasureHuntGrapple(
 
     private fun stopShot(playerId: UUID, dampVelocity: Boolean, allowWorldMismatch: Boolean = false) {
         val shot = shots.remove(playerId) ?: return
+        val player = plugin.server.getPlayer(playerId)
+        shot.gravityBeforeHold?.let { player?.setGravity(it) }
         shot.head.remove()
         shot.cable.forEach(PacketDisplay::remove)
         if (dampVelocity && shot.pulling) {
-            plugin.server.getPlayer(playerId)
+            player
                 ?.takeIf { it.isOnline && !it.isDead && (allowWorldMismatch || it.world.uid == shot.worldId) }
                 ?.velocity = Vector()
         }

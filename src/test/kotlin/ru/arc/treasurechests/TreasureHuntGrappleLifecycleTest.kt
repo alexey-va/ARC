@@ -9,6 +9,7 @@ import io.mockk.slot
 import io.mockk.unmockkConstructor
 import io.mockk.verify
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.FluidCollisionMode
 import org.bukkit.Location
 import org.bukkit.Material
@@ -18,10 +19,12 @@ import org.bukkit.block.BlockFace
 import org.bukkit.entity.Item
 import org.bukkit.entity.Player
 import org.bukkit.event.block.Action
+import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerDropItemEvent
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerQuitEvent
+import org.bukkit.event.player.PlayerToggleSneakEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
@@ -56,6 +59,15 @@ class TreasureHuntGrappleLifecycleTest : DescribeSpec({
 
                 isHook(player.inventory.getItem(2), harness.plugin) shouldBe true
                 player.inventory.getItem(2)?.amount shouldBe 1
+                player.inventory.getItem(2)?.lore()?.map(PlainTextComponentSerializer.plainText()::serialize) shouldBe
+                    listOf(
+                        "",
+                        "Нажмите ПКМ, чтобы выстрелить и подтянуться.",
+                        "Повторный ПКМ меняет цель даже в полёте.",
+                        "Shift — отпустить крюк.",
+                        "",
+                        "Действует во время охоты на спавне.",
+                    )
                 taggedCount(player, harness.plugin) shouldBe 1
                 hotbarSnapshot(player).take(2) shouldBe before.take(2)
                 taggedCount(otherPlayer, harness.plugin) shouldBe 0
@@ -229,6 +241,147 @@ class TreasureHuntGrappleLifecycleTest : DescribeSpec({
                 harness.grapple.close()
             }
         }
+
+        listOf(true, false).forEach { originalGravity ->
+            it("holds at the anchor for twenty ticks and restores gravity=$originalGravity") {
+                withGrappleBlockRayTrace(hitDistance = 1.0) { runtime ->
+                    val harness = harness(runtime)
+                    val origin = runtime.addSimpleWorld("rc_origin_spawn")
+                    val player = runtime.addPlayer("held-player")
+                    move(player, origin)
+                    standOnGround(origin)
+                    player.setGravity(originalGravity)
+                    startHunt(harness.grapple, origin)
+
+                    harness.grapple.onInteract(rightClick(player, player.inventory.itemInMainHand))
+                    runtime.performTicks(2)
+
+                    player.hasGravity() shouldBe false
+                    player.velocity shouldBe Vector()
+                    val head = harness.spawnedHeads.single()
+                    runtime.callEvent(PlayerToggleSneakEvent(player, false))
+                    runtime.callEvent(PlayerToggleSneakEvent(player, true).apply { isCancelled = true })
+                    runtime.performTicks(19)
+                    player.hasGravity() shouldBe false
+                    verify(exactly = 0) { head.remove() }
+                    harness.spawnedCable.forEach { display -> verify(exactly = 0) { display.remove() } }
+
+                    runtime.performTicks(1)
+
+                    player.hasGravity() shouldBe originalGravity
+                    verify(exactly = 1) { head.remove() }
+                    harness.spawnedCable.forEach { display -> verify(exactly = 1) { display.remove() } }
+                    harness.grapple.close()
+                }
+            }
+        }
+
+        listOf("flight" to 24.0, "pull" to 5.0, "hold" to 1.0).forEach { (phase, distance) ->
+            it("releases the $phase immediately on sneak without clearing momentum") {
+                withGrappleBlockRayTrace(hitDistance = distance) { runtime ->
+                    val harness = harness(runtime)
+                    val origin = runtime.addSimpleWorld("rc_origin_spawn")
+                    val player = runtime.addPlayer("sneak-player")
+                    move(player, origin)
+                    standOnGround(origin)
+                    startHunt(harness.grapple, origin)
+                    harness.grapple.onInteract(rightClick(player, player.inventory.itemInMainHand))
+                    runtime.performTicks(3)
+                    val head = harness.spawnedHeads.single()
+                    val momentum = Vector(0.31, 0.42, -0.27)
+                    player.velocity = momentum.clone()
+
+                    runtime.callEvent(PlayerToggleSneakEvent(player, true))
+
+                    player.hasGravity() shouldBe true
+                    player.velocity shouldBe momentum
+                    verify(exactly = 1) { head.remove() }
+                    harness.spawnedCable.forEach { display -> verify(exactly = 1) { display.remove() } }
+                    player.isSneaking = true
+                    runtime.performTicks(20)
+                    harness.grapple.onInteract(rightClick(player, player.inventory.itemInMainHand))
+                    harness.spawnedHeads.size shouldBe 1
+                    harness.grapple.close()
+                }
+            }
+        }
+
+        it("retargets immediately from the hold and restores gravity before the new flight") {
+            withGrappleBlockRayTrace(hitDistance = 1.0) { runtime ->
+                val harness = harness(runtime)
+                val origin = runtime.addSimpleWorld("rc_origin_spawn")
+                val player = runtime.addPlayer("hold-redirect")
+                move(player, origin)
+                standOnGround(origin)
+                startHunt(harness.grapple, origin)
+                val hook = player.inventory.itemInMainHand
+                harness.grapple.onInteract(rightClick(player, hook))
+                runtime.performTicks(2)
+                player.hasGravity() shouldBe false
+                val oldHead = harness.spawnedHeads.single()
+                val oldCable = harness.spawnedCable.toList()
+                look(player, Vector(1.0, 0.0, 0.0))
+                val momentum = Vector(0.31, 0.42, -0.27)
+                player.velocity = momentum.clone()
+
+                harness.grapple.onInteract(rightClick(player, hook))
+
+                player.hasGravity() shouldBe true
+                player.velocity shouldBe momentum
+                harness.spawnedHeads.size shouldBe 2
+                verify(exactly = 1) { oldHead.remove() }
+                oldCable.forEach { display -> verify(exactly = 1) { display.remove() } }
+                runtime.performTicks(2)
+                player.hasGravity() shouldBe false
+                runtime.performTicks(20)
+                player.hasGravity() shouldBe true
+                harness.grapple.close()
+            }
+        }
+
+        listOf("hunt end", "reload", "close", "quit", "death", "world change", "teleport", "held item", "anchor removed")
+            .forEach { cleanup ->
+                it("releases the hold and restores gravity on $cleanup") {
+                    withGrappleBlockRayTrace(hitDistance = 1.0) { runtime ->
+                        val harness = harness(runtime)
+                        val origin = runtime.addSimpleWorld("rc_origin_spawn")
+                        val player = runtime.addPlayer("cleanup-player")
+                        move(player, origin)
+                        standOnGround(origin)
+                        startHunt(harness.grapple, origin)
+                        val anchor = player.eyeLocation.add(player.eyeLocation.direction).block
+                        harness.grapple.onInteract(rightClick(player, player.inventory.itemInMainHand))
+                        runtime.performTicks(2)
+                        player.hasGravity() shouldBe false
+                        val head = harness.spawnedHeads.single()
+
+                        when (cleanup) {
+                            "hunt end" -> harness.grapple.onActiveHuntsChanged(emptyList())
+                            "reload" -> harness.grapple.reloadConfig(settings())
+                            "close" -> harness.grapple.close()
+                            "quit" -> runtime.callEvent(PlayerQuitEvent(player, Component.empty()))
+                            "death" -> {
+                                val event = mockk<PlayerDeathEvent>(relaxed = true)
+                                every { event.player } returns player
+                                every { event.drops } returns mutableListOf()
+                                harness.grapple.onDeath(event)
+                            }
+                            "world change" -> move(player, runtime.addSimpleWorld("survival"))
+                            "teleport" -> player.teleport(player.location.add(4.0, 0.0, 0.0))
+                            "held item" -> player.inventory.heldItemSlot = 1
+                            "anchor removed" -> anchor.type = Material.AIR
+                        }
+                        runtime.performTicks(1)
+
+                        player.hasGravity() shouldBe true
+                        verify(exactly = 1) { head.remove() }
+                        harness.spawnedCable.forEach { display -> verify(exactly = 1) { display.remove() } }
+                        runtime.performTicks(20)
+                        player.hasGravity() shouldBe true
+                        harness.grapple.close()
+                    }
+                }
+            }
     }
 })
 

@@ -33,6 +33,7 @@ internal data class TreasureHuntGrappleSettings(
             "",
             "<gray>Нажмите <white>ПКМ<gray>, чтобы выстрелить и подтянуться.",
             "<gray>Повторный <white>ПКМ<gray> меняет цель даже в полёте.",
+            "<white>Shift<gray> — отпустить крюк.",
             "",
             "<dark_gray>Действует во время охоты на спавне.",
         )
