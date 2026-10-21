@@ -42,6 +42,12 @@ object ArcMenus {
     private var runtime: PaperMenuRuntime? = null
     private var dialogRuntime: PaperDialogRuntime? = null
     private var shortcuts: MenuShortcutController? = null
+    private var dialogPresentation = ArcDialogPresentation("")
+
+    /** The installed resource-pack font is opt-in and follows the HelpCenter configuration lifecycle. */
+    fun configureDialogDecoration(font: String) {
+        dialogPresentation = ArcDialogPresentation(font)
+    }
 
     fun initialize(plugin: Plugin, root: Path, prepared: Config) {
         check(runtime == null && dialogRuntime == null) { "ARC menu runtime is already initialized" }
@@ -82,9 +88,17 @@ object ArcMenus {
             ru.arc.paper.menu.PaperDialogActionId.of("close_menu"), Component.translatable("gui.back"),
             width = 200, closeDialogBeforeAction = true, onClick = {},
         )
+        val escapeGoesBack = MenuEscapeBehavior.goesBack(player)
         requireNotNull(dialogRuntime) { "ARC dialog runtime is not initialized" }
-            .open(player, MenuEscapeBehavior.apply(screen, MenuEscapeBehavior.goesBack(player), close), reopen, onDismiss, !MenuEscapeBehavior.goesBack(player))
+            .open(player, prepareDialog(screen, escapeGoesBack, close), reopen, onDismiss, !escapeGoesBack)
     }
+
+    internal fun prepareDialog(screen: PaperDialogScreen, escapeGoesBack: Boolean, closeButton: ru.arc.paper.menu.PaperDialogButton): PaperDialogScreen =
+        dialogPresentation.screen(
+            MenuEscapeBehavior.apply(screen, escapeGoesBack, closeButton),
+            footerIsBack = escapeGoesBack,
+            movedBackId = screen.exitButton?.id.takeUnless { escapeGoesBack },
+        )
 
     fun item(
         menu: MenuId,
@@ -153,6 +167,7 @@ object ArcMenus {
     )
 
     fun close() {
+        configureDialogDecoration("")
         shortcuts?.close()
         shortcuts = null
         dialogRuntime?.close()
@@ -162,6 +177,7 @@ object ArcMenus {
     }
 
     internal fun resetForTests() {
+        configureDialogDecoration("")
         shortcuts?.close()
         shortcuts = null
         dialogRuntime?.close()

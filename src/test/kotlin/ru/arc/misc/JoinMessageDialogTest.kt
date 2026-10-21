@@ -1,10 +1,12 @@
 package ru.arc.misc
 
+import com.google.gson.GsonBuilder
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.mockk.*
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.entity.Player
 import ru.arc.commands.arc.subcommands.JoinMessageSubCommand
@@ -14,9 +16,12 @@ import ru.arc.core.ScheduledTask
 import ru.arc.core.TaskScheduler
 import ru.arc.core.Tasks
 import ru.arc.gui.ArcMenus
+import ru.arc.paper.menu.PaperDialogActionId
+import ru.arc.paper.menu.PaperDialogButton
 import ru.arc.paper.menu.PaperDialogClickContext
 import ru.arc.paper.menu.PaperDialogScreen
 import java.nio.file.Files
+import java.nio.file.Path
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
@@ -188,6 +193,101 @@ class JoinMessageDialogTest : FreeSpec({
             plain(screen!!.body[1].text) shouldContain "1/1"
             click("previous")
             plain(screen!!.body[1].text) shouldContain "1/1"
+        }
+    }
+
+    "decorated join and leave catalogs paginate through actual callbacks and export fixture screens" {
+        every { ArcMenus.configureDialogDecoration(any()) } answers { callOriginal() }
+        every { ArcMenus.prepareDialog(any(), any(), any()) } answers { callOriginal() }
+        ArcMenus.configureDialogDecoration("arc:dialog_ui")
+        val close = PaperDialogButton(PaperDialogActionId.of("close_menu"), Component.translatable("gui.cancel"),
+            width = 200, closeDialogBeforeAction = true, onClick = {})
+        var rawScreen: PaperDialogScreen? = null
+        every { ArcMenus.openDialog(player, any(), any(), any(), any()) } answers {
+            actionsAvailable = true
+            rawScreen = secondArg()
+            screen = ArcMenus.prepareDialog(checkNotNull(rawScreen), true, close)
+            dismiss = arg(4)
+        }
+        fun entries(isJoin: Boolean) = (1..25).map { index ->
+            val templates = if (isJoin) listOf(
+                "<gold>%player_name% <gray>принёс уют $index",
+                "<aqua>%player_name% <gray>вернулся с долгой прогулки $index",
+                "<green>● %player_name% <gray>снова с нами $index",
+            ) else listOf(
+                "%player_name% ушёл $index",
+                "<red>◆ %player_name% <gray>отправился отдыхать $index",
+                "<dark_aqua>%player_name% <gray>оставил за собой тихий вечер $index",
+            )
+            JoinMessageCatalogEntry(id = "${if (isJoin) "join" else "leave"}-$index",
+                message = templates[(index - 1) % templates.size])
+        }
+        every { JoinMessageCatalogManager.currentAsync() } returns CompletableFuture.completedFuture(
+            JoinMessageCatalog(revision = "pagination-fixture", join = entries(true), leave = entries(false)),
+        )
+        val screens = linkedMapOf<String, PaperDialogScreen>()
+        fun icons(button: PaperDialogButton) = plain(button.label).codePoints().toArray().filter { it in 0xF9060..0xF907F }
+        fun capture(name: String) {
+            val raw = checkNotNull(rawScreen)
+            val presented = checkNotNull(screen)
+            presented.title shouldBe raw.title
+            presented.body shouldBe raw.body
+            presented.columns shouldBe raw.columns
+            presented.buttons.map { it.id } shouldBe raw.buttons.map { it.id }
+            presented.buttons.zip(raw.buttons).forEach { (actual, original) ->
+                actual.width shouldBe original.width
+                actual.tooltip shouldBe original.tooltip
+                (actual.onClick === original.onClick) shouldBe true
+                if (original.id.value.startsWith("phrase_")) actual shouldBe original
+            }
+            val buttons = presented.buttons.associateBy { it.id.value }
+            icons(buttons.getValue("previous")).isNotEmpty() shouldBe true
+            icons(buttons.getValue("next")).isNotEmpty() shouldBe true
+            (icons(buttons.getValue("previous")) != icons(buttons.getValue("next"))) shouldBe true
+            presented.exitButton!!.id.value shouldBe "arc_history_exit_0"
+            presented.exitButton!!.width shouldBe 200
+            presented.exitButton!!.closeDialogBeforeAction shouldBe false
+            plain(presented.exitButton!!.label).codePoints().anyMatch { it in 0xF9000..0xF9FFF } shouldBe true
+            screens[name] = presented
+        }
+        try {
+            dialogs.show(player)
+            for (kind in listOf("join", "leave")) {
+                screen!!.id shouldBe "messages.catalog.$kind"
+                plain(screen!!.body[1].text) shouldContain "1/3"
+                capture("$kind-first")
+                val firstChoice = screen!!.buttons.first().label
+                click("next")
+                plain(screen!!.body[1].text) shouldContain "2/3"
+                capture("$kind-middle")
+                val middleChoice = screen!!.buttons.first().label
+                (middleChoice != firstChoice) shouldBe true
+                click("next")
+                plain(screen!!.body[1].text) shouldContain "3/3"
+                capture("$kind-last")
+                click("previous")
+                plain(screen!!.body[1].text) shouldContain "2/3"
+                screen!!.buttons.first().label shouldBe middleChoice
+                click("previous")
+                plain(screen!!.body[1].text) shouldContain "1/3"
+                screen!!.buttons.first().label shouldBe firstChoice
+                if (kind == "join") click("switch")
+            }
+            val serializer = LegacyComponentSerializer.builder().character('&').hexColors().build()
+            fun serialize(component: Component) = serializer.serialize(component)
+            val export = screens.mapValues { (_, view) -> mapOf(
+                "title" to serialize(view.title), "columns" to view.columns,
+                "body" to view.body.map { mapOf("text" to serialize(it.text), "width" to it.width) },
+                "buttons" to view.buttons.map { mapOf("id" to it.id.value, "text" to serialize(it.label),
+                    "tooltip" to serialize(it.tooltip), "width" to it.width) },
+                "exit" to view.exitButton?.let { mapOf("id" to it.id.value, "text" to serialize(it.label),
+                    "tooltip" to serialize(it.tooltip), "width" to it.width) },
+            ) }
+            val output = Path.of("build/reports/join-message-decoration/content.json")
+            Files.createDirectories(output.parent)
+            Files.writeString(output, GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create().toJson(export))
+        } finally {
+            ArcMenus.configureDialogDecoration("")
         }
     }
 

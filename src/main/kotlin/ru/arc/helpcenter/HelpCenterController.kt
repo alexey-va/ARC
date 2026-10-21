@@ -1,6 +1,7 @@
 package ru.arc.helpcenter
 
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
@@ -12,7 +13,6 @@ import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.whenCompleteSync
 import ru.arc.graves.GravesModule
 import ru.arc.gui.ArcMenus
-import ru.arc.gui.MenuEscapeBehavior
 import ru.arc.paper.menu.DialogTables
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
@@ -31,9 +31,11 @@ internal class HelpCenterController(
     private val inviteToLand: (Player, HelpCenterPlayer) -> Unit,
     private val navigation: HelpCenterNavigation = HelpCenterNavigation(ru.arc.ARC.instance, inventoryReturn::cancel),
     private val showDialog: (Player, PaperDialogScreen) -> Unit = { player, screen ->
-        val close = HelpCenterPresentation(settings).closeButton(
+        val close = PaperDialogButton(
+            PaperDialogActionId.of("close_menu"),
             MiniMessage.miniMessage().deserialize(settings.text("menu-close-label")),
-        ) { navigation.visit(player) }
+            width = 200, closeDialogBeforeAction = true, onClick = { navigation.visit(player) },
+        )
         ArcMenus.openDialog(player, screen, close, reopen = navigation.returnTarget(player), onDismiss = { navigation.visit(player) })
     },
     private val legacySettings: HelpCenterLegacySettings = HelpCenterLegacySettings(),
@@ -42,12 +44,9 @@ internal class HelpCenterController(
     private val enchantmentsCatalog: () -> HelpCenterEnchantmentsCatalog = HelpCenterEnchantmentsCatalog::fromAeApi,
     private val activeGraveCount: (Player) -> Int = { player -> GravesModule.activeCount(player) },
     private val openGraves: (Player) -> Boolean = { player -> GravesModule.open(player) },
-    private val escapeGoesBack: (Player) -> Boolean = MenuEscapeBehavior::goesBack,
 ) {
     private val presentation = HelpCenterPresentation(settings)
-    private val present: (Player, PaperDialogScreen) -> Unit = { player, screen ->
-        showDialog(player, presentation.screen(screen, escapeGoesBack(player)))
-    }
+    private val present: (Player, PaperDialogScreen) -> Unit = showDialog
     private val miniMessage = MiniMessage.miniMessage()
     private val plainText = PlainTextComponentSerializer.plainText()
     private val tasks = LifecycleTaskScope()
@@ -195,13 +194,10 @@ internal class HelpCenterController(
                         "count" to (profile.lands?.toString() ?: unavailable),
                         "chunks" to (profile.claimedChunks?.toString() ?: unavailable),
                     ),
-                    text("table-location-label") to text(
-                        "table-location-value",
-                        "server" to profile.server,
-                        "world" to worldLabel(profile.worldKind, profile.world),
-                    ),
+                    text("table-location-label") to Component.text(profile.server, TextColor.color(0x86dcf1)),
+                    text("table-world-label") to Component.text(worldLabel(profile.worldKind, profile.world), TextColor.color(0xe6fff3)),
                 )
-            body += presentation.facts(listOf(rows.take(2), rows.slice(2..3), rows.slice(4..5), rows.takeLast(1)), 506, corners = true)
+            body += presentation.facts(rows.chunked(2), 506, corners = true)
         }
         present(
             player,
@@ -337,7 +333,7 @@ internal class HelpCenterController(
                     add(presentation.facts(listOf(rows.take(2)), 468, corners = true))
                     add(presentation.facts(listOf(rows.slice(2..3), rows.slice(4..5)), 468))
                     presentation.separator(468)?.let(::add)
-                    add(presentation.facts(rows.drop(6).map { listOf(it) }, 468))
+                    add(presentation.facts(listOf(listOf(rows[6], rows[8]), listOf(rows[7])), 468))
                 },
                 buttons = (recommendationButtons(player, profile) + listOf(
                     button("now_homes", text("my-homes-label"), text("my-homes-tooltip")) { openTravel(player) },

@@ -10,7 +10,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.spyk
 import io.mockk.verify
-import ru.arc.gui.MenuEscapeBehavior
+import ru.arc.gui.ArcMenus
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
@@ -27,6 +27,8 @@ import ru.arc.tablist.TablistCapacity
 import ru.arc.tablist.TablistSection
 import ru.arc.core.BukkitTaskScheduler
 import ru.arc.core.Tasks
+import ru.arc.paper.menu.PaperDialogActionId
+import ru.arc.paper.menu.PaperDialogButton
 import ru.arc.paper.menu.PaperDialogClickContext
 import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.paper.testing.MockBukkitTestRuntime
@@ -119,13 +121,15 @@ class HelpCenterScreensTest {
     private fun newController(plugin: Plugin, font: String = "", closeEscape: Boolean = false): HelpCenterController {
         val inventoryReturn = HelpCenterInventoryReturnRuntime(plugin, returnOnClose = { true })
         val settings = HelpCenterConfig.load(directory).snapshot().copy(decorationFont = font)
-        val presentation = HelpCenterPresentation(settings)
+        ArcMenus.configureDialogDecoration(settings.decorationFont)
         return HelpCenterController(
             settings, gateway, {}, inventoryReturn,
             { _, _ -> }, HelpCenterNavigation(plugin, inventoryReturn::cancel), { _, value ->
-                screen = if (closeEscape) MenuEscapeBehavior.apply(value, false,
-                    presentation.closeButton(MiniMessage.miniMessage().deserialize(settings.text("menu-close-label"))) { },
-                ) else value
+                screen = ArcMenus.prepareDialog(value, !closeEscape,
+                    PaperDialogButton(PaperDialogActionId.of("close_menu"),
+                        MiniMessage.miniMessage().deserialize(settings.text("menu-close-label")),
+                        width = 200, closeDialogBeforeAction = true, onClick = { }),
+                )
                 screenCount++
             }, legacy,
             closeDialog = { dialogCloses++ },
@@ -133,13 +137,13 @@ class HelpCenterScreensTest {
             enchantmentsCatalog = { HelpCenterEnchantmentsCatalog.unavailable() },
             activeGraveCount = { if (gravesUnavailable) error("Graves unavailable") else gravesCount },
             openGraves = { gravesOpenCalls++; true },
-            escapeGoesBack = if (closeEscape) ({ false }) else MenuEscapeBehavior::goesBack,
         )
     }
 
     @AfterEach
     fun cleanup() {
         controller.close()
+        ArcMenus.configureDialogDecoration("")
         Tasks.reset()
         ConfigManager.clear()
         paper.close()
@@ -169,6 +173,15 @@ class HelpCenterScreensTest {
         open(HelpCenterPage.ROOT)
         screens["root"] = screen
         screen.buttons.size shouldBe 15
+        val ordinaryProfile = gateway.loadProfile(player, 12).join()
+        every { gateway.loadProfile(player, any()) } returns CompletableFuture.completedFuture(ordinaryProfile.copy(
+            playerName = "Long_Player_1234", balance = "123 456 789.99", rank = "Исследователь",
+        ))
+        open(HelpCenterPage.ROOT)
+        screens["root-long"] = screen
+        body().contains("Long_Player_1234") shouldBe true
+        body().contains("123 456 789.99") shouldBe true
+        every { gateway.loadProfile(player, any()) } returns CompletableFuture.completedFuture(ordinaryProfile)
         open(HelpCenterPage.NOW)
         screens["profile"] = screen
         // Keep the established readable geometry while ordinary buttons use vanilla widgets.
@@ -219,7 +232,7 @@ class HelpCenterScreensTest {
         open(HelpCenterPage.ROOT)
         click("root_trade")
         checkedScreens["TRADE"] = screen
-        val utilityIds = setOf("search", "create_home", "rec_home", "back_command", "back", "root", "close_menu")
+        val utilityIds = setOf("search", "settings", "create_home", "rec_home", "back_command", "back", "root", "close_menu")
         for ((name, view) in checkedScreens) {
             for (button in view.buttons + listOfNotNull(view.exitButton)) {
                 withClue("$name/${button.id.value}: ${plain(button.label)}") {

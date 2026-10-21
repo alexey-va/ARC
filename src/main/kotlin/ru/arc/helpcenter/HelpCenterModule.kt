@@ -19,6 +19,7 @@ object HelpCenterModule : PluginModule {
     override fun reload() = start(HelpCenterConfig.load(ARC.instance.dataPath).snapshot())
 
     override fun shutdown() {
+        ArcMenus.configureDialogDecoration("")
         controller?.close()
         controller = null
     }
@@ -53,6 +54,7 @@ object HelpCenterModule : PluginModule {
     private fun start(settings: HelpCenterSettings) {
         controller?.close()
         controller = null
+        ArcMenus.configureDialogDecoration(if (settings.enabled) settings.decorationFont else "")
         if (!settings.enabled) {
             info("Help center module disabled by configuration")
             return
