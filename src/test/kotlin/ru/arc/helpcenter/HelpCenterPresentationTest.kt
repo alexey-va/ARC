@@ -20,7 +20,7 @@ class HelpCenterPresentationTest : FreeSpec({
         onClick = { },
     )
     val screen = PaperDialogScreen(title = Component.text("Настройки"),
-        buttons = listOf(button("settings", 230)), exitButton = button("back", 150), id = "help.settings")
+        buttons = listOf(button("search", 230)), exitButton = button("back", 150), id = "help.settings")
 
     "empty font is a complete opt-out and decoration preserves domain handlers" {
         presentation("").screen(screen, true) shouldBe screen
@@ -61,22 +61,15 @@ class HelpCenterPresentationTest : FreeSpec({
         native shouldBe 5
     }
 
-    "long iconless captions use plain A while preserving their words and the action family" {
+    "ordinary categories and dynamic names retain their original vanilla button" {
         val theme = presentation("arc:dialog_ui")
-        val words = "Инструменты строителя ›"
-        val original = button("home_0", 150).copy(label = Component.text(words))
-        fun points(value: PaperDialogButton) = PlainTextComponentSerializer.plainText()
-            .serialize(theme.screen(screen.copy(buttons = listOf(value)), true).buttons.single().label)
-            .codePoints().toArray()
-        val long = points(original)
-        long.contains(0xF9024) shouldBe true
-        long.any { it in 0xF9080..0xF908F || it in 0xF9060..0xF9073 } shouldBe false
-        buildString {
-            long.filter { it !in 0xF9000..0xF9FFF && it !in 0xF0F01..0xF0F0A }.forEach { appendCodePoint(it) }
-        } shouldBe words
-        points(original.copy(label = Component.text("Дом"))).contains(0xF9088) shouldBe true
-        // A functional button keeps its own plain frame even when its optional icon cannot fit.
-        points(original.copy(id = PaperDialogActionId.of("search"))).contains(0xF9018) shouldBe true
+        for ((id, label) in listOf("settings" to "☷ Настройки ›", "rank" to "Ранги ›",
+            "root_technology" to "Технологии ›", "settings_interface" to "Интерфейс ›",
+            "command_builder" to "⚒ Инструменты строителя ›", "home_0" to "⌖ Утёс ›")) {
+            val original = button(id, 150).copy(label = Component.text(label))
+            val presented = theme.screen(screen.copy(buttons = listOf(original)), true).buttons.single()
+            (presented === original) shouldBe true
+        }
     }
 
     "functional glyphs replace only the known static ornamental arrows" {

@@ -171,7 +171,7 @@ class HelpCenterScreensTest {
         screen.buttons.size shouldBe 15
         open(HelpCenterPage.NOW)
         screens["profile"] = screen
-        // Long recommendations need room between the native side ornaments.
+        // Keep the established readable geometry while ordinary buttons use vanilla widgets.
         screen.columns shouldBe 2
         screen.buttons.map { it.width }.distinct() shouldBe listOf(230)
         screen.body.map { it.width }.distinct() shouldBe listOf(468)
@@ -186,7 +186,7 @@ class HelpCenterScreensTest {
         click("settings_world")
         click("legacy_flight")
         screens["flight"] = screen
-        // The decorated action still dispatches the same player command.
+        // The ordinary action still dispatches the same player command.
         click("legacy_flight_recharge")
         executed.last() shouldBe "cmi flightcharge recharge"
         player.addAttachment(plugin, "arcbuild.use", true)
@@ -197,7 +197,7 @@ class HelpCenterScreensTest {
         open(HelpCenterPage.REQUESTS)
         screens["long-caption"] = screen
         plain(screen.buttons.single { it.id.value == "request_vote" }.label)
-            .codePoints().anyMatch { it == 0xF9024 } shouldBe true
+            .codePoints().anyMatch { it in 0xF9000..0xF9FFF } shouldBe false
         val serializer = LegacyComponentSerializer.builder().character('&').hexColors().build()
         fun serialize(component: Component) = serializer.serialize(component)
         val export = screens.mapValues { (_, view) -> mapOf(
@@ -219,12 +219,15 @@ class HelpCenterScreensTest {
         open(HelpCenterPage.ROOT)
         click("root_trade")
         checkedScreens["TRADE"] = screen
-        val missing = checkedScreens.flatMap { (name, view) ->
-            (view.buttons + listOfNotNull(view.exitButton)).filterNot { button ->
-                plain(button.label).codePoints().anyMatch { it in 0xF9000..0xF908F }
-            }.map { "$name/${it.id.value}: ${plain(it.label)}" }
+        val utilityIds = setOf("search", "create_home", "rec_home", "back_command", "back", "root", "close_menu")
+        for ((name, view) in checkedScreens) {
+            for (button in view.buttons + listOfNotNull(view.exitButton)) {
+                withClue("$name/${button.id.value}: ${plain(button.label)}") {
+                    plain(button.label).codePoints().anyMatch { it in 0xF9000..0xF908F } shouldBe
+                        (button.id.value in utilityIds)
+                }
+            }
         }
-        withClue(missing.joinToString("\n")) { missing shouldBe emptyList() }
     }
 
     @Test
