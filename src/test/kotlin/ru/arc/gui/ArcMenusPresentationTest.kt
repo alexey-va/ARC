@@ -3,6 +3,11 @@ package ru.arc.gui
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.mockk
+import io.mockk.every
+import io.mockk.mockkConstructor
+import io.mockk.mockkObject
+import io.mockk.unmockkConstructor
+import io.mockk.unmockkObject
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import ru.arc.paper.menu.PaperDialogActionId
@@ -10,6 +15,8 @@ import ru.arc.paper.menu.PaperDialogBody
 import ru.arc.paper.menu.PaperDialogButton
 import ru.arc.paper.menu.PaperDialogClickContext
 import ru.arc.paper.menu.PaperDialogScreen
+import ru.arc.paper.menu.PaperDialogRuntime
+import ru.arc.paper.testing.MockBukkitTestRuntime
 
 class ArcMenusPresentationTest : FreeSpec({
     fun button(id: String, width: Int = 230, close: Boolean = false, action: () -> Unit = {}) = PaperDialogButton(
@@ -103,6 +110,63 @@ class ArcMenusPresentationTest : FreeSpec({
         moved.onClick.handle(context)
         footer.onClick.handle(context)
         called shouldBe listOf("back", "close")
+    }
+
+    "explicit Back footer stays below the grid and preserves its callback even with close preference" {
+        for (font in listOf("", "arc:dialog_ui")) {
+            ArcMenus.configureDialogDecoration(font)
+            var returned = 0
+            val back = button("root", 200) { returned++ }
+            val original = PaperDialogScreen(Component.text("Профиль"),
+                buttons = listOf(button("now_homes"), button("now_lands")), exitButton = back,
+                columns = 2, id = "help.now")
+            val prepared = ArcMenus.prepareDialog(original, false, close(), preferBackFooter = true)
+            prepared.buttons shouldBe original.buttons
+            val footer = requireNotNull(prepared.exitButton)
+            footer.id shouldBe back.id
+            footer.width shouldBe 200
+            footer.closeDialogBeforeAction shouldBe false
+            (footer.onClick === back.onClick) shouldBe true
+            footer.onClick.handle(mockk<PaperDialogClickContext>())
+            returned shouldBe 1
+            val ordinary = ArcMenus.prepareDialog(original, false, close())
+            ordinary.buttons.last().id shouldBe back.id
+            ordinary.exitButton!!.id.value shouldBe "close_menu"
+        }
+    }
+
+    "explicit footer dispatches native history mode while the default still closes on Escape" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val player = paper.addPlayer("ProfileFooter")
+            val modes = mutableListOf<Boolean>()
+            val screens = mutableListOf<PaperDialogScreen>()
+            mockkObject(MenuEscapeBehavior)
+            mockkConstructor(PaperDialogRuntime::class)
+            try {
+                every { MenuEscapeBehavior.goesBack(player) } returns false
+                every { anyConstructed<PaperDialogRuntime>().open(any(), any(), any(), any(), any()) } answers {
+                    screens += secondArg<PaperDialogScreen>()
+                    modes += arg<Boolean>(4)
+                }
+                ArcMenus.initializeDialogRuntime(paper.createSimplePlugin("ProfileFooter"))
+                val original = PaperDialogScreen(Component.text("Профиль"),
+                    buttons = listOf(button("now_homes"), button("now_lands")),
+                    exitButton = button("root", 200), columns = 2, id = "help.now")
+                ArcMenus.openDialog(player, original, close(), null, {}, preferBackFooter = true)
+                modes shouldBe listOf(false)
+                screens.single().buttons shouldBe original.buttons
+                screens.single().exitButton!!.id.value shouldBe "root"
+                screens.single().exitButton!!.closeDialogBeforeAction shouldBe false
+                ArcMenus.openDialog(player, original, close(), null, {})
+                modes shouldBe listOf(false, true)
+                screens.last().buttons.last().id.value shouldBe "root"
+                screens.last().exitButton!!.id.value shouldBe "close_menu"
+            } finally {
+                ArcMenus.close()
+                unmockkConstructor(PaperDialogRuntime::class)
+                unmockkObject(MenuEscapeBehavior)
+            }
+        }
     }
 
     "Escape Back normalizes a declared closing footer before decoration without losing its callback" {

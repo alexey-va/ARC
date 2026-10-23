@@ -180,8 +180,9 @@ class DialogLibraryGalleryTest : FreeSpec() {
                             val font = span.style.font()?.asString()
                             if (font?.startsWith("arc:dialog_panel_") == true) seenFonts += font
                             span.text.codePoints().forEach { point ->
-                                if (point in 0x10A000..0x10A007 || point == 0x1F4B0 || point == 0xE516) {
+                                if (point in 0x10A000..0x10A009) {
                                     seenIcons += point
+                                    span.style.font() shouldBe Key.key("arc:dialog_field_icons")
                                     span.style.color() shouldBe NamedTextColor.WHITE
                                     span.style.shadowColor().shouldBeNull()
                                 }
@@ -192,7 +193,7 @@ class DialogLibraryGalleryTest : FreeSpec() {
             }
             seenFonts shouldBe setOf("arc:dialog_panel_navy", "arc:dialog_panel_plum", "arc:dialog_panel_evergreen",
                 "arc:dialog_panel_cocoa", "arc:dialog_panel_ornate")
-            seenIcons shouldBe (0x10A000..0x10A007).toSet() + setOf(0x1F4B0, 0xE516)
+            seenIcons shouldBe (0x10A000..0x10A009).toSet()
             val progress = gallery.screen(DialogLibraryGallery.Page(DialogLibraryGallery.Section.ELEMENTS, 2), false) { _, _ -> }
             val unknown = spans(progress.body[7].text).joinToString("") { it.text }
             unknown.contains("Нет данных") shouldBe true

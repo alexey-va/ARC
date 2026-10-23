@@ -54,6 +54,7 @@ class HelpCenterScreensTest {
     private var gravesCount = 0
     private var gravesUnavailable = false
     private var gravesOpenCalls = 0
+    private var landsOpenCalls = 0
     private val executed = mutableListOf<String>()
 
     @BeforeEach
@@ -125,12 +126,13 @@ class HelpCenterScreensTest {
         val settings = HelpCenterConfig.load(directory).snapshot().copy(decorationFont = font)
         ArcMenus.configureDialogDecoration(settings.decorationFont)
         return HelpCenterController(
-            settings, gateway, {}, inventoryReturn,
+            settings, gateway, { landsOpenCalls++ }, inventoryReturn,
             { _, _ -> }, HelpCenterNavigation(plugin, inventoryReturn::cancel), { _, value ->
                 screen = ArcMenus.prepareDialog(value, !closeEscape,
                     PaperDialogButton(PaperDialogActionId.of("close_menu"),
                         MiniMessage.miniMessage().deserialize(settings.text("menu-close-label")),
                         width = 200, closeDialogBeforeAction = true, onClick = { }),
+                    preferBackFooter = value.id == "help.now" || value.id == "help.now.failure",
                 )
                 screenCount++
             }, legacy,
@@ -180,14 +182,18 @@ class HelpCenterScreensTest {
         open(HelpCenterPage.ROOT)
         screens["root"] = screen
         screen.buttons.size shouldBe 15
-        plain(screen.body.first().text) shouldBe "Ниже — ваша короткая сводка; кнопки ведут к игровым разделам без запоминания команд."
+        body().contains("Ниже — ваша короткая сводка") shouldBe false
+        body().contains("Сейчас") shouldBe false
+        body().contains("survival") shouldBe false
+        body().contains("Жетоны") shouldBe true
         body().contains("RusCrafting") shouldBe false
-        screen.body[1].width shouldBe 508
-        plain(screen.body[1].text).codePoints().anyMatch { it in 0x108000..0x109834 } shouldBe true
-        val rootPoints = plain(screen.body[1].text).codePoints().toArray().toSet()
-        for (icon in listOf(0x10A000, 0x10A001, 0x10A002, 0x10A003, 0x10A004, 0x10A007, 0x1F4B0)) {
+        screen.body.first().width shouldBe 508
+        plain(screen.body.first().text).codePoints().anyMatch { it in 0x108000..0x109834 } shouldBe true
+        val rootPoints = plain(screen.body.first().text).codePoints().toArray().toSet()
+        for (icon in listOf(0x10A000, 0x10A001, 0x10A002, 0x10A003, 0x10A004, 0x10A007, 0x10A008, 0x10A009)) {
             withClue("Main summary field icon U+${icon.toString(16)}") { (icon in rootPoints) shouldBe true }
         }
+        rootPoints.intersect(setOf(0x1F4B0, 0xE516)) shouldBe emptySet()
         every { gateway.loadProfile(player, any()) } returns CompletableFuture.completedFuture(ordinaryProfile.copy(
             playerName = "Long_Player_1234", balance = "123 456 789.99", rank = "Исследователь",
         ))
@@ -206,7 +212,24 @@ class HelpCenterScreensTest {
         for (value in listOf("Viewer", "Игрок", "67.7M", "3", "1 / 3", "124", "Другой мир", "1, 65, 2", "локальный")) {
             withClue("All nine profile fields remain visible: $value") { body().contains(value) shouldBe true }
         }
+        screen.buttons.map { it.id.value } shouldBe listOf("now_homes", "now_lands")
+        val profileFooter = requireNotNull(screen.exitButton)
+        profileFooter.id.value shouldBe "root"
+        profileFooter.width shouldBe 150
+        profileFooter.closeDialogBeforeAction shouldBe false
+        plain(profileFooter.label).contains("Назад") shouldBe true
+        val profilePoints = body().codePoints().toArray().toSet()
+        profilePoints.intersect(setOf(0x1F4B0, 0xE516)) shouldBe emptySet()
+        profilePoints.containsAll(setOf(0x10A008, 0x10A009)) shouldBe true
         val profileActions = screen.buttons.map { it.id to it.width }
+        click("now_homes")
+        screen.id shouldBe "help.travel"
+        open(HelpCenterPage.NOW)
+        click("now_lands")
+        landsOpenCalls shouldBe 1
+        open(HelpCenterPage.NOW)
+        click("root")
+        screen.id shouldBe "help.root"
         every { gateway.loadProfile(player, any()) } returns CompletableFuture.completedFuture(ordinaryProfile.copy(
             playerName = "Long_Player_1234", balance = "123 456 789.99", rank = "Исследователь дальних земель",
             x = -1234567, y = 255, z = 1234567,
@@ -216,6 +239,21 @@ class HelpCenterScreensTest {
         screen.buttons.map { it.id to it.width } shouldBe profileActions
         body().contains("Long_Player_1234") shouldBe true
         body().contains("123 456 789.99") shouldBe true
+        val pendingProfile = CompletableFuture<HelpCenterProfile>()
+        every { gateway.loadProfile(player, any()) } returns pendingProfile
+        open(HelpCenterPage.NOW)
+        screens["profile-loading"] = screen
+        pendingProfile.completeExceptionally(IllegalStateException("profile unavailable"))
+        paper.performTicks(2)
+        screens["profile-failure"] = screen
+        screen.id shouldBe "help.now.failure"
+        body().contains("Часть профиля сейчас недоступна") shouldBe true
+        for (name in listOf("profile-loading", "profile-failure")) {
+            val view = screens.getValue(name)
+            view.buttons.map { it.id to it.width } shouldBe profileActions
+            view.exitButton!!.id.value shouldBe "root"
+            view.exitButton!!.closeDialogBeforeAction shouldBe false
+        }
         every { gateway.loadProfile(player, any()) } returns CompletableFuture.completedFuture(ordinaryProfile)
         open(HelpCenterPage.TRAVEL)
         screens["travel"] = screen
@@ -268,6 +306,20 @@ class HelpCenterScreensTest {
         screens["root-plain"] = screen
         open(HelpCenterPage.NOW)
         screens["profile-plain"] = screen
+        val pendingPlainProfile = CompletableFuture<HelpCenterProfile>()
+        every { gateway.loadProfile(player, any()) } returns pendingPlainProfile
+        open(HelpCenterPage.NOW)
+        screens["profile-loading-plain"] = screen
+        pendingPlainProfile.completeExceptionally(IllegalStateException("profile unavailable"))
+        paper.performTicks(2)
+        screens["profile-failure-plain"] = screen
+        for (name in listOf("profile-loading-plain", "profile-failure-plain")) {
+            val view = screens.getValue(name)
+            view.buttons.map { it.id to it.width } shouldBe profileActions
+            view.exitButton!!.id.value shouldBe "root"
+            view.exitButton!!.closeDialogBeforeAction shouldBe false
+        }
+        every { gateway.loadProfile(player, any()) } returns CompletableFuture.completedFuture(ordinaryProfile)
         open(HelpCenterPage.COMMANDS)
         screens["commands-plain"] = screen
         open(HelpCenterPage.RECOVERY)
@@ -277,8 +329,14 @@ class HelpCenterScreensTest {
             screens.getValue(fallback).buttons.map { it.id to it.width } shouldBe
                 screens.getValue(decorated).buttons.map { it.id to it.width }
             screens.getValue(fallback).body.forEach {
-                plain(it.text).codePoints().anyMatch { point -> point in 0xF9000..0xF9FFF || point in 0xFA300..0xFAF1B || point in 0x100000..0x10A007 } shouldBe false
+                plain(it.text).codePoints().anyMatch { point -> point in 0xF9000..0xF9FFF || point in 0xFA300..0xFAF1B || point in 0x100000..0x10A009 } shouldBe false
             }
+        }
+        for (name in listOf("root-plain", "profile-plain")) {
+            val value = screens.getValue(name).body.joinToString("\n") { plain(it.text) }
+            value.contains("Жетоны") shouldBe true
+            value.contains("💰") shouldBe true
+            value.contains("") shouldBe true
         }
         val serializer = LegacyComponentSerializer.builder().character('&').hexColors().build()
         fun serialize(component: Component) = serializer.serialize(component)
@@ -296,7 +354,7 @@ class HelpCenterScreensTest {
         Files.writeString(output, GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create().toJson(export))
         val gson = GsonComponentSerializer.gson()
         fun component(value: Component) = JsonParser.parseString(gson.serialize(value))
-        val components = screens.filterKeys { it in setOf("root", "root-long", "root-plain", "flight", "profile", "profile-long", "profile-plain") }.mapValues { (_, view) -> mapOf(
+        val components = screens.filterKeys { it in setOf("root", "root-long", "root-plain", "flight", "profile", "profile-long", "profile-plain", "profile-loading", "profile-failure", "profile-loading-plain", "profile-failure-plain") }.mapValues { (_, view) -> mapOf(
             "title" to component(view.title), "columns" to view.columns,
             "body" to view.body.map { mapOf("text" to component(it.text), "width" to it.width) },
             "buttons" to view.buttons.map { mapOf("id" to it.id.value, "text" to component(it.label), "tooltip" to component(it.tooltip), "width" to it.width) },

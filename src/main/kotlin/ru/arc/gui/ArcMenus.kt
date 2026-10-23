@@ -83,22 +83,28 @@ object ArcMenus {
 
     fun closeDialog(player: Player) { dialogRuntime?.close(player) }
 
-    fun openDialog(player: Player, screen: PaperDialogScreen, closeButton: ru.arc.paper.menu.PaperDialogButton? = null, reopen: (() -> Unit)? = null, onDismiss: () -> Unit = {}) {
+    fun openDialog(player: Player, screen: PaperDialogScreen, closeButton: ru.arc.paper.menu.PaperDialogButton? = null, reopen: (() -> Unit)? = null, onDismiss: () -> Unit = {}) =
+        openDialog(player, screen, closeButton, reopen, onDismiss, preferBackFooter = false)
+
+    /** An explicit Back footer uses native Back/history semantics, including Escape, for this visit. */
+    fun openDialog(player: Player, screen: PaperDialogScreen, closeButton: ru.arc.paper.menu.PaperDialogButton?, reopen: (() -> Unit)?, onDismiss: () -> Unit, preferBackFooter: Boolean) {
         val close = closeButton ?: ru.arc.paper.menu.PaperDialogButton(
             ru.arc.paper.menu.PaperDialogActionId.of("close_menu"), Component.translatable("gui.back"),
             width = 200, closeDialogBeforeAction = true, onClick = {},
         )
-        val escapeGoesBack = MenuEscapeBehavior.goesBack(player)
+        val escapeGoesBack = preferBackFooter || MenuEscapeBehavior.goesBack(player)
         requireNotNull(dialogRuntime) { "ARC dialog runtime is not initialized" }
             .open(player, prepareDialog(screen, escapeGoesBack, close), reopen, onDismiss, !escapeGoesBack)
     }
 
-    internal fun prepareDialog(screen: PaperDialogScreen, escapeGoesBack: Boolean, closeButton: ru.arc.paper.menu.PaperDialogButton): PaperDialogScreen =
-        dialogPresentation.screen(
-            MenuEscapeBehavior.apply(screen, escapeGoesBack, closeButton),
-            footerIsBack = escapeGoesBack,
-            movedBackId = screen.exitButton?.id.takeUnless { escapeGoesBack },
+    internal fun prepareDialog(screen: PaperDialogScreen, escapeGoesBack: Boolean, closeButton: ru.arc.paper.menu.PaperDialogButton, preferBackFooter: Boolean = false): PaperDialogScreen {
+        val back = preferBackFooter || escapeGoesBack
+        return dialogPresentation.screen(
+            MenuEscapeBehavior.apply(screen, back, closeButton),
+            footerIsBack = back,
+            movedBackId = screen.exitButton?.id.takeUnless { back },
         )
+    }
 
     fun item(
         menu: MenuId,

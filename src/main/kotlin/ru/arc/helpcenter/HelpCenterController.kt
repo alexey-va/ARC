@@ -37,7 +37,9 @@ internal class HelpCenterController(
             MiniMessage.miniMessage().deserialize(settings.text("menu-close-label")),
             width = 200, closeDialogBeforeAction = true, onClick = { navigation.visit(player) },
         )
-        ArcMenus.openDialog(player, screen, close, reopen = navigation.returnTarget(player), onDismiss = { navigation.visit(player) })
+        ArcMenus.openDialog(player, screen, close, reopen = navigation.returnTarget(player),
+            onDismiss = { navigation.visit(player) },
+            preferBackFooter = screen.id == "help.now" || screen.id == "help.now.failure")
     },
     private val legacySettings: HelpCenterLegacySettings = HelpCenterLegacySettings(),
     private val closeDialog: (Player) -> Unit = ArcMenus::closeDialog,
@@ -175,7 +177,7 @@ internal class HelpCenterController(
 
     private fun showRoot(player: Player, profile: HelpCenterProfile? = null) {
         val activeGraves = runCatching { activeGraveCount(player) }.getOrDefault(0).coerceAtLeast(0)
-        val body = mutableListOf(PaperDialogBody(text("root-summary-hint"), width = 506))
+        val body = mutableListOf<PaperDialogBody>()
         if (profile == null) {
             body += PaperDialogBody(text("my-error"), width = 506)
         } else {
@@ -185,7 +187,7 @@ internal class HelpCenterController(
                     label("table-player-label", DialogDecoration.FieldIcon.PLAYER) to Component.text(profile.playerName),
                     label("table-online-label", DialogDecoration.FieldIcon.ONLINE) to Component.text(profile.onlinePlayers),
                     label("table-rank-label", DialogDecoration.FieldIcon.RANK) to text("table-rank-value", "value" to (profile.rank ?: unavailable)),
-                    label("table-balance-label", DialogDecoration.FieldIcon.BALANCE) to text("table-coins-value", "value" to (profile.balance ?: unavailable)),
+                    label("table-balance-label", DialogDecoration.FieldIcon.BALANCE) to currencyValue("table-coins-value", profile.balance),
                     label("table-homes-label", DialogDecoration.FieldIcon.HOMES) to text(
                         "table-slots-value",
                         "used" to (profile.homes?.usedSlots?.toString() ?: unavailable),
@@ -196,7 +198,7 @@ internal class HelpCenterController(
                         "count" to (profile.lands?.toString() ?: unavailable),
                         "chunks" to (profile.claimedChunks?.toString() ?: unavailable),
                     ),
-                    label("table-location-label", DialogDecoration.FieldIcon.WORLD) to Component.text(profile.server, TextColor.color(0x86dcf1)),
+                    label("table-tokens-label", DialogDecoration.FieldIcon.TOKENS) to currencyValue("table-tokens-value", profile.tokens),
                     label("table-world-label", DialogDecoration.FieldIcon.WORLD) to Component.text(worldLabel(profile.worldKind, profile.world), TextColor.color(0xe6fff3)),
                 )
             body += presentation.filledFacts(rows.chunked(2), 508, DialogTables.PanelSkin.ORNATE)
@@ -299,11 +301,7 @@ internal class HelpCenterController(
                 id = "help.now",
                 title = text("now-title"),
                 body = listOf(PaperDialogBody(text("my-loading"), width = 500)),
-                buttons = listOf(
-                    button("now_homes", text("my-homes-label")) { openTravel(player) },
-                    button("now_lands", text("my-lands-label")) { open(player, HelpCenterPage.PRIVAT) },
-                    button("now_guide", text("guide-label")) { openGuide(player) },
-                ).map { it.copy(width = 230) },
+                buttons = nowButtons(player),
                 exitButton = rootButton(player),
                 columns = 2,
             ),
@@ -320,8 +318,8 @@ internal class HelpCenterController(
         val rows = listOf(
             label("table-player-label", DialogDecoration.FieldIcon.PLAYER) to Component.text(profile.playerName),
             label("table-rank-label", DialogDecoration.FieldIcon.RANK) to text("table-rank-value", "value" to (profile.rank ?: unavailable)),
-            label("table-balance-label", DialogDecoration.FieldIcon.BALANCE) to text("table-coins-value", "value" to (profile.balance ?: unavailable)),
-            label("table-tokens-label", DialogDecoration.FieldIcon.TOKENS) to text("table-tokens-value", "value" to (profile.tokens ?: unavailable)),
+            label("table-balance-label", DialogDecoration.FieldIcon.BALANCE) to currencyValue("table-coins-value", profile.balance),
+            label("table-tokens-label", DialogDecoration.FieldIcon.TOKENS) to currencyValue("table-tokens-value", profile.tokens),
             label("table-homes-label", DialogDecoration.FieldIcon.HOMES) to text("table-slots-value",
                 "used" to (profile.homes?.usedSlots?.toString() ?: unavailable),
                 "maximum" to (profile.homes?.maxSlots?.toString() ?: unavailable)),
@@ -347,31 +345,20 @@ internal class HelpCenterController(
                     add(presentation.section(text("my-location-heading"), 468))
                     add(presentation.compactFacts(rows.drop(6), 468, DialogTables.PanelSkin.NAVY))
                 },
-                buttons = (recommendationButtons(player, profile) + listOf(
-                    button("now_homes", text("my-homes-label"), text("my-homes-tooltip")) { openTravel(player) },
-                    button("now_lands", text("my-lands-label"), text("my-lands-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
-                    button("now_requests", text("requests-short-label"), text("requests-tooltip")) { hub.openRequests(player) },
-                    button("now_context", text("context-short-label"), text("context-tooltip")) { hub.openContext(player) },
-                    button("now_guide", text("guide-label"), text("guide-tooltip")) { openGuide(player) },
-                )).map { it.copy(width = 230) },
+                buttons = nowButtons(player),
                 exitButton = rootButton(player),
                 columns = 2,
             ),
         )
     }
 
+    private fun currencyValue(key: String, value: String?): Component = text(
+        if (settings.decorationFont.isEmpty()) key else "table-currency-amount-value",
+        "value" to (value ?: settings.text("not-available")),
+    )
+
     private fun worldLabel(kind: HelpCenterWorldKind, raw: String): String =
         resolveHelpCenterWorldLabel(kind, raw, settings::text)
-
-    private fun recommendationButtons(player: Player, profile: HelpCenterProfile): List<PaperDialogButton> =
-        HelpCenterPlanner.recommendations(profile, gateway.features(), 4).map { recommendation ->
-            when (recommendation.id) {
-                HelpCenterRecommendationId.CREATE_HOME -> button("rec_home", text("rec-home-label")) { openCreateHome(player) }
-                HelpCenterRecommendationId.CREATE_LAND -> button("rec_land", text("rec-land-label")) { open(player, HelpCenterPage.PRIVAT) }
-                HelpCenterRecommendationId.RANK_GOAL -> button("rec_rank", text("rec-rank-label")) { executeCatalog(player, "rank") }
-                HelpCenterRecommendationId.EVENTS -> button("rec_events", text("rec-events-label")) { executeCatalog(player, "events") }
-            }
-        }
 
     private fun showMyFailure(player: Player) {
         present(
@@ -380,23 +367,17 @@ internal class HelpCenterController(
                 id = "help.now.failure",
                 title = text("now-title"),
                 body = listOf(PaperDialogBody(text("my-error"), width = 500)),
-                buttons = myButtons(player),
+                buttons = nowButtons(player),
                 exitButton = rootButton(player),
                 columns = 2,
             ),
         )
     }
 
-    private fun myButtons(player: Player): List<PaperDialogButton> = listOf(
-        button("my_homes", text("my-homes-label"), text("my-homes-tooltip")) { openTravel(player) },
-        button("my_lands", text("my-lands-label"), text("my-lands-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
-        button("my_requests", text("requests-short-label"), text("requests-tooltip")) { hub.openRequests(player) },
-        button("my_context", text("context-short-label"), text("context-tooltip")) { hub.openContext(player) },
-        button("my_rank", text("my-rank-label"), text("my-rank-tooltip")) { executeCatalog(player, "rank") },
-        button("my_jobs", text("my-jobs-label"), text("my-jobs-tooltip")) { executeCatalog(player, "jobs") },
-        button("my_quests", text("my-quests-label"), text("my-quests-tooltip")) { executeCatalog(player, "quests") },
-        button("my_skills", text("my-skills-label"), text("my-skills-tooltip")) { executeCatalog(player, "skills") },
-    )
+    private fun nowButtons(player: Player): List<PaperDialogButton> = listOf(
+        button("now_homes", text("my-homes-label"), text("my-homes-tooltip")) { openTravel(player) },
+        button("now_lands", text("my-lands-label"), text("my-lands-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
+    ).map { it.copy(width = 230) }
 
     private fun openGuide(player: Player, returnTo: () -> Unit = { openRoot(player) }) {
         markNavigation(player) { openGuide(player, returnTo) }

@@ -737,6 +737,6 @@ design:
     coordinates: {label: '<#e8dfd2>Координаты:', value: '<#e8dfd2>128, 64, -32'}
     chat: {label: '<#e8dfd2>Чат:', value: '<#e8dfd2>Локальный'}
     online: {label: '<#e8dfd2>В сети:', value: '<#e8dfd2>27'}
-    balance: {label: '<#e8dfd2>Баланс:', value: '<#f4d87a>67.7M <white>💰</white>'}
-    tokens: {label: '<#e8dfd2>Жетоны:', value: '<#f4d87a>3 <white></white>'}
+    balance: {label: '<#e8dfd2>Баланс:', value: '<#f4d87a>67.7M'}
+    tokens: {label: '<#e8dfd2>Жетоны:', value: '<#f4d87a>3'}
     note: <#e8dfd2>Равные отступы перед подписями. Монета и жетон сохраняют свои исходные цвета.

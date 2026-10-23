@@ -19,12 +19,18 @@ specimen uses the shared Core constructor and configured module copy; ordinary
 navigation remains native. The ornate page pairs its corner plates with the
 native gold diamond heading.
 
-The main `/mm` summary keeps its eight fields and two-column structure, with
-typed field icons and the ornate skin. Its actions and two technical button
-accents stay unchanged. `/help` → **Мой профиль** uses the same components behind the existing
+The main `/mm` starts directly with its eight-field ornate summary in two columns;
+tokens replace the redundant current-server field. All ten typed field icons share
+the native 9px icon font. In icon mode balance/token values contain only their
+amounts, while the plain fallback retains its currency labels and glyphs. Root
+actions and its two technical button accents stay unchanged. `/help` → **Мой профиль** uses the same components behind the existing
 `presentation.font` opt-in: compact identity, two resource groups and compact
-location facts. All nine fields and their actions remain owned by the profile
-controller. Empty font configuration keeps readable native labels, group titles
+location facts. All nine fields remain; only **Мои дома** and **Мои приваты**
+remain in the action grid. The existing Back action occupies the centered native
+footer and uses Back/history semantics, including Escape, on this page. The same
+two actions and Back footer remain during profile loading or a load failure. Shared
+recommendations, context and requests remain available from their other entries.
+Empty font configuration keeps readable native labels, group titles
 and values without panel or field-icon glyphs. The existing diagnostic checklist
 now calls `DialogDecoration.listBody` with the planner's explicit states.
 
