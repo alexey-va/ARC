@@ -3,8 +3,8 @@
 ## Installed component gallery
 
 Open **`/arc dialog preview`** or **`/arc dialogdemo design`**. The first root
-button opens the new opaque closed frame; its two pages show ordinary and long
-native text. The remaining sections contain all six text compositions (including
+button opens the opaque closed panel: a compact single column, a wide two-column
+summary, three independently wrapped columns and a longer text block. The remaining sections contain all six text compositions (including
 four progress palettes), 20 functional action styles plus Back, four ornamental
 frames, the six textured tables T13–T18 and all 18 divider specimens. The original
 API laboratory remains available through `/arc dialogdemo`, including its 18
@@ -19,20 +19,38 @@ The existing demo permission and configured aliases remain in force.
 
 The gallery explicitly selects `arc:dialog_ui` on bitmap spans, independent of
 the production-menu `presentation.font` setting. Captions use `minecraft:default`.
-The filled prototype uses the separate `arc:dialog_ui_preview` font: bitmap
-U+FA110–FA112, height 54, ascent 8, advance 17; negative binary spaces
-U+FA200–FA209 and positive spaces U+FA220–FA229. It supports exactly four content
-rows inside a six-line, 498px-wide panel (`body.width=506`). All background tiles
-are emitted on line one, before any native words or their shadows. Only the
-background has shadow disabled. Line six preserves height with an invisible
-498px spacer. This is a bounded gallery prototype, not an arbitrary-height panel.
+The filled panels call the shared `DialogTables.filledBody` constructor and use
+`arc:dialog_ui_preview`. The v03 atlas contains 16×9px left/fill/right/divider tiles.
+Its 194 row banks start at U+FA300 with stride 16; each provider has height 9 and
+ascent `8 - 9 * row`. Top/middle/bottom tiles use offsets 0–3/4–7/8–11. Signed
+ascents are accepted by the official 1.21.11 and 26.3 bitmap-provider codecs.
+Negative binary spaces U+FA200–FA209 and positive spaces U+FA220–FA229 position
+all background strips on the first text baseline, before any native words or
+shadows. Subsequent native lines determine the widget's full height. Only the
+background disables shadow; the native coin U+1F4B0 remains in the foreground.
 
-Focused tests cover the command alias, section coverage, exact six-row advances,
-background-first ordering, native foreground shadow, real Core custom-click
-dispatch and repeated sample/pagination history. Their actual component export
-is `build/reports/dialog-library/screens.json`; it does not prove client pack
-loading or live appearance. Inspect both frame pages in the actual client after
-the matching ARC and pack are activated.
+The shared API supports 1–8 positively weighted columns, 64 logical rows including
+an optional header, and 192 wrapped content lines. Cells wrap independently;
+height follows the tallest cell in each row. Unsupported metrics, narrow widths
+or larger content retain every cell in a readable unframed body. The four gallery
+pages use body widths 300/508/508/508; they do not change the six existing tooltip
+frame styles or production menus.
+
+The body reserves 8px for native widget padding and 2px for wrapping headroom.
+In the official clients, `StringSplitter.LineBreakFinder.accept` checks each
+accumulated glyph advance before reading its following negative spacer. A panel
+of width `P` reaches a temporary prefix of `P + 1`; its text budget is `P + 2`.
+This prevents the earlier 506px-body/498px-panel right-cap wrap. The dated v02
+red/green regression receipt is preserved separately from the v03 tests.
+The white outline on a focused plain-message body belongs to Minecraft's
+`FocusableTextWidget`; the server's plain-message API has no border/focus switch.
+
+Focused tests cover all column counts, bounds and fallback, compact background
+payloads, immediate client wrapping, background-first ordering, native coin/text
+shadows, command aliases and actual shared-history navigation. The gallery's
+component export is `build/reports/dialog-library/screens.json`. Source checks
+and font-backed previews do not establish live pack loading or native appearance;
+inspect all four pages in the actual client after matching ARC and pack activation.
 
 ## Original API laboratory
 

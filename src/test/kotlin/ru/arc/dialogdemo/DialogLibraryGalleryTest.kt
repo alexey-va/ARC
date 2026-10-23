@@ -14,13 +14,13 @@ import io.papermc.paper.connection.PlayerGameConnection
 import net.kyori.adventure.key.Key
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.TextComponent
+import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.ShadowColor
 import net.kyori.adventure.text.format.Style
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer
 import org.bukkit.entity.Player
-import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
@@ -113,11 +113,10 @@ class DialogLibraryGalleryTest : FreeSpec() {
             Files.writeString(target, GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create().toJson(export))
         } }
 
-        "filled frame draws one complete background before four native rows and preserves foreground shadows" { withCopy { copy ->
-            for (sample in 0..1) {
-                val content = (0..3).map { copy("design.filled.$sample.row-$it") }
-                val body = DialogLibraryGallery.filledFrame(content)
-                body.width shouldBe 506
+        "filled gallery uses compact one column and independently wrapped wide columns without client overflow" { withCopy { copy ->
+            val gallery = DialogLibraryGallery(mockk(), copy)
+            for (sample in 0..3) {
+                val body = gallery.screen(DialogLibraryGallery.Page(DialogLibraryGallery.Section.FILLED, sample), false) { _, _ -> }.body[3]
                 val rows = mutableListOf(mutableListOf<Span>())
                 for (span in spans(body.text)) {
                     span.text.split('\n').forEachIndexed { index, text ->
@@ -125,25 +124,34 @@ class DialogLibraryGalleryTest : FreeSpec() {
                         if (text.isNotEmpty()) rows.last() += span.copy(text = text)
                     }
                 }
-                rows.size shouldBe 6
-                rows.map(::advance) shouldBe List(6) { 498 }
+                body.width shouldBe listOf(300, 508, 508, 508)[sample]
+                rows.map(::advance) shouldBe List(rows.size) { body.width - 10 }
+                val clientRows = rows.flatMap { clientLines(it, body.width - 8) }
+                withClue("The client checks each prefix before reading the following negative spacer") {
+                    clientRows.size shouldBe rows.size
+                    clientRows.map { row -> row.sumOf { it.advance } } shouldBe List(rows.size) { body.width - 10 }
+                }
                 val background = rows.first().flatMap { it.text.codePoints().toArray().toList() }
-                background.count { it == 0xFA110 } shouldBe 1
-                background.count { it == 0xFA111 } shouldBe 30
-                background.count { it == 0xFA112 } shouldBe 1
-                rows.first().forEach { it.style.shadowColor() shouldBe ShadowColor.none() }
-                for (row in rows.drop(1)) (row.none { span -> span.text.codePoints().anyMatch { it in 0xFA110..0xFA112 } }) shouldBe true
-                for (row in rows.slice(1..4)) {
-                    val text = row.filter { it.text.any(Char::isLetter) }
-                    (text.isNotEmpty()) shouldBe true
-                    text.forEach {
+                    .filter { it in 0xFA300..0xFAF1B }
+                background.map { (it - 0xFA300) / 16 }.toSet() shouldBe rows.indices.toSet()
+                background.count { (it and 15) in listOf(3, 7, 11) } shouldBe rows.size * listOf(0, 1, 2, 0)[sample]
+                rows.first().forEach {
+                    it.style.font()?.asString() shouldBe "arc:dialog_ui_preview"
+                    it.style.shadowColor() shouldBe ShadowColor.none()
+                }
+                for (row in rows.drop(1)) {
+                    row.none { span -> span.text.codePoints().anyMatch { it in 0xFA300..0xFAF1B } } shouldBe true
+                    row.filter { it.text.any(Char::isLetter) || it.text.codePoints().anyMatch { point -> point == 0x1F4B0 } }.forEach {
                         it.style.font()?.asString() shouldBe "minecraft:default"
-                        withClue("Native foreground must retain the client's default shadow") { it.style.shadowColor().shouldBeNull() }
+                        withClue("Native words and coin retain the client's default shadow") { it.style.shadowColor().shouldBeNull() }
+                        if (it.text.codePoints().anyMatch { point -> point == 0x1F4B0 }) {
+                            withClue("The resource-pack coin must retain its original palette") { it.style.color() shouldBe NamedTextColor.WHITE }
+                        }
                     }
                 }
+                if (sample in listOf(1, 3)) (rows.size > 6) shouldBe true
+                if (sample in listOf(0, 3)) spans(body.text).any { it.text.codePoints().anyMatch { point -> point == 0x1F4B0 } } shouldBe true
             }
-            shouldThrow<IllegalArgumentException> { DialogLibraryGallery.filledFrame(listOf(Component.text("short"))) }
-            shouldThrow<IllegalArgumentException> { DialogLibraryGallery.filledFrame(List(4) { Component.text("word ".repeat(160)) }) }
         } }
 
         "pagination and repeated sample clicks return to the real root once without closing between pages" { withCopy { copy ->
@@ -218,15 +226,44 @@ class DialogLibraryGalleryTest : FreeSpec() {
         javaClass.getResourceAsStream("/fonts/dialog-font-metrics.json")!!.bufferedReader()
             .use { JsonParser.parseReader(it).asJsonObject.getAsJsonObject("fonts") }
     }
+    private fun advance(point: Int, style: Style): Int = when (point) {
+        in 0xFA300..0xFAF1B -> 17
+        in 0xFA200..0xFA209 -> -(1 shl (point - 0xFA200))
+        in 0xFA220..0xFA229 -> 1 shl (point - 0xFA220)
+        else -> fonts.getAsJsonObject(style.font()?.asString() ?: "minecraft:default")
+            .getAsJsonObject(if (style.decoration(TextDecoration.BOLD) == TextDecoration.State.TRUE) "bold" else "normal")
+            .get("U+%04X".format(point)).asInt
+    }
+
     private fun advance(row: List<Span>): Int = row.sumOf { span ->
-        span.text.codePoints().toArray().sumOf { point ->
-            when (point) {
-                in 0xFA110..0xFA112 -> 17
-                in 0xFA200..0xFA209 -> -(1 shl (point - 0xFA200))
-                in 0xFA220..0xFA229 -> 1 shl (point - 0xFA220)
-                else -> fonts.getAsJsonObject(span.style.font()?.asString() ?: "minecraft:default")
-                    .getAsJsonObject(if (span.style.decoration(TextDecoration.BOLD) == TextDecoration.State.TRUE) "bold" else "normal")
-                    .get("U+%04X".format(point)).asInt
+        span.text.codePoints().toArray().sumOf { advance(it, span.style) }
+    }
+
+    private data class Glyph(val point: Int, val advance: Int)
+
+    /** LineBreakFinder.accept / splitLines from the official 1.21.11 and 26.3 clients, per authored row. */
+    private fun clientLines(row: List<Span>, maxWidth: Int): List<List<Glyph>> {
+        val glyphs = row.flatMap { span ->
+            span.text.codePoints().toArray().map { Glyph(it, advance(it, span.style)) }
+        }
+        return buildList {
+            var start = 0
+            while (start < glyphs.size) {
+                var end = start
+                var width = 0
+                var hadNonZeroWidth = false
+                var lastSpace = -1
+                while (end < glyphs.size) {
+                    val glyph = glyphs[end]
+                    if (glyph.point == ' '.code) lastSpace = end
+                    width += glyph.advance
+                    if (hadNonZeroWidth && width > maxWidth.coerceAtLeast(1)) break
+                    hadNonZeroWidth = hadNonZeroWidth || glyph.advance != 0
+                    end++
+                }
+                if (end < glyphs.size && lastSpace >= start) end = lastSpace
+                add(glyphs.subList(start, end))
+                start = if (end < glyphs.size && glyphs[end].point == ' '.code) end + 1 else end
             }
         }
     }

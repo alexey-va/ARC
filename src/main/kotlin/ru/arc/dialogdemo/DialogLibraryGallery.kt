@@ -3,12 +3,12 @@ package ru.arc.dialogdemo
 import net.kyori.adventure.key.Key
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
-import net.kyori.adventure.text.format.ShadowColor
 import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.entity.Player
 import ru.arc.gui.MenuEscapeBehavior
 import ru.arc.paper.menu.DialogDecoration
 import ru.arc.paper.menu.DialogTextLayout
+import ru.arc.paper.menu.DialogTables
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
 import ru.arc.paper.menu.PaperDialogButton
@@ -24,7 +24,7 @@ internal class DialogLibraryGallery(
     private val copy: (String) -> Component,
 ) {
     enum class Section(val key: String, val pageCount: Int) {
-        FILLED("filled", 2),
+        FILLED("filled", 4),
         TEXT("text", 6), ACTIONS("actions", 3), ORNAMENTS("ornaments", 1),
         TABLES("tables", 6), DIVIDERS("dividers", 3),
     }
@@ -97,9 +97,9 @@ internal class DialogLibraryGallery(
                     bodies += PaperDialogBody(DialogDesignGallery.divider(number, ::tableText), 400)
                 }
                 Section.FILLED -> {
-                    body("filled.${page.index}.title", FILLED_BODY_WIDTH)
-                    bodies += filledFrame((0..3).map { text("filled.${page.index}.row-$it") })
-                    body("filled.note", FILLED_BODY_WIDTH)
+                    body("filled.${page.index}.title", FILLED_BODY_WIDTHS[page.index])
+                    bodies += filledPanel(page.index)
+                    body("filled.note", 508)
                 }
             }
             if (sample != null) bodies += PaperDialogBody(text("sample-selected").append(text(sample)))
@@ -125,6 +125,14 @@ internal class DialogLibraryGallery(
         .decoration(TextDecoration.ITALIC, false)
     private fun tableText(key: String) = copy(key).font(NATIVE_FONT)
         .decoration(TextDecoration.ITALIC, false)
+
+    private fun filledPanel(index: Int): PaperDialogBody {
+        val weights = when (index) { 1 -> listOf(2, 3); 2 -> listOf(3, 2, 2); else -> listOf(1) }
+        val count = listOf(4, 5, 3, 6)[index]
+        val rows = List(count) { row -> List(weights.size) { column -> text("filled.$index.row-$row.col-$column") } }
+        val headers = if (index in 1..2) List(weights.size) { text("filled.$index.column-$it") } else null
+        return DialogTables.filledBody(rows, headers, FILLED_BODY_WIDTHS[index], weights)
+    }
 
     private fun composition(index: Int): PaperDialogBody = when (index) {
         0 -> decoration.openCorners(text("text.0.sample"), 320, DialogDecoration.Corners(
@@ -192,14 +200,11 @@ internal class DialogLibraryGallery(
         val LIBRARY_FONT: Key = Key.key("arc:dialog_ui")
         val PREVIEW_FONT: Key = Key.key("arc:dialog_ui_preview")
         val PROSE = net.kyori.adventure.text.format.TextColor.color(0xE8DFD2)
-        const val FILLED_WIDTH = 498
-        const val FILLED_BODY_WIDTH = 506
+        val FILLED_BODY_WIDTHS = listOf(300, 508, 508, 508)
         val ORNAMENTS = listOf("02", "11", "12", "16")
         private val decoration = DialogDecoration(LIBRARY_FONT, 0xF9F00, 0xF9F10)
         private val positive = PixelSpacing(LIBRARY_FONT, 0xF9F00)
         private val negative = PixelSpacing(LIBRARY_FONT, 0xF9F10)
-        private val previewPositive = PixelSpacing(PREVIEW_FONT, 0xFA220)
-        private val previewNegative = PixelSpacing(PREVIEW_FONT, 0xFA200)
         private val undecorated = TextDecoration.values().associateWith { TextDecoration.State.FALSE }
 
         private fun piece(point: Int, advance: Int) = DialogDecoration.Glyph(point, advance)
@@ -221,22 +226,6 @@ internal class DialogLibraryGallery(
             val iconAdvance = if (iconIndex in listOf(8, 12, 16, 17, 19)) 10 else 11
             return decoration.buttonLabel(label.font(NATIVE_FONT), 200,
                 frame(if (index == 20) 0xF9050 else 0xF9000 + index * 4), piece(0xF9060 + iconIndex, iconAdvance), index == 4)
-        }
-
-        /** v02 is exactly 6 lines / 54px. The whole opaque panel precedes every native foreground/shadow pixel. */
-        internal fun filledFrame(content: List<Component>): PaperDialogBody {
-            require(content.size == 4) { "The installed filled-frame bitmap supports exactly four content rows" }
-            val background = Row(previewPositive, previewNegative).apply {
-                at(0, glyph(0xFA110, PREVIEW_FONT), 17)
-                for (x in 16..464 step 16) at(x, glyph(0xFA111, PREVIEW_FONT), 17)
-                at(466, glyph(0xFA111, PREVIEW_FONT), 17)
-                at(482, glyph(0xFA112, PREVIEW_FONT), 17)
-            }.finish(FILLED_WIDTH).shadowColor(ShadowColor.none())
-            val foreground = content.map {
-                Component.empty().append(previewPositive.padding(16))
-                    .append(nativeCell(it, 466)).append(previewPositive.padding(16))
-            }
-            return PaperDialogBody(lines(listOf(background) + foreground + previewPositive.padding(FILLED_WIDTH)), FILLED_BODY_WIDTH)
         }
 
         /** Static specimen placement only; shared PixelSpacing and DialogTextLayout own spacing and text measurement. */
