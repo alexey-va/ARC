@@ -16,6 +16,7 @@ import ru.arc.hooks.elitemobs.EMHook
 import ru.arc.hooks.elitemobs.DungeonSharedSkillXp
 import ru.arc.hooks.elitemobs.EliteMobsLifecycleListener
 import ru.arc.hooks.elitemobs.PassiveClassCompatibility
+import ru.arc.hooks.elitemobs.PrimisEncounterGuard
 import ru.arc.hooks.elitemobs.arena.NativeArenaLevels
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import ru.arc.sync.EmSync
@@ -62,6 +63,7 @@ class ArcDungeonsNativeIntegrationLifecycleTest {
             val sharedXp = mockk<DungeonSharedSkillXp>(relaxed = true)
             val passives = mockk<PassiveClassCompatibility>(relaxed = true)
             val arena = mockk<NativeArenaLevels>(relaxed = true)
+            val primis = mockk<PrimisEncounterGuard>(relaxed = true)
             every { arena.close() } throws IllegalStateException("injected arena cleanup failure")
             every { hook.reload() } throws IllegalStateException("injected hook reload failure")
             every { qol.close() } throws IllegalStateException("injected QOL cleanup failure")
@@ -74,6 +76,7 @@ class ArcDungeonsNativeIntegrationLifecycleTest {
             setField(plugin, "sharedSkillXp", sharedXp)
             setField(plugin, "passiveClasses", passives)
             setField(plugin, "arenaLevels", arena)
+            setField(plugin, "primisEncounters", primis)
             @Suppress("UNCHECKED_CAST")
             val listeners = field(plugin, "nativeListeners").get(plugin) as MutableList<Listener>
             listeners += mockk<Listener>(relaxed = true)
@@ -93,8 +96,10 @@ class ArcDungeonsNativeIntegrationLifecycleTest {
             verify(exactly = 1) { sharedXp.close() }
             verify(exactly = 1) { passives.close() }
             verify(exactly = 1) { arena.close() }
+            verify(exactly = 1) { primis.close() }
             field(plugin, "passiveClasses").get(plugin).shouldBeNull()
             field(plugin, "arenaLevels").get(plugin).shouldBeNull()
+            field(plugin, "primisEncounters").get(plugin).shouldBeNull()
         }
     }
 

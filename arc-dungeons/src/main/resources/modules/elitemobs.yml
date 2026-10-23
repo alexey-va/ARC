@@ -37,6 +37,10 @@ chests:
   quest-locked-message: '<white></white> <#c42323>Сундук доступен только по заданию.'
 
 dungeon-qol:
+  encounters:
+    enter-room: 'Войди в зал, чтобы вступить в бой.'
+    passage-occupied: 'Отойди от прохода — двери должны закрыться.'
+    not-ready: 'Зал ещё готовится. Подожди немного и попробуй снова.'
   bestiary:
     label: '<#c4abff>Бестиарий ›'
     tooltip: 'Изученные противники, способности и шансы добычи'
