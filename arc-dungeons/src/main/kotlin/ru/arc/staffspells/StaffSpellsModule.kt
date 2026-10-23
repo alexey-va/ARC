@@ -31,6 +31,7 @@ import ru.arc.core.PluginModule
 import ru.arc.dungeons.ArcDungeonsPlugin
 import ru.arc.dungeons.api.ArcStaffCooldowns
 import ru.arc.paper.display.PaperPacketDisplays
+import ru.arc.paper.particle.PaperViewerParticles
 import java.util.UUID
 import org.bukkit.util.Vector
 import kotlin.math.abs
@@ -76,7 +77,7 @@ object StaffSpellsModule : PluginModule {
         }
         val displays = PaperPacketDisplays(plugin, "staff-spells")
         controller = StaffSpellController(config, settings, StaffSpellDamage(duelAccess),
-            StaffSpellDisplayEffects(displays), cooldowns,
+            StaffSpellDisplayEffects(displays), cooldowns, PaperViewerParticles(plugin, "staff-spells"),
             scenery = scenery, hud = StaffSpellHud(displays, config, ownDisplays = false)).also {
             Bukkit.getPluginManager().registerEvents(it, plugin)
             Bukkit.getPluginManager().registerEvents(it.input, plugin)
@@ -104,13 +105,14 @@ internal class StaffSpellController(
     private val damage: StaffSpellDamage,
     private val effects: StaffSpellDisplayEffects,
     private val cooldowns: ArcStaffCooldowns,
+    private val particles: PaperViewerParticles,
     summonActorFactory: ((org.bukkit.World, Location, Boolean) -> org.bukkit.entity.AbstractSkeleton)? = null,
     private val scenery: StaffSceneryEffects? = null,
     private val hud: StaffSpellHud? = null,
     private val hotkeys: StaffHotkeyCooldowns = StaffHotkeyCooldowns(),
 ) : Listener, AutoCloseable, StaffSpellInputActions {
     private val tasks = LifecycleTaskScope()
-    private val visuals = StaffSpellVisuals(tasks, sceneryImpact = { owner, at, radius ->
+    private val visuals = StaffSpellVisuals(tasks, particles, sceneryImpact = { owner, at, radius ->
         scenery?.impact(owner, at, radius)
     }, sceneryDepression = { owner, at, radius ->
         scenery?.depress(owner, at, radius)
@@ -178,7 +180,7 @@ internal class StaffSpellController(
                     listOfNotNull(target(player)).forEach { selected ->
                         val cue = center(selected).add(0.0, selected.height * 0.55, 0.0)
                         if (cue.distanceSquared(player.eyeLocation) >= 3.2 * 3.2)
-                            player.spawnParticle(Particle.END_ROD, cue, 2, 0.13, 0.05, 0.13, 0.0)
+                            particles.emit(player, cue, Particle.END_ROD, 2, 0.13, 0.05, 0.13, 0.0, null, false)
                     }
                 }
             }

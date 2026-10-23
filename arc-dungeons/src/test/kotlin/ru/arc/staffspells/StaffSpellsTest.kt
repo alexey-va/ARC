@@ -44,6 +44,7 @@ import ru.arc.core.Tasks
 import ru.arc.core.TestTaskScheduler
 import ru.arc.paper.display.PacketTextDisplay
 import ru.arc.paper.display.PaperPacketDisplays
+import ru.arc.paper.particle.PaperViewerParticles
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import ru.arc.paper.testing.failOnUnsupportedMockBukkitOperation
 import java.util.UUID
@@ -1626,8 +1627,9 @@ internal fun withStaffHarness(
                         every { effects.remove(any()) } answers { removedEffects += firstArg<UUID?>() }
                         var hotkeyTick = 0L
                         val hotkeyClock = scheduler.runTimer(1, 1) { hotkeyTick++ }
+                        val particles = mockk<PaperViewerParticles>(relaxed = true)
                         val controller = StaffSpellController(config, settings, damage, effects, cooldowns,
-                            summonActorFactory, hud = hudFactory?.invoke(), hotkeys = StaffHotkeyCooldowns { hotkeyTick })
+                            particles, summonActorFactory, hud = hudFactory?.invoke(), hotkeys = StaffHotkeyCooldowns { hotkeyTick })
                         val harness = StaffHarness(paper, scheduler, config, controller, cooldowns, effects,
                             movedEffects, trailMoves, projectileMoves, finishedTrails, visualPlays, removedEffects,
                             captures, hits, hitLocations, damageScales)
@@ -1638,7 +1640,7 @@ internal fun withStaffHarness(
                             hotkeyClock.cancel()
                             cooldowns.close()
                             // MockK retains call stacks and captured fixture graphs until these owned mocks are cleared.
-                            clearMocks(damage, effects)
+                            clearMocks(damage, effects, particles)
                         }
                     }
                 } finally {

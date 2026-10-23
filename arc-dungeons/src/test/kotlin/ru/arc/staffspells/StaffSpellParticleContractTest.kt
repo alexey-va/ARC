@@ -4,20 +4,69 @@ import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import org.bukkit.Color
 import org.bukkit.Location
 import org.bukkit.Particle
 import org.bukkit.World
 import org.bukkit.block.data.BlockData
 import org.bukkit.entity.Player
+import org.bukkit.util.Vector
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.Tasks
 import ru.arc.core.TestTaskScheduler
+import ru.arc.paper.particle.PaperViewerParticles
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import java.util.UUID
 
 /** Paper 1.21.11 validates particle payloads before sending a packet, unlike relaxed test players. */
 class StaffSpellParticleContractTest : FreeSpec({
+    "shared packet emissions preserve authored payloads and count-zero velocity without forcing visibility" {
+        MockBukkitTestRuntime.open().use {
+            Tasks.withScheduler(TestTaskScheduler()) {
+                val world = mockk<World>(relaxed = true)
+                val observer = mockk<Player>(relaxed = true)
+                every { observer.uniqueId } returns UUID.randomUUID()
+                every { observer.eyeLocation } returns Location(world, 0.0, 1.62, -5.0)
+                every { world.isChunkLoaded(any<Int>(), any<Int>()) } returns true
+                every { world.getNearbyPlayers(any<Location>(), any<Double>()) } returns listOf(observer)
+                val received = mutableListOf<ParticleEmission>()
+                val particleOwner = mockk<PaperViewerParticles>(relaxed = true)
+                every { particleOwner.emit(observer, any<Location>(), any<Particle>(), any<Int>(),
+                    any<Double>(), any<Double>(), any<Double>(), any<Double>(), any(), any<Boolean>()) } answers {
+                    arg<Boolean>(9) shouldBe false
+                    received += ParticleEmission(arg(2), arg(3),
+                        Vector(arg<Double>(4), arg<Double>(5), arg<Double>(6)), arg(7), arg(8))
+                }
+                val tasks = LifecycleTaskScope()
+                val visuals = StaffSpellVisuals(tasks, particleOwner)
+                try {
+                    val origin = Location(world, 0.0, 1.0, 0.0)
+                    val transition = Particle.DustTransition(Color.RED, Color.BLUE, 0.8F)
+                    visuals.particles(origin, listOf(
+                        StaffParticleSample(Particle.CLOUD, Vector(), count = 0,
+                            spread = Vector(0.25, -0.5, 0.75), speed = 0.125),
+                        StaffParticleSample(Particle.DUST_COLOR_TRANSITION, Vector(), count = 2,
+                            spread = Vector(0.1, 0.2, 0.3), data = transition),
+                        StaffParticleSample(Particle.FLASH, Vector()),
+                    ))
+                    received shouldBe listOf(
+                        ParticleEmission(Particle.CLOUD, 0, Vector(0.25, -0.5, 0.75), 0.125, null),
+                        ParticleEmission(Particle.DUST_COLOR_TRANSITION, 2, Vector(0.1, 0.2, 0.3), 0.0, transition),
+                        ParticleEmission(Particle.FLASH, 1, Vector(), 0.0, Color.WHITE),
+                    )
+
+                    listOf(StaffSpell.GALE, StaffSpell.TIDE).forEach { spell ->
+                        received.clear()
+                        visuals.quickElement(origin, spell, ageTicks = 6, durationTicks = 20, radius = 2.0)
+                        received.isNotEmpty() shouldBe true
+                        received.all { it.count == 0 && it.speed == 1.0 && it.spread.lengthSquared() > 0.0 } shouldBe true
+                    }
+                } finally { visuals.close(); tasks.close() }
+            }
+        }
+    }
+
     "solar and impact particles satisfy the installed Paper payload contract for nearby observers" {
         Particle.FLASH.dataType shouldBe Color::class.java
         val scheduler = TestTaskScheduler()
@@ -38,16 +87,13 @@ class StaffSpellParticleContractTest : FreeSpec({
                     received += particle to data
                     positions += particle to at.clone()
                 }
-                every { observer.spawnParticle(any<Particle>(), any<Location>(), any<Int>(),
-                    any<Double>(), any<Double>(), any<Double>(), any<Double>()) } answers {
-                    accept(firstArg(), null, secondArg())
-                }
-                every { observer.spawnParticle(any<Particle>(), any<Location>(), any<Int>(),
-                    any<Double>(), any<Double>(), any<Double>(), any<Double>(), any<Any>()) } answers {
-                    accept(firstArg(), arg<Any>(7), secondArg())
+                val particleOwner = mockk<PaperViewerParticles>(relaxed = true)
+                every { particleOwner.emit(observer, any<Location>(), any<Particle>(), any<Int>(),
+                    any<Double>(), any<Double>(), any<Double>(), any<Double>(), any(), false) } answers {
+                    accept(arg(2), arg<Any?>(8), arg(1))
                 }
                 val tasks = LifecycleTaskScope()
-                val visuals = StaffSpellVisuals(tasks)
+                val visuals = StaffSpellVisuals(tasks, particleOwner)
                 val eye = Location(world, 0.0, 1.62, 0.0)
                 val target = Location(world, 0.0, 1.62, 16.0)
                 try {
@@ -105,10 +151,20 @@ class StaffSpellParticleContractTest : FreeSpec({
                     val staleStart = received.size
                     visuals.withOwner(owner) { visuals.nova(target, 8.0) }
                     visuals.cancel(owner)
+                    verify(exactly = 1) { particleOwner.invalidatePending() }
                     scheduler.tick(20)
                     received.size shouldBe staleStart
-                } finally { tasks.close() }
+                } finally { visuals.close(); tasks.close() }
+                verify(exactly = 1) { particleOwner.close() }
             }
         }
     }
 })
+
+private data class ParticleEmission(
+    val particle: Particle,
+    val count: Int,
+    val spread: Vector,
+    val speed: Double,
+    val data: Any?,
+)

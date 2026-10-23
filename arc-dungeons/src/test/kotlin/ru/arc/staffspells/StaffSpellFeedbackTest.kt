@@ -15,6 +15,7 @@ import org.joml.Vector3f
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.Tasks
 import ru.arc.core.TestTaskScheduler
+import ru.arc.paper.particle.PaperViewerParticles
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import java.util.UUID
 import kotlin.math.sqrt
@@ -40,18 +41,15 @@ class StaffSpellFeedbackTest : FreeSpec({
                     sounds += secondArg<Sound>() to arg<Float>(4)
                 }
                 val particles = mutableListOf<StaffParticleEvent>()
-                every { player.spawnParticle(any<Particle>(), any<Location>(), any<Int>(),
-                    any<Double>(), any<Double>(), any<Double>(), any<Double>()) } answers {
-                    particles += StaffParticleEvent(firstArg<Particle>(), secondArg<Location>().clone(), null)
-                }
-                every { player.spawnParticle(any<Particle>(), any<Location>(), any<Int>(),
-                    any<Double>(), any<Double>(), any<Double>(), any<Double>(), any<Any>()) } answers {
-                    particles += StaffParticleEvent(firstArg<Particle>(), secondArg<Location>().clone(), arg<Any>(7))
+                val particleOwner = mockk<PaperViewerParticles>(relaxed = true)
+                every { particleOwner.emit(player, any<Location>(), any<Particle>(), any<Int>(),
+                    any<Double>(), any<Double>(), any<Double>(), any<Double>(), any(), false) } answers {
+                    particles += StaffParticleEvent(arg<Particle>(2), arg<Location>(1).clone(), arg<Any?>(8))
                 }
 
                 val tasks = LifecycleTaskScope()
                 try {
-                    val visuals = StaffSpellVisuals(tasks) { tick }
+                    val visuals = StaffSpellVisuals(tasks, particleOwner) { tick }
                     visuals.chargeFeedback(player, StaffSpell.GALE, 0.0)
                     visuals.chargeFeedback(player, StaffSpell.GALE, 0.25)
                     visuals.chargeFeedback(player, StaffSpell.GALE, 0.5)
@@ -87,6 +85,7 @@ class StaffSpellFeedbackTest : FreeSpec({
                     )
 
                     visuals.cancel(playerId)
+                    verify(exactly = 1) { particleOwner.invalidatePending() }
                     visuals.cooldownFeedback(player, StaffSpell.GALE)
                     sounds.size shouldBe 10
                     listOf(StaffSpell.INFERNO, StaffSpell.GRAVITY, StaffSpell.OSSUARY).forEach { spell ->
@@ -98,6 +97,7 @@ class StaffSpellFeedbackTest : FreeSpec({
                         (particles.size > previousParticles) shouldBe true
                     }
                     visuals.close()
+                    verify(exactly = 1) { particleOwner.close() }
                     visuals.cooldownFeedback(player, StaffSpell.CHAIN)
                     visuals.chargeFeedback(player, StaffSpell.GALE, 1.0)
                     sounds.takeLast(6).map { it.first } shouldBe listOf(
@@ -141,18 +141,15 @@ class StaffSpellFeedbackTest : FreeSpec({
                 every { player.eyeLocation } returns eye
                 every { player.world } returns world
                 val particles = mutableListOf<StaffParticleEvent>()
-                every { player.spawnParticle(any<Particle>(), any<Location>(), any<Int>(),
-                    any<Double>(), any<Double>(), any<Double>(), any<Double>()) } answers {
-                    particles += StaffParticleEvent(firstArg<Particle>(), secondArg<Location>().clone(), null)
-                }
-                every { player.spawnParticle(any<Particle>(), any<Location>(), any<Int>(),
-                    any<Double>(), any<Double>(), any<Double>(), any<Double>(), any<Any>()) } answers {
-                    particles += StaffParticleEvent(firstArg<Particle>(), secondArg<Location>().clone(), arg<Any>(7))
+                val particleOwner = mockk<PaperViewerParticles>(relaxed = true)
+                every { particleOwner.emit(player, any<Location>(), any<Particle>(), any<Int>(),
+                    any<Double>(), any<Double>(), any<Double>(), any<Double>(), any(), false) } answers {
+                    particles += StaffParticleEvent(arg<Particle>(2), arg<Location>(1).clone(), arg<Any?>(8))
                 }
 
                 val tasks = LifecycleTaskScope()
                 try {
-                    val visuals = StaffSpellVisuals(tasks)
+                    val visuals = StaffSpellVisuals(tasks, particleOwner)
                     visuals.chargeFeedback(player, StaffSpell.EMBER, 0.5)
                     val direction = eye.direction
                     val emberRotation = staffChargeOrientation(StaffSpell.EMBER, eye.yaw,
@@ -202,13 +199,10 @@ class StaffSpellFeedbackTest : FreeSpec({
                 every { observer.eyeLocation } returns Location(world, 0.0, 65.62, -10.0)
                 every { world.getNearbyPlayers(any<Location>(), any<Double>()) } returns listOf(observer)
                 val particles = mutableListOf<StaffParticleEvent>()
-                every { observer.spawnParticle(any<Particle>(), any<Location>(), any<Int>(),
-                    any<Double>(), any<Double>(), any<Double>(), any<Double>()) } answers {
-                    particles += StaffParticleEvent(firstArg<Particle>(), secondArg<Location>().clone(), null)
-                }
-                every { observer.spawnParticle(any<Particle>(), any<Location>(), any<Int>(),
-                    any<Double>(), any<Double>(), any<Double>(), any<Double>(), any<Any>()) } answers {
-                    particles += StaffParticleEvent(firstArg<Particle>(), secondArg<Location>().clone(), arg<Any>(7))
+                val particleOwner = mockk<PaperViewerParticles>(relaxed = true)
+                every { particleOwner.emit(observer, any<Location>(), any<Particle>(), any<Int>(),
+                    any<Double>(), any<Double>(), any<Double>(), any<Double>(), any(), false) } answers {
+                    particles += StaffParticleEvent(arg<Particle>(2), arg<Location>(1).clone(), arg<Any?>(8))
                 }
                 val sounds = mutableListOf<Sound>()
                 every { observer.playSound(any<Location>(), any<Sound>(), any<SoundCategory>(), any<Float>(), any<Float>()) } answers {
@@ -217,7 +211,7 @@ class StaffSpellFeedbackTest : FreeSpec({
 
                 val tasks = LifecycleTaskScope()
                 try {
-                    val visuals = StaffSpellVisuals(tasks)
+                    val visuals = StaffSpellVisuals(tasks, particleOwner)
                     val origin = Location(world, 0.0, 64.0, 0.0)
                     visuals.galeFunnel(origin, ageTicks = 21, charge = 1.0)
                     particles.size shouldBe 32

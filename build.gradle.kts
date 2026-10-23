@@ -22,7 +22,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath("ru.ruscrafting.arc:arc-core-integration-testing:2.7.55")
+        classpath("ru.ruscrafting.arc:arc-core-integration-testing:2.7.57")
     }
 }
 
@@ -76,10 +76,10 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.454"
+version = "1.4.455"
 description = "ARC"
 val pluginVersion = version.toString()
-val arcCoreVersion = "2.7.55"
+val arcCoreVersion = "2.7.57"
 val arcCorePluginVersion: String by project
 val arcDungeonsPluginVersion: String by project
 val landsJar = providers.gradleProperty("landsJar").orNull?.let(::file)

@@ -11,6 +11,7 @@ import org.bukkit.entity.Player
 import org.bukkit.util.Vector
 import org.joml.Vector3f
 import ru.arc.core.LifecycleTaskScope
+import ru.arc.paper.particle.PaperViewerParticles
 import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.PI
@@ -20,9 +21,10 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-/** Native staff particles and sound; all delayed phases run on Paper's main thread. */
+/** Budgeted staff particles and native sound; all delayed phases run on Paper's main thread. */
 internal class StaffSpellVisuals(
     private val tasks: LifecycleTaskScope,
+    private val particleOwner: PaperViewerParticles,
     private val sceneryImpact: (UUID, Location, Double) -> Unit = { _, _, _ -> },
     private val sceneryDepression: (UUID, Location, Double) -> Unit = { _, _, _ -> },
     private val currentTick: () -> Long = { Bukkit.getCurrentTick().toLong() },
@@ -51,6 +53,9 @@ internal class StaffSpellVisuals(
     }
 
     fun cancel(ownerId: UUID) {
+        // The shared generation drops only cosmetics, including other casts queued this instant;
+        // the existing owner fence below still cancels only this caster's delayed phases.
+        particleOwner.invalidatePending()
         chargeFeedbackStates.remove(ownerId)
         lastCooldownFeedbackTick.remove(ownerId)
         ownerTasks[ownerId]?.let { state ->
@@ -66,6 +71,7 @@ internal class StaffSpellVisuals(
 
     /** Clears per-player feedback and invalidates delayed visual work when the module closes. */
     fun close() {
+        particleOwner.close()
         ownerTasks.values.forEach { it.generation++ }
         ownerTasks.clear()
         chargeFeedbackStates.clear()
@@ -1403,10 +1409,8 @@ internal class StaffSpellVisuals(
                 if (packets >= 480 || spawned + cost > 4096) continue
                 framePackets[id] = packets + 1
                 frameParticles[id] = spawned + cost
-                if (data == null) viewer.spawnParticle(sample.particle, at, count,
-                    spread.x, spread.y, spread.z, sample.speed)
-                else viewer.spawnParticle(sample.particle, at, count,
-                    spread.x, spread.y, spread.z, sample.speed, data)
+                particleOwner.emit(viewer, at, sample.particle, count,
+                    spread.x, spread.y, spread.z, sample.speed, data, false)
             }
         }
     }
@@ -1422,8 +1426,7 @@ internal class StaffSpellVisuals(
     private fun emitPrivate(player: Player, at: Location, particle: Particle, data: Any? = null) {
         if (!drawable(at) || player.world !== at.world) return
         val particleData = data ?: if (particle == Particle.FLASH) Color.WHITE else null
-        if (particleData == null) player.spawnParticle(particle, at, 1, 0.0, 0.0, 0.0, 0.0)
-        else player.spawnParticle(particle, at, 1, 0.0, 0.0, 0.0, 0.0, particleData)
+        particleOwner.emit(player, at, particle, 1, 0.0, 0.0, 0.0, 0.0, particleData, false)
     }
 
     /** Sends one native-velocity particle per nearby viewer instead of a stationary point. */
@@ -1439,11 +1442,7 @@ internal class StaffSpellVisuals(
             val distanceSquared = eye.distanceSquared(at)
             if (!distanceSquared.isFinite() || distanceSquared < minEyeDistanceSquared ||
                 distanceSquared > QUICK_ELEMENT_VIEW_DISTANCE * QUICK_ELEMENT_VIEW_DISTANCE) return@forEach
-            if (particleData == null) {
-                player.spawnParticle(particle, at, 0, velocity.x, velocity.y, velocity.z, 1.0)
-            } else {
-                player.spawnParticle(particle, at, 0, velocity.x, velocity.y, velocity.z, 1.0, particleData)
-            }
+            particleOwner.emit(player, at, particle, 0, velocity.x, velocity.y, velocity.z, 1.0, particleData, false)
         }
     }
 
@@ -1468,8 +1467,7 @@ internal class StaffSpellVisuals(
             if (eye.world !== world) return@forEach
             val distanceSquared = eye.distanceSquared(at)
             if (distanceSquared < minEyeDistanceSquared || distanceSquared > maxViewerDistanceSquared) return@forEach
-            if (particleData == null) player.spawnParticle(particle, at, 1, 0.0, 0.0, 0.0, 0.0)
-            else player.spawnParticle(particle, at, 1, 0.0, 0.0, 0.0, 0.0, particleData)
+            particleOwner.emit(player, at, particle, 1, 0.0, 0.0, 0.0, 0.0, particleData, false)
         }
     }
 

@@ -13,11 +13,12 @@ import org.bukkit.entity.Player
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.Tasks
 import ru.arc.core.TestTaskScheduler
+import ru.arc.paper.particle.PaperViewerParticles
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import kotlin.math.abs
 
 class StaffSpellVisualsTest : FreeSpec({
-    "overlapping native frames are bounded per viewer and resume without a backlog" {
+    "overlapping packet frames are bounded per viewer and resume without a backlog" {
         MockBukkitTestRuntime.open().use {
             Tasks.withScheduler(TestTaskScheduler()) {
                 val world = mockk<World>(relaxed = true)
@@ -27,12 +28,13 @@ class StaffSpellVisualsTest : FreeSpec({
                 every { world.isChunkLoaded(any<Int>(), any<Int>()) } returns true
                 every { world.getNearbyPlayers(any<Location>(), any<Double>()) } returns listOf(observer)
                 var emitted = 0
-                every { observer.spawnParticle(any<Particle>(), any<Location>(), any<Int>(),
-                    any<Double>(), any<Double>(), any<Double>(), any<Double>()) } answers { emitted++ }
+                val particleOwner = mockk<PaperViewerParticles>(relaxed = true)
+                every { particleOwner.emit(observer, any<Location>(), any<Particle>(), any<Int>(),
+                    any<Double>(), any<Double>(), any<Double>(), any<Double>(), any(), false) } answers { emitted++ }
                 var tick = 0L
                 val tasks = LifecycleTaskScope()
                 try {
-                    val visuals = StaffSpellVisuals(tasks) { tick }
+                    val visuals = StaffSpellVisuals(tasks, particleOwner) { tick }
                     val origin = Location(world, 0.0, 1.0, 0.0)
                     val frame = List(192) { StaffParticleSample(Particle.CLOUD, org.bukkit.util.Vector()) }
                     repeat(20) { visuals.particles(origin, frame) }
@@ -73,7 +75,7 @@ class StaffSpellVisualsTest : FreeSpec({
 
                 val tasks = LifecycleTaskScope()
                 try {
-                    StaffSpellVisuals(tasks).arcane(Location(world, 0.0, 1.62, 0.0), StaffSpell.PRISM,
+                    StaffSpellVisuals(tasks, mockk(relaxed = true)).arcane(Location(world, 0.0, 1.62, 0.0), StaffSpell.PRISM,
                         phase = 2, radius = 2.5)
                 } finally {
                     tasks.close()
@@ -108,13 +110,10 @@ class StaffSpellVisualsTest : FreeSpec({
                 every { world.isChunkLoaded(any<Int>(), any<Int>()) } returns true
                 every { world.getNearbyPlayers(any<Location>(), any<Double>()) } returns listOf(observer)
                 val particles = mutableListOf<Pair<Particle, Any?>>()
-                every { observer.spawnParticle(any<Particle>(), any<Location>(), any<Int>(),
-                    any<Double>(), any<Double>(), any<Double>(), any<Double>()) } answers {
-                    particles += firstArg<Particle>() to null
-                }
-                every { observer.spawnParticle(any<Particle>(), any<Location>(), any<Int>(),
-                    any<Double>(), any<Double>(), any<Double>(), any<Double>(), any<Any>()) } answers {
-                    particles += firstArg<Particle>() to arg<Any>(7)
+                val particleOwner = mockk<PaperViewerParticles>(relaxed = true)
+                every { particleOwner.emit(observer, any<Location>(), any<Particle>(), any<Int>(),
+                    any<Double>(), any<Double>(), any<Double>(), any<Double>(), any(), false) } answers {
+                    particles += arg<Particle>(2) to arg<Any?>(8)
                 }
                 val heard = mutableListOf<Sound>()
                 every { observer.playSound(any<Location>(), any<Sound>(), any<SoundCategory>(),
@@ -122,7 +121,7 @@ class StaffSpellVisualsTest : FreeSpec({
 
                 val tasks = LifecycleTaskScope()
                 try {
-                    val visuals = StaffSpellVisuals(tasks)
+                    val visuals = StaffSpellVisuals(tasks, particleOwner)
                     val origin = Location(world, 0.0, 1.62, 0.0)
                     StaffSpell.entries.forEach { spell ->
                         visuals.release(origin, spell, charged = true)
@@ -162,17 +161,14 @@ class StaffSpellVisualsTest : FreeSpec({
                 every { world.isChunkLoaded(any<Int>(), any<Int>()) } returns true
                 every { world.getNearbyPlayers(any<Location>(), any<Double>()) } returns listOf(observer)
                 val particles = mutableListOf<Pair<Particle, Any?>>()
-                every { observer.spawnParticle(any<Particle>(), any<Location>(), any<Int>(),
-                    any<Double>(), any<Double>(), any<Double>(), any<Double>()) } answers {
-                    particles += firstArg<Particle>() to null
-                }
-                every { observer.spawnParticle(any<Particle>(), any<Location>(), any<Int>(),
-                    any<Double>(), any<Double>(), any<Double>(), any<Double>(), any<Any>()) } answers {
-                    particles += firstArg<Particle>() to arg<Any>(7)
+                val particleOwner = mockk<PaperViewerParticles>(relaxed = true)
+                every { particleOwner.emit(observer, any<Location>(), any<Particle>(), any<Int>(),
+                    any<Double>(), any<Double>(), any<Double>(), any<Double>(), any(), false) } answers {
+                    particles += arg<Particle>(2) to arg<Any?>(8)
                 }
                 val tasks = LifecycleTaskScope()
                 try {
-                    StaffSpellVisuals(tasks).lightning(Location(world, 0.0, 64.0, 0.0),
+                    StaffSpellVisuals(tasks, particleOwner).lightning(Location(world, 0.0, 64.0, 0.0),
                         Location(world, 96.0, 64.0, 0.0))
                     scheduler.tick(1)
                 } finally {
