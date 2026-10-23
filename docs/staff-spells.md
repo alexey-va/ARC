@@ -26,9 +26,10 @@ there is no click-toggle substitute or inferred left-button release timeout.
 
 Changing Shift, held slot/item, world or player lifecycle cancels an active
 charge. An accepted action starts a four-tick (0.2-second) global cooldown.
-Primary, secondary, Q and F each keep a separate deadline per player and staff
-family, so another ability is available after that short interval. Duplicate
-items or slot swaps do not bypass the same ability's deadline. Mastery adjusts
+Primary, secondary, Q and F each keep a separate deadline per player, shared
+across all staff families. Another ability is available after that short interval,
+but changing staves cannot bypass the same ability's deadline. The action that
+starts recovery supplies its duration, including mastery adjustments. Mastery adjusts
 primary/secondary/channel recovery once using the captured cast. Item lore and the HUD name the actual controls of
 the held staff, including existing prototype and EliteMobs items.
 
@@ -48,27 +49,32 @@ its centered text and offsets use the client camera's CENTER billboard frame.
 Movement and camera turns therefore do not wait for a server-follow teleport.
 HUD and defensive display passengers share one `PaperPacketDisplays` owner.
 
-`hud.motion.prediction-ticks` converts sampled speed to extra camera-local forward
-retreat, bounded by `max-lead-blocks`; it does not extrapolate a world anchor.
-`forward-blocks` and `vertical-blocks` add clearance during movement, and
-`settle-ticks` returns the card smoothly after stopping. Both chosen sides retain
-full-text reticle clearance, including the small native head-to-eye attachment
-offset. Whole-card wall clipping samples the center and corners from the player
-eye; wall pull-in and an explicit side change snap the local transform. Native
-text depth testing remains enabled. Offline first-person and F5 models do not
-establish native attachment offsets, third-person camera collision, or client
-acceptance.
+The camera-local pose stays fixed during walking, flight and yaw turns; it does
+not add server-sampled speed or turn prediction on top of native passenger motion.
+Legacy `hud.motion` values are ignored. Both chosen sides retain full-text reticle
+clearance, including the small native head-to-eye attachment offset. Only text
+bounds, eye-height/pitch correction and whole-card wall clipping update the local
+transform. Small changes accumulate against the last applied pose. Wall clipping
+samples the center and corners from the player eye; wall pull-in and an explicit
+side change snap the local transform. Native text depth testing remains enabled.
+Offline first-person and F5 models do not establish native attachment offsets,
+third-person camera collision, or client acceptance.
 
 Gravity's primary uses held right-click: press to grab, release to throw. Shift + right-click instead creates a caster-centered gravity pulse.
 Inferno is temporarily retired from issuance and casting. Existing EliteMobs
 Inferno assignments migrate once to Ember; old prototype IDs remain recognizable
 but cannot cast.
 
-Gravity selects a visible solid block within its reach, holds a visual boulder
-in front of the caster as the aim moves, and throws it when right-click is released. The
+Gravity selects a visible solid block within 32 blocks. When the direct ray finds
+no surface, it tries visible ground up to six blocks below a point four blocks
+ahead, so a horizontal aim can still grab a boulder in an open field. It holds
+the visual boulder in front of the caster as the aim moves and throws it when right-click is released. The
 boulder is a visual effect: Gravity does not move, break, place or replace
 world blocks. If the selected surface or safe path is unavailable, the grab is
-rejected.
+rejected. Impact uses 1.35 times the configured damage and power in the existing
+2.5-block radius. The secondary pulse pulls enemies inward while lifting them;
+after eight ticks, enemies that could not rise still receive one compression
+hit on the ground. Lifted enemies receive that one hit on landing instead.
 
 For every staff, left-click raises the frontal guard; Shift + left-click raises its
 all-around absorption shield. Defenses have their own recovery track, independent of the
@@ -106,27 +112,27 @@ are denied during duel preparation, countdown, spectator and locked states.
 | --- | --- | --- |
 | Chain | Lightning orb detonates near an exposed enemy or at its terminal point; optional Q recast | Spark blink |
 | Mark | Tether punishes leaving its anchor | Rift blink |
-| Frost | Shatter the caster's existing slows | Ground ice slide |
+| Frost | Shatter the caster's existing slows and bind the victim for one second | Ground ice slide |
 | Lance | Pin an enemy near the wall behind it | Backward vault |
 | Ember | Record a short trail; Q ignites it | Backward fire recoil |
 | Nova | Rooting seed trap | Pull toward a visible solid anchor |
-| Icicle | Compact 4.5-block radial crystal burst | Ice-step double impulse |
+| Icicle | 4.5-block radial crystal burst binds victims for 1.2 seconds | Ice-step double impulse |
 | Fault | Magic-cover wall; Q shatters it forward | Ground rush |
 | Lunar | Wide outbound and returning crescent | Short phase blink |
 | Gale | Fixed five-second hurricane, radius 7.5 / height 13; separate 30-second recovery | Brief steerable glide |
 | Tide | Water capsule breaks on accepted damage | Forward surf |
 | Requiem | Timed bell; Q strikes during its active window | Bell blink |
-| Prism | Triangle damages enemies crossing its edges | Steerable speed burst |
+| Prism | Triangle damages crossing enemies and applies Slow II for two seconds | Steerable speed burst |
 | Necromancer | Prepare an existing-army volley with one empowered leading arrow; empty aim rallies the army | Soul blink |
-| Gravity | Hold one enemy; Q throws it | Ballistic leap |
+| Gravity | Full-power strike and 1.4-second hold; Q releases and throws the victim | Ballistic leap |
 | Ossuary | Closing bone-jaw trap | Bone-ridge rush |
 
-Q and F have separate per-player, per-staff-family cooldowns, retained when
-changing staves or reconnecting. A four-tick GCD prevents same-tick bursts; round
+Q and F have separate per-player cooldowns shared by all staff families, retained
+when changing staves or reconnecting. A four-tick GCD prevents same-tick bursts; round
 reset clears the round's cooldowns. Per-staff defaults live at
 `<staff>.hotkeys.q.cooldown-ticks` and `f.cooldown-ticks` in `staff-spells.yml`.
 The existing HUD and item lore expose Q/F availability and continuation state.
-Necromancer's Q has a separate 20-second cooldown. After a 12-tick preparation,
+Necromancer's Q starts a 20-second shared Q cooldown. After a 12-tick preparation,
 each existing archer can spend one remaining ordinary shot; a designated leading
 arrow has 2.5 times the normal power. The order grants no new actors, ammunition
 or lifetime. Its arrows can travel 32 blocks; accepted hits are bounded to four
@@ -144,11 +150,19 @@ loaded chunks, safe landing and arena bounds; blinks may cross intervening
 cover but cannot land outside the allowed arena. Virtual Fault cover blocks
 staff rays, not ordinary projectiles or player movement. World blocks remain
 unchanged. Cancelled or expired casts release their own control effects.
+Frost Q binds only after an accepted shatter hit and consumes only that caster's
+still-active staff slow. Icicle Q also binds only after accepted damage. Both
+reuse the existing root lifecycle and restore the prior slow on release. Prism's
+growing primary beams follow their selected targets until fully extended; the
+full beams remain dangerous through tick 24, and secondary segments through
+tick 32. Each cast hits a victim once. New cover clips the connected route at
+the first blocked segment, including its downstream visuals.
 
 Focused checks: `:arc-dungeons:test --tests ru.arc.staffspells.StaffSpellInputTest`,
 `StaffSpellMobilityTest`, `StaffSpellConjurationsTest`,
 `StaffSpellTechniquesRuntimeTest`, `StaffMagicBarriersTest` and
-`StaffHotkeyCooldownsTest`; ArcDuels' `KitRegistryMagicTest` covers the policy
+`StaffHotkeyCooldownsTest`, `StaffSharedCooldownTest` and `StaffSpellHudTest`;
+ArcDuels' `KitRegistryMagicTest` covers the policy
 adapter. `:arc-dungeons:exportStaffHotkeyPreview` exports 33 clips: 17 Q
 controller captures (including CHAIN proximity) and 16 F helper clips on
 explicitly synthetic paths. Q captures production display, particle and sound
@@ -162,7 +176,7 @@ damage or Minecraft-client acceptance.
 | --- | --- | --- | --- | --- | --- |
 | `chain` · Грозовая ветвь | Lightning jumps between up to four enemies | Грозовой круг expands a jagged lightning front eight blocks around the caster, blocked by cover | Грозовой заслон | Круговой покров | `3dfantasyweaponscit:divine_staff` |
 | `mark` · Разрыв | A targeted void rupture follows the enemy, then explodes | Чёрная дыра shrinks and draws mobs into a growing core, then releases survivors | Покров пустоты | Круговой покров | `3dfantasyweaponscit:night_staff` |
-| `frost` · Ледяной хлопок | A broad field of clustered ice teeth rises in front, reaches seven blocks and briefly slows enemies | Полярный круг expands an ice front eight blocks from the caster | Ледяной щит | Круговой покров | `3dfantasyweaponscit:northgate_guardian_staff` |
+| `frost` · Ледяной хлопок | A broad field of clustered ice teeth rises in front, reaches seven blocks and applies Slow II for two seconds by default | Полярный круг expands an ice front eight blocks from the caster | Ледяной щит | Круговой покров | `3dfantasyweaponscit:northgate_guardian_staff` |
 | `lance` · Солнечное копьё | A ranged solar spear pierces up to three enemies, applying damage when its light front arrives | Three diverging solar beams | Солнечный щит | Круговой покров | `3dfantasyweaponscit:sagrada_winged_staff` |
 | `ember` · Пепельная комета | Fireball grows below the reticle with four-tick interpolation, then launches immediately with forward speed and accelerates | Three ground circles lock on cast; the first meteor launches after a 15-tick warning | Огненный заслон | Круговой покров | `3dfantasyweaponscit:bermunde_hermit_staff` |
 | `nova` · Терновый хват | Seeded winding roots branch over terrain and climb one-block steps up to 18 blocks; airborne casts seed a visible surface | Терновая клетка warns around the aimed 4.5-block area, then closes inward | Терновый заслон | Круговой покров | `3dfantasyweaponscit:holy_celtic_staff` |
@@ -172,9 +186,9 @@ damage or Minecraft-client acceptance.
 | `gale` · Посох бури | An open tornado wanders irregularly around the aimed point and lifts enemies along its path | Шквал follows full-pitch aim up to 56 blocks, including upward; contact with an enemy, cover or the endpoint triggers the burst | Ветряной щит | Круговой покров | `3dfantasyweaponscit:goblin_witch_staff` |
 | `tide` · Сердце прилива | A compressed rotating water droplet flies up to 32 blocks along full-pitch aim and bursts on contact, cover or range | Приливный вал is a broad curled wave with a foamy crest that travels forward | Водяной заслон | Круговой покров | `3dfantasyweaponscit:northgate_guardian_staff` |
 | `requiem` · Реквием | A copper-and-gold bell forms above the aimed point, tolls at 0.8 seconds and releases a five-block soul wave | Погребальный перезвон suspends the bell above the caster and releases three seven-block waves, with five-second minimum recovery | Покров душ | Круговой покров | `3dfantasyweaponscit:lich_staff` |
-| `prism` · Кристальная призма | A crystal grows at the aimed point and refracts beams into up to three enemies | Three rays converge on the selected point | Гранёный щит | Круговой покров | `3dfantasyweaponscit:northgate_golden_crook` |
+| `prism` · Кристальная призма | A crystal grows at the aimed point; growing beams track up to three selected enemies and use 1.20 times configured power and damage | A connected refracted beam pierces up to six enemies with 1.25 times configured power and damage | Гранёный щит | Круговой покров | `3dfantasyweaponscit:northgate_golden_crook` |
 | `necromancer` · Зов могилы | Adds two skeleton archers for 45 seconds; up to ten minions can coexist | Костяной жнец summons one larger wither-skeleton commander | Костяной заслон | Круговой покров | `3dfantasyweaponscit:lich_staff` |
-| `gravity` · Гравитационный захват | Grab a surface within 32 blocks, hold the same boulder, and release into a fast accelerating throw up to 32 blocks | Гравитационный обвал lifts visible enemies within 6.5 blocks, then slams those that actually rose; contact damage occurs once on landing | Каменный заслон | Круговой покров | `3dfantasyweaponscit:staff_of_unholy_wisdom` |
+| `gravity` · Гравитационный захват | Grab a surface within 32 blocks, hold the same boulder, and release into a fast accelerating throw up to 32 blocks | Гравитационный обвал lifts visible enemies within 6.5 blocks, pulls inward, then slams lifted enemies or compresses grounded ones; each receives at most one contact hit | Каменный заслон | Круговой покров | `3dfantasyweaponscit:staff_of_unholy_wisdom` |
 | `ossuary` · Костяной прокол | Individually seeded curved bone clusters erupt along a fixed 24-block forward path, blocked by walls | Костяной прорыв warns at the aimed point, then irregular branching bone clusters erupt across a 5.5–6 block radius | Щит рёбер | Круговой покров | `3dfantasyweaponscit:lich_staff` |
 
 Each sample uses its configured ItemsAdder skin; issuance fails with a player

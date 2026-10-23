@@ -196,8 +196,10 @@ object StaffHotkeyPreviewExport {
                     "point" to point(relative(secondArg())))
                 liveSummons?.commandRally(firstArg(), secondArg(), thirdArg()) ?: true
             }
-            val techniques = StaffSpellTechniques(settings, damage, h.effects, visuals, targeting, summons)
             val conjurations = StaffSpellConjurations(settings, damage, h.effects, visuals, targeting)
+            val techniques = StaffSpellTechniques(settings, damage, h.effects, visuals, targeting, summons,
+                rootTarget = conjurations::rootTarget, rootActive = conjurations::rootActive,
+                clearRoots = conjurations::clearRoots)
             val frames = mutableListOf<Map<String, Any>>()
             val duration = qDuration(spell, proximity)
             var throwVelocity: Vector? = null

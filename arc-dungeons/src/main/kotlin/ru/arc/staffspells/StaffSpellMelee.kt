@@ -138,10 +138,10 @@ internal class StaffSpellMelee(
             if (pending[player.uniqueId] !== swing || !current(player, swing)) break
             if (!damage.eligible(player, target, swing.cast)) continue
             if (swing.spell == StaffSpell.FROST &&
-                target.addPotionEffect(PotionEffect(PotionEffectType.SLOWNESS, 16, 0, false, false)) &&
+                target.addPotionEffect(PotionEffect(PotionEffectType.SLOWNESS, settings.frostSlowTicks, 1, false, true)) &&
                 pending[player.uniqueId] === swing && current(player, swing) &&
                 damage.eligible(player, target, swing.cast) && visible(player.eyeLocation, target)) {
-                onFrostSlow(player, target, 16)
+                onFrostSlow(player, target, settings.frostSlowTicks)
             }
             val push = when (swing.spell) { StaffSpell.FAULT -> 0.42; StaffSpell.TIDE -> 0.35; else -> 0.0 }
             if (push > 0.0) target.velocity = target.velocity.clone().add(swing.horizontal.clone().multiply(push))

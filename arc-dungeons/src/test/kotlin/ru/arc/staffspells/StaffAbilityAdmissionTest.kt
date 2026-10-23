@@ -50,11 +50,11 @@ class StaffAbilityAdmissionTest : FreeSpec({
 
             val elapsed = if (action == "Q") 1L else 0L
             h.captures.size shouldBe 2
-            h.controller.skillRemaining(player.uniqueId, StaffSpell.GRAVITY) shouldBe 20L - elapsed
+            h.controller.skillRemaining(player.uniqueId) shouldBe 20L - elapsed
             h.cooldowns.remainingTicks(player.uniqueId) shouldBe 4L - elapsed
             h.controller.canCharge(player, StaffSpell.GRAVITY, secondary = true) shouldBe false
             h.scheduler.tick(4)
-            h.controller.skillRemaining(player.uniqueId, StaffSpell.GRAVITY) shouldBe 16L - elapsed
+            h.controller.skillRemaining(player.uniqueId) shouldBe 16L - elapsed
             h.controller.canCharge(player, StaffSpell.GRAVITY, secondary = true) shouldBe true
         }
     }
@@ -69,7 +69,7 @@ class StaffAbilityAdmissionTest : FreeSpec({
 
             if (release) h.controller.releaseChannel(player) else h.controller.cancelChannel(player)
 
-            h.controller.skillRemaining(player.uniqueId, StaffSpell.GRAVITY) shouldBe 20L
+            h.controller.skillRemaining(player.uniqueId) shouldBe 20L
             h.cooldowns.remainingTicks(player.uniqueId) shouldBe if (release) 4L else 0L
             if (release) {
                 h.scheduler.tick(3)

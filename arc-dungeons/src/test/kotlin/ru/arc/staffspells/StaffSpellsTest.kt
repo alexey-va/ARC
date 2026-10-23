@@ -542,10 +542,10 @@ class StaffSpellsTest : FreeSpec({
 
             h.controller.cast(player, StaffCastInput.PRIMARY, 0.5)
             h.cooldowns.remainingTicks(player.uniqueId) shouldBe 4L
-            h.controller.skillRemaining(player.uniqueId, StaffSpell.ICICLE) shouldBe 20L
+            h.controller.skillRemaining(player.uniqueId) shouldBe 20L
             displays.text().startsWith("ПКМ · Ледяной венец\n1.0 с ") shouldBe true
             h.scheduler.tick(8)
-            h.controller.skillRemaining(player.uniqueId, StaffSpell.ICICLE) shouldBe 12L
+            h.controller.skillRemaining(player.uniqueId) shouldBe 12L
             displays.text().startsWith("ПКМ · Ледяной венец\n0.6 с ") shouldBe true
 
             player.isSneaking = true
@@ -553,8 +553,8 @@ class StaffSpellsTest : FreeSpec({
             h.scheduler.tick(4)
             displays.records.size shouldBe 1
             h.captures.size shouldBe 1
-            h.controller.skillRemaining(player.uniqueId, StaffSpell.ICICLE) shouldBe 8L
-            h.controller.skillRemaining(player.uniqueId, StaffSpell.FAULT, secondary = true) shouldBe 0L
+            h.controller.skillRemaining(player.uniqueId) shouldBe 8L
+            h.controller.skillRemaining(player.uniqueId, secondary = true) shouldBe 0L
             displays.text().startsWith("Shift + ПКМ · Каменный выброс\nQ готово") shouldBe true
 
             player.inventory.setItemInMainHand(ItemStack(Material.AIR))
@@ -587,17 +587,17 @@ class StaffSpellsTest : FreeSpec({
             player.isSneaking = true
             h.controller.start()
             h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
-            h.controller.skillRemaining(player.uniqueId, StaffSpell.ICICLE, secondary = true) shouldBe 30L
+            h.controller.skillRemaining(player.uniqueId, secondary = true) shouldBe 30L
             h.scheduler.tick(8)
             h.controller.onQuit(PlayerQuitEvent(player, Component.empty()))
             h.scheduler.tick(4) // Mock quit leaves the player online, modelling the returning HUD.
-            val remaining = h.controller.skillRemaining(player.uniqueId, StaffSpell.ICICLE, secondary = true)
+            val remaining = h.controller.skillRemaining(player.uniqueId, secondary = true)
             remaining shouldBe 18L
             displays.text().startsWith("Дождь · Shift + ПКМ\nВосстановление 0.9 с\n") shouldBe true
             displays.text().substringBefore("\nQ ").endsWith(staffSpellHudBar(staffCooldownProgress(remaining, 30).toDouble())) shouldBe true
             h.controller.cast(player)
             h.captures.size shouldBe 1
-            h.controller.skillRemaining(player.uniqueId, StaffSpell.ICICLE, secondary = true) shouldBe remaining
+            h.controller.skillRemaining(player.uniqueId, secondary = true) shouldBe remaining
         }
     }
 
@@ -795,7 +795,7 @@ class StaffSpellsTest : FreeSpec({
             h.controller.cast(player)
             h.hits shouldBe emptyList()
             h.projectileMoves shouldBe emptyList()
-            h.controller.skillRemaining(player.uniqueId, StaffSpell.CHAIN, secondary = true) shouldBe 80L
+            h.controller.skillRemaining(player.uniqueId, secondary = true) shouldBe 80L
             h.scheduler.tick(8)
 
             h.hits shouldBe listOf(behind)
@@ -1198,7 +1198,7 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "short GCD separates per-spell primary secondary Q and F cooldowns" {
+    "short GCD separates primary secondary Q and F while staves share each input cooldown" {
         withStaffHarness { h ->
             every { h.effects.custom(any(), any(), any(), any(), any()) } returns UUID.randomUUID()
             every { h.effects.isActive(any()) } returns true
@@ -1206,7 +1206,7 @@ class StaffSpellsTest : FreeSpec({
             val player = h.player("staff-specific-cooldown", world, StaffSpell.CHAIN)
             h.controller.start()
             h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
-            h.controller.skillRemaining(player.uniqueId, StaffSpell.CHAIN, secondary = true) shouldBe 80L
+            h.controller.skillRemaining(player.uniqueId, secondary = true) shouldBe 80L
             h.controller.canCharge(player, StaffSpell.CHAIN) shouldBe false
             h.controller.canHotkey(player, StaffSpell.CHAIN, StaffHotkey.Q) shouldBe false
             h.scheduler.tick(4)
@@ -1222,8 +1222,9 @@ class StaffSpellsTest : FreeSpec({
             h.controller.canHotkey(player, StaffSpell.CHAIN, StaffHotkey.Q) shouldBe false
             h.controller.canHotkey(player, StaffSpell.CHAIN, StaffHotkey.F) shouldBe true
             player.inventory.setItemInMainHand(h.config.item(StaffSpell.FROST))
-            h.controller.canCharge(player, StaffSpell.FROST, secondary = true) shouldBe true
-            h.controller.canHotkey(player, StaffSpell.FROST, StaffHotkey.Q) shouldBe true
+            h.controller.canCharge(player, StaffSpell.FROST, secondary = true) shouldBe false
+            h.controller.canHotkey(player, StaffSpell.FROST, StaffHotkey.Q) shouldBe false
+            h.controller.canCharge(player, StaffSpell.FROST) shouldBe true
             player.inventory.setItemInMainHand(h.config.item(StaffSpell.CHAIN))
             h.controller.canHotkey(player, StaffSpell.CHAIN, StaffHotkey.Q) shouldBe false
             h.controller.canCharge(player, StaffSpell.CHAIN, secondary = true) shouldBe false

@@ -17,6 +17,61 @@ import ru.arc.paper.testing.MockBukkitTestRuntime
 import java.util.UUID
 
 class StaffSpellChannelsTest : FreeSpec({
+    "gravity gathers visible ground on an open field and lands one empowered boulder hit" {
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("gravity-open-field")
+            for (x in -1..1) for (z in 0..12) world.getBlockAt(x, 63, z).type = Material.STONE
+            val player = h.player("gravity-open-field", world, StaffSpell.GRAVITY)
+            val target = h.zombie(world, .5, 8.0)
+            val hits = mutableListOf<Pair<UUID, Double>>()
+            val (damage, visuals) = channelDependencies(hits)
+            val settings = staffSettings()
+            val channels = StaffSpellChannels(settings, damage, h.effects, visuals, StaffSpellTargeting(settings, damage))
+            channels.start()
+            val cast = StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false)
+            val tuning = StaffSpellTuning(1.2, 10.0, 44)
+
+            channels.begin(player, StaffSpell.GRAVITY, cast, tuning, secondary = false) shouldBe true
+            channels.release(player)
+            h.scheduler.tick(40)
+
+            hits shouldBe listOf(target.uniqueId to 13.5)
+            verify(exactly = 1) { damage.hit(player, target, cast, tuning.power * 1.35, 13.5) }
+            world.getBlockAt(0, 63, 4).type shouldBe Material.STONE
+            channels.close()
+        }
+    }
+
+    "gravity compresses an unlifted grounded target once and draws it toward the caster" {
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("gravity-low-ceiling")
+            for (x in -1..1) for (z in 0..8) {
+                world.getBlockAt(x, 63, z).type = Material.STONE
+                world.getBlockAt(x, 66, z).type = Material.STONE
+            }
+            val player = h.player("gravity-low-ceiling", world, StaffSpell.GRAVITY)
+            val target = h.zombie(world, .5, 4.5)
+            val hits = mutableListOf<Pair<UUID, Double>>()
+            val (damage, visuals) = channelDependencies(hits)
+            val settings = staffSettings()
+            val channels = StaffSpellChannels(settings, damage, h.effects, visuals, StaffSpellTargeting(settings, damage))
+            channels.start()
+            val cast = StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false)
+
+            channels.gravityPulse(player, cast, StaffSpellTuning(1.2, 10.0, 44)) shouldBe true
+            target.velocity.z shouldBe -0.35
+            // MockBukkit has no entity physics: reproduce a ceiling stopping the launch at its original floor.
+            target.velocity = Vector()
+            h.scheduler.tick(6)
+            hits shouldBe emptyList()
+            h.scheduler.tick(2)
+            hits shouldBe listOf(target.uniqueId to 10.0)
+            h.scheduler.tick(40)
+            hits.size shouldBe 1
+            channels.close()
+        }
+    }
+
     "inferno has a bright bounded stream and spends at most one full-hit budget over sixty ticks" {
         withStaffHarness(settings = staffSettings(range = 24.0)) { h ->
             val clearWorld = h.paper.addSimpleWorld("channel-inferno-clear")

@@ -11,6 +11,75 @@ import org.bukkit.event.player.PlayerQuitEvent
 import java.util.UUID
 
 class StaffSpellArsenalTest : FreeSpec({
+    "new cover severs the complete Prism route even while the caster can still see its target" {
+        withStaffHarness { h ->
+            val scenes = recordArsenalCustomScenes(h)
+            val world = h.paper.addSimpleWorld("prism-severed-route")
+            for (x in -2..4) for (z in 0..12) world.getBlockAt(x, 63, z).type = Material.STONE
+            val player = h.player("prism-severed-route", world, StaffSpell.PRISM)
+            val target = h.zombie(world, .5, 8.0)
+            h.controller.start()
+            h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
+            h.scheduler.tick(10)
+            h.hits shouldBe emptyList()
+            scenes.single().geometry(8).size shouldBe 4
+
+            world.getBlockAt(1, 65, 4).type = Material.STONE
+            visible(player.eyeLocation, target) shouldBe true
+            h.scheduler.tick(2)
+
+            scenes.single().geometry(8).map { it.identity } shouldBe listOf("prism:refract:beam:0")
+            verify(exactly = 1) { h.effects.updateCustom(any(), any(), any()) }
+            h.scheduler.tick(30)
+            h.hits shouldBe emptyList()
+        }
+    }
+
+    "Prism primary tracks a moving selected target until its beam arrives and hits it once" {
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("prism-moving-target")
+            val player = h.player("prism-moving-target", world, StaffSpell.PRISM)
+            val target = h.zombie(world, .5, 8.0)
+            h.controller.start()
+            h.controller.cast(player)
+            h.scheduler.tick(10)
+            h.hits shouldBe emptyList()
+
+            target.teleport(target.location.clone().add(3.0, 0.0, 0.0))
+            h.scheduler.tick(6)
+
+            h.hits shouldBe listOf(target)
+            h.damageScales.single().first shouldBe 1.2
+            (kotlin.math.abs(h.damageScales.single().second - 7.2) < 1.0e-9) shouldBe true
+            h.scheduler.tick(30)
+            h.hits shouldBe listOf(target)
+        }
+    }
+
+    "Prism refracted beams catch a late arrival only while their grown segment remains exposed" {
+        for (covered in listOf(false, true)) {
+            withStaffHarness { h ->
+                val world = h.paper.addSimpleWorld("prism-late-arrival-$covered")
+                val player = h.player("prism-late-arrival-$covered", world, StaffSpell.PRISM)
+                h.zombie(world, .5, 4.0)
+                h.zombie(world, .5, 8.0)
+                h.controller.start()
+                h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
+                h.scheduler.tick(24)
+                h.hits.size shouldBe 2
+                val late = h.zombie(world, .5, 6.0)
+                if (covered) for (x in -2..2) for (y in 63..69) world.getBlockAt(x, y, 5).type = Material.STONE
+
+                h.scheduler.tick(8)
+
+                h.hits.count { it == late } shouldBe if (covered) 0 else 1
+                h.damageScales.all { it == (1.25 to 7.5) } shouldBe true
+                h.scheduler.tick(30)
+                h.hits.count { it == late } shouldBe if (covered) 0 else 1
+            }
+        }
+    }
+
     "NOVA roots every exposed area target for seventy ticks across staff swaps and two followups" {
         withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("nova-network-hold")

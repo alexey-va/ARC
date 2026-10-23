@@ -12,6 +12,25 @@ import org.bukkit.util.Vector
 import java.util.UUID
 
 class StaffSpellConjurationsTest : FreeSpec({
+    "Frost Q leaves its existing slow untouched when damage is rejected" {
+        withStaffHarness(hit = { _, _ -> false }) { h ->
+            val scenes = mutableListOf<CustomConjurationScene>()
+            recordConjurationScenes(h, scenes, mutableListOf())
+            val world = h.paper.addSimpleWorld("staff-frost-q-rejected-root")
+            val player = h.player("staff-frost-q-rejected-root", world, StaffSpell.FROST)
+            val target = h.zombie(world, .5, 4.5)
+            target.addPotionEffect(PotionEffect(PotionEffectType.SLOWNESS, 40, 1))
+            h.controller.conjurations.rememberFrostSlow(player, target, 40)
+
+            h.controller.conjurations.cast(player, StaffSpell.FROST, conjurationCast(player),
+                staffSettings().tuning.getValue(StaffSpell.FROST)) shouldBe true
+
+            h.hits shouldBe listOf(target)
+            target.getPotionEffect(PotionEffectType.SLOWNESS)?.amplifier shouldBe 1
+            target.getPotionEffect(PotionEffectType.SLOWNESS)?.duration shouldBe 40
+        }
+    }
+
     "MARK anchors to an exposed head and expires only when the whole body is covered" {
         withStaffHarness { h ->
             val scenes = mutableListOf<CustomConjurationScene>()
@@ -210,10 +229,13 @@ class StaffSpellConjurationsTest : FreeSpec({
 
             h.hits.count { it.uniqueId == ownedTarget.uniqueId } shouldBe 2
             h.hits.any { it.uniqueId == otherTarget.uniqueId } shouldBe false
-            ownedTarget.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
+            ownedTarget.getPotionEffect(PotionEffectType.SLOWNESS)?.amplifier shouldBe 7
+            ownedTarget.getPotionEffect(PotionEffectType.SLOWNESS)?.duration shouldBe 20
             otherTarget.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe true
             scenes.size shouldBe 1
             scenes.single().geometry(12).size shouldBe 36
+            repeat(20) { h.paper.performTicks(1); h.scheduler.tick(1) }
+            ownedTarget.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
         }
     }
 

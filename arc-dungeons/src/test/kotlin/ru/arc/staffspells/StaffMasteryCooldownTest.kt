@@ -28,16 +28,16 @@ class StaffMasteryCooldownTest : FreeSpec({
                 h.controller.cast(secondary, StaffCastInput.SECONDARY, 0.0)
                 h.controller.cast(unchanged, StaffCastInput.SECONDARY, 0.0)
                 durations shouldBe listOf(20L, 80L, 80L)
-                h.controller.skillRemaining(primary.uniqueId, StaffSpell.CHAIN) shouldBe 19L
-                h.controller.skillRemaining(secondary.uniqueId, StaffSpell.CHAIN, secondary = true) shouldBe 73L
-                h.controller.skillRemaining(unchanged.uniqueId, StaffSpell.CHAIN, secondary = true) shouldBe 80L
+                h.controller.skillRemaining(primary.uniqueId) shouldBe 19L
+                h.controller.skillRemaining(secondary.uniqueId, secondary = true) shouldBe 73L
+                h.controller.skillRemaining(unchanged.uniqueId, secondary = true) shouldBe 80L
                 h.scheduler.tick(18)
-                h.controller.skillRemaining(primary.uniqueId, StaffSpell.CHAIN) shouldBe 1L
+                h.controller.skillRemaining(primary.uniqueId) shouldBe 1L
                 h.controller.canCharge(primary, StaffSpell.CHAIN) shouldBe false
                 h.scheduler.tick(1)
                 h.controller.canCharge(primary, StaffSpell.CHAIN) shouldBe true
                 h.scheduler.tick(53)
-                h.controller.skillRemaining(secondary.uniqueId, StaffSpell.CHAIN, secondary = true) shouldBe 1L
+                h.controller.skillRemaining(secondary.uniqueId, secondary = true) shouldBe 1L
                 h.controller.canCharge(secondary, StaffSpell.CHAIN, secondary = true) shouldBe false
                 h.scheduler.tick(1)
                 h.controller.canCharge(secondary, StaffSpell.CHAIN, secondary = true) shouldBe true
@@ -68,7 +68,7 @@ class StaffMasteryCooldownTest : FreeSpec({
                 h.controller.cancelChannel(player)
                 h.captures.size shouldBe 1
                 casts.single().casterId shouldBe player.uniqueId
-                h.controller.skillRemaining(player.uniqueId, StaffSpell.GRAVITY) shouldBe 19L
+                h.controller.skillRemaining(player.uniqueId) shouldBe 19L
                 h.controller.cancelChannel(player)
                 casts.size shouldBe 1
             } finally {
@@ -89,20 +89,20 @@ class StaffMasteryCooldownTest : FreeSpec({
             h.captures.size shouldBe 4
             h.controller.onQuit(PlayerQuitEvent(quitting, Component.empty()))
             h.controller.onDeath(mockk<PlayerDeathEvent> { every { entity } returns dying })
-            h.controller.skillRemaining(quitting.uniqueId, StaffSpell.CHAIN) shouldBe 20L
-            h.controller.skillRemaining(dying.uniqueId, StaffSpell.CHAIN) shouldBe 20L
+            h.controller.skillRemaining(quitting.uniqueId) shouldBe 20L
+            h.controller.skillRemaining(dying.uniqueId) shouldBe 20L
             h.controller.cast(quitting)
             h.controller.cast(dying)
             h.captures.size shouldBe 4
             h.controller.resetPlayer(resetting.uniqueId)
-            h.controller.skillRemaining(resetting.uniqueId, StaffSpell.CHAIN) shouldBe 0L
+            h.controller.skillRemaining(resetting.uniqueId) shouldBe 0L
             h.scheduler.tick(19)
-            h.controller.skillRemaining(quitting.uniqueId, StaffSpell.CHAIN) shouldBe 1L
-            h.controller.skillRemaining(dying.uniqueId, StaffSpell.CHAIN) shouldBe 1L
-            h.controller.skillRemaining(closing.uniqueId, StaffSpell.CHAIN) shouldBe 1L
+            h.controller.skillRemaining(quitting.uniqueId) shouldBe 1L
+            h.controller.skillRemaining(dying.uniqueId) shouldBe 1L
+            h.controller.skillRemaining(closing.uniqueId) shouldBe 1L
             h.controller.close()
             listOf(quitting, dying, closing).forEach {
-                h.controller.skillRemaining(it.uniqueId, StaffSpell.CHAIN) shouldBe 0L
+                h.controller.skillRemaining(it.uniqueId) shouldBe 0L
             }
         }
     }
@@ -122,7 +122,7 @@ class StaffMasteryCooldownTest : FreeSpec({
                 calls shouldBe 0
                 StaffSpellsModule.installMasteryCooldown(null)
                 h.controller.cast(ordinary)
-                h.controller.skillRemaining(ordinary.uniqueId, StaffSpell.CHAIN) shouldBe 20L
+                h.controller.skillRemaining(ordinary.uniqueId) shouldBe 20L
             } finally {
                 StaffSpellsModule.installMasteryCooldown(null)
             }

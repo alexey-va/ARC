@@ -179,8 +179,8 @@ class StaffSpellMeleeTest : FreeSpec({
                         StaffSpell.FROST -> {
                             denied.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
                             val slow = requireNotNull(accepted.getPotionEffect(PotionEffectType.SLOWNESS))
-                            slow.duration shouldBe 16
-                            slow.amplifier shouldBe 0
+                            slow.duration shouldBe settings.frostSlowTicks
+                            slow.amplifier shouldBe 1
                         }
                         StaffSpell.FAULT -> {
                             abs(denied.velocity.z) shouldBe 0.0
