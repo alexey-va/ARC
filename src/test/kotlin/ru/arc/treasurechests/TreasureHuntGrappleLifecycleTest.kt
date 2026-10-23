@@ -42,6 +42,112 @@ import java.util.concurrent.ConcurrentHashMap
 
 class TreasureHuntGrappleLifecycleTest : DescribeSpec({
     describe("spawn grapple item lifecycle") {
+        it("grants the same hook in the mine without a hunt and removes it outside the main map") {
+            MockBukkitTestRuntime.open().use { runtime ->
+                val harness = harness(runtime)
+                val mine = runtime.addSimpleWorld("rc_atelier_compact_mine")
+                val player = runtime.addPlayer("miner")
+                player.addAttachment(harness.plugin, "arcfarms.mine", true)
+                player.inventory.setItem(0, ItemStack(Material.DIAMOND, 3))
+                player.teleport(Location(mine, 30.5, 111.0, 43.5))
+                harness.grapple.reloadConfig(settings().copy(areas = listOf(mineGrappleArea())))
+
+                taggedCount(player, harness.plugin) shouldBe 1
+                harness.grapple.onActiveHuntsChanged(emptyList())
+                taggedCount(player, harness.plugin) shouldBe 1
+
+                player.teleport(Location(mine, -69.5, 106.0, -224.5))
+                runtime.performTicks(1)
+
+                taggedCount(player, harness.plugin) shouldBe 0
+                player.inventory.getItem(0) shouldBe ItemStack(Material.DIAMOND, 3)
+                player.teleport(Location(mine, 30.5, 83.0, 43.5))
+                runtime.performTicks(1)
+                taggedCount(player, harness.plugin) shouldBe 1
+                harness.grapple.close()
+            }
+        }
+
+        it("does not pull a mine player toward an anchor outside the configured cuboid") {
+            withGrappleBlockRayTrace(hitDistance = 24.0) { runtime ->
+                val harness = harness(runtime)
+                val mine = runtime.addSimpleWorld("rc_atelier_compact_mine")
+                val player = runtime.addPlayer("mine-boundary")
+                player.addAttachment(harness.plugin, "arcfarms.mine", true)
+                player.teleport(Location(mine, 80.5, 111.0, 43.5))
+                harness.grapple.reloadConfig(settings().copy(areas = listOf(mineGrappleArea())))
+                look(player, Vector(1.0, 0.0, 0.0))
+                player.velocity = Vector()
+
+                harness.grapple.onInteract(rightClick(player, player.inventory.itemInMainHand))
+                runtime.performTicks(10)
+
+                player.velocity shouldBe Vector()
+                verify(exactly = 1) { harness.spawnedHeads.single().remove() }
+                harness.grapple.close()
+            }
+        }
+
+        it("keeps the existing mine access permission at hook issuance") {
+            MockBukkitTestRuntime.open().use { runtime ->
+                val harness = harness(runtime)
+                val mine = runtime.addSimpleWorld("rc_atelier_compact_mine")
+                val player = runtime.addPlayer("locked-miner")
+                player.addAttachment(harness.plugin, "arcfarms.mine", false)
+                player.teleport(Location(mine, 30.5, 111.0, 43.5))
+                harness.grapple.reloadConfig(settings().copy(areas = listOf(mineGrappleArea())))
+
+                taggedCount(player, harness.plugin) shouldBe 0
+                harness.grapple.close()
+            }
+        }
+
+        it("stops a spawn pull when the hunt ends while permanent mine access stays enabled") {
+            withGrappleBlockRayTrace(hitDistance = 8.0) { runtime ->
+                val harness = harness(runtime)
+                val origin = runtime.addSimpleWorld("rc_origin_spawn")
+                val mine = runtime.addSimpleWorld("rc_atelier_compact_mine")
+                val player = runtime.addPlayer("hunter")
+                val miner = runtime.addPlayer("permanent-miner")
+                miner.addAttachment(harness.plugin, "arcfarms.mine", true)
+                miner.teleport(Location(mine, 30.5, 111.0, 43.5))
+                move(player, origin)
+                standOnGround(origin)
+                harness.grapple.reloadConfig(settings().copy(areas = listOf(mineGrappleArea())))
+                startHunt(harness.grapple, origin)
+                look(player, Vector(0.0, 0.0, -1.0))
+                harness.grapple.onInteract(rightClick(player, player.inventory.itemInMainHand))
+                runtime.performTicks(3)
+                (player.velocity.length() > 0.0) shouldBe true
+
+                harness.grapple.onActiveHuntsChanged(emptyList())
+
+                taggedCount(player, harness.plugin) shouldBe 0
+                player.velocity shouldBe Vector()
+                taggedCount(miner, harness.plugin) shouldBe 1
+                harness.grapple.close()
+            }
+        }
+
+        it("does not issue a hook when a queued mine entry is followed by death") {
+            MockBukkitTestRuntime.open().use { runtime ->
+                val harness = harness(runtime)
+                val mine = runtime.addSimpleWorld("rc_atelier_compact_mine")
+                val player = runtime.addPlayer("dead-on-entry")
+                player.addAttachment(harness.plugin, "arcfarms.mine", true)
+                player.teleport(Location(mine, -69.5, 106.0, -224.5))
+                harness.grapple.reloadConfig(settings().copy(areas = listOf(mineGrappleArea())))
+                player.teleport(Location(mine, 30.5, 111.0, 43.5))
+                player.health = 0.0
+                player.isDead shouldBe true
+
+                runtime.performTicks(1)
+
+                taggedCount(player, harness.plugin) shouldBe 0
+                harness.grapple.close()
+            }
+        }
+
         it("grants one tagged hook to an Origin player without changing ordinary items") {
             MockBukkitTestRuntime.open().use { runtime ->
                 val harness = harness(runtime)
@@ -66,7 +172,7 @@ class TreasureHuntGrappleLifecycleTest : DescribeSpec({
                         "Повторный ПКМ меняет цель даже в полёте.",
                         "Shift — отпустить крюк.",
                         "",
-                        "Действует во время охоты на спавне.",
+                        "Действует в шахте и во время охоты на спавне.",
                     )
                 taggedCount(player, harness.plugin) shouldBe 1
                 hotbarSnapshot(player).take(2) shouldBe before.take(2)
@@ -411,6 +517,9 @@ private fun harness(runtime: MockBukkitTestRuntime): GrappleHarness {
     grapple.reloadConfig(settings())
     return GrappleHarness(plugin, grapple, spawnedHeads, spawnedCable)
 }
+
+private fun mineGrappleArea() =
+    TreasureHuntGrappleArea("rc_atelier_compact_mine", 0, 64, 0, 87, 139, 87, "arcfarms.mine")
 
 private fun settings(enabled: Boolean = true): TreasureHuntGrappleSettings =
     TreasureHuntGrappleSettings.load(TestConfig(mapOf("grapple.enabled" to enabled)).section("grapple"))

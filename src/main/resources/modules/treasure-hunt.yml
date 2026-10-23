@@ -15,6 +15,17 @@ highlight:
   color: '#ffc242'
 grapple:
   enabled: true
+  # Permanent access is bounded to the main mine, excluding its off-site expeditions.
+  areas:
+    mine:
+      world: rc_atelier_compact_mine
+      min-x: 0
+      min-y: 64
+      min-z: 0
+      max-x: 87
+      max-y: 139
+      max-z: 87
+      permission: arcfarms.mine
   cooldown-ticks: 12
   max-distance: 34.0
   projectile-blocks-per-tick: 4.0
@@ -29,7 +40,7 @@ grapple:
   - <gray>Повторный <white>ПКМ<gray> меняет цель даже в полёте.
   - <white>Shift<gray> — отпустить крюк.
   - ''
-  - <dark_gray>Действует во время охоты на спавне.
+  - <dark_gray>Действует в шахте и во время охоты на спавне.
   messages:
     item-received: <gold>Крюк-кошка добавлен на панель быстрого доступа.
     inventory-full: <gray>Освободите слот на панели быстрого доступа — крюк появится автоматически.

@@ -51,5 +51,24 @@ class TreasureHuntGrappleTest :
                 settings.pullSpeed shouldBe 1.25
                 settings.cableSegments shouldBe 12
             }
+
+            it("loads a permanent mine cuboid and rejects incomplete or reversed areas") {
+                val config = TestConfig(mapOf(
+                    "grapple.areas.mine.world" to "rc_atelier_compact_mine",
+                    "grapple.areas.mine.min-x" to 0, "grapple.areas.mine.min-y" to 64,
+                    "grapple.areas.mine.min-z" to 0, "grapple.areas.mine.max-x" to 87,
+                    "grapple.areas.mine.max-y" to 139, "grapple.areas.mine.max-z" to 87,
+                    "grapple.areas.mine.permission" to "arcfarms.mine",
+                    "grapple.areas.missing.world" to "other",
+                    "grapple.areas.reversed.world" to "other",
+                    "grapple.areas.reversed.min-x" to 10, "grapple.areas.reversed.max-x" to 0,
+                    "grapple.areas.reversed.min-y" to 0, "grapple.areas.reversed.max-y" to 10,
+                    "grapple.areas.reversed.min-z" to 0, "grapple.areas.reversed.max-z" to 10,
+                ))
+
+                TreasureHuntGrappleSettings.load(config.section("grapple")).areas shouldBe listOf(
+                    TreasureHuntGrappleArea("rc_atelier_compact_mine", 0, 64, 0, 87, 139, 87, "arcfarms.mine"),
+                )
+            }
         }
     })

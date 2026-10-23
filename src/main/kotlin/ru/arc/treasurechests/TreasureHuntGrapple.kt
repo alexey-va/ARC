@@ -31,6 +31,8 @@ import org.bukkit.event.player.PlayerDropItemEvent
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerItemHeldEvent
 import org.bukkit.event.player.PlayerJoinEvent
+import org.bukkit.event.player.PlayerMoveEvent
+import org.bukkit.event.player.PlayerPortalEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerRespawnEvent
 import org.bukkit.event.player.PlayerSwapHandItemsEvent
@@ -58,7 +60,7 @@ import kotlin.math.ceil
 
 /**
  * Owns the temporary spawn-hunt hook, its inventory guards, and each short-lived
- * client-only shot. Only the exact spawn world receives the item.
+ * client-only shot. Authored areas can also grant access between hunts.
  */
 internal class TreasureHuntGrapple(
     private val plugin: JavaPlugin,
@@ -151,7 +153,7 @@ internal class TreasureHuntGrapple(
         if (closed) return
         activeHunts = hunts.toList()
         val hasSpawnHunt = activeHunts.any { it.world.name == SPAWN_WORLD }
-        if (!hasSpawnHunt || settings?.enabled != true) {
+        if ((!hasSpawnHunt && settings?.areas.orEmpty().isEmpty()) || settings?.enabled != true) {
             activeSessionId = null
             stopAllShots(dampVelocity = true)
             plugin.server.onlinePlayers.toList().forEach(::removeAndForget)
@@ -161,7 +163,7 @@ internal class TreasureHuntGrapple(
         }
         if (activeSessionId == null) activeSessionId = UUID.randomUUID().toString()
         plugin.server.onlinePlayers.toList().forEach { player ->
-            if (isEligible(player)) ensureHook(player) else removeAndForget(player)
+            if (isEligible(player)) ensureHook(player) else removeAndForget(player, dampVelocity = true)
         }
     }
 
@@ -183,10 +185,33 @@ internal class TreasureHuntGrapple(
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun onTeleport(event: PlayerTeleportEvent) {
-        val fromWorld = event.from.world?.uid
-        val toWorld = event.to.world?.uid
-        if (fromWorld != toWorld || event.from.distanceSquared(event.to) > 9.0) {
-            stopShot(event.player.uniqueId, dampVelocity = true)
+        handleTeleport(event.player, event.from, event.to)
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    fun onPortal(event: PlayerPortalEvent) {
+        handleTeleport(event.player, event.from, event.to ?: return)
+    }
+
+    private fun handleTeleport(player: Player, from: Location, to: Location) {
+        if (from.world?.uid != to.world?.uid || from.distanceSquared(to) > 9.0) {
+            stopShot(player.uniqueId, dampVelocity = true)
+        }
+        reconcileAreaCrossing(player, from, to)
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onMove(event: PlayerMoveEvent) {
+        if (event.from.blockX == event.to.blockX && event.from.blockY == event.to.blockY &&
+            event.from.blockZ == event.to.blockZ) return
+        reconcileAreaCrossing(event.player, event.from, event.to)
+    }
+
+    private fun reconcileAreaCrossing(player: Player, from: Location, to: Location) {
+        if (eligibleAt(player, from) == eligibleAt(player, to)) return
+        scheduler.runLater(1L) {
+            if (closed || !player.isOnline) return@runLater
+            if (isEligible(player)) ensureHook(player) else removeAndForget(player)
         }
     }
 
@@ -210,7 +235,7 @@ internal class TreasureHuntGrapple(
     fun onRespawn(event: PlayerRespawnEvent) {
         val id = event.player.uniqueId
         respawnRetries.remove(id)?.cancel()
-        if (event.respawnLocation.world?.name != SPAWN_WORLD || activeSessionId == null) return
+        if (activeSessionId == null) return
         respawnRetries[id] = scheduler.runLater(1L) {
             respawnRetries.remove(id)
             plugin.server.getPlayer(id)?.takeIf(::isEligible)?.let(::ensureHook)
@@ -344,7 +369,10 @@ internal class TreasureHuntGrapple(
             config.maxDistance,
             FluidCollisionMode.NEVER,
             true,
-        )
+        )?.takeIf { result ->
+            val block = result.hitBlock
+            block != null && targetAllowed(player, block.location)
+        }
         val target = hit?.hitPosition ?: eye.toVector().add(direction.multiply(config.maxDistance))
         val distance = eye.toVector().distance(target)
         val travelTicks = ceil(distance / config.projectileBlocksPerTick).toInt().coerceIn(1, MAX_SHOT_LIFETIME_TICKS)
@@ -545,7 +573,7 @@ internal class TreasureHuntGrapple(
     private fun isShotValid(player: Player, shot: Shot): Boolean =
         player.isOnline && !player.isDead && player.world.uid == shot.worldId &&
             activeSessionId == shot.sessionId &&
-            activeHunts.any { it.world.uid == shot.worldId } &&
+            isEligible(player) && (shot.targetBlock == null || targetAllowed(player, shot.targetBlock.location)) &&
             isCurrentTool(player.inventory.itemInMainHand, shot.sessionId)
 
     private fun stopShot(playerId: UUID, dampVelocity: Boolean, allowWorldMismatch: Boolean = false) {
@@ -629,8 +657,8 @@ internal class TreasureHuntGrapple(
         if (isTagged(player.itemOnCursor)) player.setItemOnCursor(null)
     }
 
-    private fun removeAndForget(player: Player) {
-        stopShot(player.uniqueId, dampVelocity = false)
+    private fun removeAndForget(player: Player, dampVelocity: Boolean = false) {
+        stopShot(player.uniqueId, dampVelocity = dampVelocity)
         removeTaggedItems(player)
         fullHotbarPlayers.remove(player.uniqueId)
         nextAllowedTick.remove(player.uniqueId)
@@ -650,9 +678,18 @@ internal class TreasureHuntGrapple(
     }
 
     private fun isEligible(player: Player): Boolean =
-        player.uniqueId !in pendingHuskSyncPlayers && activeSessionId != null && settings?.enabled == true &&
-            player.world.name == SPAWN_WORLD &&
-            activeHunts.any { it.world.uid == player.world.uid }
+        !player.isDead && player.uniqueId !in pendingHuskSyncPlayers && activeSessionId != null && settings?.enabled == true &&
+            eligibleAt(player, player.location)
+
+    private fun eligibleAt(player: Player, location: Location): Boolean =
+        (location.world?.name == SPAWN_WORLD && activeHunts.any { it.world.uid == location.world?.uid }) ||
+            settings?.areas.orEmpty().any { area -> area.contains(location) &&
+                (area.permission.isBlank() || player.hasPermission(area.permission)) }
+
+    private fun targetAllowed(player: Player, target: Location): Boolean =
+        (player.world.name == SPAWN_WORLD && activeHunts.any { it.world.uid == player.world.uid }) ||
+            settings?.areas.orEmpty().any { area -> area.contains(player.location) && area.contains(target) &&
+                (area.permission.isBlank() || player.hasPermission(area.permission)) }
 
     private fun retryWhenSpaceMayBeAvailable(player: Player) {
         if (player.uniqueId in fullHotbarPlayers && isEligible(player)) ensureHook(player)

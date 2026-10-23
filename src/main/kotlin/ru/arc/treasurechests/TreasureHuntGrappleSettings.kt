@@ -7,7 +7,7 @@ import ru.arc.util.Logging.warn
 import org.joml.Quaternionf
 import org.joml.Vector3f
 
-/** Bounded operator settings for the spawn-only hunt grapple. */
+/** Bounded operator settings for treasure-hunt and permanent-area grapple access. */
 internal data class TreasureHuntGrappleSettings(
     val enabled: Boolean,
     val cooldownTicks: Long,
@@ -20,6 +20,7 @@ internal data class TreasureHuntGrappleSettings(
     val itemName: Component,
     val itemLore: List<Component>,
     val messages: TreasureHuntGrappleMessages,
+    val areas: List<TreasureHuntGrappleArea> = emptyList(),
 ) {
     companion object {
         private const val DEFAULT_COOLDOWN_TICKS = 12L
@@ -35,7 +36,7 @@ internal data class TreasureHuntGrappleSettings(
             "<gray>Повторный <white>ПКМ<gray> меняет цель даже в полёте.",
             "<white>Shift<gray> — отпустить крюк.",
             "",
-            "<dark_gray>Действует во время охоты на спавне.",
+            "<dark_gray>Действует в шахте и во время охоты на спавне.",
         )
 
         fun load(section: ConfigSection): TreasureHuntGrappleSettings {
@@ -63,6 +64,14 @@ internal data class TreasureHuntGrappleSettings(
                     missed = messageSection.component("missed", "<gray>Крюк не зацепился за поверхность."),
                     pulling = messageSection.component("pulling", "<aqua>Есть зацеп! Вас подтягивает."),
                 ),
+                areas = section.keys("areas").mapNotNull { id ->
+                    try {
+                        TreasureHuntGrappleArea.load(section.section("areas.$id"))
+                    } catch (failure: IllegalArgumentException) {
+                        warn("Invalid treasure-hunt.grapple.areas.$id: ${failure.message}")
+                        null
+                    }
+                },
             )
         }
     }
