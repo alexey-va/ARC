@@ -134,7 +134,7 @@ object StaffHudPreviewExport {
                 "tick" to frame.tick, "phase" to frame.phase,
                 "eye" to vectorMap(frame.eye.toVector()), "yaw" to frame.eye.yaw, "pitch" to frame.eye.pitch,
                 "passengerGap" to frame.passengerGap,
-                "velocity" to vectorMap(frame.velocity), "retreat" to frame.motion.retreat,
+                "velocity" to vectorMap(frame.velocity),
                 "translation" to frame.transform.translation.let { listOf(it.x, it.y, it.z) },
                 "scale" to frame.pose.textScale, "interpolationTicks" to 1,
                 "beforeTarget" to vectorMap(frame.beforeTarget), "beforeSend" to (frame.tick % 2 == 0),
@@ -168,8 +168,6 @@ object StaffHudPreviewExport {
         listOf(
             "hud.position.forward-blocks", "hud.position.vertical-blocks",
             "hud.position.horizontal-blocks", "hud.position.scale",
-            "hud.motion.prediction-ticks", "hud.motion.max-lead-blocks", "hud.motion.forward-blocks",
-            "hud.motion.vertical-blocks", "hud.motion.settle-ticks",
         ).forEach { key ->
             require(defaults.contains(key)) { "Missing HUD position setting: $key" }
             put(key, defaults.getDouble(key))
@@ -191,7 +189,6 @@ internal data class StaffHudMotionPreviewFrame(
     val eye: Location,
     val passengerGap: Double,
     val velocity: Vector,
-    val motion: StaffSpellHudMotion,
     val pose: StaffSpellHudPose,
     val transform: Transformation,
     val beforeTarget: Vector,
@@ -203,8 +200,6 @@ internal fun staffHudMotionPreviewFrames(
     preference: StaffHudPlacement,
 ): List<StaffHudMotionPreviewFrame> {
     val feet = Vector(0.0, 64.0, 0.0)
-    var motion = StaffSpellHudMotion()
-    var previousDirection = Vector(0.0, 0.0, 1.0)
     return (0..165).map { tick ->
         val phase = when (tick) {
             in 0..9 -> "rest"
@@ -258,18 +253,15 @@ internal fun staffHudMotionPreviewFrames(
         }
         feet.add(velocity)
         eye.add(velocity)
-        val turn = kotlin.math.acos(forward.dot(previousDirection).coerceIn(-1.0, 1.0))
-        motion = staffSpellHudMotion(motion, velocity, 1.0, flying = true, config.hudMotion, turn)
-        previousDirection = forward.clone()
         val gap = bodyHeight - eyeHeight
-        val moving = staffHudMovingPosition(config.hudPosition, config.hudMotion, motion, preference, bounds, gap)
-        val pose = staffSpellHudPose(moving)
+        val position = staffHudPosition(config.hudPosition, preference, bounds, gap)
+        val pose = staffSpellHudPose(position)
         val legacy = config.hudPosition.copy(verticalBlocks = config.hudPosition.verticalBlocks *
             if (preference == StaffHudPlacement.BOTTOM) 1 else -1)
         val before = eye.toVector().add(forward.clone().multiply(legacy.forwardBlocks))
             .add(down.clone().multiply(legacy.verticalBlocks))
             .add(right.clone().multiply(legacy.horizontalBlocks))
-        StaffHudMotionPreviewFrame(tick, phase, eye, gap, velocity, motion, pose,
+        StaffHudMotionPreviewFrame(tick, phase, eye, gap, velocity, pose,
             staffHudBillboardTransformation(pose, bounds, eye, gap), before)
     }
 }

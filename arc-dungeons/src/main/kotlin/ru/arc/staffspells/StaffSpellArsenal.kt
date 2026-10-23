@@ -69,6 +69,7 @@ internal class StaffSpellArsenal(
         val novaWrapGroups: MutableSet<Int> = mutableSetOf(),
         val novaWrapScenes: MutableSet<UUID?> = mutableSetOf(),
         var prismScene: UUID? = null,
+        var prismTargets: List<LivingEntity> = emptyList(),
 
     )
     private val tasks = LifecycleTaskScope()
@@ -554,38 +555,37 @@ internal class StaffSpellArsenal(
     private fun prism(a: Attack, player: Player) {
         if (a.input.secondary) { prismRefraction(a, player); return }
         particles(a, a.point, a.age, a.duration)
+        val emitter = a.point.clone().add(0.0, 2.6, 0.0)
         if (a.age == 10) {
-            val emitter = a.point.clone().add(0.0, 2.6, 0.0)
-            val eligible = targeting.nearby(player, emitter, 12.0, a.cast)
-                .filter { visible(emitter, it) }.sortedBy { center(it).distanceSquared(emitter) }.take(3)
+            a.prismTargets = targeting.nearby(player, emitter, 12.0, a.cast)
+                .filter { visible(emitter, it) && visible(player.eyeLocation, it) }
+                .sortedBy { center(it).distanceSquared(emitter) }.take(3)
             if (!current(a, player)) return
-            a.rays = if (a.input.secondary) {
-                // Three converging emitters focus on the aimed point, then pierce along the cast line.
-                val right = Vector(a.forward.z, 0.0, -a.forward.x)
-                (-1..1).map { lane ->
-                    val from = a.origin.clone().add(0.0, 2.2, 0.0).add(right.clone().multiply(lane * 1.7))
-                    from to targeting.rayEnd(from, emitter.toVector().subtract(from.toVector()).normalize(),
-                        from.distance(emitter).coerceAtMost(48.0))
-                }
-            } else if (eligible.isNotEmpty()) eligible.mapNotNull { target ->
-                staffVisibleTargetPoint(emitter, target, player.eyeLocation)?.let { emitter.clone() to it }
+            if (a.prismTargets.isEmpty()) a.rays = (-1..1).map { lane ->
+                emitter.clone() to targeting.rayEnd(emitter, a.forward.clone().rotateAroundY(lane * .55), 9.0)
             }
-            else (-1..1).map { lane -> emitter.clone() to targeting.rayEnd(emitter,
-                a.forward.clone().rotateAroundY(lane * .55), 9.0) }
             sound(a, emitter, true)
         }
         if (a.age !in 10..24) return
+        if (a.age <= 16 && a.prismTargets.isNotEmpty()) {
+            a.rays = a.prismTargets.mapNotNull { target ->
+                if (!damage.eligible(player, target, a.cast) || target.world != emitter.world ||
+                    center(target).distanceSquared(emitter) > 12.0 * 12.0) return@mapNotNull null
+                staffVisibleTargetPoint(emitter, target, player.eyeLocation)?.let { emitter.clone() to it }
+            }
+        }
         val front = ((a.age - 10) / 6.0).coerceIn(0.0, 1.0)
-        val previous = ((a.age - 12) / 6.0).coerceIn(0.0, 1.0)
         a.rays.forEach { (from, to) ->
             if (!current(a, player)) return
             val ray = to.toVector().subtract(from.toVector())
+            if (front <= 0.0 || ray.lengthSquared() < .01) return@forEach
+            val end = targeting.rayEnd(from, ray, ray.length() * front)
+            val visibleFront = from.distance(end) / ray.length()
             visuals.withOwner(a.casterId) { visuals.particles(from,
-                staffPrismBeam(ray, front, a.cast.visualCharge, a.age)) }
-            if (front <= previous) return@forEach
-            val begin = from.clone().add(ray.clone().multiply(previous))
-            val end = from.clone().add(ray.clone().multiply(front))
-            targeting.lineTargets(player, begin, end, .55, a.cast).forEach { hit(a, player, it, from) }
+                staffPrismBeam(ray, visibleFront, a.cast.visualCharge, a.age)) }
+            targeting.lineTargets(player, from, end, .55, a.cast).forEach {
+                hit(a, player, it, from, PRISM_PRIMARY_DAMAGE_SCALE)
+            }
         }
     }
 
@@ -616,35 +616,51 @@ internal class StaffSpellArsenal(
             if (points.size == 2) points += targeting.rayEnd(first, a.forward, 8.0)
             a.rays = points.zipWithNext().filter { (from, to) -> from.distanceSquared(to) > .01 }
             if (!current(a, player) || a.rays.isEmpty()) return
-            val local = listOf(a.rays.first().first) + a.rays.map { it.second }
             a.prismScene = effects.custom(a.casterId, a.spell, a.origin, a.duration - 10) { age ->
-                staffPrismRefractionParts(age, a.duration - 10, local.map { localPoint(a.origin, it) })
+                prismRefractionFrame(a, age)
             }
             a.scenes += a.prismScene
             sound(a, first, true)
         }
         if (a.rays.isEmpty() || a.age > 32) return
+        val connected = mutableListOf<Pair<Location, Location>>()
+        for (segment in a.rays) {
+            val (from, to) = segment
+            val delta = to.toVector().subtract(from.toVector())
+            val end = targeting.rayEnd(from, delta, delta.length())
+            if (from.distanceSquared(end) + .001 < from.distanceSquared(to)) {
+                if (from.distanceSquared(end) > .01) connected += from to end
+                // Once cover severs the route, later mirrors cannot carry detached damage or light.
+                a.rays = connected
+                effects.updateCustom(a.prismScene, a.origin, prismRefractionFrame(a, a.age - 10))
+                break
+            }
+            connected += segment
+        }
         val total = a.rays.sumOf { (from, to) -> from.distance(to) }
         val travel = total * ((a.age - 10) / 14.0).coerceIn(0.0, 1.0)
-        val previousTravel = total * ((a.age - 12) / 14.0).coerceIn(0.0, 1.0)
         var passed = 0.0
         a.rays.forEach { (from, to) ->
             val ray = to.toVector().subtract(from.toVector())
             val length = ray.length()
             val front = ((travel - passed) / length).coerceIn(0.0, 1.0)
-            val previous = ((previousTravel - passed) / length).coerceIn(0.0, 1.0)
             passed += length
             if (front <= 0.0 || !current(a, player)) return@forEach
             // Bound the whole route's particle budget; displays carry its continuous beam.
             val samples = staffPrismBeam(ray, front, a.cast.visualCharge, a.age)
             visuals.withOwner(a.casterId) { visuals.particles(from, samples.filterIndexed { index, _ -> index % 4 == 0 }) }
-            if (front <= previous) return@forEach
-            val begin = from.clone().add(ray.clone().multiply(previous))
             val requested = from.clone().add(ray.clone().multiply(front))
             val end = targeting.rayEnd(from, ray, from.distance(requested))
-            if (end.distanceSquared(from) + .001 < begin.distanceSquared(from)) return@forEach
-            targeting.lineTargets(player, begin, end, .70, a.cast).forEach { target -> hit(a, player, target, from) }
+            targeting.lineTargets(player, from, end, .70, a.cast).forEach { target ->
+                hit(a, player, target, from, PRISM_SECONDARY_DAMAGE_SCALE)
+            }
         }
+    }
+
+    private fun prismRefractionFrame(a: Attack, age: Int): List<StaffDisplayPart> {
+        val points = a.rays.firstOrNull()?.let { listOf(it.first) + a.rays.map { ray -> ray.second } }
+            ?: return emptyList()
+        return staffPrismRefractionParts(age, a.duration - 10, points.map { localPoint(a.origin, it) })
     }
 
     private fun along(a: Attack, progress: Double): Location {
@@ -880,6 +896,8 @@ internal class StaffSpellArsenal(
     }
 
     companion object {
+        private const val PRISM_PRIMARY_DAMAGE_SCALE = 1.20
+        private const val PRISM_SECONDARY_DAMAGE_SCALE = 1.25
         val SPELLS = setOf(StaffSpell.LUNAR, StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM,
             StaffSpell.PRISM, StaffSpell.NOVA, StaffSpell.OSSUARY)
         private const val GALE_RAM_TRAVEL_TICKS = 20.0

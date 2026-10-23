@@ -6,6 +6,8 @@ import org.bukkit.Particle
 import org.bukkit.Sound
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Player
+import org.bukkit.potion.PotionEffect
+import org.bukkit.potion.PotionEffectType
 import org.bukkit.util.Vector
 import org.joml.Vector3f
 import ru.arc.core.LifecycleTaskScope
@@ -23,6 +25,9 @@ internal class StaffSpellTechniques(
     private val visuals: StaffSpellVisuals,
     private val targeting: StaffSpellTargeting,
     private val summons: StaffSpellSummons,
+    private val rootTarget: (Player, LivingEntity, StaffSpellCast, Int) -> Boolean,
+    private val rootActive: (UUID, UUID) -> Boolean,
+    private val clearRoots: (UUID) -> Unit,
 ) : AutoCloseable {
     private enum class LunarPhase { OUTBOUND, TURN, RETURN }
 
@@ -478,7 +483,11 @@ internal class StaffSpellTechniques(
                     if (icicleBursts[burst.casterId] !== burst || !ready(player, burst.cast)) break
                     if (!validTechniqueTarget(player, target, burst.cast, burst.worldId) ||
                         !visible(burst.origin.clone().add(0.0, .65, 0.0), target)) continue
-                    damage.hit(player, target, burst.cast, burst.tuning.power * .72, burst.tuning.vanillaDamage * .72)
+                    if (damage.hit(player, target, burst.cast, burst.tuning.power * .72, burst.tuning.vanillaDamage * .72) &&
+                        icicleBursts[burst.casterId] === burst &&
+                        validTechniqueTarget(player, target, burst.cast, burst.worldId)) {
+                        rootTarget(player, target, burst.cast, ICICLE_BURST_ROOT_TICKS)
+                    }
                 }
             }
             if (burst.ageTicks >= STAFF_ICICLE_RADIAL_TICKS) removeIcicleBurst(burst)
@@ -547,6 +556,10 @@ internal class StaffSpellTechniques(
                 if (target.uniqueId !in ward.crossing && target.uniqueId !in ward.alreadyHit) {
                     ward.alreadyHit += target.uniqueId
                     if (damage.hit(player, target, ward.cast, ward.tuning.power, ward.tuning.vanillaDamage)) {
+                        if (prismWards[ward.casterId] !== ward ||
+                            !validTechniqueTarget(player, target, ward.cast, ward.worldId)) return@targetLoop
+                        target.addPotionEffect(PotionEffect(PotionEffectType.SLOWNESS, PRISM_WARD_SLOW_TICKS,
+                            1, false, true))
                         ward.lastCutTick = ward.ageTicks
                         visuals.withOwner(ward.casterId) {
                             visuals.cue(center(target), Sound.BLOCK_AMETHYST_BLOCK_HIT, .46f, 1.55f)
@@ -701,9 +714,7 @@ internal class StaffSpellTechniques(
             return false
         var admittedHold = false
         try {
-            if (!damage.hit(player, target, cast,
-                    tuning.power * GRAVITY_OPENING_DAMAGE_SCALE,
-                    tuning.vanillaDamage * GRAVITY_OPENING_DAMAGE_SCALE)) return false
+            if (!damage.hit(player, target, cast, tuning.power, tuning.vanillaDamage)) return false
             // Damage hooks can invalidate the round, target, or line of sight synchronously.
             if (!validTechniqueTarget(player, target, cast, player.world.uid)) return true
             val gravity = target.hasGravity()
@@ -712,6 +723,15 @@ internal class StaffSpellTechniques(
                 staffGravityPinParts(age, thrown = false, yaw = 0f)
             } ?: return true
             if (!effects.isActive(sceneId) || !validTechniqueTarget(player, target, cast, player.world.uid)) {
+                effects.remove(sceneId)
+                return true
+            }
+            if (!rootTarget(player, target, cast, GRAVITY_HOLD_TICKS)) {
+                effects.remove(sceneId)
+                return true
+            }
+            if (!effects.isActive(sceneId) || !validTechniqueTarget(player, target, cast, player.world.uid)) {
+                clearRoots(cast.attackId)
                 effects.remove(sceneId)
                 return true
             }
@@ -775,7 +795,8 @@ internal class StaffSpellTechniques(
         return gravityHolds[hold.casterId] === hold && effects.isActive(hold.sceneId) && ready(player, hold.cast) &&
             player.world.uid == hold.worldId && (if (target == null)
                 isLoaded(hold.anchor) && visible(player.eyeLocation, hold.anchor)
-            else validTechniqueTarget(player, target, hold.cast, hold.worldId))
+            else validTechniqueTarget(player, target, hold.cast, hold.worldId) &&
+                rootActive(target.uniqueId, hold.cast.attackId))
     }
 
     private fun throwGravity(player: Player, hold: GravityHold) {
@@ -820,6 +841,7 @@ internal class StaffSpellTechniques(
     private fun releaseGravity(hold: GravityHold) {
         gravityHolds.remove(hold.casterId, hold)
         hold.target?.let { gravityTargetOwners.remove(it.uniqueId, hold.casterId) }
+        clearRoots(hold.cast.attackId)
         effects.remove(hold.sceneId)
         hold.target?.takeIf { it.isValid && !it.isDead }?.setGravity(hold.originalGravity)
     }
@@ -1428,10 +1450,13 @@ internal class StaffSpellTechniques(
         const val GALE_HURRICANE_CANDIDATE_LIMIT = 32
         const val GALE_HURRICANE_QUERY_RADIUS = 10.5
 
+        const val ICICLE_BURST_ROOT_TICKS = 24
+
         const val PRISM_WARD_RANGE = 14.0
         const val PRISM_GROUND_RAY_HEIGHT = 2.5
         const val PRISM_GROUND_RAY_RANGE = 5.5
         const val PRISM_WARD_TICKS = 60
+        const val PRISM_WARD_SLOW_TICKS = 40
         const val PRISM_DETECTION_RADIUS = 3.5
         const val PRISM_VERTICAL_TOLERANCE = 1.4
 
@@ -1440,7 +1465,6 @@ internal class StaffSpellTechniques(
 
         const val GRAVITY_Q_RANGE = 20.0
         const val GRAVITY_HOLD_TICKS = 28
-        const val GRAVITY_OPENING_DAMAGE_SCALE = .45
         const val GRAVITY_THROW_RANGE = 24.0
         const val GRAVITY_THROW_SPEED = 1.35
         const val GRAVITY_THROW_LIFT = .48

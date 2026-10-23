@@ -8,9 +8,12 @@ import net.kyori.adventure.text.Component
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.entity.LivingEntity
+import org.bukkit.entity.Player
 import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerQuitEvent
+import org.bukkit.potion.PotionEffect
+import org.bukkit.potion.PotionEffectType
 import java.util.UUID
 
 class StaffSpellTechniquesRuntimeTest : FreeSpec({
@@ -31,10 +34,55 @@ class StaffSpellTechniquesRuntimeTest : FreeSpec({
             h.hits shouldBe emptyList<LivingEntity>()
             h.scheduler.tick(1)
             h.hits shouldBe listOf(inside)
-            h.scheduler.tick(STAFF_ICICLE_RADIAL_TICKS.toLong())
+            inside.getPotionEffect(PotionEffectType.SLOWNESS)?.amplifier shouldBe 7
+            inside.getPotionEffect(PotionEffectType.SLOWNESS)?.duration shouldBe 24
+            repeat(24) { h.paper.performTicks(1); h.scheduler.tick(1) }
 
             h.hits shouldBe listOf(inside)
+            inside.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
             activeScenes shouldBe emptySet<UUID>()
+        }
+    }
+
+    "Icicle Gravity and Prism Q cannot add crowd control after rejected damage" {
+        for (spell in listOf(StaffSpell.ICICLE, StaffSpell.GRAVITY, StaffSpell.PRISM)) {
+            withTechniqueScenes(hit = { _, _ -> false }) { h, _ ->
+                val world = h.paper.addSimpleWorld("staff-q-rejected-cc-${spell.id}")
+                world.getBlockAt(0, 63, 14).type = Material.STONE
+                val player = h.player("staff-q-rejected-cc-${spell.id}", world, spell)
+                val target = h.zombie(world, .5, if (spell == StaffSpell.PRISM) 13.5 else 4.5)
+                target.setGravity(true)
+                h.controller.start()
+
+                h.controller.hotkey(player, spell, StaffHotkey.Q)
+                h.scheduler.tick(12)
+
+                h.hits shouldBe listOf(target)
+                target.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
+                target.hasGravity() shouldBe true
+            }
+        }
+    }
+
+    "Prism ward slows a crossing enemy once without replacing a stronger effect" {
+        withTechniqueScenes { h, _ ->
+            val world = h.paper.addSimpleWorld("staff-prism-q-slow")
+            world.getBlockAt(0, 63, 14).type = Material.STONE
+            val player = h.player("staff-prism-q-slow", world, StaffSpell.PRISM)
+            val target = h.zombie(world, .5, 13.5)
+            val stronger = h.zombie(world, 1.0, 13.5)
+            stronger.addPotionEffect(PotionEffect(PotionEffectType.SLOWNESS, 80, 3))
+            h.controller.start()
+
+            h.controller.hotkey(player, StaffSpell.PRISM, StaffHotkey.Q)
+            h.scheduler.tick(1)
+
+            target.getPotionEffect(PotionEffectType.SLOWNESS)?.amplifier shouldBe 1
+            target.getPotionEffect(PotionEffectType.SLOWNESS)?.duration shouldBe 40
+            stronger.getPotionEffect(PotionEffectType.SLOWNESS)?.amplifier shouldBe 3
+            h.scheduler.tick(60)
+            h.hits.count { it == target } shouldBe 1
+            h.hits.count { it == stronger } shouldBe 1
         }
     }
 
@@ -293,11 +341,13 @@ class StaffSpellTechniquesRuntimeTest : FreeSpec({
 
             h.controller.hotkey(player, StaffSpell.GRAVITY, StaffHotkey.Q)
             target.hasGravity() shouldBe false
+            target.getPotionEffect(PotionEffectType.SLOWNESS)?.amplifier shouldBe 7
             activeScenes.clear()
             // Scene eviction restores control on the next owner tick, without a new input through the GCD.
             h.scheduler.tick(1)
 
             target.hasGravity() shouldBe true
+            target.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
             target.velocity.lengthSquared() shouldBe 0.0
             h.hits shouldBe listOf(target)
         }
@@ -373,15 +423,23 @@ class StaffSpellTechniquesRuntimeTest : FreeSpec({
             val player = h.player("staff-gravity-q-one-hit", world, StaffSpell.GRAVITY)
             val target = h.zombie(world, .5, 4.5)
             target.setGravity(true)
+            target.addPotionEffect(PotionEffect(PotionEffectType.SLOWNESS, 80, 1))
+            val unrelated = h.zombie(world, 4.5, 4.5)
+            val unrelatedCast = StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false)
             h.controller.start()
+            h.controller.conjurations.rootTarget(player, unrelated, unrelatedCast, 70) shouldBe true
 
             h.controller.hotkey(player, StaffSpell.GRAVITY, StaffHotkey.Q)
             target.hasGravity() shouldBe false
+            target.getPotionEffect(PotionEffectType.SLOWNESS)?.amplifier shouldBe 7
             h.scheduler.tick(5)
             h.controller.hotkey(player, StaffSpell.GRAVITY, StaffHotkey.Q)
 
             h.hits shouldBe listOf(target)
+            h.damageScales shouldBe listOf(1.0 to 6.0)
             target.hasGravity() shouldBe true
+            target.getPotionEffect(PotionEffectType.SLOWNESS)?.amplifier shouldBe 1
+            h.controller.conjurations.rootActive(unrelated.uniqueId, unrelatedCast.attackId) shouldBe true
             (target.velocity.lengthSquared() > 0.0) shouldBe true
             activeScenes.size shouldBe 1 // The released impulse is visible for real victims too.
             h.visualPlays.size shouldBe 2
@@ -517,9 +575,10 @@ class StaffSpellTechniquesRuntimeTest : FreeSpec({
 
 private fun withTechniqueScenes(
     settings: StaffSpellSettings = staffSettings(),
+    hit: (Player, LivingEntity) -> Boolean = { _, _ -> true },
     block: (StaffHarness, MutableSet<UUID>) -> Unit,
 ) {
-    withStaffHarness(settings = settings) { h ->
+    withStaffHarness(settings = settings, hit = hit) { h ->
         val activeScenes = mutableSetOf<UUID>()
         every { h.effects.custom(any(), any(), any(), any(), any()) } answers {
             UUID.randomUUID().also { id ->

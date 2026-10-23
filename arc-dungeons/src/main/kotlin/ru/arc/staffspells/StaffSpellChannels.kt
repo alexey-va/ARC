@@ -230,7 +230,12 @@ internal class StaffSpellChannels(
 
         for (target in targets) {
             target.entity.fallDistance = 0f
+            val pull = origin.toVector().subtract(target.entity.location.toVector()).setY(0.0)
+            val pullSpeed = minOf(pull.length() * .12, GRAVITY_PULSE_PULL_SPEED)
+            if (pull.lengthSquared() > .01) pull.normalize().multiply(pullSpeed)
             target.entity.velocity = target.entity.velocity.clone().apply {
+                x = pull.x
+                z = pull.z
                 y = maxOf(y, GRAVITY_PULSE_LIFT_VELOCITY)
             }
             pulseFallProtections[target.entity.uniqueId] = PulseFallProtection(
@@ -373,7 +378,15 @@ internal class StaffSpellChannels(
         val direction = safeDirection(eye.direction) ?: return null
         val ray = staffBlockHit(eye, direction, GRAVITY_TARGET_RANGE)
         if (!ray.pathLoaded) return null
-        val hit = ray.hit ?: return null
+        val hit = ray.hit ?: run {
+            val horizontal = safeDirection(direction.clone().setY(0.0)) ?: return null
+            val probe = targeting.rayEnd(eye, horizontal, GRAVITY_HOLD_DISTANCE)
+            if (probe.distanceSquared(eye) < GRAVITY_MIN_EYE_DISTANCE * GRAVITY_MIN_EYE_DISTANCE) return null
+            val ground = staffBlockHit(probe, Vector(0.0, -1.0, 0.0), GRAVITY_GROUND_PICKUP_DEPTH)
+            if (!ground.pathLoaded) return null
+            ground.hit?.takeIf { visible(eye, it.hitPosition.toLocation(eye.world).add(0.0, .04, 0.0)) }
+                ?: return null
+        }
         val block = hit.hitBlock ?: return null
         if (!block.type.isSolid || block.isPassable) return null
         return BlockSelection(hit.hitPosition.toLocation(eye.world), block.blockData.clone(),
@@ -470,9 +483,14 @@ internal class StaffSpellChannels(
                 target.fallDistance = 0f
                 if (!candidate.lifted && target.location.y - candidate.startY >= GRAVITY_PULSE_MIN_LIFT)
                     candidate.lifted = true
-                if (candidate.lifted && !candidate.slammed && pulse.ageTicks >= GRAVITY_PULSE_LIFT_TICKS) {
-                    candidate.slammed = true
-                    target.velocity = target.velocity.clone().apply { y = minOf(y, -GRAVITY_PULSE_SLAM_VELOCITY) }
+                if (!candidate.slammed && pulse.ageTicks >= GRAVITY_PULSE_LIFT_TICKS) {
+                    if (candidate.lifted) {
+                        candidate.slammed = true
+                        target.velocity = target.velocity.clone().apply { y = minOf(y, -GRAVITY_PULSE_SLAM_VELOCITY) }
+                    } else if (pulseGroundContact(target) != null) {
+                        // Low ceilings and resisted lift still receive the one ground-compression hit.
+                        candidate.slammed = true
+                    }
                 }
                 if (candidate.slammed) {
                     val contact = pulseGroundContact(target) ?: return@forEach
@@ -533,7 +551,8 @@ internal class StaffSpellChannels(
             if (flight.cancelled || !current(player, flight.cast, flight.worldId) ||
                 !damage.eligible(player, target, flight.cast) || !visible(at, target) ||
                 !visible(player.eyeLocation, target)) break
-            damage.hit(player, target, flight.cast, flight.tuning.power, flight.tuning.vanillaDamage)
+            damage.hit(player, target, flight.cast, flight.tuning.power * GRAVITY_THROW_DAMAGE_SCALE,
+                flight.tuning.vanillaDamage * GRAVITY_THROW_DAMAGE_SCALE)
         }
         flights.remove(flight)
         if (!flight.cancelled) retireScene(flight.casterId, flight.sceneId, (GRAVITY_IMPACT_TICKS + 2).toLong())
@@ -603,16 +622,19 @@ internal class StaffSpellChannels(
         const val PARTICLE_CLEARANCE = 1.35
         const val GRAVITY_TARGET_RANGE = 32.0
         const val GRAVITY_HOLD_DISTANCE = 4.0
+        const val GRAVITY_GROUND_PICKUP_DEPTH = 6.0
         const val GRAVITY_MIN_EYE_DISTANCE = 2.1
         const val GRAVITY_BLOCK_GAP = 0.65
         const val GRAVITY_RADIUS = 1.0
         const val GRAVITY_THROW_RANGE = 32.0
         const val GRAVITY_SWEEP_WIDTH = 0.65
         const val GRAVITY_BLAST_RADIUS = 2.5
+        const val GRAVITY_THROW_DAMAGE_SCALE = 1.35
         const val GRAVITY_PULSE_RADIUS = 6.5
         const val GRAVITY_PULSE_TICKS = 36
         const val GRAVITY_PULSE_LIFT_TICKS = 8
         const val GRAVITY_PULSE_LIFT_VELOCITY = 0.9
+        const val GRAVITY_PULSE_PULL_SPEED = 0.35
         const val GRAVITY_PULSE_SLAM_VELOCITY = 0.9
         const val GRAVITY_PULSE_MIN_LIFT = 0.6
         const val GRAVITY_PULSE_CONTACT_MAX_UPWARD_SPEED = 0.05

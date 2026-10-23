@@ -81,8 +81,8 @@ class StaffSpellHudTest : FreeSpec({
             record.transformWrites shouldBe initialWrites
             player.teleport(Location(harness.world, 1.5, 64.0, 0.5))
             harness.scheduler.tick(2)
-            (record.transformWrites > initialWrites) shouldBe true
-            // Only the local retreat changes; native passenger movement carries the card.
+            record.transformWrites shouldBe initialWrites
+            // Native passenger movement carries the card without a second server-driven pose.
             record.teleports.size shouldBe 0
             harness.scheduler.tick(12)
             (record.translation.distance(initialTranslation) < 1.0e-6) shouldBe true
@@ -153,8 +153,8 @@ class StaffSpellHudTest : FreeSpec({
                 player.height - player.eyeHeight)
             val distance = center.distance(player.eyeLocation.toVector())
             // The outer corners may meet a wall before the origin; the entire card must fit.
-            val moving = staffHudMovingPosition(StaffSpellHudPositionSettings(), StaffSpellHudMotionSettings(),
-                StaffSpellHudMotion(), StaffHudPlacement.BOTTOM, bounds, player.height - player.eyeHeight)
+            val moving = staffHudPosition(StaffSpellHudPositionSettings(),
+                StaffHudPlacement.BOTTOM, bounds, player.height - player.eyeHeight)
             (distance <= staffHudSafeDistance(staffSpellHudPose(moving).distance, 1.6) + 1.0e-6) shouldBe true
             (kotlin.math.abs(record.scale - staffSpellHudPose(distance, moving).textScale) < 1.0e-6) shouldBe true
             record.visibleByDefault shouldBe false
@@ -317,8 +317,7 @@ class StaffSpellHudTest : FreeSpec({
         val bounds = staffSpellHudBounds("ПКМ · Комета\n55% ■■■■■□□□□□\nQ готово   F готово", 220)
         val eye = Location(null, 0.0, 64.0, 0.0)
         for (preference in listOf(StaffHudPlacement.TOP, StaffHudPlacement.BOTTOM)) {
-            val position = staffHudMovingPosition(StaffSpellHudPositionSettings(), StaffSpellHudMotionSettings(),
-                StaffSpellHudMotion(), preference, bounds)
+            val position = staffHudPosition(StaffSpellHudPositionSettings(), preference, bounds)
             val transform = staffHudBillboardTransformation(staffSpellHudPose(position), bounds, eye, 0.18)
             for (yaw in listOf(0f, 90f, 180f)) for (pitch in listOf(-85f, 0f, 85f)) {
                 val camera = eye.clone().apply { this.yaw = yaw; this.pitch = pitch }
@@ -333,40 +332,55 @@ class StaffSpellHudTest : FreeSpec({
         }
     }
 
-    "motion is bounded settles after stopping and never preserves a stale heading through a reversal" {
-        val settings = StaffSpellHudMotionSettings()
-        StaffSpellConfig(StaffTestConfig(emptyMap())).hudMotion shouldBe settings
-        StaffSpellConfig(StaffTestConfig(mapOf(
-            "hud.motion.prediction-ticks" to 99.0, "hud.motion.max-lead-blocks" to -1.0,
-            "hud.motion.forward-blocks" to 99.0, "hud.motion.vertical-blocks" to -1.0,
-            "hud.motion.settle-ticks" to 0,
-        ))).hudMotion shouldBe StaffSpellHudMotionSettings(4.0, 0.0, 4.0, 0.0, 1)
-        StaffSpellConfig(StaffTestConfig(mapOf(
-            "hud.motion.prediction-ticks" to -1.0, "hud.motion.max-lead-blocks" to 99.0,
-            "hud.motion.forward-blocks" to -1.0, "hud.motion.vertical-blocks" to 99.0,
-            "hud.motion.settle-ticks" to 99,
-        ))).hudMotion shouldBe StaffSpellHudMotionSettings(0.0, 8.0, 0.0, 2.0, 40)
-        var motion = StaffSpellHudMotion()
-        repeat(4) { motion = staffSpellHudMotion(motion, Vector(0.0, 0.0, 3.0), 1.0, true, settings) }
-        motion.lead.length() shouldBe settings.maxLeadBlocks
-        motion.retreat shouldBe 1.0
-        staffSpellHudMotion(motion, Vector(), 1.0, true, settings.copy(maxLeadBlocks = 0.0))
-            .lead.length() shouldBe 0.0
-        val firstStop = staffSpellHudMotion(motion, Vector(), 1.0, true, settings)
-        (firstStop.lead.z in 0.1..<motion.lead.z) shouldBe true
-        (firstStop.retreat in 0.1..<motion.retreat) shouldBe true
-        motion = firstStop
-        repeat(settings.settleTicks) { motion = staffSpellHudMotion(motion, Vector(), 1.0, true, settings) }
-        motion.retreat shouldBe 0.0
-        (motion.lead.length() < 1.0e-8) shouldBe true
-        motion = staffSpellHudMotion(motion, Vector(0.0, 0.0, 1.5), 1.0, true, settings)
-        motion = staffSpellHudMotion(motion, Vector(0.0, 0.0, -1.5), 1.0, true, settings)
-        motion.lead.z shouldBe -3.0
-        motion = staffSpellHudMotion(motion, Vector(), 1.0, true, settings, Math.toRadians(12.0))
-        motion.turnRadiansPerTick shouldBe Math.toRadians(12.0)
-        repeat(settings.settleTicks) { motion = staffSpellHudMotion(motion, Vector(), 1.0, true, settings) }
-        motion.turnRadiansPerTick shouldBe 0.0
-        staffSpellHudMotion(motion, Vector(0.0, 0.0, 80.0), 1.0, true, settings) shouldBe StaffSpellHudMotion()
+    "continuous and batched movement and yaw never resize or reposition the mounted card" {
+        withHudHarness { h ->
+            val player = h.player("staff-hud-steady", StaffSpell.EMBER)
+            h.hud.cooldown(player, StaffSpell.EMBER, secondary = false, remainingTicks = 40, totalTicks = 40)
+            val card = h.recorder.records.single()
+            val translation = Vector3f(card.translation)
+            val scale = card.scale
+            val writes = card.transformWrites
+            val movement = List(8) { Vector(0.0, 0.0, 0.28) } + listOf(
+                Vector(), Vector(), Vector(0.0, 0.0, 0.84), // Three received movement ticks in one server tick.
+                Vector(0.0, 0.42, 0.28), Vector(0.0, -0.4, 0.28),
+                Vector(1.5, 1.2, 0.0), Vector(-1.5, -1.2, 0.0), Vector(),
+            )
+            movement.forEachIndexed { index, delta ->
+                player.teleport(player.location.add(delta).apply { yaw += 13f })
+                h.hud.cooldown(player, StaffSpell.EMBER, secondary = false,
+                    remainingTicks = 39L - index, totalTicks = 40)
+                h.scheduler.tick(1)
+                card.translation shouldBe translation
+                card.scale shouldBe scale
+                card.transformWrites shouldBe writes
+                card.teleports.size shouldBe 0
+            }
+            h.recorder.records.size shouldBe 1
+            card.textWrites.isNotEmpty() shouldBe true
+            card.attachedPlayerId shouldBe player.uniqueId
+        }
+    }
+
+    "slow pitch corrections accumulate against the last applied pose" {
+        withHudHarness { h ->
+            val player = h.player("staff-hud-slow-pitch", StaffSpell.EMBER)
+            h.hud.ready(player, StaffSpell.EMBER, secondary = false)
+            val card = h.recorder.records.single()
+            val writes = card.transformWrites
+            val bounds = staffSpellHudBounds(text(card.text), staffSpellHudVisualSpec().lineWidth)
+            val gap = player.height - player.eyeHeight
+            val pose = staffSpellHudPose(staffHudPosition(StaffSpellHudPositionSettings(),
+                StaffHudPlacement.BOTTOM, bounds, gap))
+            repeat(40) { tick ->
+                player.teleport(player.location.apply { pitch = (tick + 1) * 0.1f })
+                h.scheduler.tick(1)
+                if (tick == 0) card.transformWrites shouldBe writes
+                val expected = staffHudBillboardTransformation(pose, bounds, player.eyeLocation, gap)
+                (card.translation.distance(expected.translation) < 0.00101f) shouldBe true
+            }
+            (card.transformWrites > writes) shouldBe true
+            card.teleports.size shouldBe 0
+        }
     }
 
     "camera turns reuse the mounted card and top-bottom changes snap only the local pose" {
@@ -496,7 +510,7 @@ private fun withHudHarness(ownDisplays: Boolean = true, block: (HudHarness) -> U
             )
         } answers {
             val distance = rayHitDistance.firstOrNull()
-            if (distance == null) null else {
+            if (distance == null || distance > thirdArg<Double>()) null else {
                 val start = firstArg<Location>()
                 val direction = secondArg<Vector>().clone().normalize()
                 RayTraceResult(start.toVector().add(direction.multiply(distance)))

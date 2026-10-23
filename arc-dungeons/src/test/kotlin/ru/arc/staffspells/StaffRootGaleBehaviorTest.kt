@@ -78,7 +78,7 @@ class StaffRootGaleBehaviorTest : FreeSpec({
             wrap.second(0).size shouldBe 6
             player.inventory.setItemInMainHand(h.config.item(StaffSpell.GALE))
             h.controller.cast(player, StaffCastInput.PRIMARY, 0.0)
-            h.scheduler.tick(10) // Wait out the normal global cooldown before the third admitted attack.
+            h.scheduler.tick(20) // Wait out the shared primary recovery before the third admitted attack.
             player.inventory.setItemInMainHand(h.config.item(StaffSpell.PRISM))
             h.controller.cast(player, StaffCastInput.PRIMARY, 0.0)
             h.visualPlays.count { it.spell in setOf(StaffSpell.GALE, StaffSpell.PRISM) } shouldBe 2
@@ -148,13 +148,13 @@ class StaffRootGaleBehaviorTest : FreeSpec({
             h.controller.start()
             h.controller.cast(player, input, 0.0)
             h.cooldowns.remainingTicks(player.uniqueId) shouldBe 0L
-            h.controller.skillRemaining(player.uniqueId, StaffSpell.NOVA, input.secondary) shouldBe 0L
+            h.controller.skillRemaining(player.uniqueId, input.secondary) shouldBe 0L
             for (x in -8..8) for (z in 0..24) world.getBlockAt(x, 119, z).type = Material.STONE
             val target = h.zombie(world, .5, 8.5).apply { teleport(location.add(0.0, 56.0, 0.0)) }
             player.teleport(player.location.setDirection(center(target).toVector().subtract(player.eyeLocation.toVector())))
             h.controller.cast(player, input, 0.0)
             h.cooldowns.remainingTicks(player.uniqueId) shouldBe 4L
-            (h.controller.skillRemaining(player.uniqueId, StaffSpell.NOVA, input.secondary) > 0) shouldBe true
+            (h.controller.skillRemaining(player.uniqueId, input.secondary) > 0) shouldBe true
             h.scheduler.tick(14)
             h.hits.count { it == target } shouldBe 1
         } }

@@ -25,15 +25,6 @@ hud:
     vertical-blocks: 0.85
     horizontal-blocks: 0.0
     scale: 0.66
-  # Native passenger + camera billboard follow movement locally, preserving the selected side.
-  # Speed * prediction-ticks gives extra forward retreat, capped by max-lead-blocks.
-  # This is a local distance envelope, not a predicted world-space anchor.
-  motion:
-    prediction-ticks: 2.0
-    max-lead-blocks: 4.0
-    forward-blocks: 2.0
-    vertical-blocks: 0.9
-    settle-ticks: 10
 # Raw damage before the arena kit multiplier (0.4); read again on ARC reload.
 # Each ability has its own cooldown plus a shared 4-tick GCD. Charged primaries use native RMB release.
 duel:
@@ -104,8 +95,8 @@ mark:
 frost:
   hotkeys:
     q:
-      name: 'Оттепель'
-      description: 'Расколите собственную заморозку на врагах'
+      name: 'Ледяные оковы'
+      description: 'Поражает замедленных вами врагов и сковывает на 1 с'
       cooldown-ticks: 160
     f:
       name: 'Ледяное скольжение'
@@ -114,7 +105,7 @@ frost:
   secondary-name: 'Полярный круг'
   secondary: '<#b1f2ff><attack-secondary> <#e8dfd2>— ледяной фронт расходится от вас на восемь блоков'
   name: '<#b1f2ff>Ледяной хлопок'
-  description: '<#e8dfd2>Ледяные челюсти сходятся перед вами, с хлопком разбиваются и замедляют врагов.'
+  description: '<#e8dfd2>Ледяные челюсти сходятся перед вами, разбиваются и накладывают замедление II.'
   aim: '<#b1f2ff><attack> · область перед собой до 7 блоков · без зарядки'
   quick-name: 'Ледяной щит'
   quick: '<#b1f2ff><defense> <#e8dfd2>— щит спереди: два удара за 1,2 с; перезарядка 4 с'
@@ -134,7 +125,7 @@ icicle:
   hotkeys:
     q:
       name: 'Кристальный всплеск'
-      description: 'Кристаллы поражают врагов вокруг в радиусе 4,5 блока'
+      description: 'Поражает врагов в радиусе 4,5 блока и сковывает на 1,2 с'
       cooldown-ticks: 160
     f:
       name: 'Ледяная ступень'
@@ -373,15 +364,15 @@ prism:
   hotkeys:
     q:
       name: 'Режущие грани'
-      description: 'Поставьте треугольник, опасный при пересечении'
+      description: 'Треугольник ранит и замедляет вошедших врагов на 2 с'
       cooldown-ticks: 180
     f:
       name: 'Преломление'
       description: 'Управляемый разгон'
       cooldown-ticks: 80
   name: '<#e7c5ff>Кристальная призма'
-  description: '<#e8dfd2>Кристалл вырастает у прицела и поражает до трёх врагов лучами.'
-  aim: '<#e7c5ff>Кристалл и преломление · до 36 блоков'
+  description: '<#e8dfd2>Кристалл у прицела наводит растущие лучи на трёх врагов; каждый луч поражает цель один раз.'
+  aim: '<#e7c5ff>Наводящиеся лучи · до 56 блоков · укрытия останавливают свет'
   secondary-name: 'Сведение лучей'
   secondary: '<#e7c5ff><attack-secondary> <#e8dfd2>— луч наводится на цепь до 6 врагов и преломляется в видимых призмах, поражая цели на пути'
   quick-name: 'Гранёный щит'
@@ -439,17 +430,17 @@ gravity:
   hotkeys:
     q:
       name: 'Подвешивание'
-      description: 'Удержите врага; повторное Q — бросить'
+      description: 'Бьёт и удерживает врага 1,4 с; повторное Q — бросить'
       cooldown-ticks: 200
     f:
       name: 'Невесомый прыжок'
       description: 'Баллистический прыжок с мягкой дугой'
       cooldown-ticks: 110
   name: <#cfb8ff>Гравитационный захват
-  description: <#e8dfd2>Подхватите глыбу с видимой поверхности и ведите её прицелом.
+  description: <#e8dfd2>Подхватите глыбу с видимой поверхности или земли перед собой и бросьте во врагов.
   aim: <#cfb8ff>Удерживайте <attack> — захват · ведите прицел · отпустите — бросок до 32 блоков
   secondary-name: Гравитационный обвал
-  secondary: <#cfb8ff><attack-secondary> <#e8dfd2>— поднимает врагов вокруг и обрушивает на землю в радиусе 6,5 блока
+  secondary: <#cfb8ff><attack-secondary> <#e8dfd2>— стягивает и обрушивает врагов в радиусе 6,5 блока; при низком потолке прижимает к земле
   skin: 3dfantasyweaponscit:staff_of_unholy_wisdom
   duel-appearance:
     item-model: ''

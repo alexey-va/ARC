@@ -127,14 +127,16 @@ internal class StaffSpellController(
     private data class ChannelInput(val spell: StaffSpell, val cast: StaffSpellCast)
     private val channelInputs = mutableMapOf<UUID, ChannelInput>()
     internal val summons = StaffSpellSummons(settings, damage, visuals, targeting, summonActorFactory)
-    private val techniques = StaffSpellTechniques(settings, damage, effects, visuals, targeting, summons)
+    private val techniques = StaffSpellTechniques(settings, damage, effects, visuals, targeting, summons,
+        rootTarget = conjurations::rootTarget, rootActive = conjurations::rootActive,
+        clearRoots = conjurations::clearRoots)
     private val mobility = StaffSpellMobility(settings, damage, effects, visuals, targeting)
     init {
         damage.summonCast = summons::castFor
         hud?.armyCount = { player -> summons.countFor(player.uniqueId) }
         hud?.hotkeyState = { player, spell -> StaffHotkeyHudState(
-            hotkeys.remaining(player.uniqueId, spell, StaffAbility.Q),
-            hotkeys.remaining(player.uniqueId, spell, StaffAbility.F),
+            hotkeys.remaining(player.uniqueId, StaffAbility.Q),
+            hotkeys.remaining(player.uniqueId, StaffAbility.F),
             techniques.continuationLabel(player.uniqueId, spell) ?: conjurations.continuationLabel(player.uniqueId, spell),
         ) }
     }
@@ -220,7 +222,7 @@ internal class StaffSpellController(
             return false
         }
         if (!ready(player)) return false
-        if (attackRemaining(player.uniqueId, spell, secondary) > 0) {
+        if (attackRemaining(player.uniqueId, secondary) > 0) {
             showCooldown(player, spell)
             visuals.cooldownFeedback(player, spell)
             return false
@@ -231,7 +233,7 @@ internal class StaffSpellController(
     override fun canHotkey(player: Player, spell: StaffSpell, key: StaffHotkey): Boolean {
         if (!ready(player) || spell !in StaffSpell.available || cooldowns.remainingTicks(player.uniqueId) > 0) return false
         if (key == StaffHotkey.Q && canRecast(player.uniqueId, spell)) return true
-        if (hotkeys.remaining(player.uniqueId, spell, StaffAbility.hotkey(key)) > 0) {
+        if (hotkeys.remaining(player.uniqueId, StaffAbility.hotkey(key)) > 0) {
             visuals.cooldownFeedback(player, spell)
             showCooldown(player, spell)
             return false
@@ -243,14 +245,14 @@ internal class StaffSpellController(
         if (!ready(player) || spell !in StaffSpell.available || cooldowns.remainingTicks(player.uniqueId) > 0 ||
             StaffSpell.from(player.inventory.itemInMainHand) != spell) return
         val recast = key == StaffHotkey.Q && canRecast(player.uniqueId, spell)
-        if (!recast && hotkeys.remaining(player.uniqueId, spell, StaffAbility.hotkey(key)) > 0) return
+        if (!recast && hotkeys.remaining(player.uniqueId, StaffAbility.hotkey(key)) > 0) return
         val cast = damage.capture(player, duelOnly = StaffSpell.isDuelOnly(player.inventory.itemInMainHand)) ?: return
         val tuning = settings.tuningFor(spell, duel = cast.duelAuthorization != null)
         val accepted = if (key == StaffHotkey.F) mobility.cast(player, spell, cast, tuning)
             else if (spell in CONJURATION_SPELLS) conjurations.cast(player, spell, cast, tuning)
             else techniques.cast(player, spell, cast, tuning)
         if (accepted) {
-            if (!recast) hotkeys.start(player.uniqueId, spell, StaffAbility.hotkey(key), config.hotkeyCooldown(spell, key))
+            if (!recast) hotkeys.start(player.uniqueId, StaffAbility.hotkey(key), config.hotkeyCooldown(spell, key))
             beginGcd(player.uniqueId)
         } else {
             visuals.cooldownFeedback(player, spell)
@@ -302,7 +304,7 @@ internal class StaffSpellController(
 
     private fun beginCooldown(player: Player, spell: StaffSpell, secondary: Boolean, ticks: Long, cast: StaffSpellCast, startGcd: Boolean = true): Long {
         val adjusted = StaffSpellsModule.masteryCooldownTicks(player, cast, ticks)
-        hotkeys.start(player.uniqueId, spell, StaffAbility.attack(secondary), adjusted)
+        hotkeys.start(player.uniqueId, StaffAbility.attack(secondary), adjusted)
         if (startGcd) beginGcd(player.uniqueId)
         if (ready(player)) showCooldown(player, spell)
         return adjusted
@@ -348,7 +350,7 @@ internal class StaffSpellController(
         if (!ready(player) || cooldowns.remainingTicks(player.uniqueId) > 0) return
         if (input.quick) { defend(player, spell); return }
         if (spell == StaffSpell.GRAVITY && !input.secondary) return
-        if (attackRemaining(player.uniqueId, spell, input.secondary) > 0) {
+        if (attackRemaining(player.uniqueId, input.secondary) > 0) {
             showCooldown(player, spell)
             visuals.cooldownFeedback(player, spell)
             return
@@ -493,16 +495,16 @@ internal class StaffSpellController(
         gcdOwners += playerId
     }
 
-    internal fun skillRemaining(playerId: UUID, spell: StaffSpell, secondary: Boolean = false): Long =
-        hotkeys.remaining(playerId, spell, StaffAbility.attack(secondary))
+    internal fun skillRemaining(playerId: UUID, secondary: Boolean = false): Long =
+        hotkeys.remaining(playerId, StaffAbility.attack(secondary))
 
-    private fun attackRemaining(playerId: UUID, spell: StaffSpell, secondary: Boolean): Long =
-        maxOf(cooldowns.remainingTicks(playerId), skillRemaining(playerId, spell, secondary))
+    private fun attackRemaining(playerId: UUID, secondary: Boolean): Long =
+        maxOf(cooldowns.remainingTicks(playerId), skillRemaining(playerId, secondary))
 
     private fun showCooldown(player: Player, spell: StaffSpell) {
-        val skill = skillRemaining(player.uniqueId, spell, player.isSneaking)
+        val skill = skillRemaining(player.uniqueId, player.isSneaking)
         val gcd = cooldowns.remainingTicks(player.uniqueId)
-        val total = if (skill >= gcd) hotkeys.total(player.uniqueId, spell, StaffAbility.attack(player.isSneaking))
+        val total = if (skill >= gcd) hotkeys.total(player.uniqueId, StaffAbility.attack(player.isSneaking))
             else GLOBAL_COOLDOWN_TICKS
         hud?.cooldown(player, spell, player.isSneaking, maxOf(skill, gcd), total.coerceAtLeast(1))
     }

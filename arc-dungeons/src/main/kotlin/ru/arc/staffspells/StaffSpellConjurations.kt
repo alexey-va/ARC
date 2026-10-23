@@ -270,6 +270,7 @@ internal class StaffSpellConjurations(
                 !visible(player.eyeLocation, target) || !frostSlowStillOwned(player, mark)) continue
             target.removePotionEffect(PotionEffectType.SLOWNESS)
             frostSlows.remove(mark.key)
+            rootTarget(player, target, cast, FROST_THAW_ROOT_TICKS)
             consumed += target.uniqueId
         }
         if (!damage.isCurrent(player, cast)) {
@@ -859,6 +860,7 @@ internal class StaffSpellConjurations(
         const val FROST_THAW_RANGE = 8.0
         const val FROST_THAW_TICKS = 18
         const val FROST_THAW_DAMAGE_MULTIPLIER = 0.72
+        const val FROST_THAW_ROOT_TICKS = 20
         const val NOVA_TRAP_RADIUS = 1.65
         const val NOVA_ARM_TICKS = 8
         const val NOVA_TRAP_DURATION = 72
