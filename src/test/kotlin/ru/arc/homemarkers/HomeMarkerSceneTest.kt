@@ -276,10 +276,10 @@ private fun PaperSpatialControls<*, *>.captureNativeForTest(player: Player) {
     val viewerConstructor = viewerType.getDeclaredConstructor(Player::class.java, UUID::class.java,
         UUID::class.java, Int::class.javaPrimitiveType, Set::class.java, Double::class.javaPrimitiveType,
         Double::class.javaPrimitiveType, Double::class.javaPrimitiveType, Set::class.java, List::class.java,
-        Class.forName("ru.arc.paper.display.PacketDisplayView"))
+        Class.forName("ru.arc.paper.display.PacketDisplayView"), Double::class.javaPrimitiveType)
     val eye = player.eyeLocation
     val viewer = viewerConstructor.newInstance(player, player.uniqueId, player.world.uid, player.entityId,
-        emptySet<UUID>(), eye.x, eye.y - player.eyeHeight, eye.z, emptySet<Long>(), emptyList<Int>(), null)
+        emptySet<UUID>(), eye.x, eye.y - player.eyeHeight, eye.z, emptySet<Long>(), emptyList<Int>(), null, player.height)
     val steps = capture.invoke(participant, listOf(viewer)) as Iterator<*>
     val clock = TestTaskScheduler()
     LifecycleTaskScope(clock).use { scope ->
