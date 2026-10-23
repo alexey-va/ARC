@@ -27,6 +27,7 @@ internal class HelpCenterHubController(
     private val executeInventory: (Player, String) -> Boolean,
 ) : AutoCloseable {
     private val miniMessage = MiniMessage.miniMessage()
+    private val presentation = HelpCenterPresentation(settings)
     private val tasks = LifecycleTaskScope()
 
     fun openCatalogAction(player: Player, command: HelpCenterCommand, returnTo: () -> Unit = { openPage(player, HelpCenterPage.COMMANDS) }) {
@@ -241,10 +242,9 @@ internal class HelpCenterHubController(
         val context = gateway.context(player)
         val label = plain("problem-${problem.name.lowercase().replace('_', '-')}-label")
         val facts = HelpCenterHubPlanner.diagnosticFacts(problem, context, homesLoaded = null)
-        val factsText = facts.joinToString("\n") { fact ->
-            val marker = if (fact.positive) "✓" else "•"
-            "$marker ${plainFact(fact.id, fact.positive)}"
-        }
+        val factsText = presentation.checklist(facts.map { fact ->
+            fact.positive to Component.text(plainFact(fact.id, fact.positive))
+        }, 420)
         val actions = when (problem) {
             HelpCenterProblem.CANNOT_TELEPORT -> listOf(HelpCenterPage.TRAVEL, HelpCenterPage.PLAYERS)
             HelpCenterProblem.CANNOT_CLAIM -> listOf(HelpCenterPage.PRIVAT, HelpCenterPage.CONTEXT)
@@ -258,8 +258,9 @@ internal class HelpCenterHubController(
                 id = "help.diagnostic",
                 title = text("diagnostic-title", "problem" to label),
                 body = listOf(
-                    PaperDialogBody(text("diagnostic-body", "facts" to factsText), width = 420),
-                    PaperDialogBody(text("diagnostic-${problem.name.lowercase().replace('_', '-')}-help"), width = 420),
+                    PaperDialogBody(miniMessage.deserialize(settings.text("diagnostic-body"),
+                        Placeholder.component("facts", factsText)), width = 420),
+                    presentation.callout(text("diagnostic-${problem.name.lowercase().replace('_', '-')}-help"), 420),
                 ),
                 buttons = actions.mapIndexed { index, page ->
                     button("diagnostic_$index", pageLabel(page)) { openPage(player, page) }

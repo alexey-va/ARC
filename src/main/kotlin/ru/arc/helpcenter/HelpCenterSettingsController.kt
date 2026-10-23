@@ -75,7 +75,7 @@ internal class HelpCenterSettingsController(
         ) else emptyList()
         showDialog(player, PaperDialogScreen(
             id = "help.category.settings", title = text("category-settings-title"),
-            body = listOf(PaperDialogBody(text("settings-hub-body",
+            body = listOf(presentation.callout(text("settings-hub-body",
                 "shortcut" to state(entries.getValue("shortcut")), "escape" to state(entries.getValue("escape"))), 468)),
             buttons = buttons, exitButton = button("root", text("root-label")) { openRoot(player) }, columns = 2,
         ))
@@ -124,7 +124,8 @@ internal class HelpCenterSettingsController(
         }
         showDialog(player, PaperDialogScreen(
             id = "help.settings.section.${section.key}", title = text("settings-${section.key}-title"),
-            body = listOf(PaperDialogBody(text("settings-${section.key}-body"), 468)), buttons = buttons,
+            body = listOfNotNull(presentation.paragraph(text("settings-${section.key}-body"), 468),
+                presentation.separator(468)), buttons = buttons,
             exitButton = button("back", text("settings-back-label")) { open(player) }, columns = 2,
         ))
     }

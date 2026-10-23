@@ -168,6 +168,7 @@ class HelpCenterScreensTest {
         val closeSettings = legacy.entries(player).map { if (it.id == "escape") it.copy(state = "close") else it }
         every { legacy.entries(player) } returns closeSettings
         player.addAttachment(plugin, "arcjustteams.use", true)
+        player.addAttachment(plugin, "arc.mounts.use", true)
         gravesCount = 2
         val screens = linkedMapOf<String, PaperDialogScreen>()
         open(HelpCenterPage.ROOT)
@@ -197,6 +198,7 @@ class HelpCenterScreensTest {
         screens["interface"] = screen
         open(HelpCenterPage.SETTINGS)
         click("settings_world")
+        screens["world"] = screen
         click("legacy_flight")
         screens["flight"] = screen
         // The ordinary action still dispatches the same player command.
@@ -211,11 +213,50 @@ class HelpCenterScreensTest {
         screens["long-caption"] = screen
         plain(screen.buttons.single { it.id.value == "request_vote" }.label)
             .codePoints().anyMatch { it in 0xF9000..0xF9FFF } shouldBe false
+        for (page in listOf(HelpCenterPage.HELP, HelpCenterPage.COMMANDS, HelpCenterPage.RTP,
+            HelpCenterPage.ACTIVITIES, HelpCenterPage.GUIDE)) {
+            open(page)
+            screens[page.name.lowercase()] = screen
+        }
+        open(HelpCenterPage.SETTINGS)
+        click("settings_social")
+        screens["social"] = screen
+        open(HelpCenterPage.ROOT)
+        click("root_trade")
+        screens["trade"] = screen
+        open(HelpCenterPage.RECOVERY)
+        screens["recovery"] = screen
+        click("problem_cannot_teleport")
+        screens["diagnostic"] = screen
+        body().codePoints().filter { it == 0xF910C }.count() shouldBe 2L
+        body().codePoints().filter { it == 0xF910D }.count() shouldBe 1L
+        click("back")
+        screen.id shouldBe "help.recovery"
+
+        // The empty-font runtime retains native readable text and all of the same controls.
+        controller.close()
+        controller = newController(plugin, "", closeEscape = true)
+        open(HelpCenterPage.ROOT)
+        screens["root-plain"] = screen
+        open(HelpCenterPage.COMMANDS)
+        screens["commands-plain"] = screen
+        open(HelpCenterPage.RECOVERY)
+        click("problem_cannot_teleport")
+        screens["diagnostic-plain"] = screen
+        for ((decorated, fallback) in listOf("root" to "root-plain", "commands" to "commands-plain", "diagnostic" to "diagnostic-plain")) {
+            screens.getValue(fallback).buttons.map { it.id to it.width } shouldBe
+                screens.getValue(decorated).buttons.map { it.id to it.width }
+            screens.getValue(fallback).body.forEach {
+                plain(it.text).codePoints().anyMatch { point -> point in 0xF9000..0xF9FFF } shouldBe false
+            }
+        }
         val serializer = LegacyComponentSerializer.builder().character('&').hexColors().build()
         fun serialize(component: Component) = serializer.serialize(component)
         val export = screens.mapValues { (_, view) -> mapOf(
             "title" to serialize(view.title), "columns" to view.columns,
             "body" to view.body.map { mapOf("text" to serialize(it.text), "width" to it.width) },
+            "inputs" to view.inputs.map { mapOf("id" to it.id.value, "label" to serialize(it.label),
+                "initial" to it.initial, "width" to it.width) },
             "buttons" to view.buttons.map { mapOf("id" to it.id.value, "text" to serialize(it.label),
                 "tooltip" to serialize(it.tooltip), "width" to it.width) },
             "exit" to view.exitButton?.let { mapOf("text" to serialize(it.label), "width" to it.width) },
@@ -223,15 +264,7 @@ class HelpCenterScreensTest {
         val output = Path.of("build/reports/help-center-decoration/content.json")
         Files.createDirectories(output.parent)
         Files.writeString(output, GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create().toJson(export))
-        val checkedScreens = screens.toMutableMap()
-        for (page in listOf(HelpCenterPage.HELP, HelpCenterPage.COMMANDS, HelpCenterPage.RTP,
-            HelpCenterPage.TECHNOLOGY, HelpCenterPage.ACTIVITIES, HelpCenterPage.GUIDE)) {
-            open(page)
-            checkedScreens[page.name] = screen
-        }
-        open(HelpCenterPage.ROOT)
-        click("root_trade")
-        checkedScreens["TRADE"] = screen
+        val checkedScreens = screens.filterKeys { !it.endsWith("-plain") }
         val utilityIds = setOf("search", "settings", "create_home", "rec_home", "back_command", "back", "root", "close_menu")
         for ((name, view) in checkedScreens) {
             for (button in view.buttons + listOfNotNull(view.exitButton)) {
@@ -438,11 +471,12 @@ class HelpCenterScreensTest {
     fun `root is a compact server router and help is a separate support hub`() {
         open(HelpCenterPage.ROOT)
         player.addAttachment(paper.createSimplePlugin("TeamsPermission"), "arcjustteams.use", true)
+        player.addAttachment(paper.createSimplePlugin("MountsPermission"), "arc.mounts.use", true)
         open(HelpCenterPage.ROOT)
         assertEquals(3, screen.columns)
         assertTrue(screen.buttons.all { it.width == 166 })
         assertEquals(listOf("now", "teams", "travel", "privat", "root_activities",
-            "root_trade", "rank", "jobs", "skills", "quests", "enchants", "root_technology", "search", "settings"), screen.buttons.map { it.id.value })
+            "root_trade", "rank", "jobs", "skills", "quests", "enchants", "mounts", "search", "settings"), screen.buttons.map { it.id.value })
         assertTrue(body().contains("Viewer"))
         assertFalse(screen.buttons.single { it.id.value == "quests" }.closeDialogBeforeAction)
         click("quests")
@@ -474,7 +508,8 @@ class HelpCenterScreensTest {
         every { gateway.features() } returns HelpCenterFeature.entries.toSet() - HelpCenterFeature.TEAMS
         open(HelpCenterPage.ROOT)
         assertFalse(screen.buttons.any { it.id.value == "teams" })
-        assertEquals(13, screen.buttons.size)
+        assertFalse(screen.buttons.any { it.id.value == "mounts" })
+        assertEquals(12, screen.buttons.size)
         open(HelpCenterPage.PLAYERS)
         assertFalse(screen.buttons.any { it.id.value == "command_teams" })
     }
@@ -593,20 +628,17 @@ class HelpCenterScreensTest {
         val access = player.addAttachment(paper.createSimplePlugin("BuilderAccess"))
         for (permission in listOf("arcbuild.use", "arcbuild.copy", "arcbuild.book.create")) {
             access.setPermission(permission, true)
-            open(HelpCenterPage.ROOT)
-            click("root_technology")
+            open(HelpCenterPage.TECHNOLOGY)
             click("command_builder")
             assertEquals("help.builder", screen.id)
             click("builder_wand")
             assertEquals("builder wand", executed.last())
             executed.clear()
-            open(HelpCenterPage.ROOT)
-            click("root_technology")
+            open(HelpCenterPage.TECHNOLOGY)
             access.setPermission(permission, false)
             click("command_builder")
             assertTrue(executed.isEmpty())
-            open(HelpCenterPage.ROOT)
-            click("root_technology")
+            open(HelpCenterPage.TECHNOLOGY)
             assertFalse(screen.buttons.any { it.id.value == "command_builder" })
         }
     }
@@ -1202,11 +1234,36 @@ class HelpCenterScreensTest {
     @Test
     fun `main menu labels have no decorative icons while child labels retain their styling`() {
         player.addAttachment(paper.createSimplePlugin("MainLabels"), "arcjustteams.use", true)
+        player.addAttachment(paper.createSimplePlugin("MountLabels"), "arc.mounts.use", true)
         open(HelpCenterPage.ROOT)
         assertEquals(listOf("Мой профиль", "Кланы", "Телепортация", "Приваты", "Активности",
-            "Торговля", "Ранги", "Работы", "Навыки", "Квесты", "Зачарования", "Технологии", "Поиск", "Настройки"), screen.buttons.map { plain(it.label) })
+            "Торговля", "Ранги", "Работы", "Навыки", "Квесты", "Зачарования", "Маунты", "Поиск", "Настройки"), screen.buttons.map { plain(it.label) })
         click("search")
         assertTrue(screen.buttons.any { plain(it.label).startsWith("⚡") })
+    }
+
+    @Test
+    fun `root mounts uses the existing provider action and rechecks access`() {
+        val access = player.addAttachment(paper.createSimplePlugin("RootMounts"))
+        access.setPermission("arc.mounts.use", true)
+        open(HelpCenterPage.ROOT)
+        assertFalse(screen.buttons.any { it.id.value == "root_technology" })
+        assertEquals("Маунты", plain(screen.buttons.single { it.id.value == "mounts" }.label))
+        click("mounts")
+        assertEquals(listOf("mount"), executed)
+        executed.clear()
+
+        open(HelpCenterPage.ROOT)
+        access.setPermission("arc.mounts.use", false)
+        click("mounts")
+        assertTrue(executed.isEmpty())
+        open(HelpCenterPage.ROOT)
+        assertFalse(screen.buttons.any { it.id.value == "mounts" })
+
+        access.setPermission("arc.mounts.use", true)
+        every { gateway.features() } returns HelpCenterFeature.entries.toSet() - HelpCenterFeature.MOUNTS
+        open(HelpCenterPage.ROOT)
+        assertFalse(screen.buttons.any { it.id.value == "mounts" })
     }
 
     @Test
