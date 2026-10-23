@@ -97,7 +97,10 @@ object ArcMenus {
             .open(player, prepareDialog(screen, escapeGoesBack, close), reopen, onDismiss, !escapeGoesBack)
     }
 
-    internal fun prepareDialog(screen: PaperDialogScreen, escapeGoesBack: Boolean, closeButton: ru.arc.paper.menu.PaperDialogButton, preferBackFooter: Boolean = false): PaperDialogScreen {
+    internal fun prepareDialog(screen: PaperDialogScreen, escapeGoesBack: Boolean, closeButton: ru.arc.paper.menu.PaperDialogButton): PaperDialogScreen =
+        prepareDialog(screen, escapeGoesBack, closeButton, preferBackFooter = false)
+
+    internal fun prepareDialog(screen: PaperDialogScreen, escapeGoesBack: Boolean, closeButton: ru.arc.paper.menu.PaperDialogButton, preferBackFooter: Boolean): PaperDialogScreen {
         val back = preferBackFooter || escapeGoesBack
         return dialogPresentation.screen(
             MenuEscapeBehavior.apply(screen, back, closeButton),
