@@ -30,7 +30,8 @@ class ItemInfoControllerTest : StringSpec({
             horizontalOffset = 0.75,
         )
         val inspection = mockk<PaperArcInspectionService>(relaxed = true)
-        val controller = ItemInfoController({ selected }, inspection)
+        val clearPreparation = mockk<(Player) -> Unit>(relaxed = true)
+        val controller = ItemInfoController({ selected }, inspection, clearPreparation = clearPreparation)
 
         controller.update(player)
         controller.follow(player)
@@ -42,6 +43,7 @@ class ItemInfoControllerTest : StringSpec({
                 InspectionViewPreferences(InspectionViewMode.BOSSBAR, 1.25f, -0.25, 0.75),
             )
             inspection.follow(player)
+            clearPreparation(player)
             inspection.clear(player)
         }
     }
@@ -90,18 +92,24 @@ class ItemInfoControllerTest : StringSpec({
             bossbarTemplate = "<white><name> <dark_gray>· <gray><id>",
         )
         var selected = ItemInfoPreferences.DEFAULT
+        val preparation = ItemInfoTestPreparation()
         val provider = ItemInfoInspectionProvider(
             settings = settings,
             resolveTarget = { target },
             preferences = { selected },
+            work = preparation.work,
         )
         val plain = PlainTextComponentSerializer.plainText()
 
+        provider.resolve(player)?.suppressesLowerSources shouldBe true
+        preparation.completeNext()
         val nameOnly = provider.resolve(player) ?: error("Expected the block source to resolve")
         plain.serialize(nameOnly.hologram) shouldBe "Дубовый стол"
         plain.serialize(nameOnly.bossbar) shouldBe "Дубовый стол"
 
         selected = selected.copy(showNamespacedId = true)
+        provider.resolve(player)?.suppressesLowerSources shouldBe true
+        preparation.completeNext()
         val withId = provider.resolve(player) ?: error("Expected the block source to resolve")
         plain.serialize(withId.hologram) shouldBe "Дубовый стол\nitemsadder:oak_table"
         plain.serialize(withId.bossbar) shouldBe "Дубовый стол · itemsadder:oak_table"
@@ -115,6 +123,7 @@ class ItemInfoControllerTest : StringSpec({
             settings = settings.copy(enabled = enabled),
             resolveTarget = { selectedTarget },
             preferences = { ItemInfoPreferences.DEFAULT },
+            work = ItemInfoTestPreparation().work,
         )
 
         provider().resolve(player) shouldBe null
@@ -144,7 +153,10 @@ class ItemInfoControllerTest : StringSpec({
         private fun player(): Player = mockk {
             every { uniqueId } returns UUID.randomUUID()
             every { hasPermission("arc.chest-preview") } returns true
-            every { world } returns mockk { every { name } returns "survival" }
+            every { world } returns mockk {
+                every { uid } returns UUID.randomUUID()
+                every { name } returns "survival"
+            }
         }
     }
 }

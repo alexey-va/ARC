@@ -31,7 +31,7 @@ internal class ItemInfoBlockResolver(
 internal class ItemInfoTargetPolicy(
     private val managedCrate: (Location) -> Boolean,
 ) {
-    fun filter(location: Location?, target: ItemInfoTarget?): ItemInfoTarget? =
+    fun <T> filter(location: Location?, target: T?): T? =
         if (location != null && managedCrate(location)) null else target
 }
 
@@ -82,11 +82,7 @@ internal class BukkitItemInfoTargetResolver(
         val furnitureHit = if (Bukkit.getPluginManager().isPluginEnabled("ItemsAdder")) {
             player.world.rayTraceEntities(eye, eye.direction, distance, if (gallery) 0.0 else 0.20) { entity ->
                 if (entity.uniqueId == player.uniqueId) return@rayTraceEntities false
-                if (gallery) {
-                    (entity is ItemDisplay || entity is ArmorStand) && furniture(entity, gallery = true) != null
-                } else {
-                    (entity is ItemDisplay || entity is ArmorStand) && furniture(entity, false) != null
-                }
+                (entity is ItemDisplay || entity is ArmorStand) && furnitureCandidate(entity, gallery) != null
             }
         } else null
         val entityTarget = furnitureHit?.let { hit ->
@@ -115,10 +111,15 @@ internal class BukkitItemInfoTargetResolver(
         }.getOrNull()
     }
 
-    private fun furniture(entity: Entity, gallery: Boolean): ItemInfoTarget? = runCatching {
+    private fun furnitureCandidate(entity: Entity, gallery: Boolean): CustomFurniture? = runCatching {
         val custom = CustomFurniture.byAlreadySpawned(entity) ?: return null
         if (gallery && (entity.world.name != FURNITURE_GALLERY_WORLD || custom.entity?.uniqueId != entity.uniqueId)) return null
-        policy.filter(custom.entity?.location, customTarget(custom, furnitureDefinition = true))
+        if (custom.namespacedID?.trim()?.isNotEmpty() != true) return null
+        policy.filter(custom.entity?.location, custom)
+    }.getOrNull()
+
+    private fun furniture(entity: Entity, gallery: Boolean): ItemInfoTarget? = runCatching {
+        furnitureCandidate(entity, gallery)?.let { customTarget(it, furnitureDefinition = true) }
     }.getOrNull()
 
     private fun customTarget(custom: CustomStack, furnitureDefinition: Boolean = false): ItemInfoTarget? {

@@ -19,11 +19,8 @@ import ru.arc.chestpreview.ChestPreviewTarget
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.furniturehitbox.FurnitureHitboxHint
 import ru.arc.hooks.luckperms.LuckPermsHook
-import ru.arc.hooks.economyshop.FURNITURE_GALLERY_WORLD
 import ru.arc.hooks.economyshop.FurnitureGalleryInteractionRuntime
 import ru.arc.onboarding.OnboardingModule
-import ru.arc.paper.api.ArcInspectionFrame
-import ru.arc.paper.api.ArcInspectionProvider
 import ru.arc.paper.inspection.PaperArcInspectionService
 import ru.arc.paper.display.PaperPacketDisplays
 import ru.arc.util.Logging.error
@@ -51,17 +48,13 @@ internal class ItemInfoRuntime(
         player.isDead || player.gameMode == GameMode.SPECTATOR || ru.arc.landsui.LandsUiModule.hasClaimMenu(player) ||
             OnboardingModule.claimGuide?.hasHologram(player) == true
     }
-    private val providerRegistration = inspection.register(
-        ARC.instance,
-        "item-info",
-        0,
-        ItemInfoInspectionProvider(
-            settings = settings,
-            resolveTarget = resolver::resolve,
-            preferences = readPreferences,
-            galleryPurchasePrice = galleryPurchasePrice,
-        ),
+    private val itemInfoProvider = ItemInfoInspectionProvider(
+        settings = settings,
+        resolveTarget = resolver::resolve,
+        preferences = readPreferences,
+        galleryPurchasePrice = galleryPurchasePrice,
     )
+    private val providerRegistration = inspection.register(ARC.instance, "item-info", 0, itemInfoProvider)
     private val chestPreview = ChestPreviewProvider(settings.chestPreview, chestPreviewResolver, readChestPreferences)
     private val chestIcons = ChestPreviewIcons(PaperPacketDisplays(ARC.instance, "chest-preview"), settings.chestPreview)
     private val chestPreviewRegistration = inspection.register(
@@ -77,6 +70,7 @@ internal class ItemInfoRuntime(
         chestPreview = chestPreview,
         chestIcons = chestIcons,
         chestSettings = readChestPreferences,
+        clearPreparation = itemInfoProvider::clear,
     )
     private var tick = 0L
 
@@ -140,6 +134,7 @@ internal class ItemInfoRuntime(
     override fun close() {
         tasks.close()
         furnitureHitboxHint?.close()
+        itemInfoProvider.close()
         chestPreviewRegistration.close()
         chestIcons.close()
         providerRegistration.close()
@@ -149,37 +144,3 @@ internal class ItemInfoRuntime(
 
 internal fun shouldUpdateItemInfo(tick: Long, chestPreviewEnabled: Boolean): Boolean =
     chestPreviewEnabled || tick == 1L || tick % 5L == 0L
-
-internal class ItemInfoInspectionProvider(
-    private val settings: ItemInfoSettings,
-    private val resolveTarget: (Player) -> ItemInfoTarget?,
-    private val preferences: (Player) -> ItemInfoPreferences,
-    private val galleryPurchasePrice: (Player, String) -> String? = { _, _ -> null },
-) : ArcInspectionProvider {
-    override fun resolve(player: Player): ArcInspectionFrame? {
-        if (!settings.enabled) return null
-        val target = resolveTarget(player) ?: return null
-        val isGallery = player.world.name == FURNITURE_GALLERY_WORLD
-        val price = if (isGallery) {
-            runCatching { galleryPurchasePrice(player, target.namespacedId) }
-                .getOrNull()
-                ?.replace('\n', ' ')
-                ?.replace('\r', ' ')
-                ?.trim()
-                ?.takeIf(String::isNotEmpty)
-                ?.take(256)
-        } else {
-            null
-        }
-        // Gallery commerce may surface a current native offer for IDs suppressed
-        // from ordinary game item-info, but the generic exclusion remains in force
-        // anywhere else and whenever no current quote is available.
-        if (target.namespacedId in settings.excludedItemIds && price == null) return null
-        val showNamespacedId = preferences(player).showNamespacedId
-        val displayTarget = target.copy(purchasePrice = price)
-        return ArcInspectionFrame(
-            settings.hologramText(displayTarget, showNamespacedId),
-            settings.bossbarText(displayTarget, showNamespacedId),
-        )
-    }
-}

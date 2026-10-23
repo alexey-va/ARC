@@ -14,6 +14,7 @@ internal class ItemInfoController(
     private val chestPreview: ChestPreviewProvider? = null,
     private val chestIcons: ChestPreviewIcons? = null,
     private val chestSettings: (Player) -> ChestPreviewSettings = { ChestPreviewSettings() },
+    private val clearPreparation: (Player) -> Unit = {},
 ) {
     fun update(player: Player) {
         if (suppressed(player)) {
@@ -42,6 +43,7 @@ internal class ItemInfoController(
     fun follow(player: Player) = inspection.follow(player)
 
     fun reset(player: Player) {
+        clearPreparation(player)
         chestIcons?.clear(player)
         inspection.clear(player)
     }
