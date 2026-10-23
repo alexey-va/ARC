@@ -58,7 +58,7 @@ object FurnitureDialogs {
                     component("Приват") to component("Работайте только в своём привате."),
                     component("Границы") to component("F3+G показывает границы чанков."),
                 ),
-                frame = DialogTables.Frame.EPIC,
+                frame = DialogTables.Frame.COMMON,
                 width = 320,
                 columns = DialogTables.Columns.LABEL_WIDE,
             ),

@@ -91,7 +91,8 @@ internal class LandsManagementMenus(
                 LandsUiAccess.ADMIN -> "lands.admin"
             },
             title = text(if (context.access == LandsUiAccess.ADMIN) "admin-title" else "details-title", "land" to land.name),
-            body = listOf(DialogTables.body(rows, frame = DialogTables.Frame.LEGENDARY, width = 360)) +
+            body = listOf(DialogTables.filledBody(rows.map { (label, value) -> listOf(label, value) },
+                headers = null, width = 360, columnWeights = listOf(2, 3))) +
                 listOfNotNull(view.description.takeIf { it.isNotBlank() }?.let {
                     PaperDialogBody(text("management-description", "description" to it), width = 460)
                 }) + if (context.access == LandsUiAccess.ADMIN) listOf(PaperDialogBody(text("admin-body"))) else emptyList(),

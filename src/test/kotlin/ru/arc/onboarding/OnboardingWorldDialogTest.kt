@@ -49,7 +49,7 @@ class OnboardingWorldDialogTest : FreeSpec({
         table.width shouldBe 310
         val content = plain(table.text)
         content.lines().size shouldBe 5
-        content shouldContain "\uE570"
+        content shouldContain "\uE550"
         content shouldContain "Обычный мир"
         content shouldContain "обычное выживание"
         content shouldContain "Новые биомы"

@@ -159,7 +159,8 @@ internal class DungeonSkillProgressionMenus(
         val body = mutableListOf<PaperDialogBody>()
         feedback?.let { body += body(it) }
         body += body(literal(entry.gainDescription))
-        body += table(rows, DialogTables.Frame.LEGENDARY, separators = true)
+        body += DialogTables.filledBody(rows.map { (name, value) -> listOf(name, value) },
+            null, 400, listOf(2, 3))
         if (entry.nextUnlock != null) body += body(text("unlock-explanation", "<#e8dfd2><name>: <description>",
             "name" to literal(entry.nextUnlock.name), "description" to literal(entry.nextUnlock.description)))
         body += body(when {

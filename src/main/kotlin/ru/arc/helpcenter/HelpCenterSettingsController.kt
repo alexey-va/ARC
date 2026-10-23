@@ -682,7 +682,7 @@ internal class HelpCenterSettingsController(
             val ratio = (valid.charge / valid.maximum).coerceIn(0.0, 1.0)
             val filled = (ratio * 16).toInt()
             val numbers = NumberFormat.getIntegerInstance(Locale.forLanguageTag("ru-RU"))
-            presentation.facts(
+            presentation.filledFacts(
                 rows = listOf(
                     text("table-flight-charge-label") to text("table-slots-value",
                         "used" to Component.text(numbers.format(valid.charge.toLong())),
@@ -693,7 +693,6 @@ internal class HelpCenterSettingsController(
                     text("table-flight-state-label") to booleanState(valid.enabled),
                 ).map { listOf(it) },
                 width = 468,
-                corners = true,
             )
         }
         showDialog(player, PaperDialogScreen(

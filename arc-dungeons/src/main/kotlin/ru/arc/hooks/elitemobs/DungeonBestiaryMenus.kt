@@ -148,7 +148,7 @@ internal class DungeonBestiaryMenus(
                     text("page-label", "<#e8dfd2>Страница") to text("page-value", "<#e8dfd2><current> / <total>",
                         "current" to Component.text(page + 1), "total" to Component.text(pages)),
                 ),
-                frame = DialogTables.Frame.ARTIFACT,
+                frame = DialogTables.Frame.UNCOMMON,
                 width = 320,
                 columns = DialogTables.Columns.BALANCED,
             ),
@@ -222,14 +222,14 @@ internal class DungeonBestiaryMenus(
         val page = requestedPage.coerceIn(0, pages - 1)
         val pageFacts = facts.drop(page * FACT_PAGE_SIZE).take(FACT_PAGE_SIZE)
         val body = mutableListOf(
-            DialogTables.body(
+            DialogTables.filledBody(
                 listOf(
                     text("kind-label", "<#e8dfd2>Тип") to plain(mob.kind),
                     text("level-label", "<#e8dfd2>Уровень") to plain(mob.level),
-                ),
-                frame = DialogTables.Frame.ARTIFACT,
+                ).map { (label, value) -> listOf(label, value) },
+                headers = null,
                 width = 320,
-                columns = DialogTables.Columns.BALANCED,
+                columnWeights = listOf(1, 1),
             ),
         )
         if (isShortened(mob.name, TITLE_NAME_LIMIT)) body += PaperDialogBody(plain(compactText(mob.name)), 468)

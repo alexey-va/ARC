@@ -8,6 +8,7 @@ import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
 import ru.arc.paper.menu.DialogDecoration
+import ru.arc.paper.menu.DialogTables
 import ru.arc.paper.menu.DialogTextLayout
 import ru.arc.paper.menu.PaperDialogBody
 import ru.arc.text.TextAlignment
@@ -23,12 +24,19 @@ internal class HelpCenterPresentation(settings: HelpCenterSettings) {
     private val corners = DialogDecoration.Corners(glyph(0xF9100, 13), glyph(0xF9101, 13), glyph(0xF9102, 13), glyph(0xF9103, 13))
     private val divider = DialogDecoration.Divider(glyph(0xF9104, 13), glyph(0xF9106, 13), glyph(0xF9105, 13))
 
+    /** Explicit opaque summary; the existing font opt-out keeps portable native facts. */
+    fun filledFacts(rows: List<List<Pair<Component, Component>>>, width: Int): PaperDialogBody {
+        if (decoration == null || rows.isEmpty()) return facts(rows, width)
+        return DialogTables.filledBody(rows.map { row -> row.map(::field) }, null, width, List(rows.first().size) { 1 })
+    }
+
+    private fun field(pair: Pair<Component, Component>) = Component.empty().color(prose)
+        .append(pair.first).append(Component.text(": ")).append(pair.second)
+
     /** Labels share a left edge and values a right edge within each measured column. */
     fun facts(rows: List<List<Pair<Component, Component>>>, width: Int, corners: Boolean = false): PaperDialogBody {
         val contentWidth = width - 40 // Native padding plus the existing 16px open-corner inset.
         val gutter = 24
-        fun field(pair: Pair<Component, Component>) = Component.empty().color(prose)
-            .append(pair.first).append(Component.text(": ")).append(pair.second)
         fun fallback() = PaperDialogBody(lines(rows.flatten().map(::field)), width)
         val rendered = rows.flatMap { row ->
             if (row.isEmpty()) return@flatMap emptyList()

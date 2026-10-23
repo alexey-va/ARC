@@ -24,6 +24,7 @@ import ru.arc.hooks.HuskHomesTeleporter
 import ru.arc.gui.ArcMenus
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
+import ru.arc.paper.menu.DialogTables
 import ru.arc.paper.menu.PaperDialogButton
 import ru.arc.paper.menu.PaperDialogClickContext
 import ru.arc.paper.menu.PaperDialogInputId
@@ -142,7 +143,8 @@ object SlimefunMenuModule : PluginModule {
         return PaperDialogScreen(
             id = "slimefun.skyblock.root",
             title = text("title"),
-            body = listOf(PaperDialogBody(text("intro"), width = 420), PaperDialogBody(stateText, width = 420)),
+            body = listOf(PaperDialogBody(text("intro"), width = 420),
+                DialogTables.filledBody(listOf(listOf(stateText)), null, 420, listOf(1))),
             buttons = islandButtons + sharedButtons,
             columns = 2,
         )

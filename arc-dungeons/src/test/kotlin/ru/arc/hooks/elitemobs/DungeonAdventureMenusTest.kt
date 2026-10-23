@@ -12,6 +12,7 @@ import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
+import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.entity.Player
 import org.bukkit.configuration.file.YamlConfiguration
@@ -256,10 +257,18 @@ class DungeonAdventureMenusTest : FreeSpec({
         glyphs.any { it in 0xE570..0xE59E } shouldBe true
         val path = Path.of("build/reports/dungeon-adventure/content.json")
         Files.createDirectories(path.parent)
+        Files.writeString(path.resolveSibling("components.json"), GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create().toJson(
+            selected.mapIndexed { index, screen -> "${screen.id}-$index" to mapOf(
+                "id" to screen.id, "body" to screen.body.map {
+                    mapOf("text" to GsonComponentSerializer.gson().serializeToTree(it.text), "width" to it.width)
+                }, "actions" to screen.buttons.map { it.id.value },
+            ) }.toMap(),
+        ))
         Files.writeString(path, GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create().toJson(mapOf("content" to content, "screens" to meta,
             "glyphs" to glyphs.map { mapOf("character" to String(Character.toChars(it)), "provider" to "minecraft:default") })))
         val plain = PlainTextComponentSerializer.plainText()
         selected.first().body.any { plain.serialize(it.text).contains("27") } shouldBe true
+        selected.first().body.count { plain.serialize(it.text).codePoints().anyMatch { point -> point in 0xFA300..0xFAF1B } } shouldBe 1
         selected.flatMap { it.body }.none { plain.serialize(it.text).contains("Параметр") || plain.serialize(it.text).contains("Значение") } shouldBe true
         val panel = selected.single { it.id == "dungeon.panel" }
         panel.buttons.none { it.id.value == "lost_loot" } shouldBe true

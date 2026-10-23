@@ -1,9 +1,11 @@
 package ru.arc.helpcenter
 
 import com.google.gson.GsonBuilder
+import com.google.gson.JsonParser
 import io.kotest.assertions.withClue
 import io.kotest.matchers.shouldBe
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
+import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer
 import java.nio.file.Path
 import org.bukkit.plugin.Plugin
 import io.mockk.every
@@ -174,6 +176,8 @@ class HelpCenterScreensTest {
         open(HelpCenterPage.ROOT)
         screens["root"] = screen
         screen.buttons.size shouldBe 15
+        screen.body[1].width shouldBe 508
+        plain(screen.body[1].text).codePoints().anyMatch { it in 0xFA300..0xFAF1B } shouldBe true
         val ordinaryProfile = gateway.loadProfile(player, 12).join()
         every { gateway.loadProfile(player, any()) } returns CompletableFuture.completedFuture(ordinaryProfile.copy(
             playerName = "Long_Player_1234", balance = "123 456 789.99", rank = "Исследователь",
@@ -247,7 +251,7 @@ class HelpCenterScreensTest {
             screens.getValue(fallback).buttons.map { it.id to it.width } shouldBe
                 screens.getValue(decorated).buttons.map { it.id to it.width }
             screens.getValue(fallback).body.forEach {
-                plain(it.text).codePoints().anyMatch { point -> point in 0xF9000..0xF9FFF } shouldBe false
+                plain(it.text).codePoints().anyMatch { point -> point in 0xF9000..0xF9FFF || point in 0xFA300..0xFAF1B } shouldBe false
             }
         }
         val serializer = LegacyComponentSerializer.builder().character('&').hexColors().build()
@@ -264,6 +268,15 @@ class HelpCenterScreensTest {
         val output = Path.of("build/reports/help-center-decoration/content.json")
         Files.createDirectories(output.parent)
         Files.writeString(output, GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create().toJson(export))
+        val gson = GsonComponentSerializer.gson()
+        fun component(value: Component) = JsonParser.parseString(gson.serialize(value))
+        val components = screens.filterKeys { it in setOf("root", "root-long", "root-plain") }.mapValues { (_, view) -> mapOf(
+            "title" to component(view.title), "columns" to view.columns,
+            "body" to view.body.map { mapOf("text" to component(it.text), "width" to it.width) },
+            "buttons" to view.buttons.map { mapOf("id" to it.id.value, "text" to component(it.label), "tooltip" to component(it.tooltip), "width" to it.width) },
+            "exit" to view.exitButton?.let { mapOf("text" to component(it.label), "width" to it.width) },
+        ) }
+        Files.writeString(output.parent.resolve("components.json"), GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create().toJson(components))
         val checkedScreens = screens.filterKeys { !it.endsWith("-plain") }
         val utilityIds = setOf("search", "settings", "create_home", "rec_home", "back_command", "back", "root", "close_menu")
         for ((name, view) in checkedScreens) {

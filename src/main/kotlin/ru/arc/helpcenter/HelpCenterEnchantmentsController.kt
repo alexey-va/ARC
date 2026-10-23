@@ -31,6 +31,7 @@ internal class HelpCenterEnchantmentsController(
 ) {
     private val miniMessage = MiniMessage.miniMessage()
     private val plainText = PlainTextComponentSerializer.plainText()
+    private val presentation = HelpCenterPresentation(settings)
 
     fun open(player: Player, returnTo: () -> Unit) {
         openOverview(player, returnTo, catalog())
@@ -194,16 +195,14 @@ internal class HelpCenterEnchantmentsController(
         val soldByEnchanter = isSoldByEnchanter(enchantment)
         val purchaseAvailable = soldByEnchanter && canPurchase(player, enchantment.id)
         val body = buildList {
-            add(DialogTables.body(
+            add(presentation.filledFacts(
                 rows = listOf(
                     text("ui.details-group-label") to Component.text(groupLabel(enchantment.group)),
                     text("ui.details-level-label") to Component.text(enchantment.maxLevel.toString()),
                     text("ui.details-compatible-label") to Component.text(materialSummary(enchantment)),
                     text("ui.details-source-label") to text(detailsSourceKey(enchantment, soldByEnchanter)),
-                ),
-                frame = DialogTables.Frame.EPIC,
-                width = 320,
-                columns = DialogTables.Columns.VALUE_WIDE,
+                ).map { listOf(it) },
+                width = 400,
             ))
             add(PaperDialogBody(text("ui.description", "description" to enchantment.description), 468))
             if (enchantment.maxLevelDescription != enchantment.description) {
@@ -256,7 +255,7 @@ internal class HelpCenterEnchantmentsController(
                             text("ui.route-fishing-label") to text("ui.route-fishing"),
                             text("ui.route-caches-label") to text("ui.route-caches"),
                         ),
-                        frame = DialogTables.Frame.EPIC,
+                        frame = DialogTables.Frame.UNCOMMON,
                         width = 320,
                         columns = DialogTables.Columns.VALUE_WIDE,
                     ),

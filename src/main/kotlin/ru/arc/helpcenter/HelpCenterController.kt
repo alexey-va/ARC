@@ -197,7 +197,7 @@ internal class HelpCenterController(
                     text("table-location-label") to Component.text(profile.server, TextColor.color(0x86dcf1)),
                     text("table-world-label") to Component.text(worldLabel(profile.worldKind, profile.world), TextColor.color(0xe6fff3)),
                 )
-            body += presentation.facts(rows.chunked(2), 506, corners = true)
+            body += presentation.filledFacts(rows.chunked(2), 508)
         }
         body += presentation.section(text("root-sections-heading"), 506)
         present(
@@ -335,7 +335,7 @@ internal class HelpCenterController(
                 id = "help.now",
                 title = text("now-title"),
                 body = buildList {
-                    add(presentation.facts(listOf(rows.take(2)), 468, corners = true))
+                    add(presentation.filledFacts(listOf(rows.take(2)), 468))
                     add(presentation.section(text("my-resources-heading"), 468))
                     add(presentation.facts(listOf(rows.slice(2..3), rows.slice(4..5)), 468))
                     add(presentation.section(text("my-location-heading"), 468))

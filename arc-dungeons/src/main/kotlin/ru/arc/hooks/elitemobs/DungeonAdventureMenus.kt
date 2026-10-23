@@ -62,7 +62,7 @@ internal class DungeonAdventureMenus(
         )
         val body = mutableListOf(
             PaperDialogBody(text("intro", "<#e8dfd2>Подберите поход или займитесь своим героем. Внутри данжа /данж и Shift + F открывают быстрые действия."), 500),
-            table(rows, DialogTables.Frame.EPIC),
+            DialogTables.filledBody(rows.map { (label, value) -> listOf(label, value) }, null, 320, listOf(1, 1)),
         )
         feedback?.let { body += PaperDialogBody(it, 500) }
         val buttons = listOf(
@@ -112,7 +112,7 @@ internal class DungeonAdventureMenus(
         val body = mutableListOf(
             PaperDialogBody(text("catalog-intro", "<#e8dfd2>Найдите данж по названию или описанию. На карточке — уровень, тип похода и подробности."), 468),
             table(listOf(label("found", "Найдено") to Component.text(entries.size),
-                label("page", "Страница") to Component.text("${query.page + 1} / $pages")), DialogTables.Frame.LEGENDARY),
+                label("page", "Страница") to Component.text("${query.page + 1} / $pages")), DialogTables.Frame.COMMON),
         )
         if (listed.isEmpty()) body += PaperDialogBody(text("catalog-empty", "<#e8dfd2>По этому запросу ничего не найдено. Измените поиск или выберите «Все данжи»."), 468)
         feedback?.let { body += PaperDialogBody(it, 468) }
@@ -160,9 +160,10 @@ internal class DungeonAdventureMenus(
             label("level", "Уровень") to Component.text(levelRange(entry)),
             label("access", "Доступ") to if (entry.permissionGranted) text("access-ready", "<#9bd48d>Открыт") else text("access-locked", "<white>Нет доступа"),
         ) + listOfNotNull(entry.maxPlayers?.let { label("maxPlayers", "Группа") to text("max-players", "<#e8dfd2>До <count> игроков", "count" to Component.text(it)) })
-        val body = mutableListOf(table(rows, DialogTables.Frame.ARTIFACT))
+        val body = mutableListOf(DialogTables.filledBody(rows.map { (label, value) -> listOf(label, value) },
+            null, 400, listOf(1, 2)))
         if (entry.description.isNotEmpty()) body += DialogTables.framedBody(
-            Component.text(entry.description.map(::clean).joinToString("\n")), frame = DialogTables.Frame.ARTIFACT, width = 320)
+            Component.text(entry.description.map(::clean).joinToString("\n")), frame = DialogTables.Frame.ARTIFACT, width = 400)
         if (blocked) body += PaperDialogBody(leaveFirst(), 468)
         feedback?.let { body += PaperDialogBody(it, 468) }
         val permitted = entry.permissionGranted && !blocked

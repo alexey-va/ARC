@@ -73,6 +73,7 @@ import ru.arc.paper.display.PacketTextDisplay
 import ru.arc.paper.display.PaperPacketDisplays
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
+import ru.arc.paper.menu.DialogTables
 import ru.arc.paper.menu.PaperDialogButton
 import ru.arc.paper.menu.PaperDialogInputId
 import ru.arc.paper.menu.PaperDialogScreen
@@ -1529,7 +1530,7 @@ object TravelAnchorsModule : PluginModule, Listener {
             PaperDialogScreen(
                 id = "travel-anchors.settings",
                 title = current.namingText("title"),
-                body = listOf(PaperDialogBody(current.namingTextSafe(
+                body = listOf(DialogTables.filledBody(listOf(listOf(current.namingTextSafe(
                     "overview",
                     "%name%" to Component.text(anchorNames[position] ?: current.defaultAnchorName()),
                     "%owner%" to Component.text(if (shared) "Общий" else displayName(owner)),
@@ -1538,7 +1539,7 @@ object TravelAnchorsModule : PluginModule, Listener {
                     "%coords%" to Component.text("${position.x}, ${position.y}, ${position.z}"),
                     "%state%" to state,
                     "%material%" to Component.text(current.displayMaterialName(anchorMaterials[position] ?: current.displayMaterial)),
-                ), width = 420)),
+                ))), null, 420, listOf(1))),
                 buttons = buildList {
                     add(anchorDialogButton("edit_name", current.namingText("name-button")) { openNameDialog(it.player, position) })
                     add(anchorDialogButton("edit_material", current.namingText("material-button")) { openMaterialDialog(it.player, position) })

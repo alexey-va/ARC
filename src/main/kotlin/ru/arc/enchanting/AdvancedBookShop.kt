@@ -156,7 +156,7 @@ internal class AdvancedBookShop(
                     config.text("shop.table.enchantment") to Component.text(flow.enchantment.name),
                     config.text("shop.table.group") to config.text("shop.groups.${flow.group}"),
                 ),
-                frame = DialogTables.Frame.LEGENDARY,
+                frame = DialogTables.Frame.RARE,
                 width = WIDTH,
                 columns = DialogTables.Columns.VALUE_WIDE,
             ),
@@ -244,16 +244,16 @@ internal class AdvancedBookShop(
             body = listOf(
                 PaperDialogBody(config.text("shop.confirm-body"), WIDTH),
                 PaperDialogBody(config.text("shop.chances"), WIDTH),
-                DialogTables.body(
+                DialogTables.filledBody(
                     rows = listOf(
                         config.text("shop.table.enchantment") to Component.text(flow.enchantment.name),
                         config.text("shop.table.group") to config.text("shop.groups.${flow.group}"),
                         config.text("shop.table.level") to Component.text(selected.level),
                         config.text("shop.table.price") to price,
-                    ),
-                    frame = DialogTables.Frame.LEGENDARY,
+                    ).map { (label, value) -> listOf(label, value) },
+                    headers = null,
                     width = WIDTH,
-                    columns = DialogTables.Columns.VALUE_WIDE,
+                    columnWeights = listOf(1, 2),
                 ),
             ),
             buttons = listOf(

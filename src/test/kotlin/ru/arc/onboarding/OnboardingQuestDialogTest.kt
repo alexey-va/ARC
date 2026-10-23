@@ -18,6 +18,7 @@ import net.citizensnpcs.api.npc.NPC
 import net.citizensnpcs.api.npc.NPCRegistry
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
+import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Location
 import org.bukkit.Server
@@ -75,6 +76,7 @@ class OnboardingQuestDialogTest : FreeSpec({
         screen.buttons.all { !it.closeDialogBeforeAction } shouldBe true
         screen.body.size shouldBe 1
         plain(screen.body.single().text) shouldContain "первый дом"
+        plain(screen.body.single().text).codePoints().anyMatch { it in 0xFA300..0xFAF1B } shouldBe true
         click(screen, "accept")
         actions shouldContainExactly listOf("accept:$runId")
     }
@@ -302,6 +304,12 @@ class OnboardingQuestDialogTest : FreeSpec({
         Files.createDirectories(output.parent)
         val gson = GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create()
         Files.writeString(output, gson.toJson(export))
+        Files.writeString(output.resolveSibling("components.json"), gson.toJson(views.mapValues { (_, view) ->
+            val screen = dialog.screen(view)
+            mapOf("id" to screen.id, "body" to screen.body.map {
+                mapOf("text" to GsonComponentSerializer.gson().serializeToTree(it.text), "width" to it.width)
+            }, "actions" to screen.buttons.map { it.id.value })
+        }))
         val npc = Location(mockk<World>(), 10.324, 70.0, -3.4444)
         val sign = onboardingQuestMarkerFrame(UUID.randomUUID(), npc).parts.single() as ScenePart.Text
         Files.writeString(output.resolveSibling("marker.json"), gson.toJson(mapOf(

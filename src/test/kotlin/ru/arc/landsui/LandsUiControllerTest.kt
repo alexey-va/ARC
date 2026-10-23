@@ -9,6 +9,10 @@ import io.mockk.mockkObject
 import io.mockk.unmockkObject
 import io.mockk.verify
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import com.google.gson.GsonBuilder
+import java.nio.file.Path
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.inventory.ItemStack
@@ -136,6 +140,17 @@ class LandsUiControllerTest : StringSpec({
                 try {
                     controller.openDetails(player, land.id)
                     val details = checkNotNull(screen)
+                    val summary = details.body.first()
+                    summary.width shouldBe 360
+                    PlainTextComponentSerializer.plainText().serialize(summary.text).codePoints()
+                        .anyMatch { it in 0xFA300..0xFAF1B } shouldBe true
+                    val output = Path.of("build/reports/dialogue-adoption/lands-components.json")
+                    Files.createDirectories(output.parent)
+                    Files.writeString(output, GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create().toJson(
+                        mapOf("lands-details" to mapOf("id" to details.id, "body" to details.body.map {
+                            mapOf("text" to GsonComponentSerializer.gson().serializeToTree(it.text), "width" to it.width)
+                        }, "actions" to details.buttons.map { it.id.value })),
+                    ))
                     val detailsIds = details.buttons.map { it.id.value }
                     detailsIds shouldContain "add_member"
                     detailsIds shouldBe listOf(

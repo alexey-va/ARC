@@ -139,11 +139,11 @@ internal class GravesMenu(
             add(PaperDialogBody(settings.text("detail-body"), width = 420))
             notice?.let { add(PaperDialogBody(settings.text(it), width = 420)) }
             add(
-                DialogTables.body(
-                    rows = rows,
-                    headers = settings.text("row-label-heading") to settings.text("row-value-heading"),
-                    frame = DialogTables.Frame.EPIC,
+                DialogTables.filledBody(
+                    rows = rows.map { (label, value) -> listOf(label, value) },
+                    headers = listOf(settings.text("row-label-heading"), settings.text("row-value-heading")),
                     width = 320,
+                    columnWeights = listOf(1, 2),
                 ),
             )
             add(PaperDialogBody(settings.text("detail-items-title"), width = 320))

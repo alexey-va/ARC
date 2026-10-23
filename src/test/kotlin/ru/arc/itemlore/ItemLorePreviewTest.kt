@@ -47,11 +47,11 @@ class ItemLorePreviewTest : FreeSpec({
 
         frame.width shouldBe 320
         rendered shouldContain "Добавлено"
-        rendered shouldContain "\uE570"
-        rendered shouldContain "\uE573"
-        rendered shouldContain "\uE57B"
-        rendered shouldContain "\uE57E"
-        listOf("Было", "Станет", "\uE572", "\uE575", "\uE579", "\uE57D").forEach {
+        rendered shouldContain "\uE560"
+        rendered shouldContain "\uE563"
+        rendered shouldContain "\uE56B"
+        rendered shouldContain "\uE56E"
+        listOf("Было", "Станет", "\uE562", "\uE565", "\uE569", "\uE56D").forEach {
             rendered shouldNotContain it
         }
     }
@@ -82,8 +82,8 @@ class ItemLorePreviewTest : FreeSpec({
     "clearing lore shows its explanation inside the same single frame" {
         val rendered = plain.serialize(ItemLorePreview.framed(emptyList(), text).text)
         rendered shouldContain "описание будет очищено"
-        rendered shouldContain "\uE570"
-        rendered shouldNotContain "\uE575"
+        rendered shouldContain "\uE560"
+        rendered shouldNotContain "\uE565"
     }
 
     "editing help lists every legacy color and effect with readable examples" {
@@ -95,13 +95,13 @@ class ItemLorePreviewTest : FreeSpec({
         (intro.lines().size <= 6) shouldBe true
         (codes.lines().size <= 16) shouldBe true
         intro shouldContain "5 монет"
-        intro shouldNotContain "\uE575"
+        intro shouldNotContain "\uE545"
         ("0123456789abcdefklmnor".map { "&$it" } + listOf("&#RRGGBB", "&&")).forEach { codes shouldContain it }
         val example = plain.serialize(help[2].text)
         example shouldContain "&a&lМеч&r"
         example shouldContain "Новый цвет снимает эффекты"
         example shouldContain "&#FFAA00Текст"
-        codes shouldNotContain "\uE579"
+        codes shouldNotContain "\uE549"
         coloredRuns(help[1].text).any { (content, color) ->
             "Аа" in content && color == NamedTextColor.GREEN
         } shouldBe true

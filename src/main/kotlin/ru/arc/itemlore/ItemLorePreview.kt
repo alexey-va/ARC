@@ -15,12 +15,12 @@ internal object ItemLorePreview {
                 if (index == 0) listOf(row) else listOf(Component.newline(), row)
             },
         ),
-        frame = DialogTables.Frame.EPIC,
+        frame = DialogTables.Frame.RARE,
         width = WIDTH,
     )
 
     fun editorHelp(instructions: Component, text: (String) -> Component): List<PaperDialogBody> = listOf(
-        DialogTables.framedBody(instructions, DialogTables.Frame.EPIC, WIDTH),
+        DialogTables.framedBody(instructions, DialogTables.Frame.COMMON, WIDTH),
         DialogTables.body(
             rows = listOf(
                 text("color-black") to text("color-dark-gray"),
@@ -37,11 +37,11 @@ internal object ItemLorePreview {
                 text("color-hex") to text("color-ampersand"),
             ),
             headers = null,
-            frame = DialogTables.Frame.EPIC,
+            frame = DialogTables.Frame.COMMON,
             width = WIDTH,
             columns = DialogTables.Columns.BALANCED,
         ),
-        DialogTables.framedBody(text("format-example"), DialogTables.Frame.EPIC, WIDTH),
+        DialogTables.framedBody(text("format-example"), DialogTables.Frame.COMMON, WIDTH),
     )
 
     private const val WIDTH = 320

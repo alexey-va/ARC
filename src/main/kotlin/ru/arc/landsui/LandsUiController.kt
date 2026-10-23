@@ -42,7 +42,7 @@ class LandsUiController(
         val nearby = gateway.inspectedLand(player)
         val selected = lands.firstOrNull { it.selected }
         val body = mutableListOf(
-            DialogTables.body(
+            DialogTables.filledBody(
                 rows = listOf(
                     text("table-settlements-label") to text("table-count-value", "count" to lands.size.toString()),
                     text("table-selected-label") to text(
@@ -53,23 +53,19 @@ class LandsUiController(
                         "table-protected-value",
                         "chunks" to lands.sumOf { it.chunks }.toString(),
                     ),
-                ),
-                frame = DialogTables.Frame.LEGENDARY,
-                width = 320,
-                columns = DialogTables.Columns.BALANCED,
+                ).map { (label, value) -> listOf(label, value) },
+                headers = null,
+                width = 400,
+                columnWeights = listOf(1, 1),
             ),
-            DialogTables.framedBody(
-                text("root-body"),
-                frame = DialogTables.Frame.LEGENDARY,
-                width = 320,
-            ),
+            PaperDialogBody(text("root-body"), width = 400),
             DialogTables.body(
                 rows = listOf("create", "edit", "claim", "trust", "untrust").map { command ->
                     text("root-command-$command") to text("root-command-$command-help")
                 },
                 headers = text("root-command-heading") to text("root-command-help-heading"),
-                frame = DialogTables.Frame.LEGENDARY,
-                width = 320,
+                frame = DialogTables.Frame.COMMON,
+                width = 400,
                 columns = DialogTables.Columns.BALANCED,
             ),
         )
@@ -211,7 +207,7 @@ class LandsUiController(
             PaperDialogScreen(
                 id = "lands.guide",
                 title = text("guide-title"),
-                body = listOf(DialogTables.framedBody(text("guide-body"), DialogTables.Frame.LEGENDARY, width = 400)),
+                body = listOf(DialogTables.framedBody(text("guide-body"), DialogTables.Frame.UNCOMMON, width = 400)),
                 buttons = listOf(
                     button("guide_create", text("guide-create-label"), text("guide-create-tooltip")) { openCreationGuide(player) },
                     button("guide_expand", text("guide-expand-label"), text("guide-expand-tooltip")) { openExpansionGuide(player) },
@@ -230,7 +226,7 @@ class LandsUiController(
             PaperDialogScreen(
                 id = "lands.guide-create",
                 title = text("guide-create-title"),
-                body = listOf(DialogTables.framedBody(text("guide-create-body"), DialogTables.Frame.LEGENDARY, width = 400)),
+                body = listOf(DialogTables.framedBody(text("guide-create-body"), DialogTables.Frame.UNCOMMON, width = 400)),
                 buttons = listOf(button("create", text("create-label")) { openCreate(player) }),
                 exitButton = back("back") { openGuide(player) },
             ),
@@ -243,7 +239,7 @@ class LandsUiController(
             PaperDialogScreen(
                 id = "lands.guide-expand",
                 title = text("guide-expand-title"),
-                body = listOf(DialogTables.framedBody(text("guide-expand-body"), DialogTables.Frame.LEGENDARY, width = 400)),
+                body = listOf(DialogTables.framedBody(text("guide-expand-body"), DialogTables.Frame.UNCOMMON, width = 400)),
                 buttons = listOf(button("lands", text("my-lands-label")) { openRoot(player) }),
                 exitButton = back("back") { openGuide(player) },
             ),
@@ -256,7 +252,7 @@ class LandsUiController(
             PaperDialogScreen(
                 id = "lands.guide-members",
                 title = text("guide-members-title"),
-                body = listOf(DialogTables.framedBody(text("guide-members-body"), DialogTables.Frame.LEGENDARY, width = 400)),
+                body = listOf(DialogTables.framedBody(text("guide-members-body"), DialogTables.Frame.UNCOMMON, width = 400)),
                 buttons = listOf(button("lands", text("my-lands-label")) { openRoot(player) }),
                 exitButton = back("back") { openGuide(player) },
             ),
@@ -269,7 +265,7 @@ class LandsUiController(
             PaperDialogScreen(
                 id = "lands.guide-commands",
                 title = text("guide-commands-title"),
-                body = listOf(DialogTables.framedBody(text("guide-commands-body"), DialogTables.Frame.LEGENDARY, width = 400)),
+                body = listOf(DialogTables.framedBody(text("guide-commands-body"), DialogTables.Frame.UNCOMMON, width = 400)),
                 buttons = listOf(button("lands", text("my-lands-label")) { openRoot(player) }),
                 exitButton = back("back") { openGuide(player) },
             ),
@@ -319,14 +315,15 @@ class LandsUiController(
         }
     }
 
-    private fun territorySummary(land: LandsUiLand) = DialogTables.body(
+    private fun territorySummary(land: LandsUiLand) = DialogTables.filledBody(
         rows = listOf(
             text("table-land-label") to Component.text(land.name),
             text("table-territory-label") to text("table-territory-value",
                 "used" to land.chunks.toString(), "maximum" to land.maxChunks.toString()),
-        ),
-        frame = DialogTables.Frame.LEGENDARY,
+        ).map { (label, value) -> listOf(label, value) },
+        headers = null,
         width = 320,
+        columnWeights = listOf(1, 1),
     )
 
     private fun withLand(player: Player, landId: String, action: (LandsUiLand) -> Unit) {

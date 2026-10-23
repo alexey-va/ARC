@@ -18,18 +18,18 @@ repositories {
 }
 dependencies {
     implementation(kotlin("stdlib"))
-    implementation("ru.ruscrafting.arc:arc-core:2.7.57")
-    implementation("ru.ruscrafting.arc:arc-core-logging:2.7.57")
-    implementation("ru.ruscrafting.arc:arc-core-paper:2.7.57")
-    implementation("ru.ruscrafting.arc:arc-core-menu:2.7.57")
-    implementation("ru.ruscrafting.arc:arc-core-paper-menu:2.7.57")
-    implementation("ru.ruscrafting.arc:arc-core-redis:2.7.57")
-    implementation("ru.ruscrafting.arc:arc-core-sql:2.7.57")
+    implementation("ru.ruscrafting.arc:arc-core:2.7.59")
+    implementation("ru.ruscrafting.arc:arc-core-logging:2.7.59")
+    implementation("ru.ruscrafting.arc:arc-core-paper:2.7.59")
+    implementation("ru.ruscrafting.arc:arc-core-menu:2.7.59")
+    implementation("ru.ruscrafting.arc:arc-core-paper-menu:2.7.59")
+    implementation("ru.ruscrafting.arc:arc-core-redis:2.7.59")
+    implementation("ru.ruscrafting.arc:arc-core-sql:2.7.59")
     implementation(libs.com.google.code.gson.gson)
     implementation(libs.de.tr7zw.item.nbt.api)
     compileOnly(project(":arc-dungeons-api"))
     compileOnly(project(":arc-staff-spells-api"))
-    compileOnly("ru.ruscrafting.arc:arc-core-paper-api:2.7.57")
+    compileOnly("ru.ruscrafting.arc:arc-core-paper-api:2.7.59")
     compileOnly(libs.io.papermc.paper.paper.api)
     // Compile against the oldest supported API; the exact runtime matrix also covers 10.9.10.
     compileOnly("com.magmaguy:EliteMobs:10.9.8@jar") { isTransitive = false }
@@ -43,8 +43,8 @@ dependencies {
 
     testImplementation(project(":arc-dungeons-api"))
     testImplementation(project(":arc-staff-spells-api"))
-    testImplementation("ru.ruscrafting.arc:arc-core-paper-api:2.7.57")
-    testImplementation("ru.ruscrafting.arc:arc-core-paper-testing:2.7.57")
+    testImplementation("ru.ruscrafting.arc:arc-core-paper-api:2.7.59")
+    testImplementation("ru.ruscrafting.arc:arc-core-paper-testing:2.7.59")
     testImplementation("com.magmaguy:EliteMobs:10.9.8@jar") { isTransitive = false }
     testImplementation(libs.ru.ruscrafting.thirdparty.magmacore)
     testImplementation("com.magmaguy:FreeMinecraftModels:2.12.1") { isTransitive = false }
@@ -75,7 +75,7 @@ kotlin.target.compilations.getByName("integrationTest").associateWith(kotlin.tar
 configurations["integrationTestImplementation"].extendsFrom(configurations["testImplementation"])
 configurations["integrationTestRuntimeOnly"].extendsFrom(configurations["testRuntimeOnly"])
 dependencies {
-    "integrationTestImplementation"("ru.ruscrafting.arc:arc-core-integration-testing:2.7.57")
+    "integrationTestImplementation"("ru.ruscrafting.arc:arc-core-integration-testing:2.7.59")
 }
 tasks.withType<Test>().configureEach {
     classpath = files(classpath.filter { it.name.startsWith("adventure-") }, classpath)

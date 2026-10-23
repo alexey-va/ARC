@@ -16,6 +16,37 @@ class HelpCenterPresentationTest : FreeSpec({
     fun presentation(font: String) = HelpCenterPresentation(HelpCenterSettings(
         true, 12, 8, 3, emptyMap(), emptyMap(), emptyMap(), emptyMap(), font,
     ))
+    "filled summary preserves all facts and native coin styling while respecting the font opt-out" {
+        val values = listOf("Long_Player_1234", "999", "Исследователь", "123 456 789.99", "3 / 12", "4 (128 чанков)", "survival", "Ванильный мир")
+        val labels = listOf("Игрок", "В сети", "Ранг", "Баланс", "Дома", "Приваты", "Сейчас", "Мир")
+        val rows = labels.zip(values).mapIndexed { index, (label, value) ->
+            Component.text(label) to Component.text(value).let {
+                if (index == 3) it.append(Component.text(" 💰", NamedTextColor.WHITE)) else it
+            }
+        }.chunked(2)
+        val body = presentation("arc:dialog_ui").filledFacts(rows, 508)
+        body.width shouldBe 508
+        val visible = PlainTextComponentSerializer.plainText().serialize(body.text)
+        (labels + values).forEach { visible.contains(it) shouldBe true }
+        visible.codePoints().anyMatch { it in 0xFA300..0xFAF1B } shouldBe true
+        var coins = 0
+        fun inspect(node: Component, parent: Style) {
+            val style = node.style().merge(parent, Style.Merge.Strategy.IF_ABSENT_ON_TARGET)
+            (node as TextComponent).content().codePoints().forEach {
+                if (it == 0x1F4B0) {
+                    coins++
+                    style.color() shouldBe NamedTextColor.WHITE
+                    style.font() shouldBe Key.key("minecraft:default")
+                    style.shadowColor() shouldBe null
+                }
+            }
+            node.children().forEach { inspect(it, style) }
+        }
+        inspect(body.text, Style.empty())
+        coins shouldBe 1
+        presentation("").filledFacts(rows, 508) shouldBe presentation("").facts(rows, 508)
+    }
+
     "fact columns have exact pixel starts for long values and retain whole white currency glyphs" {
         val money = Component.text("123 456 789.99 ").append(Component.text("💰", NamedTextColor.WHITE))
         val body = presentation("arc:dialog_ui").facts(listOf(

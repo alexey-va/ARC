@@ -6,6 +6,7 @@ import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.entity.Player
 import ru.arc.gui.ArcMenus
+import ru.arc.paper.menu.DialogTables
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
 import ru.arc.paper.menu.PaperDialogButton
@@ -87,11 +88,12 @@ internal class OnboardingQuestDialog(
     )
 
     private fun body(snapshot: OnboardingQuestView): List<PaperDialogBody> = buildList {
-        add(prose(when {
+        val goal = copy(when {
             snapshot.completed -> "complete"
             !snapshot.accepted -> "offer"
             else -> instruction(snapshot)
-        }))
+        })
+        add(DialogTables.filledBody(listOf(listOf(goal)), null, 300, listOf(1)))
         snapshot.notice?.takeIf(String::isNotBlank)?.let {
             add(literal(it))
         }

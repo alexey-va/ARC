@@ -108,7 +108,8 @@ internal class DungeonSaveMenus(
                         "total" to Component.text(progress.total)))
             }
         }
-        if (stats.isNotEmpty()) body += table(stats, DialogTables.Frame.ARTIFACT)
+        if (stats.isNotEmpty()) body += DialogTables.filledBody(stats.map { (label, value) -> listOf(label, value) },
+            null, 400, listOf(1, 2))
         feedback?.let { body += PaperDialogBody(plain(it), 468) }
         show(player, PaperDialogScreen(
             id = "dungeon.panel", title = text("panel.title", "<#ffb277>Панель данжа"), body = body,
@@ -319,7 +320,8 @@ internal class DungeonSaveMenus(
         val body = mutableListOf(
             PaperDialogBody(text("saves.dialog.body", "<#e8dfd2>Ваши места в этом данже. Сохраняется только позиция: добыча и монстры не откатываются."), 468),
             PaperDialogBody(dungeon.autosaveDescription(player), 468),
-            table(saveRows(view), DialogTables.Frame.ARTIFACT),
+            DialogTables.filledBody(saveRows(view).map { (label, value) -> listOf(label, value) },
+                null, 400, listOf(1, 2)),
             PaperDialogBody(availability(blocked), 468),
         )
         if (view.points.none { it.kind == DungeonSaveKind.MANUAL }) body += PaperDialogBody(text("saves.dialog.empty", "<#e8dfd2>Ручных точек пока нет. Сохраните удобное место для возвращения."), 468)

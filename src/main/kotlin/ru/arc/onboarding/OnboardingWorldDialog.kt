@@ -28,7 +28,7 @@ internal class OnboardingWorldDialog(private val travel: (Player, String) -> Uni
                     text("survival-label") to text("survival-description"),
                 ),
                 spec = DialogTables.Spec(rowSeparators = true),
-                frame = DialogTables.Frame.EPIC,
+                frame = DialogTables.Frame.UNCOMMON,
                 width = WIDTH,
                 columns = DialogTables.Columns.BALANCED,
             ),
