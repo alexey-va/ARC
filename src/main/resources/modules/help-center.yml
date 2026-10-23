@@ -422,6 +422,7 @@ text:
   my-resources-heading: '<italic:false><#e6fff3>Ресурсы и территория'
   my-location-heading: '<italic:false><#86dcf1>Место и общение'
   root-body: "<italic:false><#86dcf1>RusCrafting <#e8dfd2>— спокойное выживание, строительство и приключения в одной сети.<newline><#e8dfd2>Ниже — ваша короткая сводка; кнопки ведут к игровым разделам без запоминания команд."
+  root-summary-hint: "<italic:false><#e8dfd2>Ниже — ваша короткая сводка; кнопки ведут к игровым разделам без запоминания команд."
   root-state-loading: '<#e8dfd2>Обновляю состояние игрока…'
   teams-label: '<#f3a2c9>⚑ Кланы ›'
   now-label: "<italic:false><#86dcf1>◆ Мой профиль ›"

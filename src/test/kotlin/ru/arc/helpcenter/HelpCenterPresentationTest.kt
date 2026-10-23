@@ -16,6 +16,19 @@ class HelpCenterPresentationTest : FreeSpec({
     fun presentation(font: String) = HelpCenterPresentation(HelpCenterSettings(
         true, 12, 8, 3, emptyMap(), emptyMap(), emptyMap(), emptyMap(), font,
     ))
+    "single field rows retain label and value columns in an opaque detail card" {
+        val rows = listOf(
+            listOf(Component.text("Заряд") to Component.text("12 / 100")),
+            listOf(Component.text("Состояние") to Component.text("Включён")),
+        )
+        val body = presentation("arc:dialog_ui").filledFacts(rows, 320)
+        val visible = PlainTextComponentSerializer.plainText().serialize(body.text)
+        listOf("Заряд", "12 / 100", "Состояние", "Включён").forEach { visible.contains(it) shouldBe true }
+        visible.contains("Заряд:") shouldBe false
+        visible.codePoints().anyMatch { it in 0xFA300..0xFAF1B && (it - 0xFA300) % 16 == 3 } shouldBe true
+        presentation("").filledFacts(rows, 320) shouldBe presentation("").facts(rows, 320)
+    }
+
     "filled summary preserves all facts and native coin styling while respecting the font opt-out" {
         val values = listOf("Long_Player_1234", "999", "Исследователь", "123 456 789.99", "3 / 12", "4 (128 чанков)", "survival", "Ванильный мир")
         val labels = listOf("Игрок", "В сети", "Ранг", "Баланс", "Дома", "Приваты", "Сейчас", "Мир")

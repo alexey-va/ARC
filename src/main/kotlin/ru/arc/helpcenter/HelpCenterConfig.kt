@@ -500,6 +500,7 @@ class HelpCenterConfig(private val config: Config) {
             "players-all-servers" to "вся сеть",
             "root-title" to "<italic:false><#86dcf1>Главное меню",
             "root-body" to "<italic:false><#86dcf1>RusCrafting <#e8dfd2>— спокойное выживание, строительство и приключения в одной сети.<newline><#e8dfd2>Ниже — ваша короткая сводка; кнопки ведут к игровым разделам без запоминания команд.",
+            "root-summary-hint" to "<italic:false><#e8dfd2>Ниже — ваша короткая сводка; кнопки ведут к игровым разделам без запоминания команд.",
             "root-state-loading" to "<#e8dfd2>Обновляю состояние игрока…",
             "teams-label" to "<#f3a2c9>⚑ Кланы ›",
             "now-label" to "<italic:false><#86dcf1>◆ Мой профиль ›",

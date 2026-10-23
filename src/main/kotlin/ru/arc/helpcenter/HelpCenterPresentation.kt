@@ -27,7 +27,9 @@ internal class HelpCenterPresentation(settings: HelpCenterSettings) {
     /** Explicit opaque summary; the existing font opt-out keeps portable native facts. */
     fun filledFacts(rows: List<List<Pair<Component, Component>>>, width: Int): PaperDialogBody {
         if (decoration == null || rows.isEmpty()) return facts(rows, width)
-        return DialogTables.filledBody(rows.map { row -> row.map(::field) }, null, width, List(rows.first().size) { 1 })
+        val cells = if (rows.all { it.size == 1 }) rows.map { row -> listOf(row.single().first, row.single().second) }
+            else rows.map { row -> row.map(::field) }
+        return DialogTables.filledBody(cells, null, width, List(cells.first().size) { 1 })
     }
 
     private fun field(pair: Pair<Component, Component>) = Component.empty().color(prose)

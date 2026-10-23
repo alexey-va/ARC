@@ -176,6 +176,8 @@ class HelpCenterScreensTest {
         open(HelpCenterPage.ROOT)
         screens["root"] = screen
         screen.buttons.size shouldBe 15
+        plain(screen.body.first().text) shouldBe "Ниже — ваша короткая сводка; кнопки ведут к игровым разделам без запоминания команд."
+        body().contains("RusCrafting") shouldBe false
         screen.body[1].width shouldBe 508
         plain(screen.body[1].text).codePoints().anyMatch { it in 0xFA300..0xFAF1B } shouldBe true
         val ordinaryProfile = gateway.loadProfile(player, 12).join()
@@ -270,7 +272,7 @@ class HelpCenterScreensTest {
         Files.writeString(output, GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create().toJson(export))
         val gson = GsonComponentSerializer.gson()
         fun component(value: Component) = JsonParser.parseString(gson.serialize(value))
-        val components = screens.filterKeys { it in setOf("root", "root-long", "root-plain") }.mapValues { (_, view) -> mapOf(
+        val components = screens.filterKeys { it in setOf("root", "root-long", "root-plain", "flight") }.mapValues { (_, view) -> mapOf(
             "title" to component(view.title), "columns" to view.columns,
             "body" to view.body.map { mapOf("text" to component(it.text), "width" to it.width) },
             "buttons" to view.buttons.map { mapOf("id" to it.id.value, "text" to component(it.label), "tooltip" to component(it.tooltip), "width" to it.width) },

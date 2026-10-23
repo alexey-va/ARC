@@ -174,7 +174,7 @@ internal class HelpCenterController(
 
     private fun showRoot(player: Player, profile: HelpCenterProfile? = null) {
         val activeGraves = runCatching { activeGraveCount(player) }.getOrDefault(0).coerceAtLeast(0)
-        val body = mutableListOf(PaperDialogBody(text("root-body"), width = 506))
+        val body = mutableListOf(PaperDialogBody(text("root-summary-hint"), width = 506))
         if (profile == null) {
             body += PaperDialogBody(text("my-error"), width = 506)
         } else {
