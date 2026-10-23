@@ -93,6 +93,9 @@ class HelpCenterConfig(private val config: Config) {
         }
 
         private val DEFAULT_TEXT = linkedMapOf(
+            "root-sections-heading" to "<italic:false><#86dcf1>Разделы сервера",
+            "my-resources-heading" to "<italic:false><#e6fff3>Ресурсы и территория",
+            "my-location-heading" to "<italic:false><#86dcf1>Место и общение",
             "main-graves-label" to "<#c4a7e7>Могилы: <#ffffff><count> <#c4a7e7>›",
             "graves-tooltip" to "<#e8dfd2>Открыть список активных могил и вернуть вещи.",
             "main-now-label" to "<#86dcf1>Мой профиль",
@@ -106,7 +109,7 @@ class HelpCenterConfig(private val config: Config) {
             "main-enchants-label" to "<#d6a5ff>Зачарования",
             "main-quests-label" to "<#c4abff>Квесты",
             "main-trade-label" to "<#f4d87a>Торговля",
-            "main-technology-label" to "<#85dfc4>Технологии",
+            "main-mounts-label" to "<#86dcf1>Маунты",
             "main-search-label" to "<#f3a2c9>Поиск",
             "main-settings-label" to "<#86dcf1>Настройки",
             "warps-title" to "<#92bed8>Варпы игроков",

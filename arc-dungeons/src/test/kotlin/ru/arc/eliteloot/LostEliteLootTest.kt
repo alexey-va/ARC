@@ -20,6 +20,7 @@ import org.bukkit.event.world.EntitiesUnloadEvent
 import org.bukkit.event.world.WorldUnloadEvent
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
+import ru.arc.core.BoundedAsyncExecutor
 import ru.arc.core.BudgetedTaskQueue
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.Tasks
@@ -61,7 +62,7 @@ class LostEliteLootTest : FreeSpec({
     beforeEach {
         paper = MockBukkitTestRuntime.open()
         scheduler = TestTaskScheduler(); Tasks.install(scheduler)
-        scope = LifecycleTaskScope(scheduler); native = BudgetedTaskQueue(scope, nanoTime = { 0 })
+        scope = LifecycleTaskScope(scheduler); native = BudgetedTaskQueue(scope, maximumSteps = 128, nanoTime = { 0 })
         cleanupScope = LifecycleTaskScope(scheduler); cleanupQueue = BudgetedTaskQueue(cleanupScope, nanoTime = { 0 })
         cleanup = object : ArcNativeCleanupService {
             override fun submit(owner: String, step: BooleanSupplier) = cleanupQueue.submit({ true }) { step.asBoolean }.thenApply<Void> { null }
@@ -111,8 +112,9 @@ class LostEliteLootTest : FreeSpec({
     fun service(
         open: () -> LostLootJournal = { LostLootStore(root) },
         publish: (LostLootRecord) -> CompletableFuture<Unit> = { CompletableFuture.completedFuture(Unit) },
+        worker: BoundedAsyncExecutor = BoundedAsyncExecutor("lost-loot-outbox"),
     ): Pair<LostEliteLoot, LostLootOutbox> {
-        val outbox = LostLootOutbox(open, publish)
+        val outbox = LostLootOutbox(open, publish, worker)
         val tickets = PaperChunkTicketRegistry(object : PaperChunkTicketBackend {
             override fun add(key: PaperChunkKey): PaperChunkTicketAddResult { openTickets.add(key); return PaperChunkTicketAddResult.ADDED }
             override fun remove(key: PaperChunkKey) = openTickets.remove(key)
@@ -205,13 +207,16 @@ class LostEliteLootTest : FreeSpec({
 
     "write failure keeps uncertainty and retries the original payload after recovery" {
         val player = paper.addPlayer("disk-failure")
-        val (loot, outbox) = service()
+        val worker = BoundedAsyncExecutor("lost-loot-retry-test")
+        val (loot, outbox) = service(worker = worker)
         ready(loot)
         val drop = entity(player)
         val obstruction = root.resolve("data/lost-elite-loot/${drop.uniqueId}.json")
         Files.createDirectories(obstruction)
         loot.capture(drop)
         tickUntil { outbox.entry(drop.uniqueId.toString()) != null }
+        // The uncertainty index is published before the failed write completes.
+        worker.submit {}.get(5, TimeUnit.SECONDS)
         scheduler.tick(5)
         verify(exactly = 0) { drop.remove() }
         outbox.entry(drop.uniqueId.toString())?.certain shouldBe false

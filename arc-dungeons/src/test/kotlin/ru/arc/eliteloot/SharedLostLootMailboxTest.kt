@@ -33,7 +33,7 @@ class SharedLostLootMailboxTest : FreeSpec({
         paper = MockBukkitTestRuntime.open(); scheduler = TestTaskScheduler(); Tasks.install(scheduler)
         repository = MemoryLostLootRepository(); gateway = TestLootCredits()
         worker = BoundedAsyncExecutor("lost-loot-mailbox-test")
-        scope = LifecycleTaskScope(scheduler); native = BudgetedTaskQueue(scope, nanoTime = { 0 })
+        scope = LifecycleTaskScope(scheduler); native = BudgetedTaskQueue(scope, maximumSteps = 128, nanoTime = { 0 })
     }
     afterEach {
         services.forEach { it.close() }; services.clear()

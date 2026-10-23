@@ -199,6 +199,7 @@ internal class HelpCenterController(
                 )
             body += presentation.facts(rows.chunked(2), 506, corners = true)
         }
+        body += presentation.section(text("root-sections-heading"), 506)
         present(
             player,
             PaperDialogScreen(
@@ -225,7 +226,11 @@ internal class HelpCenterController(
                             add(button(id, text("main-$id-label"), commandTooltip(id)) { executeCatalog(player, id) })
                         }
                     }
-                    add(rootCategoryButton(player, HelpCenterCategory.TECHNOLOGY))
+                    available["mounts"]?.let {
+                        add(button("mounts", text("main-mounts-label"), commandTooltip("mounts")) {
+                            executeCatalog(player, "mounts")
+                        })
+                    }
                     add(button("search", text("commands-label"), text("commands-tooltip")) { openCommands(player) })
                     add(button("settings", text("category-settings-label"), text("category-settings-tooltip")) { openSettings(player) })
                 }.map {
@@ -247,7 +252,7 @@ internal class HelpCenterController(
             PaperDialogScreen(
                 id = "help.help",
                 title = text("help-title"),
-                body = listOf(PaperDialogBody(text("help-body"), width = 506)),
+                body = listOfNotNull(presentation.paragraph(text("help-body"), 506), presentation.separator(506)),
                 buttons = listOf(
                     button("help_guide", text("help-guide-label"), text("guide-tooltip")) {
                         openGuide(player) { openHelp(player) }
@@ -331,8 +336,9 @@ internal class HelpCenterController(
                 title = text("now-title"),
                 body = buildList {
                     add(presentation.facts(listOf(rows.take(2)), 468, corners = true))
+                    add(presentation.section(text("my-resources-heading"), 468))
                     add(presentation.facts(listOf(rows.slice(2..3), rows.slice(4..5)), 468))
-                    presentation.separator(468)?.let(::add)
+                    add(presentation.section(text("my-location-heading"), 468))
                     add(presentation.facts(listOf(listOf(rows[6], rows[8]), listOf(rows[7])), 468))
                 },
                 buttons = (recommendationButtons(player, profile) + listOf(
@@ -393,7 +399,7 @@ internal class HelpCenterController(
             PaperDialogScreen(
                 id = "help.guide",
                 title = text("guide-title"),
-                body = listOf(PaperDialogBody(text("guide-body"), width = 500)),
+                body = listOf(presentation.paragraph(text("guide-body"), 500)),
                 buttons = listOf(
                     button("kit", text("kit-label"), commandTooltip("kit")) { executeCatalog(player, "kit") }.closing(),
                     button("jobs", text("jobs-label"), commandTooltip("jobs")) { executeCatalog(player, "jobs") },
@@ -414,7 +420,7 @@ internal class HelpCenterController(
             PaperDialogScreen(
                 id = "help.commands",
                 title = text("commands-title"),
-                body = listOf(PaperDialogBody(text("commands-body"), width = 500)),
+                body = listOf(presentation.callout(text("commands-body"), 500)),
                 inputs = listOf(PaperDialogTextInput(SEARCH_INPUT, text("search-input"), maxLength = 48)),
                 buttons = listOf(
                     contextButton("search", text("search-label"), text("search-tooltip")) { context ->
@@ -596,7 +602,7 @@ internal class HelpCenterController(
             PaperDialogScreen(
                 id = "help.recovery",
                 title = text("recovery-title"),
-                body = listOf(PaperDialogBody(text("recovery-body"), width = 500)),
+                body = listOf(presentation.callout(text("recovery-body"), 500)),
                 buttons = HelpCenterProblem.entries.map { problem ->
                     button(
                         "problem_${problem.name.lowercase()}",
@@ -699,7 +705,10 @@ internal class HelpCenterController(
             PaperDialogScreen(
                 id = "help.category.${category.configId}",
                 title = text("category-${category.configId}-title"),
-                body = listOf(PaperDialogBody(text(if (entries.isEmpty()) "category-empty" else bodyKey), width = 500)),
+                body = listOfNotNull(
+                    presentation.paragraph(text(if (entries.isEmpty()) "category-empty" else bodyKey), 500),
+                    presentation.separator(500),
+                ),
                 buttons = buildList {
                     if (category == HelpCenterCategory.TECHNOLOGY) {
                         add(button("held_item", text("context-item-label"), text("item-tooltip")) { hub.openItem(player) })
@@ -752,10 +761,11 @@ internal class HelpCenterController(
                 width = 468,
                 corners = true,
             ),
-            PaperDialogBody(text("travel-body"), width = 500),
+            presentation.paragraph(text("travel-body"), 500),
         )
         if (homes.isEmpty()) body += PaperDialogBody(text("travel-empty"))
         if (snapshot.maxSlots > 0 && snapshot.usedSlots >= snapshot.maxSlots) body += PaperDialogBody(text("travel-limit"))
+        presentation.separator(500)?.let(body::add)
         val homeButtons = homes.mapIndexed { index, home ->
             button(
                 "home_$index",
@@ -989,7 +999,7 @@ internal class HelpCenterController(
             PaperDialogScreen(
                 id = "help.travel.rtp",
                 title = text("rtp-title"),
-                body = listOf(PaperDialogBody(text("rtp-body"), width = 500)),
+                body = listOf(presentation.callout(text("rtp-body"), 500)),
                 buttons = listOf(
                     button("rtp_vanilla", text("rtp-vanilla-label"), text("rtp-vanilla-tooltip")) {
                         execute(player, settings.action("rtp-vanilla"))

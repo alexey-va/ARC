@@ -5,7 +5,9 @@ import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkConstructor
+import io.mockk.spyk
 import io.mockk.unmockkConstructor
+import io.mockk.verify
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.FluidCollisionMode
@@ -32,6 +34,28 @@ import ru.arc.staffspells.api.StaffHudPlacement
 import java.util.UUID
 
 class StaffSpellHudTest : FreeSpec({
+    "unchanged HUD follows without reparsing text and changed state refreshes both surfaces" {
+        withHudHarness { h ->
+            val player = h.player("staff-hud-unchanged", StaffSpell.EMBER)
+            h.hud.ready(player, StaffSpell.EMBER, secondary = false)
+            h.scheduler.tick(20)
+            verify(exactly = 1) { h.config.staffHudReady(StaffSpell.EMBER, false) }
+
+            player.isSneaking = true
+            h.scheduler.tick(1)
+            verify(exactly = 1) { h.config.staffHudReady(StaffSpell.EMBER, true) }
+
+            h.preferences.value = StaffSpellHudPreferences(StaffHudMode.BOSSBAR, StaffHudPlacement.BOTTOM)
+            h.scheduler.tick(20)
+            verify(exactly = 1) { h.config.staffHudBossbar(any()) }
+
+            h.hud.hotkeyState = { _, _ -> StaffHotkeyHudState(80, 20) }
+            h.scheduler.tick(20)
+            verify(exactly = 2) { h.config.staffHudBossbar(any()) }
+            text(player.activeBossBars().single().name()).endsWith("Q 4.0с   F 1.0с") shouldBe true
+        }
+    }
+
     "HUD remains in front of a wall even when the player stands against it" {
         staffHudSafeDistance(staffHudBaseDistance(), 0.30) shouldBe 0.12
     }
@@ -458,7 +482,7 @@ private class HudDisplayRecorder {
                 record.transformWrites++
                 Unit
             }
-            every { handle.attachTo(any()) } answers { record.attachedPlayerId = firstArg<Player>().uniqueId }
+            every { handle.attachTo(any<Player>()) } answers { record.attachedPlayerId = firstArg<Player>().uniqueId }
             every { handle.teleportDuration = any() } answers { record.teleportTicks = firstArg<Int>() }
             every { handle.interpolationDuration = any() } answers { record.transformTicks = firstArg<Int>() }
             every { handle.text(any()) } answers {
@@ -487,6 +511,7 @@ private data class HudHarness(
     val paper: MockBukkitTestRuntime,
     val rayHitDistance: MutableList<Double?>,
     val preferences: HudPreferenceBox,
+    val config: StaffSpellConfig,
 ) {
     fun player(name: String, spell: StaffSpell): Player = paper.addPlayer(name).apply {
         teleport(Location(world, 0.5, 64.0, 0.5))
@@ -521,7 +546,7 @@ private fun withHudHarness(ownDisplays: Boolean = true, block: (HudHarness) -> U
                 val world = paper.addSimpleWorld("staff-spell-hud")
                 val recorder = HudDisplayRecorder()
                 val preferences = HudPreferenceBox()
-                val config = StaffSpellConfig(StaffTestConfig(mapOf(
+                val config = spyk(StaffSpellConfig(StaffTestConfig(mapOf(
                     "ember.name" to "Комета",
                     "ember.secondary-name" to "Метеоры",
                     "gravity.name" to "Тяготение",
@@ -537,11 +562,11 @@ private fun withHudHarness(ownDisplays: Boolean = true, block: (HudHarness) -> U
                     "messages.staff-hud.bossbar-charging" to "<input> · <ability> <percent>% <bar>",
                     "messages.staff-hud.bossbar-cooldown" to "<input> · <ability> <seconds> с",
                     "messages.staff-hud.bossbar-channel" to "<input> · <ability> · Глыба готова",
-                )))
+                ))))
                 val hud = StaffSpellHud(recorder.displays, config,
                     preferences = StaffSpellHudPreferencesReader { preferences.value }, ownDisplays = ownDisplays).also(StaffSpellHud::start)
                 try {
-                    block(HudHarness(scheduler, world, recorder, hud, paper, rayHitDistance, preferences))
+                    block(HudHarness(scheduler, world, recorder, hud, paper, rayHitDistance, preferences, config))
                 } finally {
                     hud.close()
                     recorder.closes shouldBe if (ownDisplays) 1 else 0
