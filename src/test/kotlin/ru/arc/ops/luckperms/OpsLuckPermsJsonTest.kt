@@ -6,6 +6,14 @@ import io.kotest.matchers.shouldBe
 import java.time.Instant
 
 class OpsLuckPermsJsonTest : FreeSpec({
+    "new mutations still reject blank meta values even though native snapshots preserve them" {
+        for (value in listOf("", " ")) {
+            shouldThrow<IllegalArgumentException> {
+                OpsLuckPermsJson.parseMutation(LpSubjectRef(LpSubjectType.GROUP, "builder"),
+                    """{"version":1,"reason":"test","operations":[{"op":"set_meta","key":"rank","metaValue":"$value"}]}""")
+            }
+        }
+    }
     "strict mutation JSON round-trips typed node identity" {
         val ref = LpSubjectRef(LpSubjectType.GROUP, "builder")
         val body =

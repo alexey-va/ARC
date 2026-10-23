@@ -103,7 +103,8 @@ data class MetaNodeSpec(
 ) : LpNodeSpec {
     init {
         require(key.isNotBlank()) { "LuckPerms meta key must not be blank" }
-        require(metaValue.isNotBlank()) { "LuckPerms meta value must not be blank" }
+        // Native LuckPerms permits empty values. Snapshots and rollback must retain them exactly;
+        // new operator input is still validated by OpsLuckPermsJson.requiredString.
     }
 
     override fun canonicalKey(): String = canonicalKey("meta", key, metaValue, value.toString())

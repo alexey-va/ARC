@@ -31,6 +31,18 @@ class LuckPermsNodeCodecTest : FreeSpec({
     afterSpec { TestLuckPermsNodeFactory.uninstall() }
 
     "LuckPerms node codec" - {
+        "preserves existing blank meta values without changing permission identity" {
+            val context = LpContextSet(mapOf("server" to listOf("spawn")))
+            val expiry = Instant.parse("2099-08-02T12:00:00Z")
+            for (value in listOf("", " ", "\t")) {
+                val native = MetaNode.builder("existing_meta", value).value(false).expiry(expiry)
+                    .withContext(ImmutableContextSet.builder().add("server", "spawn").build()).build()
+                val saved = LuckPermsNodeCodec.toSpec(native)
+                saved shouldBe MetaNodeSpec("existing_meta", value, context, expiry, false)
+                LuckPermsNodeCodec.toSpec(LuckPermsNodeCodec.toNode(saved)) shouldBe saved
+                saved.canonicalKey() shouldNotBe MetaNodeSpec("existing_meta", "other", context, expiry, false).canonicalKey()
+            }
+        }
         "round-trips permission value contexts and expiry" {
             val spec =
                 PermissionNodeSpec(
