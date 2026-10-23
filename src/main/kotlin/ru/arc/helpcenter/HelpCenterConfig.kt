@@ -95,6 +95,8 @@ class HelpCenterConfig(private val config: Config) {
         private val DEFAULT_TEXT = linkedMapOf(
             "root-sections-heading" to "<italic:false><#86dcf1>Разделы сервера",
             "my-resources-heading" to "<italic:false><#e6fff3>Ресурсы и территория",
+            "my-wallet-heading" to "<italic:false><#f4d87a>Кошелёк",
+            "my-territory-heading" to "<italic:false><#e8dfd2>Территория",
             "my-location-heading" to "<italic:false><#86dcf1>Место и общение",
             "main-graves-label" to "<#c4a7e7>Могилы: <#ffffff><count> <#c4a7e7>›",
             "graves-tooltip" to "<#e8dfd2>Открыть список активных могил и вернуть вещи.",

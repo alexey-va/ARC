@@ -11,6 +11,8 @@ import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import ru.arc.paper.menu.DialogTextLayout
+import ru.arc.paper.menu.DialogDecoration
+import ru.arc.paper.menu.DialogTables
 
 class HelpCenterPresentationTest : FreeSpec({
     fun presentation(font: String) = HelpCenterPresentation(HelpCenterSettings(
@@ -115,5 +117,36 @@ class HelpCenterPresentationTest : FreeSpec({
         visible.contains("123 456 789.99") shouldBe true
         visible.contains('·') shouldBe false
         coins shouldBe 1
+    }
+
+    "compact profile wrappers keep narrow long facts and gate field icons with the existing font opt-in" {
+        val decorated = presentation("arc:dialog_ui")
+        val portable = presentation("")
+        val label = Component.text("Координаты")
+        portable.fieldLabel(DialogDecoration.FieldIcon.COORDINATES, label) shouldBe label
+        val facts = listOf(
+            decorated.fieldLabel(DialogDecoration.FieldIcon.WORLD, Component.text("Мир")) to
+                Component.text("Северная мастерская у старой пристани"),
+            decorated.fieldLabel(DialogDecoration.FieldIcon.COORDINATES, label) to Component.text("-1234567, 255, 1234567"),
+            decorated.fieldLabel(DialogDecoration.FieldIcon.CHAT, Component.text("Чат")) to Component.text("локальный"),
+        )
+        val body = decorated.compactFacts(facts, 220, DialogTables.PanelSkin.NAVY)
+        (body.width <= 220) shouldBe true
+        fun letters(value: Component) = PlainTextComponentSerializer.plainText().serialize(value).filter { it.isLetterOrDigit() }
+        val expected = facts.flatMap { listOf(it.first, it.second) }.joinToString("") { letters(it) }
+        letters(body.text).toList().sorted() shouldBe expected.toList().sorted()
+        val plainFacts = listOf(label to Component.text("-1234567, 255, 1234567"))
+        val fallback = portable.compactFacts(plainFacts, 220, DialogTables.PanelSkin.NAVY)
+        PlainTextComponentSerializer.plainText().serialize(fallback.text) shouldBe "Координаты: -1234567, 255, 1234567"
+        val groups = portable.groupedFacts(listOf(DialogTables.FactsGroup(Component.text("Место"), plainFacts)),
+            220, DialogTables.PanelSkin.ORNATE)
+        PlainTextComponentSerializer.plainText().serialize(groups.text) shouldBe "Место\nКоординаты: -1234567, 255, 1234567"
+        val record = com.google.gson.JsonObject().apply {
+            addProperty("id", "profile-narrow"); addProperty("width", body.width)
+            add("component", JsonParser.parseString(net.kyori.adventure.text.serializer.gson.GsonComponentSerializer.gson().serialize(body.text)))
+        }
+        val path = java.nio.file.Path.of("build/reports/help-center-decoration/presentation-components.json")
+        java.nio.file.Files.createDirectories(path.parent)
+        java.nio.file.Files.writeString(path, com.google.gson.JsonArray().apply { add(record) }.toString())
     }
 })

@@ -10,6 +10,24 @@ frames, the six textured tables T13–T18 and all 18 divider specimens. The orig
 API laboratory remains available through `/arc dialogdemo`, including its 18
 table layouts.
 
+The modular sections add five complete skins (navy, plum, evergreen, cocoa and
+ornate), four compact layouts (rows, metrics, capsules and groups with title
+tabs), 1/2/3-column size examples and a narrow wrapped example. Separate pages
+show lists, connected steps, four numeric progress palettes, unknown progress,
+textual state badges, measured headings and all ten typed field icons. Each
+specimen uses the shared Core constructor and configured module copy; ordinary
+navigation remains native. The ornate page pairs its corner plates with the
+native gold diamond heading.
+
+The main `/mm` summary keeps its eight fields and two-column structure, with
+typed field icons and the ornate skin. Its actions and two technical button
+accents stay unchanged. `/help` → **Мой профиль** uses the same components behind the existing
+`presentation.font` opt-in: compact identity, two resource groups and compact
+location facts. All nine fields and their actions remain owned by the profile
+controller. Empty font configuration keeps readable native labels, group titles
+and values without panel or field-icon glyphs. The existing diagnostic checklist
+now calls `DialogDecoration.listBody` with the planner's explicit states.
+
 Gallery navigation uses `PaperDialogRuntime` and shared history. Each section
 keeps one stable screen ID while paging or displaying a sample-button response,
 so Back returns to the visited root. The configured Escape preference is
@@ -50,7 +68,7 @@ payloads, immediate client wrapping, background-first ordering, native coin/text
 shadows, command aliases and actual shared-history navigation. The gallery's
 component export is `build/reports/dialog-library/screens.json`. Source checks
 and font-backed previews do not establish live pack loading or native appearance;
-inspect all four pages in the actual client after matching ARC and pack activation.
+inspect the relevant pages in the actual client after matching ARC and pack activation.
 
 ## Original API laboratory
 

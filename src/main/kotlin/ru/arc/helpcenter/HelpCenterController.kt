@@ -13,6 +13,7 @@ import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.whenCompleteSync
 import ru.arc.graves.GravesModule
 import ru.arc.gui.ArcMenus
+import ru.arc.paper.menu.DialogDecoration
 import ru.arc.paper.menu.DialogTables
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
@@ -179,25 +180,26 @@ internal class HelpCenterController(
             body += PaperDialogBody(text("my-error"), width = 506)
         } else {
             val unavailable = settings.text("not-available")
+            fun label(key: String, icon: DialogDecoration.FieldIcon) = presentation.fieldLabel(icon, text(key))
             val rows = listOf(
-                    text("table-player-label") to Component.text(profile.playerName),
-                    text("table-online-label") to Component.text(profile.onlinePlayers),
-                    text("table-rank-label") to text("table-rank-value", "value" to (profile.rank ?: unavailable)),
-                    text("table-balance-label") to text("table-coins-value", "value" to (profile.balance ?: unavailable)),
-                    text("table-homes-label") to text(
+                    label("table-player-label", DialogDecoration.FieldIcon.PLAYER) to Component.text(profile.playerName),
+                    label("table-online-label", DialogDecoration.FieldIcon.ONLINE) to Component.text(profile.onlinePlayers),
+                    label("table-rank-label", DialogDecoration.FieldIcon.RANK) to text("table-rank-value", "value" to (profile.rank ?: unavailable)),
+                    label("table-balance-label", DialogDecoration.FieldIcon.BALANCE) to text("table-coins-value", "value" to (profile.balance ?: unavailable)),
+                    label("table-homes-label", DialogDecoration.FieldIcon.HOMES) to text(
                         "table-slots-value",
                         "used" to (profile.homes?.usedSlots?.toString() ?: unavailable),
                         "maximum" to (profile.homes?.maxSlots?.toString() ?: unavailable),
                     ),
-                    text("table-lands-label") to text(
+                    label("table-lands-label", DialogDecoration.FieldIcon.LANDS) to text(
                         "table-lands-value",
                         "count" to (profile.lands?.toString() ?: unavailable),
                         "chunks" to (profile.claimedChunks?.toString() ?: unavailable),
                     ),
-                    text("table-location-label") to Component.text(profile.server, TextColor.color(0x86dcf1)),
-                    text("table-world-label") to Component.text(worldLabel(profile.worldKind, profile.world), TextColor.color(0xe6fff3)),
+                    label("table-location-label", DialogDecoration.FieldIcon.WORLD) to Component.text(profile.server, TextColor.color(0x86dcf1)),
+                    label("table-world-label", DialogDecoration.FieldIcon.WORLD) to Component.text(worldLabel(profile.worldKind, profile.world), TextColor.color(0xe6fff3)),
                 )
-            body += presentation.filledFacts(rows.chunked(2), 508)
+            body += presentation.filledFacts(rows.chunked(2), 508, DialogTables.PanelSkin.ORNATE)
         }
         body += presentation.section(text("root-sections-heading"), 506)
         present(
@@ -314,20 +316,21 @@ internal class HelpCenterController(
 
     private fun showNow(player: Player, profile: HelpCenterProfile) {
         val unavailable = settings.text("not-available")
+        fun label(key: String, icon: DialogDecoration.FieldIcon) = presentation.fieldLabel(icon, text(key))
         val rows = listOf(
-            text("table-player-label") to Component.text(profile.playerName),
-            text("table-rank-label") to text("table-rank-value", "value" to (profile.rank ?: unavailable)),
-            text("table-balance-label") to text("table-coins-value", "value" to (profile.balance ?: unavailable)),
-            text("table-tokens-label") to text("table-tokens-value", "value" to (profile.tokens ?: unavailable)),
-            text("table-homes-label") to text("table-slots-value",
+            label("table-player-label", DialogDecoration.FieldIcon.PLAYER) to Component.text(profile.playerName),
+            label("table-rank-label", DialogDecoration.FieldIcon.RANK) to text("table-rank-value", "value" to (profile.rank ?: unavailable)),
+            label("table-balance-label", DialogDecoration.FieldIcon.BALANCE) to text("table-coins-value", "value" to (profile.balance ?: unavailable)),
+            label("table-tokens-label", DialogDecoration.FieldIcon.TOKENS) to text("table-tokens-value", "value" to (profile.tokens ?: unavailable)),
+            label("table-homes-label", DialogDecoration.FieldIcon.HOMES) to text("table-slots-value",
                 "used" to (profile.homes?.usedSlots?.toString() ?: unavailable),
                 "maximum" to (profile.homes?.maxSlots?.toString() ?: unavailable)),
-            text("table-lands-label") to text("table-lands-value",
+            label("table-lands-label", DialogDecoration.FieldIcon.LANDS) to text("table-lands-value",
                 "count" to (profile.lands?.toString() ?: unavailable),
                 "chunks" to (profile.claimedChunks?.toString() ?: unavailable)),
-            text("table-world-label") to Component.text(worldLabel(profile.worldKind, profile.world)),
-            text("table-coordinates-label") to Component.text("${profile.x}, ${profile.y}, ${profile.z}"),
-            text("table-chat-label") to text(if (profile.chatMode == HelpCenterChatMode.GLOBAL) "table-chat-global" else "table-chat-local"),
+            label("table-world-label", DialogDecoration.FieldIcon.WORLD) to Component.text(worldLabel(profile.worldKind, profile.world)),
+            label("table-coordinates-label", DialogDecoration.FieldIcon.COORDINATES) to Component.text("${profile.x}, ${profile.y}, ${profile.z}"),
+            label("table-chat-label", DialogDecoration.FieldIcon.CHAT) to text(if (profile.chatMode == HelpCenterChatMode.GLOBAL) "table-chat-global" else "table-chat-local"),
         )
         present(
             player,
@@ -335,11 +338,14 @@ internal class HelpCenterController(
                 id = "help.now",
                 title = text("now-title"),
                 body = buildList {
-                    add(presentation.filledFacts(listOf(rows.take(2)), 468))
-                    add(presentation.section(text("my-resources-heading"), 468))
-                    add(presentation.facts(listOf(rows.slice(2..3), rows.slice(4..5)), 468))
+                    add(presentation.compactFacts(rows.take(2), 468, DialogTables.PanelSkin.ORNATE))
+                    add(presentation.section(text("my-resources-heading"), 468, DialogDecoration.HeadingStyle.DIAMOND))
+                    add(presentation.groupedFacts(listOf(
+                        DialogTables.FactsGroup(text("my-wallet-heading"), rows.slice(2..3)),
+                        DialogTables.FactsGroup(text("my-territory-heading"), rows.slice(4..5)),
+                    ), 468, DialogTables.PanelSkin.ORNATE))
                     add(presentation.section(text("my-location-heading"), 468))
-                    add(presentation.facts(listOf(listOf(rows[6], rows[8]), listOf(rows[7])), 468))
+                    add(presentation.compactFacts(rows.drop(6), 468, DialogTables.PanelSkin.NAVY))
                 },
                 buttons = (recommendationButtons(player, profile) + listOf(
                     button("now_homes", text("my-homes-label"), text("my-homes-tooltip")) { openTravel(player) },

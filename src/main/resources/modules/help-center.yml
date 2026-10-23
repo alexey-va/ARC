@@ -420,6 +420,8 @@ text:
   root-title: "<italic:false><#86dcf1>Главное меню"
   root-sections-heading: '<italic:false><#86dcf1>Разделы сервера'
   my-resources-heading: '<italic:false><#e6fff3>Ресурсы и территория'
+  my-wallet-heading: '<italic:false><#f4d87a>Кошелёк'
+  my-territory-heading: '<italic:false><#e8dfd2>Территория'
   my-location-heading: '<italic:false><#86dcf1>Место и общение'
   root-body: "<italic:false><#86dcf1>RusCrafting <#e8dfd2>— спокойное выживание, строительство и приключения в одной сети.<newline><#e8dfd2>Ниже — ваша короткая сводка; кнопки ведут к игровым разделам без запоминания команд."
   root-summary-hint: "<italic:false><#e8dfd2>Ниже — ваша короткая сводка; кнопки ведут к игровым разделам без запоминания команд."

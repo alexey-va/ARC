@@ -154,6 +154,53 @@ class DialogLibraryGalleryTest : FreeSpec() {
             }
         } }
 
+        "modular gallery exposes every skin layout size and icon through shared bounded components" { withCopy { copy ->
+            val gallery = DialogLibraryGallery(mockk(), copy)
+            val seenFonts = mutableSetOf<String>()
+            val seenIcons = mutableSetOf<Int>()
+            for (section in listOf(DialogLibraryGallery.Section.PANELS, DialogLibraryGallery.Section.LAYOUTS,
+                DialogLibraryGallery.Section.SIZES, DialogLibraryGallery.Section.ICONS)) {
+                repeat(section.pageCount) { index ->
+                    val screen = gallery.screen(DialogLibraryGallery.Page(section, index), false) { _, _ -> }
+                    val panels = screen.body.filter { body -> spans(body.text).any { it.style.font()?.asString()?.startsWith("arc:dialog_panel_") == true } }
+                    panels.size shouldBe 1
+                    panels.forEach { body ->
+                        val rows = mutableListOf(mutableListOf<Span>())
+                        spans(body.text).forEach { span -> span.text.split('\n').forEachIndexed { row, text ->
+                            if (row > 0) rows += mutableListOf<Span>()
+                            if (text.isNotEmpty()) rows.last() += span.copy(text = text)
+                        } }
+                        rows.forEach { row ->
+                            advance(row) shouldBe body.width - 10
+                            withClue("${section.key}-$index must stay inside the actual client wrap budget") {
+                                clientLines(row, body.width - 8).size shouldBe 1
+                            }
+                        }
+                        for (span in spans(body.text)) {
+                            val font = span.style.font()?.asString()
+                            if (font?.startsWith("arc:dialog_panel_") == true) seenFonts += font
+                            span.text.codePoints().forEach { point ->
+                                if (point in 0x10A000..0x10A007 || point == 0x1F4B0 || point == 0xE516) {
+                                    seenIcons += point
+                                    span.style.color() shouldBe NamedTextColor.WHITE
+                                    span.style.shadowColor().shouldBeNull()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            seenFonts shouldBe setOf("arc:dialog_panel_navy", "arc:dialog_panel_plum", "arc:dialog_panel_evergreen",
+                "arc:dialog_panel_cocoa", "arc:dialog_panel_ornate")
+            seenIcons shouldBe (0x10A000..0x10A007).toSet() + setOf(0x1F4B0, 0xE516)
+            val progress = gallery.screen(DialogLibraryGallery.Page(DialogLibraryGallery.Section.ELEMENTS, 2), false) { _, _ -> }
+            val unknown = spans(progress.body[7].text).joinToString("") { it.text }
+            unknown.contains("Нет данных") shouldBe true
+            unknown.codePoints().anyMatch { it in 0xF9138..0xF9147 } shouldBe false
+            val ornate = gallery.screen(DialogLibraryGallery.Page(DialogLibraryGallery.Section.PANELS, 4), false) { _, _ -> }
+            spans(ornate.body[3].text).joinToString("") { it.text }.count { it == '◆' } shouldBe 2
+        } }
+
         "pagination and repeated sample clicks return to the real root once without closing between pages" { withCopy { copy ->
             MockBukkitTestRuntime.open().use { paper ->
                 val player: Player = spyk(paper.addPlayer("GalleryViewer"))
@@ -194,6 +241,11 @@ class DialogLibraryGalleryTest : FreeSpec() {
                         shown.id shouldBe "dialog_design.filled"
                         click("exit")
                         shown.id shouldBe "dialog_design.root"
+                        click("panels")
+                        repeat(4) { click("next") }
+                        shown.id shouldBe "dialog_design.panels"
+                        click("exit")
+                        shown.id shouldBe "dialog_design.root"
                         closes shouldBe 0
                         click("exit")
                         closes shouldBe 1
@@ -228,6 +280,7 @@ class DialogLibraryGalleryTest : FreeSpec() {
     }
     private fun advance(point: Int, style: Style): Int = when (point) {
         in 0xFA300..0xFAF1B -> 17
+        in 0x100000..0x109834 -> 17
         in 0xFA200..0xFA209 -> -(1 shl (point - 0xFA200))
         in 0xFA220..0xFA229 -> 1 shl (point - 0xFA220)
         else -> fonts.getAsJsonObject(style.font()?.asString() ?: "minecraft:default")

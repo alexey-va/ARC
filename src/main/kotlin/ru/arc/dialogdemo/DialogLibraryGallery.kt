@@ -25,6 +25,8 @@ internal class DialogLibraryGallery(
 ) {
     enum class Section(val key: String, val pageCount: Int) {
         FILLED("filled", 4),
+        PANELS("panels", 5), LAYOUTS("layouts", 4), SIZES("sizes", 4),
+        ELEMENTS("elements", 5), ICONS("icons", 2),
         TEXT("text", 6), ACTIONS("actions", 3), ORNAMENTS("ornaments", 1),
         TABLES("tables", 6), DIVIDERS("dividers", 3),
     }
@@ -101,6 +103,40 @@ internal class DialogLibraryGallery(
                     bodies += filledPanel(page.index)
                     body("filled.note", 508)
                 }
+                Section.PANELS -> {
+                    body("panels.${page.index}.title")
+                    if (page.index == 4) bodies += decoration.headingBody(text("samples.heading"), 360,
+                        DialogDecoration.HeadingStyle.DIAMOND)
+                    bodies += DialogTables.factsBody(sampleFacts(), DialogTables.FactsLayout.ROWS,
+                        DialogTables.PanelSpec(DialogTables.PanelSkin.entries[page.index], 468, 1, true))
+                    body("panels.${page.index}.note")
+                }
+                Section.LAYOUTS -> {
+                    body("layouts.${page.index}.title")
+                    bodies += compactLayout(page.index)
+                    body("layouts.${page.index}.note")
+                }
+                Section.SIZES -> {
+                    body("sizes.${page.index}.title")
+                    bodies += sizedPanel(page.index)
+                    body("sizes.${page.index}.note")
+                }
+                Section.ELEMENTS -> {
+                    body("elements.${page.index}.title")
+                    bodies += sharedElements(page.index)
+                    body("elements.${page.index}.note")
+                }
+                Section.ICONS -> {
+                    body("icons.${page.index}.title")
+                    val icons = DialogDecoration.FieldIcon.entries.drop(page.index * 5).take(5)
+                    val facts = icons.map { icon ->
+                        val key = icon.name.lowercase()
+                        DialogDecoration.fieldLabel(icon, text("icons.$key.label")) to text("icons.$key.value")
+                    }
+                    bodies += DialogTables.factsBody(facts, DialogTables.FactsLayout.ROWS,
+                        DialogTables.PanelSpec(DialogTables.PanelSkin.ORNATE, 400, 1, true))
+                    body("icons.note")
+                }
             }
             if (sample != null) bodies += PaperDialogBody(text("sample-selected").append(text(sample)))
             if (page.index > 0) buttons += button("previous", text("previous"), text("previous-tip")) {
@@ -132,6 +168,49 @@ internal class DialogLibraryGallery(
         val rows = List(count) { row -> List(weights.size) { column -> text("filled.$index.row-$row.col-$column") } }
         val headers = if (index in 1..2) List(weights.size) { text("filled.$index.column-$it") } else null
         return DialogTables.filledBody(rows, headers, FILLED_BODY_WIDTHS[index], weights)
+    }
+
+    private fun sampleFacts(count: Int = 4) = List(count) { index ->
+        text("samples.fact-$index.label") to text("samples.fact-$index.value")
+    }
+
+    private fun compactLayout(index: Int): PaperDialogBody {
+        val facts = sampleFacts()
+        if (index == 3) return DialogTables.groupedFactsBody(listOf(
+            DialogTables.FactsGroup(text("samples.wallet"), facts.take(2)),
+            DialogTables.FactsGroup(text("samples.territory"), facts.drop(2)),
+        ), DialogTables.PanelSpec(DialogTables.PanelSkin.COCOA, 468, 2, true))
+        return DialogTables.factsBody(facts, DialogTables.FactsLayout.entries[index],
+            DialogTables.PanelSpec(DialogTables.PanelSkin.entries[index], 468, if (index == 0) 1 else 2, true))
+    }
+
+    private fun sizedPanel(index: Int): PaperDialogBody {
+        val facts = if (index == 3) sampleFacts(2) +
+            (text("samples.long-label") to text("samples.long-value")) else sampleFacts(6)
+        return DialogTables.factsBody(facts, DialogTables.FactsLayout.ROWS,
+            DialogTables.PanelSpec(DialogTables.PanelSkin.NAVY, listOf(220, 360, 500, 180)[index],
+                listOf(1, 2, 3, 1)[index], index != 2))
+    }
+
+    private fun sharedElements(index: Int): List<PaperDialogBody> = when (index) {
+        0 -> listOf(decoration.listBody(DialogDecoration.Marker.entries.mapIndexed { item, marker ->
+            DialogDecoration.ListEntry(marker, text("elements.0.item-$item"))
+        }, 260))
+        1 -> listOf(decoration.stepsBody(DialogDecoration.StepState.entries.mapIndexed { item, state ->
+            DialogDecoration.Step(state, text("elements.1.item-$item"))
+        }, 260))
+        2 -> DialogDecoration.ProgressColor.entries.mapIndexed { color, palette ->
+            decoration.progressBody(text("elements.2.label-$color"), 3.0, 10.0, text("elements.2.value"), 280, 10, palette)
+        } + decoration.progressBody(text("elements.2.unknown-label"), null, null, text("elements.2.unknown-value"),
+            280, 10, DialogDecoration.ProgressColor.MINT)
+        3 -> DialogDecoration.StateTone.entries.mapIndexed { item, tone ->
+            PaperDialogBody(DialogDecoration.stateBadge(text("elements.3.item-$item"), tone), 280)
+        }
+        else -> listOf(
+            decoration.headingBody(text("samples.heading"), 400),
+            decoration.headingBody(text("samples.heading"), 400, DialogDecoration.HeadingStyle.DIAMOND),
+            decoration.headingBody(text("elements.4.long-title"), 180, DialogDecoration.HeadingStyle.DIAMOND),
+        )
     }
 
     private fun composition(index: Int): PaperDialogBody = when (index) {

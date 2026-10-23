@@ -172,6 +172,10 @@ class HelpCenterScreensTest {
         player.addAttachment(plugin, "arcjustteams.use", true)
         player.addAttachment(plugin, "arc.mounts.use", true)
         gravesCount = 2
+        val ordinaryProfile = gateway.loadProfile(player, 12).join().copy(
+            balance = "67.7M", tokens = "3", homes = HelpCenterHomes(emptyList(), 1, 3), lands = 4, claimedChunks = 124,
+        )
+        every { gateway.loadProfile(player, any()) } returns CompletableFuture.completedFuture(ordinaryProfile)
         val screens = linkedMapOf<String, PaperDialogScreen>()
         open(HelpCenterPage.ROOT)
         screens["root"] = screen
@@ -179,8 +183,11 @@ class HelpCenterScreensTest {
         plain(screen.body.first().text) shouldBe "Ниже — ваша короткая сводка; кнопки ведут к игровым разделам без запоминания команд."
         body().contains("RusCrafting") shouldBe false
         screen.body[1].width shouldBe 508
-        plain(screen.body[1].text).codePoints().anyMatch { it in 0xFA300..0xFAF1B } shouldBe true
-        val ordinaryProfile = gateway.loadProfile(player, 12).join()
+        plain(screen.body[1].text).codePoints().anyMatch { it in 0x108000..0x109834 } shouldBe true
+        val rootPoints = plain(screen.body[1].text).codePoints().toArray().toSet()
+        for (icon in listOf(0x10A000, 0x10A001, 0x10A002, 0x10A003, 0x10A004, 0x10A007, 0x1F4B0)) {
+            withClue("Main summary field icon U+${icon.toString(16)}") { (icon in rootPoints) shouldBe true }
+        }
         every { gateway.loadProfile(player, any()) } returns CompletableFuture.completedFuture(ordinaryProfile.copy(
             playerName = "Long_Player_1234", balance = "123 456 789.99", rank = "Исследователь",
         ))
@@ -191,10 +198,25 @@ class HelpCenterScreensTest {
         every { gateway.loadProfile(player, any()) } returns CompletableFuture.completedFuture(ordinaryProfile)
         open(HelpCenterPage.NOW)
         screens["profile"] = screen
-        // Keep the established readable geometry while ordinary buttons use vanilla widgets.
+        // Fit the actual content while ordinary buttons retain their existing widgets and callbacks.
         screen.columns shouldBe 2
         screen.buttons.map { it.width }.distinct() shouldBe listOf(230)
-        screen.body.map { it.width }.distinct() shouldBe listOf(468)
+        screen.body.all { it.width <= 468 } shouldBe true
+        (screen.body[0].width < 468) shouldBe true
+        for (value in listOf("Viewer", "Игрок", "67.7M", "3", "1 / 3", "124", "Другой мир", "1, 65, 2", "локальный")) {
+            withClue("All nine profile fields remain visible: $value") { body().contains(value) shouldBe true }
+        }
+        val profileActions = screen.buttons.map { it.id to it.width }
+        every { gateway.loadProfile(player, any()) } returns CompletableFuture.completedFuture(ordinaryProfile.copy(
+            playerName = "Long_Player_1234", balance = "123 456 789.99", rank = "Исследователь дальних земель",
+            x = -1234567, y = 255, z = 1234567,
+        ))
+        open(HelpCenterPage.NOW)
+        screens["profile-long"] = screen
+        screen.buttons.map { it.id to it.width } shouldBe profileActions
+        body().contains("Long_Player_1234") shouldBe true
+        body().contains("123 456 789.99") shouldBe true
+        every { gateway.loadProfile(player, any()) } returns CompletableFuture.completedFuture(ordinaryProfile)
         open(HelpCenterPage.TRAVEL)
         screens["travel"] = screen
         open(HelpCenterPage.SETTINGS)
@@ -244,16 +266,18 @@ class HelpCenterScreensTest {
         controller = newController(plugin, "", closeEscape = true)
         open(HelpCenterPage.ROOT)
         screens["root-plain"] = screen
+        open(HelpCenterPage.NOW)
+        screens["profile-plain"] = screen
         open(HelpCenterPage.COMMANDS)
         screens["commands-plain"] = screen
         open(HelpCenterPage.RECOVERY)
         click("problem_cannot_teleport")
         screens["diagnostic-plain"] = screen
-        for ((decorated, fallback) in listOf("root" to "root-plain", "commands" to "commands-plain", "diagnostic" to "diagnostic-plain")) {
+        for ((decorated, fallback) in listOf("root" to "root-plain", "profile" to "profile-plain", "commands" to "commands-plain", "diagnostic" to "diagnostic-plain")) {
             screens.getValue(fallback).buttons.map { it.id to it.width } shouldBe
                 screens.getValue(decorated).buttons.map { it.id to it.width }
             screens.getValue(fallback).body.forEach {
-                plain(it.text).codePoints().anyMatch { point -> point in 0xF9000..0xF9FFF || point in 0xFA300..0xFAF1B } shouldBe false
+                plain(it.text).codePoints().anyMatch { point -> point in 0xF9000..0xF9FFF || point in 0xFA300..0xFAF1B || point in 0x100000..0x10A007 } shouldBe false
             }
         }
         val serializer = LegacyComponentSerializer.builder().character('&').hexColors().build()
@@ -272,7 +296,7 @@ class HelpCenterScreensTest {
         Files.writeString(output, GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create().toJson(export))
         val gson = GsonComponentSerializer.gson()
         fun component(value: Component) = JsonParser.parseString(gson.serialize(value))
-        val components = screens.filterKeys { it in setOf("root", "root-long", "root-plain", "flight") }.mapValues { (_, view) -> mapOf(
+        val components = screens.filterKeys { it in setOf("root", "root-long", "root-plain", "flight", "profile", "profile-long", "profile-plain") }.mapValues { (_, view) -> mapOf(
             "title" to component(view.title), "columns" to view.columns,
             "body" to view.body.map { mapOf("text" to component(it.text), "width" to it.width) },
             "buttons" to view.buttons.map { mapOf("id" to it.id.value, "text" to component(it.label), "tooltip" to component(it.tooltip), "width" to it.width) },
