@@ -63,6 +63,7 @@ open class ArcDungeonsPlugin : JavaPlugin() {
     private var mastery: DungeonMasteryEffects? = null
     private var passiveClasses: PassiveClassCompatibility? = null
     private var arenaLevels: NativeArenaLevels? = null
+    private var primisEncounters: PrimisEncounterGuard? = null
     private var nativeInitializationListener: Listener? = null
     private var retiredSync: CompletableFuture<Void> = CompletableFuture.completedFuture(null)
     private var awaitingSync: Any? = null
@@ -290,6 +291,18 @@ open class ArcDungeonsPlugin : JavaPlugin() {
         dungeonQol = qol
         listen(EMListener())
         listen(EliteMobsEventAnnouncementGuard())
+        PrimisEncounterGuard(nativeWork, logger, { player, reason ->
+            val (key, fallback) = when (reason) {
+                PrimisAdmissionDecision.ENTER_ROOM -> "enter-room" to "Войди в зал, чтобы вступить в бой."
+                PrimisAdmissionDecision.PASSAGE_OCCUPIED -> "passage-occupied" to "Отойди от прохода — двери должны закрыться."
+                else -> "not-ready" to "Зал ещё готовится. Подожди немного и попробуй снова."
+            }
+            ru.arc.paper.audience.NativePaperAudienceEffects.sendMessage(player, qol.text("encounters.$key", fallback))
+        }).also {
+            primisEncounters = it
+            listen(it)
+            it.start()
+        }
         val progressionOwner = DungeonProgression(sync = { emSync },
             text = { key, fallback -> qol.text("progression.$key", fallback) },
         ).also { progression = it }
@@ -375,6 +388,7 @@ open class ArcDungeonsPlugin : JavaPlugin() {
         val masteryOwner = mastery
         val passiveOwner = passiveClasses
         val arenaOwner = arenaLevels
+        val primisOwner = primisEncounters
 
         // Completion rights must be captured while the old synchronized native state is reachable.
         runCatching { progressionOwner?.flushCompletions() }.onFailure {
@@ -392,6 +406,7 @@ open class ArcDungeonsPlugin : JavaPlugin() {
         mastery = null
         passiveClasses = null
         arenaLevels = null
+        primisEncounters = null
         awaitingSync = null
         StaffSpellsModule.installMasteryCooldown(null)
 
@@ -401,6 +416,7 @@ open class ArcDungeonsPlugin : JavaPlugin() {
         progressionOwner?.let { actions.add { it.close() } }
         masteryOwner?.let { actions.add { it.close() } }
         arenaOwner?.let { actions.add { it.close() } }
+        primisOwner?.let { actions.add { it.close() } }
         passiveOwner?.let { actions.add { it.close() } }
         qol?.let { actions.add { it.close() } }
         hook?.let { actions.add { it.close() } }
