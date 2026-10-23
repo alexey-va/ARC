@@ -14,7 +14,7 @@ object DialogDesignGallery {
     const val TABLE_COUNT = 18
     const val DIVIDER_COUNT = 18
     private val ink = TextColor.color(0xE6EDF3)
-    private val muted = TextColor.color(0x9AA8B7)
+    private val muted = TextColor.color(0xE8DFD2)
     private val line = TextColor.color(0x728698)
     private val gold = TextColor.color(0xE8C383)
     private val blue = TextColor.color(0x83C9E8)

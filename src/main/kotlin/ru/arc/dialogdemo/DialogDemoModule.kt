@@ -34,6 +34,7 @@ import ru.arc.config.ConfigManager
 import ru.arc.core.PluginModule
 import ru.arc.util.TextUtil
 import ru.arc.paper.menu.DialogTextLayout
+import ru.arc.paper.menu.PaperDialogRuntime
 import ru.arc.text.TextAlignment
 
 /**
@@ -46,18 +47,24 @@ object DialogDemoModule : PluginModule, Listener {
     override val name = "DialogDemo"
     override val priority = 87
     private lateinit var config: Config
-    val pages = listOf("root", "alignment", "tables", "dividers", "text", "hover", "items", "inputs", "input-options", "actions",
+    private var libraryRuntime: PaperDialogRuntime? = null
+    val pages = listOf("root", "design", "alignment", "tables", "dividers", "text", "hover", "items", "inputs", "input-options", "actions",
         "template", "custom", "callbacks", "notice", "confirmation", "list", "links", "layout", "scroll", "lifecycle", "limits")
 
     override fun init() {
         reload()
+        libraryRuntime = PaperDialogRuntime(ARC.instance)
         ARC.instance.server.pluginManager.registerEvents(this, ARC.instance)
     }
     override fun reload() {
         config = ConfigManager.of(ARC.instance.dataPath, "modules/dialog-demo.yml")
         config.mergeMissingFromBundled("modules/dialog-demo.yml")
     }
-    override fun shutdown() = HandlerList.unregisterAll(this)
+    override fun shutdown() {
+        libraryRuntime?.close()
+        libraryRuntime = null
+        HandlerList.unregisterAll(this)
+    }
 
     private fun text(key: String) = TextUtil.mm(config.string(key, key))
     private fun body(key: String, width: Int = 420) = DialogBody.plainMessage(text(key), width)
@@ -116,6 +123,10 @@ object DialogDemoModule : PluginModule, Listener {
     }
 
     fun open(player: Player, page: String = "root", value: String = "") {
+        if (page == "design" || page == "preview") {
+            DialogLibraryGallery(requireNotNull(libraryRuntime) { "DialogDemo is not initialized" }, ::text).open(player)
+            return
+        }
         val screen = when (page) {
             "tables", "tables-2", "tables-3", "tables-4", "tables-5", "tables-6" -> gallery("tables", page.substringAfter('-', "1").toInt() - 1)
             "dividers", "dividers-2", "dividers-3" -> gallery("dividers", page.substringAfter('-', "1").toInt() - 1)

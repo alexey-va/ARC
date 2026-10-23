@@ -1,5 +1,41 @@
 # Native dialog API showcase
 
+## Installed component gallery
+
+Open **`/arc dialog preview`** or **`/arc dialogdemo design`**. The first root
+button opens the new opaque closed frame; its two pages show ordinary and long
+native text. The remaining sections contain all six text compositions (including
+four progress palettes), 20 functional action styles plus Back, four ornamental
+frames, the six textured tables T13–T18 and all 18 divider specimens. The original
+API laboratory remains available through `/arc dialogdemo`, including its 18
+table layouts.
+
+Gallery navigation uses `PaperDialogRuntime` and shared history. Each section
+keeps one stable screen ID while paging or displaying a sample-button response,
+so Back returns to the visited root. The configured Escape preference is
+preserved. Native gallery navigation remains undecorated; only the specimens
+display the named fonts. Button samples never perform their pictured action.
+The existing demo permission and configured aliases remain in force.
+
+The gallery explicitly selects `arc:dialog_ui` on bitmap spans, independent of
+the production-menu `presentation.font` setting. Captions use `minecraft:default`.
+The filled prototype uses the separate `arc:dialog_ui_preview` font: bitmap
+U+FA110–FA112, height 54, ascent 8, advance 17; negative binary spaces
+U+FA200–FA209 and positive spaces U+FA220–FA229. It supports exactly four content
+rows inside a six-line, 498px-wide panel (`body.width=506`). All background tiles
+are emitted on line one, before any native words or their shadows. Only the
+background has shadow disabled. Line six preserves height with an invisible
+498px spacer. This is a bounded gallery prototype, not an arbitrary-height panel.
+
+Focused tests cover the command alias, section coverage, exact six-row advances,
+background-first ordering, native foreground shadow, real Core custom-click
+dispatch and repeated sample/pagination history. Their actual component export
+is `build/reports/dialog-library/screens.json`; it does not prove client pack
+loading or live appearance. Inspect both frame pages in the actual client after
+the matching ARC and pack are activated.
+
+## Original API laboratory
+
 Open `/arc dialogdemo` on the runtime carrying this ARC build. This is an
 isolated, public, stateless UI demonstration; it neither grants displayed items
 nor changes player settings, permissions, world state or balances. Presentation
