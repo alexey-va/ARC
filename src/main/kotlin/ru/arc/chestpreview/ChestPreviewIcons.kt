@@ -37,6 +37,8 @@ internal class ChestPreviewIcons(
         val options: ChestPreviewSettings,
         val scene: PacketDisplayScene<String>,
         val audience: SceneAudience.Private,
+        var items: List<ItemStack> = emptyList(),
+        var counts: List<Int> = emptyList(),
     )
 
     private val viewers = mutableMapOf<UUID, ViewerState>()
@@ -89,6 +91,10 @@ internal class ChestPreviewIcons(
         val state = viewers.getOrPut(id) {
             ViewerState(anchor, sourceAnchor, scale, 0, options, PacketDisplayScene(displays), SceneAudience.Private(id))
         }
+        // Access and live placement are still checked by every update. Only unchanged scene
+        // construction is skipped; Core continues viewer/chunk/connection reconciliation.
+        if (state.anchor == anchor && state.scale == scale && state.items == items &&
+            state.counts == counts && state.scene.isValid()) return
         val ticks = if (state.anchor != anchor &&
             !ChestPreviewPlacement.clearPath(player, state.anchor, anchor, items.size, scale, options)) 0
             else options.teleportTicks
@@ -152,6 +158,8 @@ internal class ChestPreviewIcons(
         state.anchor = anchor
         state.itemCount = items.size
         state.scale = scale
+        state.items = items
+        state.counts = counts
     }
 
     private fun clear(playerId: UUID) {

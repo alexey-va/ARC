@@ -80,7 +80,12 @@ internal class StaffSpellHud(
         var preference: StaffHudPlacement,
         var bounds: StaffSpellHudBounds,
     )
-    private data class TrackedBossBar(val bar: BossBar, var name: Component, var progress: Float)
+    private data class TrackedBossBar(
+        val bar: BossBar,
+        var name: Component,
+        var progress: Float,
+        var state: StaffSpellHudState,
+    )
 
     var hotkeyState: ((Player, StaffSpell) -> StaffHotkeyHudState)? = null
     var armyCount: (Player) -> Int = { 0 }
@@ -153,16 +158,19 @@ internal class StaffSpellHud(
     }
 
     private fun showHologram(player: Player, state: StaffSpellHudState, placementChoice: StaffHudPlacement) {
-        val text = render(state)
-        val bounds = staffSpellHudBounds(PlainTextComponentSerializer.plainText().serialize(text), visual.lineWidth)
         val card = cards[player.uniqueId]
         if (card != null && card.display.isValid) {
-            if (card.state != state) card.display.text(text)
-            card.state = state
-            card.bounds = bounds
+            if (card.state != state) {
+                val text = render(state)
+                card.display.text(text)
+                card.state = state
+                card.bounds = staffSpellHudBounds(PlainTextComponentSerializer.plainText().serialize(text), visual.lineWidth)
+            }
             syncCard(player, card, placementChoice)
             return
         }
+        val text = render(state)
+        val bounds = staffSpellHudBounds(PlainTextComponentSerializer.plainText().serialize(text), visual.lineWidth)
         card?.display?.remove()
         val placement = placement(player, placementChoice, bounds)
         val at = player.location
@@ -193,6 +201,7 @@ internal class StaffSpellHud(
     }
 
     private fun showBossBar(player: Player, state: StaffSpellHudState) {
+        if (bossBars[player.uniqueId]?.state == state) return
         val name = config.staffHudBossbar(state).append(armyText(state)?.let {
             Component.text("  ·  ", net.kyori.adventure.text.format.TextColor.color(0x687D8F)).append(it)
         } ?: Component.empty()).append(state.hotkeys?.let {
@@ -207,7 +216,7 @@ internal class StaffSpellHud(
         val tracked = bossBars.getOrPut(player.uniqueId) {
             val created = BossBar.bossBar(name, progress, BossBar.Color.YELLOW, BossBar.Overlay.PROGRESS)
             player.showBossBar(created)
-            TrackedBossBar(created, name, progress)
+            TrackedBossBar(created, name, progress, state)
         }
         if (tracked.name != name) {
             tracked.bar.name(name)
@@ -217,6 +226,7 @@ internal class StaffSpellHud(
             tracked.bar.progress(progress)
             tracked.progress = progress
         }
+        tracked.state = state
     }
 
     private fun syncCard(player: Player, card: Card, placementChoice: StaffHudPlacement) {

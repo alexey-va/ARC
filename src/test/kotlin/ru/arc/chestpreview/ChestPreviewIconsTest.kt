@@ -31,6 +31,30 @@ class ChestPreviewIconsTest : StringSpec({
     aroundTest { (test, execute) ->
         MockBukkitTestRuntime.open().use { execute(test) }
     }
+    "unchanged scenes still refresh counts, item content and invalid handles" {
+        val worldId = UUID.randomUUID()
+        val viewer = player(worldId)
+        val harness = DisplayHarness()
+        val options = ChestPreviewSettings(showCounts = true, backgroundOpacity = 0)
+        val renderer = ChestPreviewIcons(harness.owner, options)
+        val initial = frame(worldId, listOf(ItemStack(Material.DIAMOND))).copy(counts = listOf(3))
+        renderer.update(viewer, initial, 1f)
+        renderer.update(viewer, initial, 1f)
+        val icon = harness.itemDisplays.single()
+        val count = harness.textDisplays.single()
+        renderer.update(viewer, initial.copy(counts = listOf(7)), 1f)
+        verify(exactly = 1) { count.text(Component.text("× 7")) }
+
+        val changed = initial.copy(items = listOf(ItemStack(Material.EMERALD)), counts = listOf(7))
+        renderer.update(viewer, changed, 1f)
+        verify(exactly = 1) { icon.itemStack = match { it.type == Material.EMERALD } }
+        every { icon.isValid } returns false
+        renderer.update(viewer, changed, 1f)
+        harness.itemDisplays.size shouldBe 2
+        verify(exactly = 1) { icon.remove() }
+        renderer.close()
+    }
+
     "renders only bounded private item icons and blank background, reusing unchanged handles" {
         val worldId = UUID.randomUUID()
         val player = player(worldId)
