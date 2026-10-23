@@ -7,6 +7,11 @@ to issue the set after checking inventory space. The items carry ARC prototype
 metadata; they are not FMM or EliteMobs loot, and this catalog adds no shop,
 reward or economy changes.
 
+Prototype, duel and migrated EliteMobs staves cannot be used as crafting
+ingredients, including blaze powder recipes, Shift-click crafting and automatic
+crafters. Their persistent staff markers remain protected even when a spell is
+retired or its combat provider is unavailable. Ordinary blaze rods still craft normally.
+
 Three primaries — Frost, Fault and Lunar — use substantial frontal area
 attacks with a seven-block reach. The other thirteen keep their ranged, targeted,
 summoned or charged primary mechanics; Solar is a piercing ranged spear again.

@@ -3,6 +3,7 @@ package ru.arc.staffspells
 import io.papermc.paper.event.player.PrePlayerAttackEntityEvent
 import io.papermc.paper.event.player.PlayerStopUsingItemEvent
 import org.bukkit.Bukkit
+import org.bukkit.block.Crafter
 import org.bukkit.event.Event
 import org.bukkit.event.EventHandler
 import org.bukkit.event.HandlerList
@@ -11,10 +12,13 @@ import org.bukkit.event.Listener
 import org.bukkit.event.block.Action
 import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.block.BlockDamageEvent
+import org.bukkit.event.block.CrafterCraftEvent
 import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.event.inventory.InventoryCreativeEvent
 import org.bukkit.event.inventory.InventoryDragEvent
+import org.bukkit.event.inventory.CraftItemEvent
+import org.bukkit.event.inventory.PrepareItemCraftEvent
 import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerDropItemEvent
 import org.bukkit.event.player.PlayerInteractAtEntityEvent
@@ -136,6 +140,31 @@ internal class StaffSpellInput(
 
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onJoin(event: PlayerJoinEvent) { upgradeHeldStaff(event.player) }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    fun onPrepareCraft(event: PrepareItemCraftEvent) {
+        if (event.inventory.matrix.any(::isStaffIngredient)) event.inventory.result = null
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    fun onCraft(event: CraftItemEvent) {
+        if (event.inventory.matrix.any(::isStaffIngredient)) {
+            event.isCancelled = true
+            event.inventory.result = null
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    fun onCrafterCraft(event: CrafterCraftEvent) {
+        val crafter = event.block.state as? Crafter ?: return
+        if (crafter.inventory.contents.any(::isStaffIngredient)) event.isCancelled = true
+    }
+
+    private fun isStaffIngredient(item: ItemStack?): Boolean {
+        val data = item?.itemMeta?.persistentDataContainer ?: return false
+        // Protect retired and migrated staves even when their combat provider is unavailable.
+        return data.has(StaffSpell.itemKey) || data.has(StaffEliteItems.itemKey)
+    }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun onHeldSlot(event: PlayerItemHeldEvent) {
