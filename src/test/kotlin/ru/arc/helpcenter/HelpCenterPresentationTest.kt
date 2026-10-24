@@ -18,6 +18,14 @@ class HelpCenterPresentationTest : FreeSpec({
     fun presentation(font: String) = HelpCenterPresentation(HelpCenterSettings(
         true, 12, 8, 3, emptyMap(), emptyMap(), emptyMap(), emptyMap(), font,
     ))
+    "diagnostic checklist separates complete entries in decorated and portable presentations" {
+        val entries = listOf(true to Component.text("Готово\nПодробности"), false to Component.text("Осталось"))
+        val serializer = PlainTextComponentSerializer.plainText()
+        serializer.serialize(presentation("").checklist(entries, 180)) shouldBe "✓ Готово\nПодробности\n\n• Осталось"
+        val decorated = serializer.serialize(presentation("arc:dialog_ui").checklist(entries, 180))
+            .codePoints().toArray().filter { it < 0xE000 }.map { it.toChar() }.joinToString("")
+        decorated shouldBe "Готово\nПодробности\n\nОсталось"
+    }
     "single field rows retain label and value columns in an opaque detail card" {
         val rows = listOf(
             listOf(Component.text("Заряд") to Component.text("12 / 100")),

@@ -124,7 +124,7 @@ internal class DialogLibraryGallery(
                 Section.ELEMENTS -> {
                     body("elements.${page.index}.title")
                     bodies += sharedElements(page.index)
-                    body("elements.${page.index}.note")
+                    if (page.index != 1) body("elements.${page.index}.note")
                 }
                 Section.ICONS -> {
                     body("icons.${page.index}.title")
@@ -221,19 +221,14 @@ internal class DialogLibraryGallery(
             decoration.divider(320, DialogDecoration.Divider(piece(0xF9104, 13), piece(0xF9106, 13), piece(0xF9105, 13))),
             nativeCell(text("text.1.sample"), 312),
         )), 320)
-        2 -> PaperDialogBody(lines((0..2).flatMap { step ->
-            val node = Row().at(0, glyph(0xF9108 + step), 13)
-                .at(20, nativeCell(text("text.2.step-$step"), 280), 280).finish(300)
-            val detail = Row().apply { if (step < 2) at(0, glyph(0xF910B), 6) }
-                .at(20, nativeCell(text("text.2.detail-$step"), 280), 280).finish(300)
-            if (step == 2) listOf(node, detail)
-            else listOf(node, detail, Row().at(0, glyph(0xF910B), 6).finish(300))
-        }), 308)
-        3 -> PaperDialogBody(lines((0..2).flatMap { index -> listOf(
-            Row().at(0, glyph(if (index < 2) 0xF910C else 0xF910D), 10)
-                .at(20, nativeCell(text("text.3.check-$index"), 280), 280).finish(300),
-            Row().at(20, nativeCell(text("text.3.detail-$index"), 280), 280).finish(300),
-        ) }), 308)
+        2 -> decoration.stepsBody(DialogDecoration.StepState.entries.mapIndexed { step, state ->
+            DialogDecoration.Step(state, text("text.2.step-$step").append(Component.newline())
+                .append(text("text.2.detail-$step")))
+        }, 308)
+        3 -> decoration.listBody((0..2).map { index ->
+            DialogDecoration.ListEntry(if (index < 2) DialogDecoration.Marker.COMPLETE else DialogDecoration.Marker.PENDING,
+                text("text.3.check-$index").append(Component.newline()).append(text("text.3.detail-$index")))
+        }, 308)
         4 -> beforeAfter()
         else -> progress()
     }
@@ -260,18 +255,10 @@ internal class DialogLibraryGallery(
         }.finish(288)
     }), 296)
 
-    private fun progress(): PaperDialogBody = PaperDialogBody(lines((0..3).flatMap { palette ->
-        val base = 0xF9138 + palette * 4
-        val labels = Row().at(36, nativeCell(text("text.5.palette-$palette"), 150), 150)
-            .at(186, nativeCell(text("text.5.value"), 66, TextAlignment.RIGHT), 66).finish(288)
-        val bar = Row().apply {
-            for (segment in 0 until 12) {
-                val point = base + if (segment < 7) 0 else 2
-                at(36 + segment * 18, glyph(point), 10)
-                at(45 + segment * 18, glyph(point + 1), 9)
-            }
-        }.finish(288)
-        if (palette == 3) listOf(labels, bar) else listOf(labels, bar, positive.padding(288))
+    private fun progress(): PaperDialogBody = PaperDialogBody(lines(DialogDecoration.ProgressColor.entries.flatMapIndexed { index, palette ->
+        val body = decoration.progressBody(text("text.5.palette-$index"), 7.0, 12.0, text("text.5.value"),
+            296, 12, palette).text
+        if (index == 3) listOf(body) else listOf(body, positive.padding(288))
     }), 296)
 
     companion object {

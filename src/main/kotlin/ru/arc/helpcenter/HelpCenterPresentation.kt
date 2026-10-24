@@ -123,8 +123,9 @@ internal class HelpCenterPresentation(settings: HelpCenterSettings) {
 
     /** Marks only the diagnostic facts supplied by the planner; no inferred player progress. */
     fun checklist(entries: List<Pair<Boolean, Component>>, width: Int): Component {
-        fun fallback() = lines(entries.map { (positive, text) ->
-            Component.text(if (positive) "✓ " else "• ").color(prose).append(text)
+        fun fallback() = lines(entries.flatMapIndexed { index, (positive, text) ->
+            val item = Component.text(if (positive) "✓ " else "• ").color(prose).append(text)
+            if (index == 0) listOf(item) else listOf(Component.empty(), item)
         })
         val painter = decoration ?: return fallback()
         return painter.listBody(entries.map { (positive, text) ->

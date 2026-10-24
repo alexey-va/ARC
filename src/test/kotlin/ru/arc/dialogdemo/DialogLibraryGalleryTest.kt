@@ -202,6 +202,57 @@ class DialogLibraryGalleryTest : FreeSpec() {
             spans(ornate.body[3].text).joinToString("") { it.text }.count { it == '◆' } shouldBe 2
         } }
 
+        "legacy and modular element samples share list spacing step joins and tight progress geometry" { withCopy { copy ->
+            val gallery = DialogLibraryGallery(mockk(), copy)
+            fun body(section: DialogLibraryGallery.Section, index: Int) =
+                gallery.screen(DialogLibraryGallery.Page(section, index), false) { _, _ -> }.body[3]
+            fun rows(component: Component): List<List<Span>> {
+                val rows = mutableListOf(mutableListOf<Span>())
+                spans(component).forEach { span -> span.text.split('\n').forEachIndexed { index, text ->
+                    if (index > 0) rows += mutableListOf<Span>()
+                    if (text.isNotEmpty()) rows.last() += span.copy(text = text)
+                } }
+                return rows
+            }
+            fun positions(row: List<Span>): List<Triple<Int, Int, Int>> {
+                var cursor = 0
+                return row.flatMap { span -> span.text.codePoints().toArray().map { point ->
+                    val width = advance(point, span.style)
+                    Triple(point, cursor, width).also { cursor += width }
+                } }.filterNot { (point, _, _) -> point in 0xF9F00..0xF9F19 || point in 0xF0F01..0xF0F0A }
+            }
+            for ((section, indices) in listOf(
+                DialogLibraryGallery.Section.TEXT to Triple(3, 2, 5),
+                DialogLibraryGallery.Section.ELEMENTS to Triple(0, 1, 2),
+            )) {
+                val (listIndex, stepIndex, progressIndex) = indices
+                val list = body(section, listIndex)
+                val listRows = rows(list.text)
+                listRows.count { positions(it).isEmpty() } shouldBe 2
+                listRows.forEach { advance(it) shouldBe list.width - 8 }
+                val steps = body(section, stepIndex)
+                rows(steps.text).forEach { row ->
+                    advance(row) shouldBe steps.width - 8
+                    positions(row).filter { it.first in 0xF9108..0xF910B }.forEach { it.second shouldBe 0 }
+                    positions(row).isEmpty() shouldBe false
+                }
+                val progress = body(section, progressIndex)
+                val progressRows = rows(progress.text)
+                progressRows.forEachIndexed { index, row ->
+                    val glyphs = positions(row)
+                    if (glyphs.any { it.first in 0xF9138..0xF9147 }) {
+                        val starts = glyphs.filter { it.first in 0xF9138..0xF9147 && it.first % 2 == 0 }
+                        starts.zipWithNext().forEach { (left, right) -> right.second - left.second shouldBe 18 }
+                        val caption = positions(progressRows[index - 1])
+                        caption.first().second shouldBe starts.first().second
+                        caption.last().second + caption.last().third shouldBe glyphs.last().second + glyphs.last().third
+                        caption.none { it.first == '·'.code } shouldBe true
+                    }
+                    clientLines(row, progress.width - 8).size shouldBe 1
+                }
+            }
+        } }
+
         "pagination and repeated sample clicks return to the real root once without closing between pages" { withCopy { copy ->
             MockBukkitTestRuntime.open().use { paper ->
                 val player: Player = spyk(paper.addPlayer("GalleryViewer"))
@@ -280,6 +331,13 @@ class DialogLibraryGalleryTest : FreeSpec() {
             .use { JsonParser.parseReader(it).asJsonObject.getAsJsonObject("fonts") }
     }
     private fun advance(point: Int, style: Style): Int = when (point) {
+        // Registered library cell advances; the native text snapshot excludes this artwork font.
+        in 0xF9F00..0xF9F09 -> 1 shl (point - 0xF9F00)
+        in 0xF9F10..0xF9F19 -> -(1 shl (point - 0xF9F10))
+        in 0xF9108..0xF910A -> 13
+        0xF910B -> 6
+        0xF910C, 0xF910D -> 10
+        in 0xF9138..0xF9147 -> if (point % 2 == 0) 10 else 9
         in 0xFA300..0xFAF1B -> 17
         in 0x100000..0x109834 -> 17
         in 0xFA200..0xFA209 -> -(1 shl (point - 0xFA200))
