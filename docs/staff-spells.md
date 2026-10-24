@@ -365,6 +365,15 @@ actors must belong to an enabled open-dungeon package. A matching world name
 alone does not authorize a mob. Named and armed dungeon actors are eligible;
 NPCs and actors outside these native dungeon relationships are excluded.
 
+`dungeon-casters.entity-types` is a whitelist of Bukkit `EntityType` names.
+Its defaults are `ZOMBIE`, `HUSK`, `DROWNED`, `ZOMBIE_VILLAGER`, `SKELETON`,
+`STRAY`, `BOGGED`, `WITHER_SKELETON`, `PILLAGER`, `VINDICATOR`, `EVOKER`,
+`ILLUSIONER`, `WITCH`, `PIGLIN`, `PIGLIN_BRUTE` and `ZOMBIFIED_PIGLIN`.
+An explicit empty list allows no casters; `['*']` allows any native dungeon
+`Mob`, and a list such as `[WOLF]` allows only that species. Unknown names and
+entity types that are not mobs are configuration errors. `/arc reload`
+replaces the active whitelist along with the controller generation.
+
 The default chance is **50% of eligible dungeon actors**. Ember, Icicle, Lance
 and a fixed Mark retain their visible preparation and dodgeable aim. The
 current target comes from native EliteMobs AI; an instanced target must be an
@@ -380,7 +389,9 @@ ticks; Mark always warns for at least 32 ticks. Range defaults to 16 blocks,
 the mage cap to 32 per server and simultaneous attacks to eight. Empty `worlds`
 adds no world restriction; an explicit list remains an additional filter.
 
-The displayed staff is a packet-only cosmetic. Server-side hands, original
+Only the default humanoid species display the packet-only cosmetic staff.
+Other whitelisted species, including wolves, retain spell preparation and
+effects without a staff model. Server-side hands, original
 weapons, attributes, loot and XP remain under EliteMobs. Before/after currency,
 item and XP rewards are unchanged, with zero additional obtainable staffs.
 Reload/unload/death remove only owned visuals and attacks. The old

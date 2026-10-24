@@ -1,8 +1,10 @@
 package ru.arc.staffspells
 
 import io.kotest.assertions.withClue
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -11,8 +13,10 @@ import org.bukkit.GameMode
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.damage.DamageSource
+import org.bukkit.entity.EntityType
 import org.bukkit.entity.Mob
 import org.bukkit.entity.Player
+import org.bukkit.entity.Wolf
 import org.bukkit.event.entity.CreatureSpawnEvent
 import org.bukkit.event.entity.EntityDeathEvent
 import org.bukkit.inventory.ItemStack
@@ -35,10 +39,34 @@ class StaffMobCasterTest : FreeSpec({
         raw["dungeon-casters.range-blocks"] = 24.0
         raw["dungeon-casters.max-casters"] = 12
         raw["dungeon-casters.worlds"] = listOf("world", "world_nether", "world")
+        raw["dungeon-casters.entity-types"] = listOf("WOLF", "ZOMBIE", "WOLF")
 
         config.mobCasters shouldBe StaffMobCasterSettings(false, 100.0, 2.0, 24.0, 12,
-            setOf("world", "world_nether"))
+            setOf("world", "world_nether"), setOf(EntityType.WOLF, EntityType.ZOMBIE))
         original shouldBe StaffMobCasterSettings(true, 50.0, 1.0, 16.0, 32, emptySet())
+        (EntityType.WOLF in original.allowedEntityTypes) shouldBe false
+    }
+
+    "entity type whitelist accepts native mobs and wildcard but preserves empty and invalid input" {
+        val raw = StaffTestConfig(mapOf("dungeon-casters.entity-types" to listOf("WOLF")))
+        val config = StaffSpellConfig(raw)
+        config.mobCasters.allowedEntityTypes shouldBe setOf(EntityType.WOLF)
+        raw["dungeon-casters.entity-types"] = listOf("*")
+        val allMobs = config.mobCasters.allowedEntityTypes
+        listOf(EntityType.WOLF, EntityType.ZOMBIE, EntityType.SLIME, EntityType.ENDER_DRAGON).forEach {
+            (it in allMobs) shouldBe true
+        }
+        listOf(EntityType.PLAYER, EntityType.ARMOR_STAND, EntityType.ITEM_DISPLAY, EntityType.UNKNOWN).forEach {
+            (it in allMobs) shouldBe false
+        }
+        raw["dungeon-casters.entity-types"] = emptyList<String>()
+        config.mobCasters.allowedEntityTypes shouldBe emptySet()
+        listOf("WOLFF", "PLAYER", "ITEM_DISPLAY").forEach { invalid ->
+            raw["dungeon-casters.entity-types"] = listOf("*", invalid)
+            val failure = shouldThrow<IllegalArgumentException> { config.mobCasters }
+            failure.message shouldContain "dungeon-casters.entity-types"
+            failure.message shouldContain invalid
+        }
     }
 
     "legacy natural mob settings cannot disable or configure dungeon casters" {
@@ -162,6 +190,63 @@ class StaffMobCasterTest : FreeSpec({
                 mob.equipment.itemInMainHand shouldBe mainHand
                 mob.equipment.itemInOffHand shouldBe offHand
                 mob.equipment.itemInMainHandDropChance shouldBe .17f
+            }
+        }
+    }
+
+    "default whitelist rejects wolves and an explicit empty whitelist also rejects humanoids" {
+        listOf(false, true).forEach { empty ->
+            withStaffHarness { h ->
+                val world = h.paper.addSimpleWorld("dungeon-caster-whitelist-$empty")
+                val wolf = world.spawn(Location(world, .5, 64.0, .5), Wolf::class.java)
+                val actors = listOf(dungeonActor(wolf)) + if (empty) listOf(dungeonActor(h.zombie(world, 2.5, .5))) else emptyList()
+                val settings = StaffMobCasterSettings(spawnChancePercent = 100.0).let {
+                    if (empty) it.copy(allowedEntityTypes = emptySet()) else it
+                }
+                StaffMobCasters(h.config, settings, h.effects, mockk<PaperViewerParticles>(relaxed = true)).use { casters ->
+                    casters.start()
+                    actors.forEach(casters::enrollFromDungeon)
+                    h.scheduler.tick(22)
+                    verify(exactly = 0) { h.effects.createMobStaff(any(), any()) }
+                    actors.forEach { actor -> verify(exactly = 0) { actor.currentTarget() } }
+                }
+            }
+        }
+    }
+
+    "explicit and wildcard wolves telegraph without staff handles and still consume caster capacity" {
+        listOf(listOf("WOLF"), listOf("*")).forEachIndexed { index, types ->
+            withStaffHarness { h ->
+                val world = h.solidCollisionWorld("dungeon-caster-wolf-$index")
+                for (x in -1..1) for (z in 0..6) world.getBlockAt(x, 63, z).type = Material.STONE
+                val wolf = world.spawn(Location(world, .5, 64.0, .5), Wolf::class.java)
+                val target = h.paper.addPlayer("dungeon-wolf-target").apply { teleport(Location(world, .5, 64.0, 4.5)) }
+                val actor = dungeonActor(wolf, target)
+                val overflow = dungeonActor(world.spawn(Location(world, 1.5, 64.0, .5), Wolf::class.java), target)
+                val scene = UUID.randomUUID()
+                every { h.effects.play(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns scene
+                every { h.effects.custom(any(), any(), any(), any(), any(), any(), any()) } returns scene
+                every { h.effects.isActive(scene) } returns true
+                every { h.effects.hasAudience(scene, target.uniqueId) } returns true
+                val settings = StaffSpellConfig(StaffTestConfig(mapOf(
+                    "dungeon-casters.entity-types" to types,
+                    "dungeon-casters.spawn-chance-percent" to 100.0,
+                    "dungeon-casters.max-casters" to 1,
+                ))).mobCasters
+                StaffMobCasters(h.config, settings, h.effects, mockk<PaperViewerParticles>(relaxed = true)).use { casters ->
+                    casters.start()
+                    casters.enrollFromDungeon(actor)
+                    casters.enrollFromDungeon(actor)
+                    casters.enrollFromDungeon(overflow)
+                    h.scheduler.tick(22)
+                    verify(atLeast = 1) { h.effects.hasAudience(scene, target.uniqueId) }
+                    verify(exactly = 0) { h.effects.createMobStaff(any(), any()) }
+                    verify(exactly = 0) { h.effects.cancel(wolf.uniqueId) }
+                    verify(exactly = 0) { overflow.currentTarget() }
+                    every { actor.isCurrent() } returns false
+                    h.scheduler.tick(1)
+                    verify(exactly = 1) { h.effects.cancel(wolf.uniqueId) }
+                }
             }
         }
     }

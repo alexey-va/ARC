@@ -37,10 +37,10 @@ class StaffDungeonMobBridgeTest : FreeSpec({
         }
     }
 
-    "open dungeon membership requires the exact installed package boss registry and native world" {
+    "Primis membership uses its registered world when the native boss package back-reference is null" {
         withStaffHarness { h ->
             h.paper.createSimplePlugin("EliteMobs")
-            val world = h.paper.addSimpleWorld("em_registered_open")
+            val world = h.paper.addSimpleWorld("em_primis")
             val body = h.zombie(world, .5, .5).apply {
                 customName(Component.text("Named dungeon boss"))
                 setAI(false)
@@ -57,11 +57,14 @@ class StaffDungeonMobBridgeTest : FreeSpec({
             every { content.customBossEntityList } returns listOf(boss)
             every { content.world } returns world
             every { content.wormholeWorld } returns null
-            every { boss.emPackage } returns content
+            every { boss.emPackage } returns null
             mockkStatic(EntityTracker::class, EMPackage::class)
             try {
                 every { EntityTracker.getEliteMobEntity(body) } returns boss
-                every { EMPackage.getEmPackages() } returns mapOf("registered.yml" to content)
+                every { EMPackage.getContent(any()) } returns null
+                // WorldMock is constructor-mocked by the harness; keep recorded lookup arguments literal.
+                every { EMPackage.getContent("em_primis") } returns content
+                every { EMPackage.getEmPackages() } returns mapOf("primis_adventure.yml" to content)
                 val actor = requireNotNull(resolveStaffDungeonMob(boss))
                 staffMobOwnerAllowed(actor) shouldBe true
                 val accepted = mutableListOf<StaffDungeonMob>()
@@ -69,7 +72,10 @@ class StaffDungeonMobBridgeTest : FreeSpec({
                     val event = mockk<com.magmaguy.elitemobs.api.EliteMobSpawnEvent>()
                     every { event.eliteMobEntity } returns boss
                     every { event.isCancelled } returns false
+                    every { content.customBossEntityList } returns emptyList()
+                    resolveStaffDungeonMob(boss) shouldBe null
                     bridge.onSpawn(event)
+                    every { content.customBossEntityList } returns listOf(boss)
                     h.scheduler.tick(2)
                     accepted.size shouldBe 1
                     bridge.onSpawn(event)
@@ -81,27 +87,84 @@ class StaffDungeonMobBridgeTest : FreeSpec({
                 resolveStaffDungeonMob(boss) shouldBe null
                 every { fields.isEnabled } returns true
                 actor.isCurrent() shouldBe true
+                every { EMPackage.getContent("em_primis") } returns null
+                resolveStaffDungeonMob(boss) shouldBe null
+                every { EMPackage.getContent("em_primis") } returns content
+                every { boss.isReinforcementOrMount } returns true
+                resolveStaffDungeonMob(boss) shouldBe null
+                every { boss.isReinforcementOrMount } returns false
                 every { content.customBossEntityList } returns emptyList()
                 actor.isCurrent() shouldBe false
                 resolveStaffDungeonMob(boss) shouldBe null
                 every { content.customBossEntityList } returns listOf(boss)
                 every { EMPackage.getEmPackages() } returns emptyMap()
                 actor.isCurrent() shouldBe false
-                every { EMPackage.getEmPackages() } returns mapOf("registered.yml" to content)
+                every { EMPackage.getEmPackages() } returns mapOf("primis_adventure.yml" to content)
                 every { content.isInstalled } returns false
                 resolveStaffDungeonMob(boss) shouldBe null
                 every { content.isInstalled } returns true
                 every { fields.contentType } returns ContentType.INSTANCED_DUNGEON
                 resolveStaffDungeonMob(boss) shouldBe null
                 every { fields.contentType } returns ContentType.OPEN_DUNGEON
-                val entrance = h.paper.addSimpleWorld("em_registered_open_wormhole")
+                val entrance = h.paper.addSimpleWorld("em_primis_wormhole")
                 every { content.wormholeWorld } returns entrance
+                every { EMPackage.getContent("em_primis_wormhole") } returns content
                 body.teleport(Location(entrance, .5, 64.0, .5))
                 actor.isCurrent() shouldBe false
                 resolveStaffDungeonMob(boss) shouldBe null
-                body.teleport(Location(h.paper.addSimpleWorld("em_registered_open_fake_copy"), .5, 64.0, .5))
+                body.teleport(Location(h.paper.addSimpleWorld("em_primis_fake_copy"), .5, 64.0, .5))
                 actor.isCurrent() shouldBe false
                 resolveStaffDungeonMob(boss) shouldBe null
+            } finally {
+                unmockkStatic(EntityTracker::class, EMPackage::class)
+            }
+        }
+    }
+
+    "Oasis native regional actor gets one enrollment per body across respawns" {
+        withStaffHarness { h ->
+            h.paper.createSimplePlugin("EliteMobs")
+            val world = h.paper.addSimpleWorld("em_oasis")
+            val original = h.zombie(world, .5, .5)
+            val boss = mockk<RegionalBossEntity>()
+            readyDungeonBoss(boss, original)
+            every { boss.emPackage } returns null
+            val fields = mockk<ContentPackagesConfigFields>()
+            every { fields.isEnabled } returns true
+            every { fields.contentType } returns ContentType.OPEN_DUNGEON
+            val content = mockk<WorldDungeonPackage>()
+            every { content.isInstalled } returns true
+            every { content.contentPackagesConfigFields } returns fields
+            every { content.customBossEntityList } returns listOf(boss)
+            every { content.world } returns world
+            mockkStatic(EntityTracker::class, EMPackage::class)
+            try {
+                every { EntityTracker.getEliteMobEntity(original) } returns boss
+                every { EMPackage.getContent("em_oasis") } returns content
+                every { EMPackage.getEmPackages() } returns mapOf("oasis_adventure.yml" to content)
+                val accepted = mutableListOf<StaffDungeonMob>()
+                StaffDungeonMobBridge { accepted += it }.use { bridge ->
+                    val event = mockk<com.magmaguy.elitemobs.api.EliteMobSpawnEvent>()
+                    every { event.eliteMobEntity } returns boss
+                    every { event.isCancelled } returns false
+                    bridge.onSpawn(event)
+                    h.scheduler.tick(2)
+                    bridge.onSpawn(event)
+                    h.scheduler.tick(2)
+                    accepted.map { it.body.uniqueId } shouldBe listOf(original.uniqueId)
+
+                    val respawned = h.zombie(world, 1.5, .5)
+                    every { boss.livingEntity } returns respawned
+                    every { EntityTracker.getEliteMobEntity(original) } returns null
+                    every { EntityTracker.getEliteMobEntity(respawned) } returns boss
+                    accepted.single().isCurrent() shouldBe false
+                    bridge.onSpawn(event)
+                    h.scheduler.tick(2)
+                    bridge.onSpawn(event)
+                    h.scheduler.tick(2)
+                    accepted.map { it.body.uniqueId } shouldBe listOf(original.uniqueId, respawned.uniqueId)
+                    accepted.last().isCurrent() shouldBe true
+                }
             } finally {
                 unmockkStatic(EntityTracker::class, EMPackage::class)
             }

@@ -31,7 +31,7 @@ internal class StaffMobCasters(
     particles: PaperViewerParticles,
 ) : Listener, AutoCloseable {
     private class Caster(val actor: StaffDungeonMob, val spell: StaffSpell,
-        val equipmentVisual: StaffMobEquipmentVisuals, var readyAt: Long) {
+        val equipmentVisual: StaffMobEquipmentVisuals?, var readyAt: Long) {
         val mob get() = actor.body
         var cast: Cast? = null
     }
@@ -73,20 +73,22 @@ internal class StaffMobCasters(
         val mob = actor.body
         if (closed || !settings.enabled || settings.spawnChancePercent <= 0.0 ||
             casters.size >= settings.maxCasters.coerceAtMost(32) || mob.uniqueId in casters ||
-            !inWorld(mob) || !staffMobOwnerAllowed(actor) ||
+            !inWorld(mob) || mob.type !in settings.allowedEntityTypes || !staffMobOwnerAllowed(actor) ||
             ThreadLocalRandom.current().nextDouble(100.0) >= settings.spawnChancePercent) return
         staffDungeonBoundary(Unit) {
             val spell = SPELLS.random()
-            val equipment = StaffMobEquipmentVisuals(mob, config.mobItem(spell), effects)
+            val equipment = if (mob.type in STAFF_HOLDING_MOB_TYPES)
+                StaffMobEquipmentVisuals(mob, config.mobItem(spell), effects) else null
             val caster = Caster(actor, spell, equipment, clock + 20)
             if (updateEquipment(caster)) casters[mob.uniqueId] = caster
-            else staffDungeonBoundary(Unit) { equipment.close() }
+            else staffDungeonBoundary(Unit) { equipment?.close() }
         }
     }
 
     private fun updateEquipment(caster: Caster): Boolean = staffDungeonBoundary(false) {
-        if (!caster.equipmentVisual.isValid) return@staffDungeonBoundary false
-        caster.equipmentVisual.update(caster.mob, caster.actor.currentTarget())
+        val equipment = caster.equipmentVisual ?: return@staffDungeonBoundary true
+        if (!equipment.isValid) return@staffDungeonBoundary false
+        equipment.update(caster.mob, caster.actor.currentTarget())
         true
     }
 
@@ -289,7 +291,7 @@ internal class StaffMobCasters(
     private fun forget(id: UUID) {
         val caster = casters.remove(id) ?: return
         cancelCast(caster)
-        staffDungeonBoundary(Unit) { caster.equipmentVisual.close() }
+        staffDungeonBoundary(Unit) { caster.equipmentVisual?.close() }
     }
 
     private fun inWorld(mob: Mob) = settings.allowedWorlds.isEmpty() || mob.world.name in settings.allowedWorlds

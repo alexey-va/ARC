@@ -19,6 +19,25 @@ max-area-targets: 8
 # /arc reload applies changes and removes the previous generation's cosmetic staffs.
 dungeon-casters:
   enabled: true
+  # Bukkit EntityType names. [] allows none; ['*'] allows any native dungeon Mob.
+  # Other species (for example WOLF) cast without a displayed staff; native equipment stays intact.
+  entity-types:
+    - ZOMBIE
+    - HUSK
+    - DROWNED
+    - ZOMBIE_VILLAGER
+    - SKELETON
+    - STRAY
+    - BOGGED
+    - WITHER_SKELETON
+    - PILLAGER
+    - VINDICATOR
+    - EVOKER
+    - ILLUSIONER
+    - WITCH
+    - PIGLIN
+    - PIGLIN_BRUTE
+    - ZOMBIFIED_PIGLIN
   # Percent of eligible EliteMobs dungeon actors; 0 disables additional mage attacks.
   spawn-chance-percent: 50.0
   # 0.25..4: multiplier over native EliteMobs damage; timing divides by sqrt(difficulty).

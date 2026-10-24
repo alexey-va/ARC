@@ -22,14 +22,13 @@ import org.bukkit.event.Listener
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.dungeons.ArcDungeonsPlugin
 import java.util.UUID
-import java.util.Collections
 import java.util.WeakHashMap
 
 /** Loaded only after the optional EliteMobs API has been resolved. */
 internal class StaffDungeonMobBridge(private val accept: (StaffDungeonMob) -> Unit) : Listener, AutoCloseable {
     private val tasks = LifecycleTaskScope()
     private val pending = mutableSetOf<UUID>()
-    private val considered = Collections.newSetFromMap(WeakHashMap<EliteEntity, Boolean>())
+    private val considered = WeakHashMap<EliteEntity, UUID>()
     private var closed = false
 
     fun start() {
@@ -81,8 +80,9 @@ internal class StaffDungeonMobBridge(private val accept: (StaffDungeonMob) -> Un
     }
 
     private fun acceptOnce(elite: EliteEntity, actor: StaffDungeonMob) {
-        // A spawn event and startup adoption must share one chance roll per native actor.
-        if (considered.add(elite)) accept(actor)
+        // Native regional actors survive respawns; deduplicate only the current body generation.
+        val bodyId = actor.body.uniqueId
+        if (considered.put(elite, bodyId) != bodyId) accept(actor)
     }
 
     override fun close() {
@@ -110,7 +110,8 @@ internal fun resolveStaffDungeonMob(elite: EliteEntity): StaffDungeonMob? {
         permits = { player -> instance.state.name == "ONGOING" && player in instance.players && player !in boss.lockoutPlayers }
     } else {
         if (boss !is RegionalBossEntity) return null
-        val content = boss.emPackage as? WorldDungeonPackage ?: return null
+        // EliteMobs indexes open packages by world; regional bosses may have no package back-reference.
+        val content = EMPackage.getContent(body.world.name) as? WorldDungeonPackage ?: return null
         currentScope = {
             content.isInstalled && content.contentPackagesConfigFields.isEnabled &&
                 content.contentPackagesConfigFields.contentType.name == "OPEN_DUNGEON" &&

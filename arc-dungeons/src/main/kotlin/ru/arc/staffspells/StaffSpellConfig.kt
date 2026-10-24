@@ -17,6 +17,8 @@ import net.kyori.adventure.text.format.TextColor
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
+import org.bukkit.entity.EntityType
+import org.bukkit.entity.Mob
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 import ru.arc.config.Config
@@ -79,6 +81,14 @@ internal fun ensureStaffChargeUseComponent(item: ItemStack, spell: StaffSpell): 
 
 internal data class StaffSpellTuning(val power: Double, val vanillaDamage: Double, val cooldownTicks: Long)
 
+/** The default mage species also define which bodies can display the humanoid staff cosmetic. */
+internal val STAFF_HOLDING_MOB_TYPES = setOf(
+    EntityType.ZOMBIE, EntityType.HUSK, EntityType.DROWNED, EntityType.ZOMBIE_VILLAGER,
+    EntityType.SKELETON, EntityType.STRAY, EntityType.BOGGED, EntityType.WITHER_SKELETON,
+    EntityType.PILLAGER, EntityType.VINDICATOR, EntityType.EVOKER, EntityType.ILLUSIONER, EntityType.WITCH,
+    EntityType.PIGLIN, EntityType.PIGLIN_BRUTE, EntityType.ZOMBIFIED_PIGLIN,
+)
+
 /** One difficulty dial scales combat; the warning always leaves time to dodge. */
 internal data class StaffMobCasterSettings(
     val enabled: Boolean = true,
@@ -87,6 +97,7 @@ internal data class StaffMobCasterSettings(
     val range: Double = 16.0,
     val maxCasters: Int = 32,
     val allowedWorlds: Set<String> = emptySet(),
+    val allowedEntityTypes: Set<EntityType> = STAFF_HOLDING_MOB_TYPES,
 ) {
     val recoveryTicks get() = (100 / sqrt(difficulty)).roundToInt().coerceAtLeast(40)
     val telegraphTicks get() = (24 / sqrt(difficulty)).roundToInt().coerceAtLeast(12)
@@ -208,7 +219,23 @@ internal open class StaffSpellConfig(private val config: Config) {
         range = number("dungeon-casters.range-blocks", 16.0, 4.0..32.0),
         maxCasters = config.integer("dungeon-casters.max-casters", 32).coerceIn(1, 32),
         allowedWorlds = config.stringList("dungeon-casters.worlds").toSet(),
+        allowedEntityTypes = dungeonCasterEntityTypes(),
     )
+
+    private fun dungeonCasterEntityTypes(): Set<EntityType> {
+        val path = "dungeon-casters.entity-types"
+        val mobTypes = EntityType.entries.filterTo(mutableSetOf()) {
+            it.entityClass?.let(Mob::class.java::isAssignableFrom) == true
+        }
+        return config.stringList(path, STAFF_HOLDING_MOB_TYPES.map { it.name }).flatMap { name ->
+            if (name == "*") mobTypes else {
+                val type = EntityType.entries.firstOrNull { it.name == name }
+                require(type != null) { "$path contains unknown entity type '$name'; use Bukkit EntityType names or '*'" }
+                require(type in mobTypes) { "$path entity type '$name' must be a Mob" }
+                listOf(type)
+            }
+        }.toSet()
+    }
 
     /** Camera-plane placement is read from this config generation and validated before use. */
     val hudPosition get() = StaffSpellHudPositionSettings(
