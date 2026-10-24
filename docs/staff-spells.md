@@ -356,6 +356,32 @@ establish ordinary-client visual or audio acceptance.
 This document describes the source contract; it does not certify a build,
 artifact delivery, runtime activation or in-client review.
 
+## Natural staff mages
+
+`mob-casters` in `modules/staff-spells.yml` controls rare adult zombies, husks
+and drowned spawned naturally with empty hands. The default conversion chance
+is **3% of eligible spawns**. Named mobs, NPCs, EliteMobs actors and other
+plugin-owned/custom mobs are excluded. Existing weapons are never replaced.
+The four possible staffs use Ember, Icicle, Lance or a fixed Mark. Mages attack
+only their native AI's current player target, with a visible warning and a
+fixed aim that can be dodged. Cover, target changes and invalid combat state
+cancel attacks; native damage events keep protection plugins authoritative.
+
+Set `mob-casters.spawn-chance-percent` to any value from 0 to 100.
+`mob-casters.difficulty` accepts 0.25–4. At 1, a hit deals 4 HP before native
+mitigation, recovery is 100 ticks (5 seconds) and the warning is 24 ticks
+(1.2 seconds). Damage scales linearly with difficulty; recovery and warning
+divide by its square root, with minima of 40 and 12 ticks. Mark always warns
+for at least 32 ticks. Range defaults to 16 blocks; the active mage limit is
+32 per server. Empty `worlds` enables all worlds; an explicit list limits it.
+
+`/arc reload` replaces the settings and cancels the previous generation's
+attacks. Existing mages return to ordinary mobs on reload or chunk unload;
+new natural spawns use the new values. The held staff is cosmetic, carries no
+usable player-staff identity and never becomes loot. Original equipment,
+ordinary drops, XP and economic rewards are preserved: before/after currency
+and item rewards are unchanged, with zero additional obtainable staffs.
+
 ## Collision-safe scenery
 
 Scenery remains packet-only. A viewer whose swept body approaches a masked

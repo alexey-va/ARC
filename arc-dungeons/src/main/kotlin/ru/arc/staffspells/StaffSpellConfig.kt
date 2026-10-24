@@ -23,6 +23,8 @@ import ru.arc.config.Config
 import ru.arc.eliteloot.applyEliteSkin
 import ru.arc.logging.ArcLogging
 import kotlin.math.cos
+import kotlin.math.sqrt
+import kotlin.math.roundToInt
 
 internal enum class StaffSpell(val id: String) {
     CHAIN("chain"), MARK("mark"), FROST("frost"), LANCE("lance"), EMBER("ember"), NOVA("nova"),
@@ -76,6 +78,21 @@ internal fun ensureStaffChargeUseComponent(item: ItemStack, spell: StaffSpell): 
 }
 
 internal data class StaffSpellTuning(val power: Double, val vanillaDamage: Double, val cooldownTicks: Long)
+
+/** One difficulty dial scales combat; the warning always leaves time to dodge. */
+internal data class StaffMobCasterSettings(
+    val enabled: Boolean = true,
+    val spawnChancePercent: Double = 3.0,
+    val difficulty: Double = 1.0,
+    val range: Double = 16.0,
+    val maxCasters: Int = 32,
+    val allowedWorlds: Set<String> = emptySet(),
+) {
+    val damage get() = 4.0 * difficulty
+    val recoveryTicks get() = (100 / sqrt(difficulty)).roundToInt().coerceAtLeast(40)
+    val telegraphTicks get() = (24 / sqrt(difficulty)).roundToInt().coerceAtLeast(12)
+    val markTelegraphTicks get() = maxOf(32, telegraphTicks)
+}
 
 internal data class StaffAimAssistSettings(
     val enabled: Boolean = true,
@@ -185,6 +202,15 @@ internal data class StaffSpellHudPositionSettings(
 )
 
 internal open class StaffSpellConfig(private val config: Config) {
+    val mobCasters get() = StaffMobCasterSettings(
+        enabled = config.bool("mob-casters.enabled", true),
+        spawnChancePercent = number("mob-casters.spawn-chance-percent", 3.0, 0.0..100.0),
+        difficulty = number("mob-casters.difficulty", 1.0, 0.25..4.0),
+        range = number("mob-casters.range-blocks", 16.0, 4.0..32.0),
+        maxCasters = config.integer("mob-casters.max-casters", 32).coerceIn(1, 64),
+        allowedWorlds = config.stringList("mob-casters.worlds").toSet(),
+    )
+
     /** Camera-plane placement is read from this config generation and validated before use. */
     val hudPosition get() = StaffSpellHudPositionSettings(
         forwardBlocks = number("hud.position.forward-blocks", 2.5, 0.8..4.0),
@@ -425,6 +451,18 @@ internal open class StaffSpellConfig(private val config: Config) {
         ))
 
     fun item(spell: StaffSpell) = buildItem(spell, duelOnly = false)
+
+    /** Mob equipment is cosmetic and never carries a usable player staff/loot identity. */
+    fun mobItem(spell: StaffSpell): ItemStack {
+        val item = ItemStack(Material.BLAZE_ROD)
+        val skin = try { configuredSkin(spell) } catch (_: StaffSpellSkinUnavailableException) { null }
+        if (skin != null) applyEliteSkin(item, skin)
+        item.editMeta { meta ->
+            meta.displayName(staffName(spell))
+            meta.persistentDataContainer.set(StaffMobCasters.staffKey, PersistentDataType.STRING, spell.id)
+        }
+        return item
+    }
 
     /** Duel items deliberately use a stable native base, independent of optional ItemsAdder startup timing. */
     fun duelItem(spell: StaffSpell) = buildItem(spell, duelOnly = true)

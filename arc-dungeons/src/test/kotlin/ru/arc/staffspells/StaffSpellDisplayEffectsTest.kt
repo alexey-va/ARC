@@ -13,6 +13,7 @@ import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.block.data.BlockData
 import org.bukkit.entity.Player
+import org.bukkit.entity.Zombie
 import org.bukkit.util.Transformation
 import ru.arc.core.Tasks
 import ru.arc.core.TestTaskScheduler
@@ -23,6 +24,34 @@ import ru.arc.paper.testing.failOnUnsupportedMockBukkitOperation
 import java.util.UUID
 
 class StaffSpellDisplayEffectsTest : FreeSpec({
+    "mob packet scenes admit their target audience expire with the owner and yield to player capacity" {
+        withDisplayHarness { h ->
+            val target = h.player("mob-scene-target")
+            val at = Location(h.world, 8.5, 66.0, 8.5)
+            val mob = h.world.spawn(at.clone().add(0.0, -2.0, 0.0), Zombie::class.java)
+            val scene = requireNotNull(h.effects.play(mob.uniqueId, StaffSpell.ICICLE, at,
+                durationTicks = 80, opportunistic = true))
+            h.effects.hasAudience(scene, target.uniqueId) shouldBe true
+            val mobHandles = h.recorder.records.toList()
+            mob.remove()
+            h.scheduler.tick(2)
+            h.effects.isActive(scene) shouldBe false
+            h.effects.hasAudience(scene, target.uniqueId) shouldBe false
+            mobHandles.all { it.removals == 1 } shouldBe true
+
+            val owners = listOf(target, h.player("mob-scene-owner-2"), h.player("mob-scene-owner-3"))
+            val playerScenes = (0 until StaffSpellDisplayEffects.MAX_SCENES).map { index ->
+                requireNotNull(h.effects.play(owners[index / StaffSpellDisplayEffects.MAX_PER_CASTER].uniqueId,
+                    StaffSpell.ICICLE, at, durationTicks = 80))
+            }
+            playerScenes.all(h.effects::isActive) shouldBe true
+            val waitingMob = h.world.spawn(at.clone().add(0.0, -2.0, 0.0), Zombie::class.java)
+            h.effects.play(waitingMob.uniqueId, StaffSpell.ICICLE, at,
+                durationTicks = 80, opportunistic = true) shouldBe null
+            playerScenes.all(h.effects::isActive) shouldBe true
+        }
+    }
+
     "moving mobility rig sweeps relative to its owner while stationary effects and observers keep world clearance" {
         withDisplayHarness { h ->
             val caster = h.player("mobility-owner")

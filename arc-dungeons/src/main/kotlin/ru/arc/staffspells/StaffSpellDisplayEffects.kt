@@ -5,6 +5,7 @@ import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.block.data.BlockData
 import org.bukkit.entity.Display
+import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Player
 import org.bukkit.util.Transformation
 import org.joml.Quaternionf
@@ -38,6 +39,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         val melee: Boolean = false,
         var customGeometry: ((Int) -> List<StaffDisplayPart>)? = null,
         val ownerAttachedMotion: Boolean = false,
+        val opportunistic: Boolean = false,
         val defense: Defense? = null,
         var controllerDriven: Boolean = false,
         var controllerDirty: Boolean = false,
@@ -71,12 +73,12 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         radius: Double = 1.0, durationTicks: Int = 16, impact: Boolean = false, secondary: Boolean = false,
         input: StaffCastInput = StaffCastInput.of(secondary, false), charging: Boolean = false,
         controllerDriven: Boolean = false, charge: Double = 0.0, chargeSlot: Int? = null,
-        preparation: Boolean = false): UUID? {
+        preparation: Boolean = false, opportunistic: Boolean = false): UUID? {
         check(Bukkit.isPrimaryThread())
         if (closed || !valid(from) || !valid(to) || from.world != to.world) return null
-        val caster = Bukkit.getPlayer(casterId) ?: return null
+        val caster = owner(casterId) ?: return null
         if (!eligible(caster, from)) return null
-        reserve(casterId)
+        if (!reserve(casterId, opportunistic)) return null
         val offset = to.toVector().subtract(from.toVector())
         val length = offset.length()
         val rotation = if (preparation) Quaternionf().rotationY(-Math.toRadians(from.yaw.toDouble()).toFloat())
@@ -96,20 +98,24 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
             radius.takeIf(Double::isFinite)?.coerceIn(0.1, if (spell == StaffSpell.FROST) 96.0 else 16.0) ?: 1.0,
             durationTicks.coerceIn(1, 240), impact, secondary, input, charging = charging, chargeSlot = chargeSlot,
             preparation = preparation,
+            opportunistic = opportunistic,
             controllerDriven = controllerDriven,
             chargeProgress = charge.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0)
         scenes[scene.id] = scene
         if (spell == StaffSpell.CHAIN) scene.trail = listOf(Vector3f())
         render(scene)
         refreshAudience()
-        return scene.id
+        return scene.id.takeIf(scenes::containsKey)
     }
 
-    private fun reserve(casterId: UUID) {
+    private fun reserve(casterId: UUID, opportunistic: Boolean = false): Boolean {
+        if (opportunistic && (scenes.size >= MAX_SCENES ||
+                scenes.values.count { it.casterId == casterId } >= MAX_PER_CASTER)) return false
         // ponytail: bounded oldest-first visual eviction; combat admission never depends on this pool.
         while (scenes.values.count { it.casterId == casterId } >= MAX_PER_CASTER)
             remove(scenes.values.first { it.casterId == casterId }.id)
         while (scenes.size >= MAX_SCENES) remove(scenes.keys.first())
+        return true
     }
 
     /** Ability-owned geometry shares the same bounded scenes, interpolation and viewer transport. */
@@ -119,21 +125,30 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
 
     /** Only rigs anchored to the moving owner's feet use an owner-relative camera sweep. */
     fun custom(casterId: UUID, spell: StaffSpell, origin: Location, durationTicks: Int, ownerAttachedMotion: Boolean,
+        parts: (Int) -> List<StaffDisplayPart>): UUID? =
+        custom(casterId, spell, origin, durationTicks, ownerAttachedMotion, opportunistic = false, parts = parts)
+
+    fun custom(casterId: UUID, spell: StaffSpell, origin: Location, durationTicks: Int, ownerAttachedMotion: Boolean,
+        opportunistic: Boolean,
         parts: (Int) -> List<StaffDisplayPart>): UUID? {
         check(Bukkit.isPrimaryThread())
-        val caster = Bukkit.getPlayer(casterId) ?: return null
+        val caster = owner(casterId) ?: return null
         if (closed || !valid(origin) || !eligible(caster, origin)) return null
-        reserve(casterId)
+        if (!reserve(casterId, opportunistic)) return null
         val scene = Scene(UUID.randomUUID(), casterId, spell, origin.clone(), Quaternionf(),
             1.0, 1.0, durationTicks.coerceIn(1, 240), false, false, StaffCastInput.PRIMARY,
-            customGeometry = parts, ownerAttachedMotion = ownerAttachedMotion)
+            customGeometry = parts, ownerAttachedMotion = ownerAttachedMotion && caster is Player,
+            opportunistic = opportunistic)
         scenes[scene.id] = scene
         render(scene)
         refreshAudience()
-        return scene.id
+        return scene.id.takeIf(scenes::containsKey)
     }
 
     fun isActive(sceneId: UUID?): Boolean = sceneId != null && sceneId in scenes
+
+    /** Budget admission only; gaze and near-camera clipping never become gameplay targeting rules. */
+    fun hasAudience(sceneId: UUID?, viewerId: UUID): Boolean = scenes[sceneId]?.viewers?.containsKey(viewerId) == true
 
     /** Snapshot a controller pose; the common two-tick render clock sends it once. */
     fun updateCustom(sceneId: UUID?, origin: Location, parts: List<StaffDisplayPart>) {
@@ -318,7 +333,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
     private fun tick() {
         scenes.values.toList().forEach { scene ->
             if (scenes[scene.id] !== scene) return@forEach
-            val caster = Bukkit.getPlayer(scene.casterId)
+            val caster = owner(scene.casterId)
             if (caster == null || !eligible(caster, scene.origin)) {
                 remove(scene.id)
             } else if (!scene.controllerDriven) {
@@ -361,6 +376,13 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
             parts = blendStaffParts(parts, previous, scene.age)
             if (scene.age >= (if (scene.spell == StaffSpell.EMBER) 4 else 2)) scene.transitionFrom = null
         }
+        // Optional mob attacks yield their whole scene instead of evicting an existing player effect.
+        if (scene.opportunistic && (
+                scenes.values.filter { it.id != scene.id && it.casterId == scene.casterId }.sumOf { it.handles.size } + parts.size > MAX_PARTS_PER_CASTER ||
+                scenes.values.filter { it.id != scene.id }.sumOf { it.handles.size } + parts.size > MAX_TOTAL_PARTS)) {
+            remove(scene.id)
+            return
+        }
         while (scenes.values.filter { it.id != scene.id && it.casterId == scene.casterId }.sumOf { it.handles.size } + parts.size > MAX_PARTS_PER_CASTER)
             remove(scenes.values.first { it.id != scene.id && it.casterId == scene.casterId }.id)
         while (scenes.values.filter { it.id != scene.id }.sumOf { it.handles.size } + parts.size > MAX_TOTAL_PARTS)
@@ -378,7 +400,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
             if (previousIndex != null) matchedPrevious += previousIndex
             previousIndexByPart += previousIndex
         }
-        val casterEye = Bukkit.getPlayer(scene.casterId)?.eyeLocation
+        val casterEye = owner(scene.casterId)?.eyeLocation
         // The broad ice fan needs per-piece clipping; projectile owners already sweep their paths.
         if ((scene.melee || scene.defense == null && !scene.preparation && scene.spell == StaffSpell.FROST && !scene.charging) && casterEye != null) parts = parts.map { part ->
             val point = scene.rotation.transform(Vector3f(part.center))
@@ -491,7 +513,8 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
                 .map { scene -> scene to (scene.bounds.minOfOrNull { (at, radius) ->
                     (at.distance(eye.toVector()) - radius).coerceAtLeast(0.0)
                 } ?: scene.origin.distance(eye)) }.filter { it.second <= VIEW_RANGE }
-                .sortedWith(compareBy<Pair<Scene, Double>> { it.first.casterId != player.uniqueId }.thenBy { it.second })
+                .sortedWith(compareBy<Pair<Scene, Double>> { it.first.casterId != player.uniqueId }
+                    .thenBy { it.first.opportunistic }.thenBy { it.second })
                 .take(MAX_PER_VIEWER).forEach { (scene, _) ->
                     if (scene.handles.size <= remainingParts) {
                         remainingParts -= scene.handles.size
@@ -536,7 +559,9 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         displays.close()
     }
 
-    private fun eligible(player: Player, origin: Location) = player.isOnline && player.isValid && !player.isDead && player.world == origin.world
+    private fun owner(id: UUID): LivingEntity? = Bukkit.getPlayer(id) ?: Bukkit.getEntity(id) as? LivingEntity
+    private fun eligible(caster: LivingEntity, origin: Location) =
+        caster.isValid && !caster.isDead && caster.world == origin.world && (caster !is Player || caster.isOnline)
     private fun valid(at: Location) = at.world != null && at.x.isFinite() && at.y.isFinite() && at.z.isFinite()
 
     internal companion object {

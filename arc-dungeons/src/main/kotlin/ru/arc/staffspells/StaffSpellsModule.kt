@@ -61,6 +61,9 @@ object StaffSpellsModule : PluginModule {
 
     internal fun activeController() = controller
     internal fun itemConfig(): StaffSpellConfig? = controller?.config
+    internal fun mobTargetProtected(player: Player) = duelAccess?.let {
+        !it.inputAllowed(player) || it.context(player) != null
+    } ?: false
 
     override fun init() {
         val plugin = ArcDungeonsPlugin.instance
@@ -69,6 +72,7 @@ object StaffSpellsModule : PluginModule {
         }
         val config = StaffSpellConfig(ConfigManager.of(plugin.legacyDataPath, "modules/staff-spells.yml"))
         val settings = config.settings // Validate the replacement before closing the active generation.
+        val mobSettings = config.mobCasters
         shutdown()
         val scenery = config.sceneryWorlds.takeIf { it.isNotEmpty() }?.let { worlds ->
             StaffSceneryEffects(PaperPacketDisplays(plugin, "staff-scenery"), worlds).also {
@@ -78,19 +82,21 @@ object StaffSpellsModule : PluginModule {
         val displays = PaperPacketDisplays(plugin, "staff-spells")
         controller = StaffSpellController(config, settings, StaffSpellDamage(duelAccess),
             StaffSpellDisplayEffects(displays), cooldowns, PaperViewerParticles(plugin, "staff-spells"),
-            scenery = scenery, hud = StaffSpellHud(displays, config, ownDisplays = false)).also {
+            scenery = scenery, hud = StaffSpellHud(displays, config, ownDisplays = false),
+            mobSettings = mobSettings).also {
             Bukkit.getPluginManager().registerEvents(it, plugin)
             Bukkit.getPluginManager().registerEvents(it.input, plugin)
             Bukkit.getPluginManager().registerEvents(it.defense, plugin)
             Bukkit.getPluginManager().registerEvents(it.summons, plugin)
             Bukkit.getPluginManager().registerEvents(it.conjurations, plugin)
+            Bukkit.getPluginManager().registerEvents(it.mobCasters, plugin)
             it.start()
         }
     }
 
     override fun reload() = init()
     override fun shutdown() {
-        controller?.let { HandlerList.unregisterAll(it); HandlerList.unregisterAll(it.input); HandlerList.unregisterAll(it.defense); HandlerList.unregisterAll(it.summons); HandlerList.unregisterAll(it.conjurations); it.close() }
+        controller?.let { HandlerList.unregisterAll(it); HandlerList.unregisterAll(it.input); HandlerList.unregisterAll(it.defense); HandlerList.unregisterAll(it.summons); HandlerList.unregisterAll(it.conjurations); HandlerList.unregisterAll(it.mobCasters); it.close() }
         controller = null
     }
 
@@ -110,6 +116,7 @@ internal class StaffSpellController(
     private val scenery: StaffSceneryEffects? = null,
     private val hud: StaffSpellHud? = null,
     private val hotkeys: StaffHotkeyCooldowns = StaffHotkeyCooldowns(),
+    mobSettings: StaffMobCasterSettings = config.mobCasters,
 ) : Listener, AutoCloseable, StaffSpellInputActions {
     private val tasks = LifecycleTaskScope()
     private val visuals = StaffSpellVisuals(tasks, particles, sceneryImpact = { owner, at, radius ->
@@ -118,6 +125,7 @@ internal class StaffSpellController(
         scenery?.depress(owner, at, radius)
     })
     private val targeting = StaffSpellTargeting(settings, damage)
+    internal val mobCasters = StaffMobCasters(config, mobSettings, effects, particles)
     internal val conjurations = StaffSpellConjurations(settings, damage, effects, visuals, targeting)
     private val arsenal = StaffSpellArsenal(settings, damage, effects, visuals, targeting,
         rootTarget = conjurations::rootTarget, rootActive = conjurations::rootActive,
@@ -158,6 +166,7 @@ internal class StaffSpellController(
     }
 
     fun start() {
+        mobCasters.start()
         input.start()
         hud?.start()
         arsenal.start()
@@ -1436,6 +1445,7 @@ internal class StaffSpellController(
     }
 
     override fun close() {
+        mobCasters.close()
         input.close()
         hud?.close()
         visuals.close()
