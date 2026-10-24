@@ -46,6 +46,16 @@ the denied creative cursor, including incompatible targets. A legacy book withou
 persisted odds is refreshed on first contact and requires another gesture so the
 player can see the odds before it is consumed.
 
+White scrolls use native AE validation and application in ordinary inventory clicks.
+`CreativeWhiteScrollGuard` vetoes only AE's `ItemApplyEvent` during a correlated
+`InventoryCreativeEvent`, before AE writes or consumes anything. The outer creative
+event remains unchanged, so Paper completes its ordinary slot replacement instead
+of retaining the original sword alongside the client's displaced copy. The player
+is directed to apply the scroll in survival. Cancelling the outer creative click or
+admitting its proposed cursor as an extra stack would violate this boundary.
+The guard binds the verified 9.24.15 event once because the compile-time 8.7.4 API
+does not contain it; reload/shutdown unregisters both event handlers.
+
 The old native `/em enchant` command remains a provider entry point; the guild NPC
 and player guide route are retired. The direct flow does not consume lucky tickets
 or invoke the native purchase/menu/challenge API. Provider updates require a new

@@ -1,4 +1,5 @@
 messages:
+  white-scroll-survival-only: '<yellow>Примените белый свиток в режиме выживания.</yellow>'
   unavailable: '<red>Не удалось применить книгу. Проверьте инвентарь и попробуйте ещё раз.</red>'
   success: '<green>Зачарование применено!</green>'
   failure: '<yellow>Зачарование не сработало. Предмет сохранён, книга потрачена.</yellow>'
