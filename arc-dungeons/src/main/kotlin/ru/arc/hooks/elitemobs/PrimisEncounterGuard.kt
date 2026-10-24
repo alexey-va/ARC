@@ -233,7 +233,7 @@ internal class PrimisEncounterGuard(
     private fun firstPhase(boss: CustomBossEntity) = boss.phaseBossEntity?.isInFirstPhase == true
     private fun alive(boss: CustomBossEntity) = boss.livingEntity?.let { it.isValid && !it.isDead && boss.health > 0.0 } == true
     private fun eligible(player: Player) = player.isOnline && !player.isDead && player.health > 0.0 &&
-        player.gameMode in setOf(GameMode.SURVIVAL, GameMode.ADVENTURE)
+        player.gameMode != GameMode.SPECTATOR
     private fun inside(entry: Encounter, player: Player): Boolean = player.location.let { at ->
         at.world.name == entry.definition.profile.world && entry.definition.profile.room.contains(at.x, at.y, at.z)
     }

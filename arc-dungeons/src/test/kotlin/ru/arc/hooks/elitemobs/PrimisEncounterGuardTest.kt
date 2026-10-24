@@ -81,6 +81,38 @@ class PrimisEncounterGuardTest : StringSpec({
             hit.isCancelled shouldBe true
         }
     }
+    "creative participants can initiate and sustain the fight from inside through both damage boundaries" {
+        PrimisGuardFixture().use { f ->
+            f.player.gameMode = GameMode.CREATIVE
+            val hit = f.damage(f.player)
+            f.guard.onBukkitDamage(hit)
+            hit.isCancelled shouldBe false
+            val native = EliteMobDamagedEvent(f.boss, hit, 5.0)
+            f.guard.onEliteDamage(native)
+            native.isCancelled shouldBe false
+            f.admit()
+            f.scheduler.tick(40)
+            f.heals shouldBe 0
+            f.damage().also { f.guard.onBukkitDamage(it); it.isCancelled shouldBe false }
+        }
+    }
+    "creative players outside still cannot initiate or damage an admitted encounter" {
+        PrimisGuardFixture().use { f ->
+            f.outside.gameMode = GameMode.CREATIVE
+            f.damage(f.outside).also { f.guard.onBukkitDamage(it); it.isCancelled shouldBe true }
+            f.feedback.last() shouldBe PrimisAdmissionDecision.ENTER_ROOM
+            f.admit()
+            f.damage(f.outside).also { f.guard.onBukkitDamage(it); it.isCancelled shouldBe true }
+        }
+    }
+    "creative participants still cannot start while a player occupies the closing passage" {
+        PrimisGuardFixture().use { f ->
+            f.player.gameMode = GameMode.CREATIVE
+            f.outside.teleport(Location(f.world, 1104.1, 37.0, 573.5))
+            f.damage(f.player).also { f.guard.onBukkitDamage(it); it.isCancelled shouldBe true }
+            f.feedback.last() shouldBe PrimisAdmissionDecision.PASSAGE_OCCUPIED
+        }
+    }
     "unowned damage cannot start but continues only while an admitted inside participant remains" {
         PrimisGuardFixture().use { f ->
             f.damage().also { f.guard.onBukkitDamage(it); it.isCancelled shouldBe true }
@@ -146,9 +178,9 @@ class PrimisEncounterGuardTest : StringSpec({
         }
     }
     "all participants leaving or becoming spectator triggers the scoped native abort after grace" {
-        for (mode in listOf(GameMode.SPECTATOR, GameMode.CREATIVE)) PrimisGuardFixture().use { f ->
+        PrimisGuardFixture().use { f ->
             f.admit()
-            f.player.gameMode = mode
+            f.player.gameMode = GameMode.SPECTATOR
             f.scheduler.tick(19)
             f.heals shouldBe 0
             f.scheduler.tick(13)
@@ -163,6 +195,14 @@ class PrimisEncounterGuardTest : StringSpec({
                 f.damage().also { f.guard.onBukkitDamage(it); it.isCancelled shouldBe false }
                 f.heals shouldBe 0
             } else (f.heals > 0) shouldBe true
+        }
+    }
+    "reload keeps an active fight with a creative participant inside" {
+        PrimisGuardFixture(initialActive = true, initialMode = GameMode.CREATIVE).use { f ->
+            f.scheduler.tick(40)
+            f.heals shouldBe 0
+            f.damage(f.player).also { f.guard.onBukkitDamage(it); it.isCancelled shouldBe false }
+            f.damage().also { f.guard.onBukkitDamage(it); it.isCancelled shouldBe false }
         }
     }
     "death and victory removal invalidate a queued abort without healing spawning or restoring quest walls" {
@@ -228,7 +268,8 @@ class PrimisEncounterGuardTest : StringSpec({
     }
 })
 
-private class PrimisGuardFixture(initialActive: Boolean = false, insidePresent: Boolean = true) : AutoCloseable {
+private class PrimisGuardFixture(initialActive: Boolean = false, insidePresent: Boolean = true,
+    initialMode: GameMode = GameMode.SURVIVAL) : AutoCloseable {
     val paper = MockBukkitTestRuntime.open()
     val world = paper.server.addSimpleWorld("em_primis")
     val player = paper.server.addPlayer("PrimisInside")
@@ -256,6 +297,7 @@ private class PrimisGuardFixture(initialActive: Boolean = false, insidePresent: 
     init {
         world.getChunkAt(68, 35); world.getChunkAt(69, 35)
         player.teleport(Location(world, if (insidePresent) 1095.5 else 1106.0, 37.0, 573.5))
+        player.gameMode = initialMode
         outside.teleport(Location(world, 1105.32241682432, 37.0, 573.8900094016826))
         every { phases.phase1Config } returns base
         every { phases.isInFirstPhase } answers { first }
