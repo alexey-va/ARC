@@ -98,6 +98,10 @@ internal data class StaffMobCasterSettings(
     val maxCasters: Int = 32,
     val allowedWorlds: Set<String> = emptySet(),
     val allowedEntityTypes: Set<EntityType> = STAFF_HOLDING_MOB_TYPES,
+    val preferredDistance: Double = 8.0,
+    val distanceTolerance: Double = 2.0,
+    val maxAimLeadTicks: Int = 12,
+    val aimLockTicks: Int = 4,
 ) {
     val recoveryTicks get() = (100 / sqrt(difficulty)).roundToInt().coerceAtLeast(40)
     val telegraphTicks get() = (24 / sqrt(difficulty)).roundToInt().coerceAtLeast(12)
@@ -220,6 +224,10 @@ internal open class StaffSpellConfig(private val config: Config) {
         maxCasters = config.integer("dungeon-casters.max-casters", 32).coerceIn(1, 32),
         allowedWorlds = config.stringList("dungeon-casters.worlds").toSet(),
         allowedEntityTypes = dungeonCasterEntityTypes(),
+        preferredDistance = number("dungeon-casters.combat.preferred-distance-blocks", 8.0, 2.0..24.0),
+        distanceTolerance = number("dungeon-casters.combat.distance-tolerance-blocks", 2.0, 0.5..4.0),
+        maxAimLeadTicks = config.integer("dungeon-casters.aim.max-lead-ticks", 12).coerceIn(0, 20),
+        aimLockTicks = config.integer("dungeon-casters.aim.lock-before-release-ticks", 4).coerceIn(0, 12),
     )
 
     private fun dungeonCasterEntityTypes(): Set<EntityType> {

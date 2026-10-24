@@ -49,6 +49,8 @@ dependencies {
     testImplementation(libs.ru.ruscrafting.thirdparty.magmacore)
     testImplementation("com.magmaguy:FreeMinecraftModels:2.12.1") { isTransitive = false }
     testImplementation(libs.com.github.retrooper.packetevents.spigot) { exclude(group = "io.netty") }
+    // Real PacketEvents codec tests use the same Netty runtime as arc-core-paper tests.
+    testRuntimeOnly("io.netty:netty-transport:4.2.7.Final")
     testImplementation(libs.com.zrips.cmi.api)
     testImplementation(libs.com.github.lonedev6.api.itemsadder)
     testImplementation(libs.net.luckperms.api)

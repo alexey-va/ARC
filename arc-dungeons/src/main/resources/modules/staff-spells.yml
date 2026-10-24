@@ -45,6 +45,14 @@ dungeon-casters:
   difficulty: 1.0
   range-blocks: 16.0
   max-casters: 32
+  combat:
+    # Hold a firing position inside this distance band; retreat when the target gets closer.
+    preferred-distance-blocks: 8.0
+    distance-tolerance-blocks: 2.0
+  aim:
+    # Track during preparation, then lock the shot so a direction change can still dodge it.
+    max-lead-ticks: 12
+    lock-before-release-ticks: 4
   # Optional additional world filter; an empty list allows every verified dungeon.
   worlds: []
 # Compatibility fence for older JARs: natural-world enrollment is retired.

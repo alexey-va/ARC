@@ -1,9 +1,13 @@
 package ru.arc.staffspells
 
+import com.magmaguy.elitemobs.api.EliteMobRemoveEvent
 import com.magmaguy.elitemobs.api.EliteMobSpawnEvent
 import com.magmaguy.elitemobs.combatsystem.CombatDamageContext
 import com.magmaguy.elitemobs.dungeons.EMPackage
 import com.magmaguy.elitemobs.dungeons.WorldDungeonPackage
+import com.magmaguy.elitemobs.easyminecraftgoals.events.WanderBackToPointEndEvent
+import com.magmaguy.elitemobs.easyminecraftgoals.events.WanderBackToPointStartEvent
+import com.magmaguy.elitemobs.easyminecraftgoals.internal.AbstractWanderBackToPoint
 import com.magmaguy.elitemobs.entitytracker.EntityTracker
 import com.magmaguy.elitemobs.instanced.dungeons.DungeonInstance
 import com.magmaguy.elitemobs.mobconstructor.EliteEntity
@@ -19,8 +23,13 @@ import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
+import org.bukkit.event.entity.EntityDeathEvent
+import org.bukkit.event.world.EntitiesUnloadEvent
+import org.bukkit.plugin.Plugin
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.dungeons.ArcDungeonsPlugin
+import java.util.Collections
+import java.util.IdentityHashMap
 import java.util.UUID
 import java.util.WeakHashMap
 
@@ -29,12 +38,14 @@ internal class StaffDungeonMobBridge(private val accept: (StaffDungeonMob) -> Un
     private val tasks = LifecycleTaskScope()
     private val pending = mutableSetOf<UUID>()
     private val considered = WeakHashMap<EliteEntity, UUID>()
+    private val returning = mutableMapOf<UUID, MutableSet<AbstractWanderBackToPoint>>()
     private var closed = false
 
-    fun start() {
-        Bukkit.getPluginManager().registerEvents(this, ArcDungeonsPlugin.instance)
-        // Existing open-dungeon actors may predate ARC listeners; never scan Bukkit worlds.
-        tasks.runLater(2) {
+    fun start(plugin: Plugin = ArcDungeonsPlugin.instance) {
+        Bukkit.getPluginManager().registerEvents(this, plugin)
+        // Older native returns expire within 100 ticks. Observe new returns throughout that warmup,
+        // including those that start immediately before adoption; never scan Bukkit worlds.
+        tasks.runLater(100) {
             if (!closed) staffDungeonBoundary(Unit) { adoptExisting() }
         }
     }
@@ -51,7 +62,7 @@ internal class StaffDungeonMobBridge(private val accept: (StaffDungeonMob) -> Un
                 val end = minOf(next + 32, ids.size)
                 while (!closed && next < end && candidates < 512) {
                     val elite = current[ids[next++]] ?: continue
-                    val actor = resolveStaffDungeonMob(elite) ?: continue
+                    val actor = resolveStaffDungeonMob(elite, ::isReturning) ?: continue
                     candidates++
                     acceptOnce(elite, actor)
                 }
@@ -64,6 +75,33 @@ internal class StaffDungeonMobBridge(private val accept: (StaffDungeonMob) -> Un
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onSpawn(event: EliteMobSpawnEvent) = queue(event.eliteMobEntity) { !event.isCancelled }
 
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onLeashStart(event: WanderBackToPointStartEvent) {
+        if (closed) return
+        val id = event.livingEntity?.uniqueId ?: return
+        returning.getOrPut(id) { Collections.newSetFromMap(IdentityHashMap<AbstractWanderBackToPoint, Boolean>()) }
+            .add(event.abstractWanderBackToPoint)
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    fun onLeashEnd(event: WanderBackToPointEndEvent) {
+        val id = event.livingEntity?.uniqueId ?: return
+        val leases = returning[id] ?: return
+        leases.remove(event.abstractWanderBackToPoint)
+        if (leases.isEmpty()) returning.remove(id)
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    fun onDeath(event: EntityDeathEvent) { returning.remove(event.entity.uniqueId) }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    fun onRemove(event: EliteMobRemoveEvent) { event.entity?.uniqueId?.let(returning::remove) }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    fun onUnload(event: EntitiesUnloadEvent) { event.entities.forEach { returning.remove(it.uniqueId) } }
+
+    private fun isReturning(bodyId: UUID) = returning.containsKey(bodyId)
+
     private fun queue(elite: EliteEntity, outcome: () -> Boolean = { true }) {
         if (closed || pending.size >= 512) return
         val body = elite.livingEntity as? Mob ?: return
@@ -74,7 +112,7 @@ internal class StaffDungeonMobBridge(private val accept: (StaffDungeonMob) -> Un
             if (closed || !outcome()) return@runLater
             staffDungeonBoundary(Unit) {
                 if (elite.livingEntity !== body || EntityTracker.getEliteMobEntity(body) !== elite) return@staffDungeonBoundary
-                resolveStaffDungeonMob(elite)?.let { acceptOnce(elite, it) }
+                resolveStaffDungeonMob(elite, ::isReturning)?.let { acceptOnce(elite, it) }
             }
         }
     }
@@ -92,12 +130,14 @@ internal class StaffDungeonMobBridge(private val accept: (StaffDungeonMob) -> Un
         tasks.close()
         pending.clear()
         considered.clear()
+        returning.clear()
     }
 }
 
-internal fun resolveStaffDungeonMob(elite: EliteEntity): StaffDungeonMob? {
+internal fun resolveStaffDungeonMob(elite: EliteEntity, returning: (UUID) -> Boolean = { false }): StaffDungeonMob? {
     val boss = elite as? CustomBossEntity ?: return null
     val body = boss.livingEntity as? Mob ?: return null
+    val bodyId = body.uniqueId
     if (boss.isReinforcementOrMount || boss.customBossesConfigFields.isReinforcement) return null
     val currentScope: () -> Boolean
     val permits: (Player) -> Boolean
@@ -123,14 +163,21 @@ internal fun resolveStaffDungeonMob(elite: EliteEntity): StaffDungeonMob? {
     }
     val actor = object : StaffDungeonMob {
         override val body = body
+        private var mageBehavior: StaffDungeonMageBehavior? = null
         override fun isCurrent() = Bukkit.getPluginManager().isPluginEnabled("EliteMobs") &&
             boss.livingEntity === body && EntityTracker.getEliteMobEntity(body) === boss &&
             !boss.isDying && currentScope()
 
-        override fun currentTarget(): Player? = if (boss.isAIActive && !boss.isTriggeredAntiExploit &&
+        override fun currentTarget(): Player? = if (!returning(bodyId) && mageBehavior?.isReturning != true &&
+            boss.isAIActive && !boss.isTriggeredAntiExploit &&
             !boss.isInAntiExploitCooldown && !boss.isInCombatGracePeriod) body.target as? Player else null
 
         override fun permitsTarget(player: Player) = isCurrent() && permits(player)
+
+        override fun claimMageBehavior(preferredDistance: Double, distanceTolerance: Double): StaffMobMageBehavior? {
+            mageBehavior?.close()
+            return StaffDungeonMageBehavior.claim(this, preferredDistance, distanceTolerance).also { mageBehavior = it }
+        }
 
         override fun damage(player: Player, multiplier: Double): Boolean {
             if (!permitsTarget(player) || currentTarget()?.uniqueId != player.uniqueId) return false

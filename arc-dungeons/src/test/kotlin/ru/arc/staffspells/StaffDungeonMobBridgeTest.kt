@@ -1,10 +1,15 @@
 package ru.arc.staffspells
 
+import com.magmaguy.elitemobs.api.EliteMobRemoveEvent
+import com.magmaguy.elitemobs.api.EliteMobSpawnEvent
 import com.magmaguy.elitemobs.config.contentpackages.ContentPackagesConfigFields
 import com.magmaguy.elitemobs.config.contentpackages.ContentPackagesConfigFields.ContentType
 import com.magmaguy.elitemobs.config.custombosses.CustomBossesConfigFields
 import com.magmaguy.elitemobs.dungeons.EMPackage
 import com.magmaguy.elitemobs.dungeons.WorldDungeonPackage
+import com.magmaguy.elitemobs.easyminecraftgoals.events.WanderBackToPointEndEvent
+import com.magmaguy.elitemobs.easyminecraftgoals.events.WanderBackToPointStartEvent
+import com.magmaguy.elitemobs.easyminecraftgoals.internal.AbstractWanderBackToPoint
 import com.magmaguy.elitemobs.entitytracker.EntityTracker
 import com.magmaguy.elitemobs.instanced.MatchInstance.InstancedRegionState
 import com.magmaguy.elitemobs.instanced.dungeons.DungeonInstance
@@ -22,9 +27,88 @@ import net.kyori.adventure.text.Component
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.entity.Mob
+import org.bukkit.entity.Player
+import org.bukkit.event.entity.EntityDeathEvent
+import org.bukkit.event.world.EntitiesUnloadEvent
 import org.bukkit.inventory.ItemStack
 
 class StaffDungeonMobBridgeTest : FreeSpec({
+    "existing actors wait out older returns and retain a return observed just before adoption" {
+        withRegionalBridgeFixture { h, body, player, _ ->
+            val accepted = mutableListOf<StaffDungeonMob>()
+            val soft = mockk<AbstractWanderBackToPoint>()
+            val hard = mockk<AbstractWanderBackToPoint>()
+            StaffDungeonMobBridge { accepted += it }.use { bridge ->
+                bridge.start(h.paper.createSimplePlugin("StaffBridgeFixture"))
+                h.scheduler.tick(98)
+                accepted shouldBe emptyList()
+                h.paper.server.pluginManager.callEvent(WanderBackToPointStartEvent(false, body, soft))
+                h.scheduler.tick(1)
+                accepted shouldBe emptyList()
+                h.scheduler.tick(1)
+                val actor = accepted.single()
+                actor.isCurrent() shouldBe true
+                actor.currentTarget() shouldBe null
+                actor.damage(player, 1.0) shouldBe false
+                body.target shouldBe player
+
+                // The bridge keeps tracking after adoption, including overlapping native leases.
+                h.paper.server.pluginManager.callEvent(WanderBackToPointStartEvent(true, body, hard))
+                h.paper.server.pluginManager.callEvent(WanderBackToPointEndEvent(false, body, soft))
+                actor.currentTarget() shouldBe null
+                h.paper.server.pluginManager.callEvent(WanderBackToPointEndEvent(true, body, hard))
+                actor.currentTarget() shouldBe player
+                h.paper.server.pluginManager.callEvent(WanderBackToPointStartEvent(false, body, soft))
+                actor.currentTarget() shouldBe null
+                h.paper.server.pluginManager.callEvent(WanderBackToPointEndEvent(false, body, soft))
+                actor.currentTarget() shouldBe player
+            }
+        }
+    }
+
+    "new spawn enrollment stays at two ticks and tracked return state clears on body lifecycle boundaries" {
+        withRegionalBridgeFixture { h, body, player, boss ->
+            val accepted = mutableListOf<StaffDungeonMob>()
+            val leash = mockk<AbstractWanderBackToPoint>()
+            val spawn = mockk<EliteMobSpawnEvent>()
+            every { spawn.eliteMobEntity } returns boss
+            every { spawn.isCancelled } returns false
+            StaffDungeonMobBridge { accepted += it }.use { bridge ->
+                bridge.start(h.paper.createSimplePlugin("StaffBridgeFixture"))
+                bridge.onLeashStart(WanderBackToPointStartEvent(false, body, leash))
+                bridge.onSpawn(spawn)
+                h.scheduler.tick(1)
+                accepted shouldBe emptyList()
+                h.scheduler.tick(1)
+                val actor = accepted.single()
+                actor.currentTarget() shouldBe null
+
+                val death = mockk<EntityDeathEvent>()
+                every { death.entity } returns body
+                bridge.onDeath(death)
+                actor.currentTarget() shouldBe player
+                bridge.onLeashStart(WanderBackToPointStartEvent(false, body, leash))
+                val unload = mockk<EntitiesUnloadEvent>()
+                every { unload.entities } returns listOf(body)
+                bridge.onUnload(unload)
+                actor.currentTarget() shouldBe player
+                bridge.onLeashStart(WanderBackToPointStartEvent(false, body, leash))
+                val removal = mockk<EliteMobRemoveEvent>()
+                every { removal.entity } returns body
+                bridge.onRemove(removal)
+                actor.currentTarget() shouldBe player
+                bridge.onLeashStart(WanderBackToPointStartEvent(false, body, leash))
+                actor.currentTarget() shouldBe null
+                bridge.close()
+                actor.currentTarget() shouldBe player
+                bridge.onLeashStart(WanderBackToPointStartEvent(false, body, leash))
+                actor.currentTarget() shouldBe player
+                h.scheduler.tick(100)
+                accepted.size shouldBe 1
+            }
+        }
+    }
+
     "ordinary elites and unscoped custom bosses never become dungeon staff actors" {
         withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("em_primis_spoof_world")
@@ -230,6 +314,37 @@ class StaffDungeonMobBridgeTest : FreeSpec({
         }
     }
 })
+
+private fun withRegionalBridgeFixture(block: (StaffHarness, Mob, Player, RegionalBossEntity) -> Unit) {
+    withStaffHarness { h ->
+        h.paper.createSimplePlugin("EliteMobs")
+        val world = h.paper.addSimpleWorld("em_primis")
+        val body = h.zombie(world, .5, .5)
+        val player = h.paper.addPlayer("regional-native-target").apply { teleport(Location(world, .5, 64.0, 8.5)) }
+        body.target = player
+        val boss = mockk<RegionalBossEntity>()
+        readyDungeonBoss(boss, body)
+        val fields = mockk<ContentPackagesConfigFields>()
+        every { fields.isEnabled } returns true
+        every { fields.contentType } returns ContentType.OPEN_DUNGEON
+        val content = mockk<WorldDungeonPackage>()
+        every { content.isInstalled } returns true
+        every { content.contentPackagesConfigFields } returns fields
+        every { content.customBossEntityList } returns listOf(boss)
+        every { content.world } returns world
+        mockkStatic(EntityTracker::class, EMPackage::class)
+        try {
+            every { EntityTracker.getEliteMobEntity(body) } returns boss
+            every { EntityTracker.getEliteMobEntities() } returns hashMapOf(body.uniqueId to boss)
+            // Keep literal lookup arguments: the harness constructor-mocks WorldMock.
+            every { EMPackage.getContent("em_primis") } returns content
+            every { EMPackage.getEmPackages() } returns mapOf("primis_adventure.yml" to content)
+            block(h, body, player, boss)
+        } finally {
+            unmockkStatic(EntityTracker::class, EMPackage::class)
+        }
+    }
+}
 
 private fun readyDungeonBoss(boss: CustomBossEntity, body: Mob) {
     val fields = mockk<CustomBossesConfigFields>()

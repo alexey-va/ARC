@@ -11,6 +11,9 @@ import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.event.entity.EntityDeathEvent
+import org.bukkit.event.entity.EntityDamageByEntityEvent
+import org.bukkit.event.entity.EntityDamageEvent
+import org.bukkit.event.entity.EntityShootBowEvent
 import org.bukkit.event.entity.EntityTransformEvent
 import org.bukkit.event.entity.ItemSpawnEvent
 import org.bukkit.event.world.EntitiesLoadEvent
@@ -23,7 +26,7 @@ import ru.arc.paper.particle.PaperViewerParticles
 import java.util.UUID
 import java.util.concurrent.ThreadLocalRandom
 
-/** A bounded extra attack for native EliteMobs dungeon actors; native AI owns every target. */
+/** Ranged staff combat for native dungeon actors; EliteMobs still owns aggro and dungeon membership. */
 internal class StaffMobCasters(
     private val config: StaffSpellConfig,
     private val settings: StaffMobCasterSettings,
@@ -31,18 +34,20 @@ internal class StaffMobCasters(
     particles: PaperViewerParticles,
 ) : Listener, AutoCloseable {
     private class Caster(val actor: StaffDungeonMob, val spell: StaffSpell,
-        val equipmentVisual: StaffMobEquipmentVisuals?, var readyAt: Long) {
+        val equipmentVisual: StaffMobEquipmentVisuals?, val behavior: StaffMobMageBehavior?, var readyAt: Long) {
         val mob get() = actor.body
         var cast: Cast? = null
     }
 
-    private class Cast(val targetId: UUID, val aim: Location, var position: Location,
+    private class Cast(val targetId: UUID, var aim: Location, var position: Location,
         var direction: Vector, var visualId: UUID, val preparationTicks: Int) {
         var age = 0
         var flying = false
         var travelled = 0.0
         var length = 0.0
         var trail = position.clone()
+        var targetPosition: Location? = null
+        val targetMovement = Vector()
     }
 
     private val tasks = LifecycleTaskScope()
@@ -77,11 +82,24 @@ internal class StaffMobCasters(
             ThreadLocalRandom.current().nextDouble(100.0) >= settings.spawnChancePercent) return
         staffDungeonBoundary(Unit) {
             val spell = SPELLS.random()
-            val equipment = if (mob.type in STAFF_HOLDING_MOB_TYPES)
-                StaffMobEquipmentVisuals(mob, config.mobItem(spell), effects) else null
-            val caster = Caster(actor, spell, equipment, clock + 20)
-            if (updateEquipment(caster)) casters[mob.uniqueId] = caster
-            else staffDungeonBoundary(Unit) { equipment?.close() }
+            val preferred = settings.preferredDistance.coerceAtMost(settings.range - 1.0)
+            val behavior = actor.claimMageBehavior(preferred, settings.distanceTolerance.coerceAtMost(preferred / 2.0))
+            var equipment: StaffMobEquipmentVisuals? = null
+            var admitted = false
+            try {
+                equipment = if (mob.type in STAFF_HOLDING_MOB_TYPES)
+                    StaffMobEquipmentVisuals(mob, config.mobItem(spell)) else null
+                val caster = Caster(actor, spell, equipment, behavior, clock + 20)
+                if (updateEquipment(caster)) {
+                    casters[mob.uniqueId] = caster
+                    admitted = true
+                }
+            } finally {
+                if (!admitted) {
+                    staffDungeonBoundary(Unit) { equipment?.close() }
+                    staffDungeonBoundary(Unit) { behavior?.close() }
+                }
+            }
         }
     }
 
@@ -102,11 +120,19 @@ internal class StaffMobCasters(
                 forget(mob.uniqueId)
                 return@forEach
             }
+            val nativeTarget = staffDungeonBoundary<Player?>(null) { caster.actor.currentTarget() }
+                ?.takeIf { staffMobTargetAllowed(caster.actor, it, settings.range) }
+            if (!staffDungeonBoundary(false) {
+                caster.behavior?.tick(nativeTarget, caster.cast?.flying == false)
+                true
+            }) {
+                forget(mob.uniqueId)
+                return@forEach
+            }
             val cast = caster.cast
             if (cast == null) {
                 if (clock < caster.readyAt || casters.values.count { it.cast != null } >= MAX_ACTIVE_CASTS) return@forEach
-                val target = staffDungeonBoundary<Player?>(null) { caster.actor.currentTarget() } ?: return@forEach
-                if (staffMobTargetAllowed(caster.actor, target, settings.range)) begin(caster, target)
+                if (nativeTarget != null) begin(caster, nativeTarget)
             } else {
                 val target = Bukkit.getPlayer(cast.targetId)
                 if (target == null || !staffMobTargetAllowed(caster.actor, target, settings.range) ||
@@ -148,7 +174,10 @@ internal class StaffMobCasters(
         caster.readyAt = clock + 20 // Back off when the shared renderer has no spare capacity.
         if (id == null || !effects.isActive(id)) return
         if (!effects.hasAudience(id, target.uniqueId)) { effects.remove(id); return }
-        caster.cast = Cast(target.uniqueId, aim.clone(), muzzle, direction, id, preparation)
+        caster.cast = Cast(target.uniqueId, aim.clone(), muzzle, direction, id, preparation).also {
+            it.targetPosition = target.location
+        }
+        staffDungeonBoundary(Unit) { caster.behavior?.tick(target, true) }
         visuals.withOwner(mob.uniqueId) {
             visuals.cue(muzzle, Sound.ENTITY_EVOKER_PREPARE_ATTACK, .5f, 1.3f)
             if (caster.spell == StaffSpell.MARK) {
@@ -160,6 +189,23 @@ internal class StaffMobCasters(
 
     private fun prepare(caster: Caster, cast: Cast, target: Player) {
         val mob = caster.mob
+        if (caster.spell != StaffSpell.MARK &&
+            cast.age <= cast.preparationTicks - settings.aimLockTicks.coerceAtMost(cast.preparationTicks / 2)) {
+            val bodyPoint = staffVisibleTargetPoint(mob.eyeLocation, target)
+                ?: run { cancelCast(caster); return }
+            val position = target.location
+            val movement = cast.targetPosition?.let { position.toVector().subtract(it.toVector()) } ?: Vector()
+            cast.targetPosition = position
+            if (movement.lengthSquared().isFinite() && movement.lengthSquared() <= 1.0) {
+                cast.targetMovement.multiply(.5).add(movement.multiply(.5))
+            } else cast.targetMovement.zero()
+            val toBody = bodyPoint.toVector().subtract(mob.eyeLocation.toVector())
+            val origin = if (toBody.lengthSquared() > .01) muzzle(mob, toBody.normalize()) else mob.eyeLocation
+            val predicted = staffMobPredictedAim(caster.spell, origin, bodyPoint,
+                cast.targetMovement, settings.range, settings.maxAimLeadTicks, cast.preparationTicks - cast.age)
+            // Prediction never grants sight through cover; fall back to the currently visible body.
+            cast.aim = if (visible(mob.eyeLocation, predicted)) predicted else bodyPoint
+        }
         val progress = (cast.age.toDouble() / cast.preparationTicks).coerceIn(0.0, 1.0)
         val direction = cast.aim.toVector().subtract(mob.eyeLocation.toVector())
         if (direction.lengthSquared() < .01) { cancelCast(caster); return }
@@ -290,8 +336,9 @@ internal class StaffMobCasters(
 
     private fun forget(id: UUID) {
         val caster = casters.remove(id) ?: return
-        cancelCast(caster)
+        staffDungeonBoundary(Unit) { cancelCast(caster) }
         staffDungeonBoundary(Unit) { caster.equipmentVisual?.close() }
+        staffDungeonBoundary(Unit) { caster.behavior?.close() }
     }
 
     private fun inWorld(mob: Mob) = settings.allowedWorlds.isEmpty() || mob.world.name in settings.allowedWorlds
@@ -301,6 +348,20 @@ internal class StaffMobCasters(
         val from = target.location.add(0.0, .8, 0.0)
         val ray = staffBlockHit(from, Vector(0.0, -1.0, 0.0), 3.0)
         return if (ray.pathLoaded) ray.hit?.hitPosition?.toLocation(from.world)?.add(0.0, .06, 0.0) else null
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    fun onNativeMelee(event: EntityDamageByEntityEvent) {
+        if (event.cause != EntityDamageEvent.DamageCause.ENTITY_ATTACK &&
+            event.cause != EntityDamageEvent.DamageCause.ENTITY_SWEEP_ATTACK) return
+        val caster = casters[event.damager.uniqueId] ?: return
+        if (staffMobOwnerAllowed(caster.actor)) event.isCancelled = true
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    fun onNativeBow(event: EntityShootBowEvent) {
+        val caster = casters[event.entity.uniqueId] ?: return
+        if (staffMobOwnerAllowed(caster.actor)) event.isCancelled = true
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)

@@ -13,6 +13,12 @@ internal interface StaffDungeonMob {
     fun currentTarget(): Player?
     fun permitsTarget(player: Player): Boolean
     fun damage(player: Player, multiplier: Double): Boolean
+    fun claimMageBehavior(preferredDistance: Double = 8.0, distanceTolerance: Double = 2.0): StaffMobMageBehavior? = null
+}
+
+/** A reversible movement lease; native target selection and scripted powers remain authoritative. */
+internal interface StaffMobMageBehavior : AutoCloseable {
+    fun tick(target: Player?, casting: Boolean)
 }
 
 private val mobStaffBridgeFailure = AtomicBoolean()

@@ -358,7 +358,7 @@ artifact delivery, runtime activation or in-client review.
 
 ## EliteMobs dungeon staff mages
 
-`dungeon-casters` in `modules/staff-spells.yml` adds staff attacks only to
+`dungeon-casters` in `modules/staff-spells.yml` enables ranged staff combat only for
 verified EliteMobs dungeon actors. Natural-world mobs are never enrolled.
 Instanced actors must belong to the actual live dungeon instance; regional
 actors must belong to an enabled open-dungeon package. A matching world name
@@ -389,12 +389,35 @@ ticks; Mark always warns for at least 32 ticks. Range defaults to 16 blocks,
 the mage cap to 32 per server and simultaneous attacks to eight. Empty `worlds`
 adds no world restriction; an explicit list remains an additional filter.
 
-Only the default humanoid species display the packet-only cosmetic staff.
+Grounded and amphibious mages hold a firing position at the configured preferred
+distance, retreat below the lower edge and resume native pursuit above the upper
+edge. `combat.preferred-distance-blocks` defaults to 8 and
+`combat.distance-tolerance-blocks` to 2, giving a 6–10 block band. Preparation
+holds position. The movement owner preserves native aggro, scripted powers and
+leash returns; cleanup removes only its transient speed modifier, flee lease and
+Paper movement goal. Existing actors are adopted after a 100-tick observation
+period for already-running native returns; new spawns retain two-tick enrollment.
+Other explicitly whitelisted locomotion profiles retain
+their native movement and can still cast. Ordinary contact attacks and bow shots
+are cancelled only while the actor is enrolled as a mage; native magical damage
+and other mobs retain their normal damage path.
+
+Projectile casters follow the visible target during preparation, then lock the
+heading for `aim.lock-before-release-ticks` (default 4). Observed horizontal motion
+provides up to `aim.max-lead-ticks` of prediction (default 12), capped at three
+blocks. Teleports and invalid samples receive no lead. Projectiles do not home
+after release; Mark keeps its fixed visible ground warning. Prediction never
+grants sight through cover or enlarges the hitbox.
+
+Only the default humanoid species display the packet-only staff in their native
+main-hand slot. Equipment updates and re-tracking preserve that appearance;
+cleanup restores the current native item for viewers. No separate item display
+follows the mob.
 Other whitelisted species, including wolves, retain spell preparation and
 effects without a staff model. Server-side hands, original
-weapons, attributes, loot and XP remain under EliteMobs. Before/after currency,
+weapons, loot and XP remain under EliteMobs. Before/after currency,
 item and XP rewards are unchanged, with zero additional obtainable staffs.
-Reload/unload/death remove only owned visuals and attacks. The old
+Reload/unload/death release owned hand overrides, movement and attacks. The old
 `mob-casters` section is retired; `mob-casters.enabled: false` safely disables
 older natural-world binaries while the replacement JAR awaits activation.
 Its disabled flag does not disable the new `dungeon-casters` settings.
