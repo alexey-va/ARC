@@ -356,31 +356,37 @@ establish ordinary-client visual or audio acceptance.
 This document describes the source contract; it does not certify a build,
 artifact delivery, runtime activation or in-client review.
 
-## Natural staff mages
+## EliteMobs dungeon staff mages
 
-`mob-casters` in `modules/staff-spells.yml` controls rare adult zombies, husks
-and drowned spawned naturally with empty hands. The default conversion chance
-is **3% of eligible spawns**. Named mobs, NPCs, EliteMobs actors and other
-plugin-owned/custom mobs are excluded. Existing weapons are never replaced.
-The four possible staffs use Ember, Icicle, Lance or a fixed Mark. Mages attack
-only their native AI's current player target, with a visible warning and a
-fixed aim that can be dodged. Cover, target changes and invalid combat state
-cancel attacks; native damage events keep protection plugins authoritative.
+`dungeon-casters` in `modules/staff-spells.yml` adds staff attacks only to
+verified EliteMobs dungeon actors. Natural-world mobs are never enrolled.
+Instanced actors must belong to the actual live dungeon instance; regional
+actors must belong to an enabled open-dungeon package. A matching world name
+alone does not authorize a mob. Named and armed dungeon actors are eligible;
+NPCs and actors outside these native dungeon relationships are excluded.
 
-Set `mob-casters.spawn-chance-percent` to any value from 0 to 100.
-`mob-casters.difficulty` accepts 0.25–4. At 1, a hit deals 4 HP before native
-mitigation, recovery is 100 ticks (5 seconds) and the warning is 24 ticks
-(1.2 seconds). Damage scales linearly with difficulty; recovery and warning
-divide by its square root, with minima of 40 and 12 ticks. Mark always warns
-for at least 32 ticks. Range defaults to 16 blocks; the active mage limit is
-32 per server. Empty `worlds` enables all worlds; an explicit list limits it.
+The default chance is **50% of eligible dungeon actors**. Ember, Icicle, Lance
+and a fixed Mark retain their visible preparation and dodgeable aim. The
+current target comes from native EliteMobs AI; an instanced target must be an
+active participant of the same run. Changed targets, cover, an expired run or
+lost visual admission cancel the attack. EliteMobs retains its damage formula,
+native protection and cancellable damage events.
 
-`/arc reload` replaces the settings and cancels the previous generation's
-attacks. Existing mages return to ordinary mobs on reload or chunk unload;
-new natural spawns use the new values. The held staff is cosmetic, carries no
-usable player-staff identity and never becomes loot. Original equipment,
-ordinary drops, XP and economic rewards are preserved: before/after currency
-and item rewards are unchanged, with zero additional obtainable staffs.
+`dungeon-casters.spawn-chance-percent` accepts 0–100;
+`dungeon-casters.difficulty` accepts 0.25–4 and multiplies native EliteMobs
+damage. At 1, recovery is 100 ticks and warning is 24 ticks. Recovery and
+warning divide by the square root of difficulty, with minima of 40 and 12
+ticks; Mark always warns for at least 32 ticks. Range defaults to 16 blocks,
+the mage cap to 32 per server and simultaneous attacks to eight. Empty `worlds`
+adds no world restriction; an explicit list remains an additional filter.
+
+The displayed staff is a packet-only cosmetic. Server-side hands, original
+weapons, attributes, loot and XP remain under EliteMobs. Before/after currency,
+item and XP rewards are unchanged, with zero additional obtainable staffs.
+Reload/unload/death remove only owned visuals and attacks. The old
+`mob-casters` section is retired; `mob-casters.enabled: false` safely disables
+older natural-world binaries while the replacement JAR awaits activation.
+Its disabled flag does not disable the new `dungeon-casters` settings.
 
 ## Collision-safe scenery
 

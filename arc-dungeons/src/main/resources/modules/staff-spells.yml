@@ -14,19 +14,23 @@ targeting:
     strength: 0.70
     excluded-spells: []
 max-area-targets: 8
-# Rare natural adult zombies/husks/drowned with empty hands become staff mages.
-# /arc reload applies changes; existing mages return to ordinary mobs on reload/unload.
-mob-casters:
+# Only verified EliteMobs dungeon actors receive these additional attacks.
+# Natural-world mobs, NPCs and other plugins' actors are never enrolled.
+# /arc reload applies changes and removes the previous generation's cosmetic staffs.
+dungeon-casters:
   enabled: true
-  # Percent of eligible natural spawns; 0 disables new mages, 100 converts all eligible spawns.
-  spawn-chance-percent: 3.0
-  # 0.25..4: damage = 4 HP * difficulty; recovery/warning time divide by sqrt(difficulty).
-  # Difficulty 1: 4 HP, 5 s recovery, 1.2 s warning (mark >= 1.6 s).
+  # Percent of eligible EliteMobs dungeon actors; 0 disables additional mage attacks.
+  spawn-chance-percent: 50.0
+  # 0.25..4: multiplier over native EliteMobs damage; timing divides by sqrt(difficulty).
+  # Difficulty 1: native EM damage, 5 s recovery, 1.2 s warning (mark >= 1.6 s).
   difficulty: 1.0
   range-blocks: 16.0
   max-casters: 32
-  # Empty means all worlds. Named/custom/EliteMobs mobs and their equipment stay under their owner.
+  # Optional additional world filter; an empty list allows every verified dungeon.
   worlds: []
+# Compatibility fence for older JARs: natural-world enrollment is retired.
+mob-casters:
+  enabled: false
 # Visual-only missing blocks and flying debris; [] disables, ['*'] allows every world on this server.
 scenery:
   worlds: []

@@ -1,56 +1,57 @@
 package ru.arc.staffspells
 
-import com.magmaguy.elitemobs.entitytracker.EntityTracker
-import org.bukkit.Bukkit
 import org.bukkit.GameMode
-import org.bukkit.damage.DamageSource
-import org.bukkit.damage.DamageType
 import org.bukkit.entity.Mob
 import org.bukkit.entity.Player
 import ru.arc.logging.ArcLogging
 import java.util.concurrent.atomic.AtomicBoolean
 
+/** A captured native dungeon actor; the optional integration owns membership, AI and damage. */
+internal interface StaffDungeonMob {
+    val body: Mob
+    fun isCurrent(): Boolean
+    fun currentTarget(): Player?
+    fun permitsTarget(player: Player): Boolean
+    fun damage(player: Player, multiplier: Double): Boolean
+}
+
 private val mobStaffBridgeFailure = AtomicBoolean()
 
-/** Never take over another plugin's actor or a player-customized mob. */
-internal fun staffMobOwnerAllowed(mob: Mob): Boolean {
-    if (!mob.isValid || mob.isDead || !mob.hasAI() || mob.customName() != null ||
-        mob.hasMetadata("NPC") || mob.hasMetadata("Elitemob") || mob.hasMetadata("Elitemobs_NPC") ||
-        mob.scoreboardTags.isNotEmpty() || mob.persistentDataContainer.keys.any {
-            it.namespace != "minecraft" && it.toString() != "arc:cleanup_source"
-        }) return false
-    if (!Bukkit.getPluginManager().isPluginEnabled("EliteMobs")) return true
-    return try {
-        !EntityTracker.isEliteMob(mob)
-    } catch (failure: RuntimeException) {
-        logMobStaffBridgeFailure(failure)
-        false
-    } catch (failure: LinkageError) {
-        logMobStaffBridgeFailure(failure)
-        false
-    }
+internal fun <T> staffDungeonBoundary(fallback: T, action: () -> T): T = try {
+    action()
+} catch (failure: RuntimeException) {
+    logMobStaffBridgeFailure(failure)
+    fallback
+} catch (failure: ReflectiveOperationException) {
+    logMobStaffBridgeFailure(failure)
+    fallback
+} catch (failure: LinkageError) {
+    logMobStaffBridgeFailure(failure)
+    fallback
 }
 
 private fun logMobStaffBridgeFailure(failure: Throwable) {
     if (mobStaffBridgeFailure.compareAndSet(false, true))
-        ArcLogging.error("Staff mob rejected: EliteMobs actor lookup failed; verify the pinned EliteMobs API", failure)
+        ArcLogging.error("Dungeon staff actor rejected: native EliteMobs integration failed", failure)
+}
+
+internal fun staffMobOwnerAllowed(actor: StaffDungeonMob): Boolean = staffDungeonBoundary(false) {
+    val mob = actor.body
+    mob.isValid && !mob.isDead && !mob.hasMetadata("NPC") && !mob.hasMetadata("Elitemobs_NPC") && actor.isCurrent()
 }
 
 /** Revalidated during windup, flight and at the native damage boundary. */
-internal fun staffMobTargetAllowed(mob: Mob, target: Player, range: Double): Boolean {
-    if (!range.isFinite() || range <= 0.0 || !staffMobOwnerAllowed(mob) ||
-        mob.target?.uniqueId != target.uniqueId || !target.isOnline || !target.isValid ||
-        target.isDead || target.isInvulnerable || target.hasMetadata("NPC") ||
-        target.gameMode !in setOf(GameMode.SURVIVAL, GameMode.ADVENTURE) ||
-        mob.world != target.world || StaffSpellsModule.mobTargetProtected(target)) return false
-    return mob.location.distanceSquared(target.location) <= range * range && visible(mob.eyeLocation, target)
+internal fun staffMobTargetAllowed(actor: StaffDungeonMob, target: Player, range: Double): Boolean = staffDungeonBoundary(false) {
+    val mob = actor.body
+    range.isFinite() && range > 0.0 && staffMobOwnerAllowed(actor) &&
+        actor.currentTarget()?.uniqueId == target.uniqueId && target.isOnline && target.isValid &&
+        !target.isDead && !target.isInvulnerable && !target.hasMetadata("NPC") &&
+        target.gameMode in setOf(GameMode.SURVIVAL, GameMode.ADVENTURE) &&
+        mob.world == target.world && !StaffSpellsModule.mobTargetProtected(target) &&
+        actor.permitsTarget(target) && mob.location.distanceSquared(target.location) <= range * range && visible(mob.eyeLocation, target)
 }
 
-/** Ordinary native damage events retain region/other plugin cancellation and mob attribution. */
-internal fun staffMobHit(mob: Mob, target: Player, damage: Double): Boolean {
-    if (!damage.isFinite() || damage <= 0.0 || !staffMobTargetAllowed(mob, target, 32.0)) return false
-    val before = target.health + target.absorptionAmount
-    target.damage(damage, DamageSource.builder(DamageType.MAGIC)
-        .withDirectEntity(mob).withCausingEntity(mob).build())
-    return before - target.health - target.absorptionAmount > 1.0e-6
+/** EliteMobs owns scaling, defenses and the cancellable native damage pipeline. */
+internal fun staffMobHit(actor: StaffDungeonMob, target: Player, multiplier: Double): Boolean = staffDungeonBoundary(false) {
+    multiplier.isFinite() && multiplier > 0.0 && staffMobTargetAllowed(actor, target, 32.0) && actor.damage(target, multiplier)
 }

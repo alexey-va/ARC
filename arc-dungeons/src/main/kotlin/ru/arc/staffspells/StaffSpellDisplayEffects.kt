@@ -7,11 +7,13 @@ import org.bukkit.block.data.BlockData
 import org.bukkit.entity.Display
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Player
+import org.bukkit.inventory.ItemStack
 import org.bukkit.util.Transformation
 import org.joml.Quaternionf
 import org.joml.Vector3f
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.paper.display.PacketBlockDisplay
+import ru.arc.paper.display.PacketItemDisplay
 import ru.arc.paper.display.PaperPacketDisplays
 import java.util.UUID
 
@@ -63,6 +65,12 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
     private val scenes = linkedMapOf<UUID, Scene>()
     private val blocks = mutableMapOf<Material, BlockData>()
     private var closed = false
+
+    /** The bounded dungeon caster owner retains and removes this cosmetic handle. */
+    fun createMobStaff(item: ItemStack, at: Location): PacketItemDisplay {
+        check(!closed) { "Staff display owner is closed" }
+        return displays.spawnItem(at, item)
+    }
 
     private var visibilityTick = 0
     init { tasks.runTimer(1, 1) {

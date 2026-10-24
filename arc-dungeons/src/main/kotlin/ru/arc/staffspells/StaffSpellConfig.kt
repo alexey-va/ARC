@@ -82,13 +82,12 @@ internal data class StaffSpellTuning(val power: Double, val vanillaDamage: Doubl
 /** One difficulty dial scales combat; the warning always leaves time to dodge. */
 internal data class StaffMobCasterSettings(
     val enabled: Boolean = true,
-    val spawnChancePercent: Double = 3.0,
+    val spawnChancePercent: Double = 50.0,
     val difficulty: Double = 1.0,
     val range: Double = 16.0,
     val maxCasters: Int = 32,
     val allowedWorlds: Set<String> = emptySet(),
 ) {
-    val damage get() = 4.0 * difficulty
     val recoveryTicks get() = (100 / sqrt(difficulty)).roundToInt().coerceAtLeast(40)
     val telegraphTicks get() = (24 / sqrt(difficulty)).roundToInt().coerceAtLeast(12)
     val markTelegraphTicks get() = maxOf(32, telegraphTicks)
@@ -203,12 +202,12 @@ internal data class StaffSpellHudPositionSettings(
 
 internal open class StaffSpellConfig(private val config: Config) {
     val mobCasters get() = StaffMobCasterSettings(
-        enabled = config.bool("mob-casters.enabled", true),
-        spawnChancePercent = number("mob-casters.spawn-chance-percent", 3.0, 0.0..100.0),
-        difficulty = number("mob-casters.difficulty", 1.0, 0.25..4.0),
-        range = number("mob-casters.range-blocks", 16.0, 4.0..32.0),
-        maxCasters = config.integer("mob-casters.max-casters", 32).coerceIn(1, 64),
-        allowedWorlds = config.stringList("mob-casters.worlds").toSet(),
+        enabled = config.bool("dungeon-casters.enabled", true),
+        spawnChancePercent = number("dungeon-casters.spawn-chance-percent", 50.0, 0.0..100.0),
+        difficulty = number("dungeon-casters.difficulty", 1.0, 0.25..4.0),
+        range = number("dungeon-casters.range-blocks", 16.0, 4.0..32.0),
+        maxCasters = config.integer("dungeon-casters.max-casters", 32).coerceIn(1, 32),
+        allowedWorlds = config.stringList("dungeon-casters.worlds").toSet(),
     )
 
     /** Camera-plane placement is read from this config generation and validated before use. */

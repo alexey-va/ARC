@@ -5,16 +5,12 @@ import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.Sound
-import org.bukkit.entity.EntityType
 import org.bukkit.entity.Mob
 import org.bukkit.entity.Player
-import org.bukkit.entity.Zombie
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
-import org.bukkit.event.entity.CreatureSpawnEvent
 import org.bukkit.event.entity.EntityDeathEvent
-import org.bukkit.event.entity.EntityPickupItemEvent
 import org.bukkit.event.entity.EntityTransformEvent
 import org.bukkit.event.entity.ItemSpawnEvent
 import org.bukkit.event.world.EntitiesLoadEvent
@@ -27,14 +23,16 @@ import ru.arc.paper.particle.PaperViewerParticles
 import java.util.UUID
 import java.util.concurrent.ThreadLocalRandom
 
-/** A bounded extra attack for ordinary natural mobs; native AI remains the sole target owner. */
+/** A bounded extra attack for native EliteMobs dungeon actors; native AI owns every target. */
 internal class StaffMobCasters(
     private val config: StaffSpellConfig,
     private val settings: StaffMobCasterSettings,
     private val effects: StaffSpellDisplayEffects,
     particles: PaperViewerParticles,
 ) : Listener, AutoCloseable {
-    private class Caster(val mob: Mob, val spell: StaffSpell, val item: ItemStack, var readyAt: Long) {
+    private class Caster(val actor: StaffDungeonMob, val spell: StaffSpell,
+        val equipmentVisual: StaffMobEquipmentVisuals, var readyAt: Long) {
+        val mob get() = actor.body
         var cast: Cast? = null
     }
 
@@ -51,7 +49,7 @@ internal class StaffMobCasters(
     // The parent owns the particle transport; this owner contributes only cancellable visual phases.
     private val visuals = StaffSpellVisuals(tasks, particles)
     private val casters = linkedMapOf<UUID, Caster>()
-    private val pending = linkedMapOf<UUID, Mob>()
+    private var dungeonBridge: AutoCloseable? = null
     private var clock = 0L
     private var started = false
     private var closed = false
@@ -59,27 +57,37 @@ internal class StaffMobCasters(
     fun start() {
         check(!started && !closed) { "Mob staff controller already started or closed" }
         started = true
-        if (settings.enabled) tasks.runTimer(1, 1) { tick() }
+        if (!settings.enabled) return
+        tasks.runTimer(1, 1) { tick() }
+        val plugin = Bukkit.getPluginManager().getPlugin("EliteMobs")?.takeIf { it.isEnabled } ?: return
+        dungeonBridge = staffDungeonBoundary<AutoCloseable?>(null) {
+            Class.forName("com.magmaguy.elitemobs.api.EliteMobSpawnEvent", false, plugin.javaClass.classLoader)
+            StaffDungeonMobBridge(::enrollFromDungeon).also { bridge ->
+                try { bridge.start() } catch (failure: RuntimeException) { bridge.close(); throw failure }
+                catch (failure: LinkageError) { bridge.close(); throw failure }
+            }
+        }
     }
 
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    fun onSpawn(event: CreatureSpawnEvent) {
+    internal fun enrollFromDungeon(actor: StaffDungeonMob) {
+        val mob = actor.body
         if (closed || !settings.enabled || settings.spawnChancePercent <= 0.0 ||
-            event.spawnReason !in SPAWN_REASONS || event.entityType !in TYPES ||
-            casters.size + pending.size >= settings.maxCasters) return
-        val mob = event.entity as? Zombie ?: return
-        if (mob.isBaby || !inWorld(mob) || !emptyHands(mob) ||
+            casters.size >= settings.maxCasters.coerceAtMost(32) || mob.uniqueId in casters ||
+            !inWorld(mob) || !staffMobOwnerAllowed(actor) ||
             ThreadLocalRandom.current().nextDouble(100.0) >= settings.spawnChancePercent) return
-        pending[mob.uniqueId] = mob
-        // Let native/EliteMobs spawn listeners establish their final ownership and equipment first.
-        tasks.runLater(2) {
-            if (pending.remove(mob.uniqueId) !== mob || closed || event.isCancelled || casters.size >= settings.maxCasters ||
-                mob.isBaby || !inWorld(mob) || !emptyHands(mob) || !staffMobOwnerAllowed(mob)) return@runLater
+        staffDungeonBoundary(Unit) {
             val spell = SPELLS.random()
-            val item = config.mobItem(spell)
-            mob.equipment.setItemInMainHand(item)
-            casters[mob.uniqueId] = Caster(mob, spell, item.clone(), clock + 20)
+            val equipment = StaffMobEquipmentVisuals(mob, config.mobItem(spell), effects)
+            val caster = Caster(actor, spell, equipment, clock + 20)
+            if (updateEquipment(caster)) casters[mob.uniqueId] = caster
+            else staffDungeonBoundary(Unit) { equipment.close() }
         }
+    }
+
+    private fun updateEquipment(caster: Caster): Boolean = staffDungeonBoundary(false) {
+        if (!caster.equipmentVisual.isValid) return@staffDungeonBoundary false
+        caster.equipmentVisual.update(caster.mob, caster.actor.currentTarget())
+        true
     }
 
     private fun tick() {
@@ -87,18 +95,19 @@ internal class StaffMobCasters(
         clock++
         casters.values.toList().forEach { caster ->
             val mob = caster.mob
-            if (!staffMobOwnerAllowed(mob) || !inWorld(mob) || !ownsHand(caster)) {
+            if (!staffMobOwnerAllowed(caster.actor) || !inWorld(mob) ||
+                (clock % 2 == 0L && !updateEquipment(caster))) {
                 forget(mob.uniqueId)
                 return@forEach
             }
             val cast = caster.cast
             if (cast == null) {
                 if (clock < caster.readyAt || casters.values.count { it.cast != null } >= MAX_ACTIVE_CASTS) return@forEach
-                val target = mob.target as? Player ?: return@forEach
-                if (staffMobTargetAllowed(mob, target, settings.range)) begin(caster, target)
+                val target = staffDungeonBoundary<Player?>(null) { caster.actor.currentTarget() } ?: return@forEach
+                if (staffMobTargetAllowed(caster.actor, target, settings.range)) begin(caster, target)
             } else {
                 val target = Bukkit.getPlayer(cast.targetId)
-                if (target == null || !staffMobTargetAllowed(mob, target, settings.range) ||
+                if (target == null || !staffMobTargetAllowed(caster.actor, target, settings.range) ||
                     !effects.isActive(cast.visualId) || !effects.hasAudience(cast.visualId, cast.targetId)) {
                     cancelCast(caster)
                     return@forEach
@@ -254,7 +263,7 @@ internal class StaffMobCasters(
         }
         caster.cast = null
         caster.readyAt = clock + settings.recoveryTicks
-        if (hit && staffMobTargetAllowed(caster.mob, target, settings.range)) staffMobHit(caster.mob, target, settings.damage)
+        if (hit && staffMobTargetAllowed(caster.actor, target, settings.range)) staffMobHit(caster.actor, target, settings.difficulty)
         // A native damage listener may remove the actor or reload the entire module.
         if (closed || casters[caster.mob.uniqueId] !== caster) return
         if (caster.spell == StaffSpell.LANCE) {
@@ -278,18 +287,12 @@ internal class StaffMobCasters(
     }
 
     private fun forget(id: UUID) {
-        pending.remove(id)
         val caster = casters.remove(id) ?: return
         cancelCast(caster)
-        if (ownsHand(caster)) caster.mob.equipment?.setItemInMainHand(ItemStack(Material.AIR))
+        staffDungeonBoundary(Unit) { caster.equipmentVisual.close() }
     }
 
-    private fun ownsHand(caster: Caster) = caster.mob.equipment?.itemInMainHand?.let {
-        it.amount == 1 && it.isSimilar(caster.item)
-    } == true
-
     private fun inWorld(mob: Mob) = settings.allowedWorlds.isEmpty() || mob.world.name in settings.allowedWorlds
-    private fun emptyHands(mob: Mob) = mob.equipment?.let { it.itemInMainHand.type.isAir && it.itemInOffHand.type.isAir } == true
     private fun muzzle(mob: Mob, direction: Vector) = mob.eyeLocation.add(0.0, -.12, 0.0).add(direction.clone().multiply(.75))
 
     private fun groundAt(target: Player): Location? {
@@ -309,9 +312,6 @@ internal class StaffMobCasters(
         if (isStaff(event.entity.itemStack)) event.isCancelled = true
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    fun onPickup(event: EntityPickupItemEvent) = forget(event.entity.uniqueId)
-
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onTransform(event: EntityTransformEvent) {
         forget(event.entity.uniqueId)
@@ -329,16 +329,14 @@ internal class StaffMobCasters(
     override fun close() {
         if (closed) return
         closed = true
+        dungeonBridge?.close()
+        dungeonBridge = null
         tasks.close()
-        pending.clear()
         casters.keys.toList().forEach(::forget)
     }
 
     internal companion object {
         val staffKey = NamespacedKey("arc", "mob_staff")
-        private val TYPES = setOf(EntityType.ZOMBIE, EntityType.HUSK, EntityType.DROWNED)
-        @Suppress("DEPRECATION")
-        private val SPAWN_REASONS = setOf(CreatureSpawnEvent.SpawnReason.NATURAL, CreatureSpawnEvent.SpawnReason.CHUNK_GEN)
         private val SPELLS = listOf(StaffSpell.EMBER, StaffSpell.ICICLE, StaffSpell.LANCE, StaffSpell.MARK)
         private const val MAX_ACTIVE_CASTS = 8
         private const val MARK_RADIUS = 1.6
