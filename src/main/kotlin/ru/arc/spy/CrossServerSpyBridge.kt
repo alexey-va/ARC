@@ -2,12 +2,15 @@ package ru.arc.spy
 
 import io.papermc.paper.event.player.AsyncChatEvent
 import org.bukkit.Bukkit
+import org.bukkit.command.FormattedCommandAlias
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
 import org.bukkit.event.player.PlayerCommandPreprocessEvent
+import org.bukkit.event.server.ServerCommandEvent
+import org.bukkit.event.server.RemoteServerCommandEvent
 import org.bukkit.plugin.Plugin
 import ru.arc.chat.ChatMode
 import ru.arc.chat.ChatModeService
@@ -58,14 +61,8 @@ class CrossServerSpyBridge(
         val command = SpyRelayCodec.sanitizeContent(event.message, settings.maxContentLength)
         if (command.isEmpty()) return
 
-        val blacklist = cmi.commandBlacklist()
         if (
-            SpyRelayPolicy.shouldPublishCommand(
-                command = command,
-                senderHidden = cmi.senderHidesCommandSpy(event.player),
-                cmiBlacklisted = blacklist,
-                sensitiveCommands = settings.sensitiveCommands,
-            )
+            !cmi.senderHidesCommandSpy(event.player) && commandAllowed(command)
         ) {
             publish(
                 SpyRelayMessage(
@@ -103,6 +100,48 @@ class CrossServerSpyBridge(
                 createdAt = now(),
             ),
         )
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onConsoleCommand(event: ServerCommandEvent) {
+        if (event is RemoteServerCommandEvent || event.isCancelled) return
+        publishConsoleCommand(UUID.randomUUID(), "CONSOLE", event.command)
+    }
+
+    // RCON owns a separate HandlerList, so the ordinary server-command listener is insufficient.
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onRemoteConsoleCommand(event: RemoteServerCommandEvent) {
+        if (event.isCancelled) return
+        publishConsoleCommand(UUID.randomUUID(), "CONSOLE", event.command)
+    }
+
+    /** Main-thread policy shared by native observations and the staff dispatch boundary. */
+    fun commandAllowed(command: String): Boolean {
+        check(Bukkit.isPrimaryThread()) { "Command policy must run on the Paper main thread" }
+        if (!active) return false
+        return runCatching {
+            val root = command.trim().removePrefix("/").substringBefore(' ').lowercase(Locale.ROOT)
+            val registered = Bukkit.getServer().commandMap.getCommand(root)
+            // commands.yml aliases can expand to multiple opaque commands; public API exposes no safe expansion.
+            if (registered is FormattedCommandAlias) return false
+            val canonical = registered?.let { it.name + command.trim().removePrefix("/").drop(root.length) } ?: command
+            val blacklist = cmi.commandBlacklist()
+            listOf(command, canonical).all {
+                SpyRelayPolicy.shouldPublishCommand(it, false, blacklist, settings.sensitiveCommands)
+            }
+        }.getOrElse {
+            log.warn("Command observation policy unavailable")
+            false
+        }
+    }
+
+    /** Called explicitly once for programmatic staff dispatch, which does not emit ServerCommandEvent. */
+    fun publishConsoleCommand(id: UUID, actor: String, command: String) {
+        if (!active || command.length !in 1..512 || command.any(StaffConsoleObservationCodec::unsafeLineCharacter)) return
+        if (!commandAllowed(command)) return
+        val payload = StaffConsoleObservationCodec.encode(StaffConsoleObservation(id, command, actor, now()))
+        runCatching { redis.publish(StaffConsoleObservationCodec.CHANNEL, payload) }
+            .onFailure { log.warn("Unable to publish staff console observation") }
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)

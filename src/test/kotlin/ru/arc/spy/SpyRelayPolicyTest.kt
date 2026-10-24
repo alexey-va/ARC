@@ -21,7 +21,11 @@ class SpyRelayPolicyTest : FreeSpec({
             sensitiveCommands = emptyList(),
         ) shouldBe false
 
-        listOf("/login secret", "/minecraft:register hunter2", "/cmi usermeta Alex token").forEach { command ->
+        listOf(
+            "/login secret", "/minecraft:register hunter2", "/cmi usermeta Alex token",
+            "/cmi:cmi cmi:login secret", "/cmi   register secret", "/usermeta Alex token",
+            "/minecraft:execute run list", "/cmi:cmi sudo Alex list", "/ex narrate hidden",
+        ).forEach { command ->
             SpyRelayPolicy.shouldPublishCommand(
                 command = command,
                 senderHidden = false,

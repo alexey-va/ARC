@@ -10,6 +10,13 @@ data class PrivateSpyMessage(
 )
 
 object SpyRelayPolicy {
+    // This floor cannot be removed by an operator-supplied observation blacklist.
+    val mandatorySensitiveCommands: Set<String> = CrossServerSpyConfig.DEFAULT_SENSITIVE_COMMANDS + setOf(
+        "auth", "authme", "limboauth", "nlogin", "resetpassword", "resetpass", "setpassword", "setpass",
+        "forcepassword", "forcelogin", "forceregister", "usermeta", "token", "secret", "apikey", "api-key",
+        "execute", "sudo", "runas", "eval", "dispatch", "script", "skript", "denizen", "ex", "exs",
+    )
+
     fun shouldPublishLocalChat(
         content: String,
         mode: ChatMode,
@@ -27,7 +34,7 @@ object SpyRelayPolicy {
     ): Boolean {
         if (senderHidden) return false
         val normalized = normalizeCommand(command) ?: return false
-        return (cmiBlacklisted + sensitiveCommands).none { matchesCommand(normalized, it) }
+        return (cmiBlacklisted + sensitiveCommands + mandatorySensitiveCommands).none { matchesCommand(normalized, it) }
     }
 
     fun commandVisibleToRestrictedViewer(command: String, commandList: Collection<String>): Boolean {
@@ -102,17 +109,21 @@ object SpyRelayPolicy {
     }
 
     internal fun normalizeCommand(raw: String): String? {
-        val normalized = raw.trim().removePrefix("/").lowercase(Locale.ROOT)
-        if (normalized.isEmpty() || normalized.any { it == '\n' || it == '\r' || it == '\u0000' }) return null
-        val firstSpace = normalized.indexOf(' ')
-        val root = if (firstSpace < 0) normalized else normalized.substring(0, firstSpace)
-        val suffix = if (firstSpace < 0) "" else normalized.substring(firstSpace)
-        return unnamespace(root) + suffix
+        if (raw.any { it == '\n' || it == '\r' || it == '\u0000' }) return null
+        val tokens = tokenize(raw.removePrefix("/").lowercase(Locale.ROOT)).toMutableList()
+        if (tokens.isEmpty()) return null
+        tokens[0] = unnamespace(tokens[0].removePrefix("/"))
+        if (tokens[0] == "cmi" && tokens.size > 1) tokens[1] = unnamespace(tokens[1].removePrefix("/"))
+        return tokens.joinToString(" ")
     }
 
     internal fun matchesCommand(normalizedCommand: String, configured: String): Boolean {
         val normalizedRule = normalizeCommand(configured) ?: return false
-        return normalizedCommand == normalizedRule || normalizedCommand.startsWith("$normalizedRule ")
+        // CMI's bare aliases and /cmi <command> enter the same command owner.
+        val command = normalizedCommand.removePrefix("cmi ")
+        val rule = normalizedRule.removePrefix("cmi ")
+        return command == rule || command.startsWith("$rule ") ||
+            normalizedCommand == normalizedRule || normalizedCommand.startsWith("$normalizedRule ")
     }
 
     private fun tokenize(commandLine: String): List<String> =

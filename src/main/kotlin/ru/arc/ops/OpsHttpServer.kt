@@ -13,6 +13,7 @@ import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import java.io.InputStream
 import java.net.InetSocketAddress
+import java.net.InetAddress
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.util.Locale
@@ -26,13 +27,15 @@ internal class OpsRequestBodyTooLargeException : RuntimeException()
 internal fun readOpsRequestBody(
     input: InputStream,
     maxBytes: Int = OPS_MAX_REQUEST_BODY_BYTES,
+    strictUtf8: Boolean = false,
 ): String {
     require(maxBytes > 0) { "maxBytes must be positive" }
     val bytes = input.readNBytes(maxBytes + 1)
     if (bytes.size > maxBytes) {
         throw OpsRequestBodyTooLargeException()
     }
-    return String(bytes, StandardCharsets.UTF_8)
+    return if (strictUtf8) StandardCharsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(bytes)).toString()
+    else String(bytes, StandardCharsets.UTF_8)
 }
 
 /**
@@ -44,14 +47,25 @@ class OpsHttpServer(
             Thread(runnable, "arc-ops-http").apply { isDaemon = true }
         }
     },
+    staffCommandHandlers: OpsStaffCommandHandlers? = null,
     private val configProvider: () -> OpsHttpConfig = { OpsHttpConfig.current() },
 ) {
+    constructor(
+        executorFactory: () -> ExecutorService,
+        configProvider: () -> OpsHttpConfig,
+    ) : this(executorFactory, null, configProvider)
+
     @Volatile
     private var httpServer: HttpServer? = null
+    private var staffCommandServer: HttpServer? = null
     private var executor: ExecutorService? = null
+    private val staffCommandHandlers = staffCommandHandlers ?: OpsStaffCommandHandlers(configProvider = configProvider)
 
     val actualPort: Int
         get() = httpServer?.address?.port ?: configProvider().bindPort
+
+    val actualStaffCommandPort: Int?
+        get() = staffCommandServer?.address?.port
 
     @Synchronized
     fun start() {
@@ -59,20 +73,42 @@ class OpsHttpServer(
         val cfg = configProvider()
         if (!cfg.enabled) return
 
+        val staffBinding = if (cfg.staffCommandsEnabled && cfg.staffCommandBindHost.isNotBlank()) {
+            val staffAddress = InetAddress.getByName(cfg.staffCommandBindHost)
+            require(staffAddress.isLoopbackAddress || staffAddress.isSiteLocalAddress) {
+                "Staff command listener requires a private address"
+            }
+            require(cfg.staffCommandAllowedAddress.isNotBlank()) { "Staff command proxy address is required" }
+            InetSocketAddress(staffAddress, cfg.staffCommandBindPort) to InetAddress.getByName(cfg.staffCommandAllowedAddress)
+        } else null
         val address = InetSocketAddress(cfg.bindHost, cfg.bindPort)
         val server = HttpServer.create(address, 0)
         server.createContext("/ops") { exchange -> handle(exchange) }
         val newExecutor = executorFactory()
         server.executor = newExecutor
+        var staffServer: HttpServer? = null
         try {
+            // JDK HttpServer retains its selector/bind when stopped before start. Start each
+            // initialized server before constructing the next, then await cleanup on bind failure.
             server.start()
+            if (staffBinding != null) {
+                val (staffAddress, allowedAddress) = staffBinding
+                staffServer = HttpServer.create(staffAddress, 0)
+                staffServer.createContext("/") { exchange -> handleStaffListener(exchange, allowedAddress) }
+                staffServer.executor = newExecutor
+                staffServer.start()
+            }
         } catch (e: Exception) {
             newExecutor.shutdownNow()
-            server.stop(0)
+            staffServer?.stop(1)
+            server.stop(1)
             throw e
         }
         executor = newExecutor
         httpServer = server
+        staffCommandServer = staffServer
+        staffCommandHandlers.activate()
+        if (staffServer != null) info("Staff command listener active on {}:{} (source restricted)", cfg.staffCommandBindHost, staffServer.address.port)
         info(
             "Ops HTTP API listening on {}:{} (console={})",
             cfg.bindHost,
@@ -86,10 +122,34 @@ class OpsHttpServer(
 
     @Synchronized
     fun stop() {
+        invalidateStaffCommands()
+        staffCommandServer?.stop(1)
+        staffCommandServer = null
         httpServer?.stop(1)
         httpServer = null
         executor?.shutdownNow()
         executor = null
+    }
+
+    /** Main-thread-safe admission invalidation; socket shutdown remains on the lifecycle worker. */
+    fun invalidateStaffCommands() = staffCommandHandlers.invalidate()
+
+    private fun handleStaffListener(exchange: HttpExchange, allowedAddress: InetAddress) {
+        val error = when {
+            exchange.remoteAddress.address != allowedAddress -> 403 to "Staff command source is not allowed"
+            exchange.requestURI.rawPath != "/ops/staff-command" -> 404 to "Not found"
+            exchange.requestMethod != "POST" -> 405 to "Method not allowed"
+            else -> null
+        }
+        if (error == null) {
+            handle(exchange)
+        } else {
+            try {
+                respondError(exchange, error.first, error.second)
+            } finally {
+                exchange.close()
+            }
+        }
     }
 
     internal fun handle(exchange: HttpExchange) {
@@ -511,6 +571,9 @@ class OpsHttpServer(
 
             method == "POST" && segments == listOf("console") ->
                 handleConsole(exchange, cfg)
+
+            method == "POST" && segments == listOf("staff-command") ->
+                handleStaffCommand(exchange, cfg)
 
             method == "POST" && segments == listOf("run-as") ->
                 handleRunAs(exchange, cfg)
@@ -1949,6 +2012,22 @@ class OpsHttpServer(
         respondOk(exchange, OpsHttpHandlers.runConsole(command))
     }
 
+    private fun handleStaffCommand(exchange: HttpExchange, cfg: OpsHttpConfig) {
+        try {
+            if (!cfg.staffCommandsEnabled) throw StaffCommandFailure(403, "Staff command endpoint disabled")
+            if (exchange.requestURI.rawQuery != null) throw StaffCommandFailure(400, "Staff command query is not supported")
+            respondOk(exchange, staffCommandHandlers.execute(readOpsRequestBody(exchange.requestBody, 4096, strictUtf8 = true), cfg))
+        } catch (failure: OpsRequestBodyTooLargeException) {
+            throw failure
+        } catch (failure: StaffCommandFailure) {
+            respondError(exchange, failure.status, failure.message ?: "Staff command unavailable")
+        } catch (_: java.nio.charset.CharacterCodingException) {
+            respondError(exchange, 400, "Invalid staff command encoding")
+        } catch (_: Exception) {
+            respondError(exchange, 503, "Staff command unavailable")
+        }
+    }
+
     private fun readRequestBody(exchange: HttpExchange): String =
         readOpsRequestBody(exchange.requestBody)
 
@@ -2149,6 +2228,9 @@ class OpsHttpServer(
         }
         if (cfg.consoleEnabled) {
             routes += "POST /ops/console {\"command\":\"...\"}"
+        }
+        if (cfg.staffCommandsEnabled) {
+            routes += "POST /ops/staff-command {requestId,actorUuid,command}"
         }
         if (cfg.runAsEnabled) {
             routes += "POST /ops/run-as {\"player\":\"...\",\"command\":\"...\"}"

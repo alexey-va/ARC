@@ -6,12 +6,19 @@ import ru.arc.core.PluginModule
 import ru.arc.hooks.HookRegistry
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
+import java.util.UUID
 
 object CrossServerSpyModule : PluginModule {
     override val name = "CrossServerSpy"
     override val priority = 67
 
     private var bridge: CrossServerSpyBridge? = null
+
+    fun staffCommandAllowed(command: String): Boolean = bridge?.commandAllowed(command) == true
+
+    fun publishStaffCommand(requestId: UUID, actorUuid: UUID, command: String) {
+        bridge?.publishConsoleCommand(requestId, actorUuid.toString(), command)
+    }
 
     override fun init() {
         stopBridge()

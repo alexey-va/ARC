@@ -29,6 +29,24 @@ open class OpsHttpConfig(private val config: Config? = null) {
     open val consoleEnabled: Boolean
         get() = bool("console-enabled", false)
 
+    open val staffCommandsEnabled: Boolean
+        get() = bool("staff-commands-enabled", false)
+
+    open val staffCommandBindHost: String
+        get() = string("staff-command-bind-host", "")
+
+    open val staffCommandBindPort: Int
+        get() = integer("staff-command-bind-port", 25833)
+
+    open val staffCommandAllowedAddress: String
+        get() = string("staff-command-allowed-address", "")
+
+    open val staffCommandAdminGroups: Set<String>
+        get() = (config?.stringList("staff-command-admin-groups", listOf("admin")) ?: listOf("admin"))
+            .map { it.trim().lowercase(java.util.Locale.ROOT) }
+            .filter { it.matches(Regex("[a-z0-9_.-]{1,64}")) }
+            .toSet()
+
     open val messagesEnabled: Boolean
         get() = bool("messages-enabled", true)
 
@@ -166,6 +184,11 @@ class TestOpsHttpConfig(
     override val bindHost: String = "127.0.0.1",
     override val bindPort: Int = 0,
     override val consoleEnabled: Boolean = false,
+    override val staffCommandsEnabled: Boolean = false,
+    override val staffCommandBindHost: String = "",
+    override val staffCommandBindPort: Int = 0,
+    override val staffCommandAllowedAddress: String = "",
+    override val staffCommandAdminGroups: Set<String> = setOf("admin"),
     override val messagesEnabled: Boolean = true,
     override val effectsEnabled: Boolean = true,
     override val reloadEnabled: Boolean = true,
@@ -206,6 +229,8 @@ class TestOpsHttpConfig(
 ) : OpsHttpConfig() {
     fun copy(
         consoleEnabled: Boolean = this.consoleEnabled,
+        staffCommandsEnabled: Boolean = this.staffCommandsEnabled,
+        staffCommandAdminGroups: Set<String> = this.staffCommandAdminGroups,
         messagesEnabled: Boolean = this.messagesEnabled,
         runAsEnabled: Boolean = this.runAsEnabled,
         economyAuditReadEnabled: Boolean = this.economyAuditReadEnabled,
@@ -245,6 +270,11 @@ class TestOpsHttpConfig(
             bindHost = bindHost,
             bindPort = bindPort,
             consoleEnabled = consoleEnabled,
+            staffCommandsEnabled = staffCommandsEnabled,
+            staffCommandBindHost = staffCommandBindHost,
+            staffCommandBindPort = staffCommandBindPort,
+            staffCommandAllowedAddress = staffCommandAllowedAddress,
+            staffCommandAdminGroups = staffCommandAdminGroups,
             messagesEnabled = messagesEnabled,
             effectsEnabled = effectsEnabled,
             reloadEnabled = reloadEnabled,

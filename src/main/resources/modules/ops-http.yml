@@ -16,6 +16,18 @@ bind-port: 25823
 # POST /ops/console — произвольные команды консоли (осторожно)
 console-enabled: false
 
+# POST /ops/staff-command — trusted proxy + fresh inherited LuckPerms admin group.
+# Exact JSON: {requestId: canonical UUID, actorUuid: canonical UUID, command: single line <=512}.
+# Idempotency lasts 10 minutes in this process only; after restart an unknown outcome
+# must be investigated, never retried automatically under a new requestId.
+staff-commands-enabled: false
+staff-command-admin-groups: [admin]
+# Optional second listener exposes ONLY /ops/staff-command to one proxy address.
+# Empty host disables it. Use the private WireGuard address, never a public/wildcard bind.
+staff-command-bind-host: ""
+staff-command-bind-port: 25833
+staff-command-allowed-address: ""
+
 # POST /ops/message — broadcast / player / ops на ЭТОМ инстансе (MiniMessage)
 messages-enabled: true
 

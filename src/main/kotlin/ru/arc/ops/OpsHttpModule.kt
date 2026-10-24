@@ -25,6 +25,7 @@ object OpsHttpModule : PluginModule {
     fun readiness(): CompletableFuture<Void> = ready.copy()
 
     override fun init() {
+        httpServer.invalidateStaffCommands()
         if (System.getProperty("arc.test.unit") != null) {
             ready = CompletableFuture.completedFuture(null)
             return
@@ -61,6 +62,7 @@ object OpsHttpModule : PluginModule {
     override fun reload() = init()
 
     override fun shutdown() {
+        httpServer.invalidateStaffCommands()
         ++generation
         ready.completeExceptionally(CancellationException("Ops HTTP stopped"))
         healthTask?.cancel()

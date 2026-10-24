@@ -11,6 +11,11 @@ import net.kyori.adventure.audience.Audience
 import net.kyori.adventure.chat.SignedMessage
 import net.kyori.adventure.text.Component
 import org.bukkit.entity.Player
+import org.bukkit.command.Command
+import org.bukkit.command.CommandSender
+import org.bukkit.command.FormattedCommandAlias
+import org.bukkit.event.server.ServerCommandEvent
+import org.bukkit.event.server.RemoteServerCommandEvent
 import ru.arc.chat.ChatMode
 import ru.arc.core.Tasks
 import ru.arc.core.TestTaskScheduler
@@ -156,6 +161,61 @@ class CrossServerSpyBridgeTest :
                         redis.publications shouldHaveSize 1
                         SpyRelayCodec.decode(redis.publications.single().second, 4096, 1000)!!.content shouldBe
                             "сообщение прошло фильтр"
+                    }
+                }
+            }
+        }
+
+        "console and RCON publish once each on their separate topic and cancelled events publish nothing" {
+            failOnUnsupportedMockBukkitOperation {
+                MockBukkitTestRuntime.open().use { paper ->
+                    val redis = RecordingRedis()
+                    CrossServerSpyBridge(
+                        paper.createSimplePlugin("ConsoleSpyTest"), redis, "spawn", testSettings(), VisibleSpyState,
+                        now = { 1_780_000_000_000L },
+                    ).use { bridge ->
+                        bridge.start()
+                        val sender = paper.server.consoleSender
+                        paper.callEvent(ServerCommandEvent(sender, "list"))
+                        paper.callEvent(RemoteServerCommandEvent(sender, "version"))
+                        paper.callEvent(ServerCommandEvent(sender, "stop").apply { isCancelled = true })
+                        paper.callEvent(RemoteServerCommandEvent(sender, "stop").apply { isCancelled = true })
+                        redis.publications shouldHaveSize 2
+                        redis.publications.forEach { (channel, payload) ->
+                            channel shouldBe StaffConsoleObservationCodec.CHANNEL
+                            StaffConsoleObservationCodec.decode(payload).actor shouldBe "CONSOLE"
+                        }
+                        redis.publications.map { StaffConsoleObservationCodec.decode(it.second).command } shouldBe listOf("list", "version")
+                    }
+                }
+            }
+        }
+
+        "sensitive namespaced CMI and registered aliases never reach Redis" {
+            failOnUnsupportedMockBukkitOperation {
+                MockBukkitTestRuntime.open().use { paper ->
+                    val login = object : Command("login") {
+                        override fun execute(sender: CommandSender, commandLabel: String, args: Array<out String>) = true
+                    }.apply { aliases = listOf("signin") }
+                    paper.server.commandMap.register("authfixture", login)
+                    paper.server.commandMap.register("aliasfixture", FormattedCommandAlias("opaque", arrayOf("login $1")))
+                    val redis = RecordingRedis()
+                    val policy = object : SpyStateAccess by VisibleSpyState {
+                        override fun commandBlacklist() = listOf("cmi hiddenmetadata")
+                    }
+                    CrossServerSpyBridge(paper.createSimplePlugin("ConsoleRedactionTest"), redis, "spawn", testSettings(), policy).use { bridge ->
+                        bridge.start()
+                        listOf(
+                            "login private-value", "authfixture:signin private-value", "signin private-value",
+                            "cmi:cmi cmi:login private-value", "cmi   register private-value",
+                            "hiddenmetadata private-value", "cmi:cmi cmi:hiddenmetadata private-value", "opaque private-value",
+                            "minecraft:execute run login private-value", "cmi sudo Player login private-value", "ex narrate private-value",
+                        ).forEach { command ->
+                            paper.callEvent(ServerCommandEvent(paper.server.consoleSender, command))
+                        }
+                        redis.publications shouldHaveSize 0
+                        bridge.publishConsoleCommand(java.util.UUID.randomUUID(), java.util.UUID.randomUUID().toString(), "list")
+                        redis.publications shouldHaveSize 1
                     }
                 }
             }
