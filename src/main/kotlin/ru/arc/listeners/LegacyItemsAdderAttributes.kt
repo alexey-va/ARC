@@ -74,7 +74,8 @@ internal object LegacyItemsAdderAttributes {
             index = end
         }
         if (sections.size < 2) return null
-        val canonical = sections.lastOrNull { it.translated } ?: return null
+        // AE can flatten every native component back to English; duplicates still need migration.
+        val canonical = sections.lastOrNull { it.translated } ?: sections.last()
         val attributes = linkedMapOf<String, Component>()
         // Current native rows win; retain a legacy speed row when an anvil refreshed only damage.
         sections.filterNot { it.translated }.forEach { attributes.putAll(it.attributes) }
@@ -87,7 +88,7 @@ internal object LegacyItemsAdderAttributes {
             for (row in lore.indices) {
                 if (row == first) {
                     if (lastOrNull()?.let(::blank) != true) add(gap)
-                    add(lore[canonical.header])
+                    add(translateLabel(lore[canonical.header], plain.serialize(lore[canonical.header]).trim(), MAIN_HAND))
                     listOf("attribute.name.attack_damage", "attribute.name.attack_speed").forEach { key ->
                         attributes[key]?.let(::add)
                     }

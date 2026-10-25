@@ -59,11 +59,39 @@ class LegacyItemsAdderAttributesTest : FreeSpec({
         equal(offhand, output[8])
     }
 
-    "legacy only native only and unknown attribute sections stay untouched" {
+    "AE and grindstone flattened katana keeps the latest stats in one translated section" {
+        val protection = Component.text("ЗАЩИЩЕНО", NamedTextColor.WHITE).decorate(TextDecoration.BOLD)
+        val counter = Component.text("Мобов: ", NamedTextColor.DARK_AQUA).append(Component.text("259", NamedTextColor.WHITE))
+        val input = listOf(
+            Component.empty(), Component.text("When in Main Hand:", NamedTextColor.GRAY),
+            Component.text(" 11.5 Attack Damage", NamedTextColor.DARK_GREEN),
+            Component.text(" 2 Attack Speed", NamedTextColor.DARK_GREEN),
+            protection,
+            Component.empty(), Component.text("When in Main Hand:", NamedTextColor.GRAY),
+            Component.text(" 12 Attack Damage", NamedTextColor.DARK_GREEN),
+            counter,
+            Component.empty(), Component.text("When in Main Hand:", NamedTextColor.GRAY),
+            Component.text(" 9 Attack Damage", NamedTextColor.DARK_GREEN),
+            Component.empty(), Component.text("When in Main Hand:", NamedTextColor.GRAY),
+            Component.text(" 9 Attack Damage", NamedTextColor.DARK_GREEN),
+        )
+
+        val output = requireNotNull(LegacyItemsAdderAttributes.normalizeLore(input))
+
+        equal(listOf("", "item.modifiers.mainhand", " 9 attribute.name.attack_damage",
+            " 2 attribute.name.attack_speed", "", "ЗАЩИЩЕНО", "Мобов: 259"), output.map(plain::serialize))
+        equal(NamedTextColor.GRAY, output[1].color())
+        equal(protection, output[5])
+        equal(counter, output[6])
+        isNull(LegacyItemsAdderAttributes.normalizeLore(output))
+    }
+
+    "single legacy native only and unknown attribute sections stay untouched" {
         val legacy = listOf(Component.text("When in Main Hand:"), Component.text(" 12 Attack Damage"))
         val native = listOf(Component.translatable("item.modifiers.mainhand"), nativeAttribute("9", "attack_damage"))
         isNull(LegacyItemsAdderAttributes.normalizeLore(legacy))
-        isNull(LegacyItemsAdderAttributes.normalizeLore(legacy + legacy))
+        equal(listOf("", "item.modifiers.mainhand", " 12 attribute.name.attack_damage"),
+            requireNotNull(LegacyItemsAdderAttributes.normalizeLore(legacy + legacy)).map(plain::serialize))
         isNull(LegacyItemsAdderAttributes.normalizeLore(native))
         isNull(LegacyItemsAdderAttributes.normalizeLore(legacy + native + Component.text(" 3 Spell Power")))
         isNull(LegacyItemsAdderAttributes.normalizeLore(listOf(Component.text("When in Main Hand:"),
