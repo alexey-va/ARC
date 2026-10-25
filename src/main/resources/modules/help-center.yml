@@ -316,7 +316,7 @@ text:
   settings-container-preview-reset-page-tooltip: "<#e8dfd2>Сбросить личные значения на этой странице."
   settings-container-preview-reset-all: "<#e8dfd2>Сбросить личные параметры"
   settings-container-preview-reset-all-tooltip: "<#e8dfd2>Все значения снова будут следовать настройкам сервера."
-  settings-options-escape-body: "<#e8dfd2>Назад — предыдущий открытый экран; если его не было, выход.<newline>Закрыть — сразу выйти из всех меню."
+  settings-options-escape-body: "<#e8dfd2>Назад — к предыдущему экрану; без него — выход. Закрыть — выйти из меню.<newline>Кнопка «Назад» или «Закрыть», заданная меню, определяет и действие Escape. Настройка применяется только в меню без своей кнопки выхода."
   settings-options-escape-title: "<#f3a2c9>Поведение Escape"
   settings-options-shortcut-body: "<#e8dfd2>Выберите действие для сочетания Shift + F.<newline>Обычная клавиша F продолжит менять предметы в руках."
   settings-options-shortcut-title: "<#f3a2c9>Горячая клавиша Shift + F"
