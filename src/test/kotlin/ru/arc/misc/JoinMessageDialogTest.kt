@@ -196,7 +196,7 @@ class JoinMessageDialogTest : FreeSpec({
         }
     }
 
-    "decorated join and leave catalogs paginate through actual callbacks and export fixture screens" {
+    "native join and leave pagers preserve callbacks and export fixture screens without a fabricated footer" {
         every { ArcMenus.configureDialogDecoration(any()) } answers { callOriginal() }
         every { ArcMenus.prepareDialog(any(), any(), any()) } answers { callOriginal() }
         ArcMenus.configureDialogDecoration("arc:dialog_ui")
@@ -241,13 +241,9 @@ class JoinMessageDialogTest : FreeSpec({
                 if (original.id.value.startsWith("phrase_")) actual shouldBe original
             }
             val buttons = presented.buttons.associateBy { it.id.value }
-            icons(buttons.getValue("previous")).isNotEmpty() shouldBe true
-            icons(buttons.getValue("next")).isNotEmpty() shouldBe true
-            (icons(buttons.getValue("previous")) != icons(buttons.getValue("next"))) shouldBe true
-            presented.exitButton!!.id.value shouldBe "arc_history_exit_0"
-            presented.exitButton!!.width shouldBe 200
-            presented.exitButton!!.closeDialogBeforeAction shouldBe false
-            plain(presented.exitButton!!.label).codePoints().anyMatch { it in 0xF9000..0xF9FFF } shouldBe true
+            icons(buttons.getValue("previous")).isEmpty() shouldBe true
+            icons(buttons.getValue("next")).isEmpty() shouldBe true
+            presented.exitButton shouldBe null
             screens[name] = presented
         }
         try {
@@ -291,16 +287,16 @@ class JoinMessageDialogTest : FreeSpec({
         }
     }
 
-    "short pages preserve complete utility and paging rows" {
+    "short pages retain only real utility controls and finish with pagination" {
         for (hasCustom in listOf(false, true)) {
             if (hasCustom) permissions += JoinMessageDialogs.CUSTOM_PERMISSION
             dialogs.show(player, startPage = 1)
             val ids = screen!!.buttons.map { it.id.value }
-            (ids.indexOf("previous") % 2) shouldBe 0
-            (ids.indexOf("switch") % 2) shouldBe 1
+            ids.none { it.startsWith("empty_") } shouldBe true
+            screen!!.buttons.none { plain(it.label).isBlank() } shouldBe true
             ids.takeLast(2) shouldBe listOf("previous", "next")
-            click("empty_phrase")
-            plain(screen!!.body[1].text) shouldContain "2/2"
+            click("previous")
+            plain(screen!!.body[1].text) shouldContain "1/2"
         }
     }
 

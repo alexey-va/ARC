@@ -142,15 +142,8 @@ internal class JoinMessageDialogs(
                 selectCatalogMessage(context.player, entry, isJoin, !current, page)
             }
         }
-        // Keep utility and paging pairs on their own rows even on a short last page.
-        if (buttons.size % 2 != 0) buttons += button("empty_phrase", Component.empty(), isJoin) {
-            show(it.player, isJoin, page)
-        }
         if (player.hasPermission(CUSTOM_PERMISSION)) {
             buttons += button("custom", text("custom-list"), isJoin, custom = true) { showCustom(it.player, isJoin, page) }
-        }
-        if (buttons.size % 2 == 0) buttons += button("empty_utility", Component.empty(), isJoin) {
-            show(it.player, isJoin, page)
         }
         buttons += button("switch", text(if (isJoin) "switch-leave" else "switch-join"), isJoin) { show(it.player, !isJoin) }
         buttons += button("previous", text("previous"), isJoin) { show(it.player, isJoin, (page + pages - 1) % pages) }
@@ -317,9 +310,10 @@ internal class JoinMessageDialogs(
             body = listOf("formatting-help", "formatting-colors", "formatting-styles", "formatting-example").map {
                 PaperDialogBody(text(it), width)
             },
-            buttons = listOf(button("back", text("back-custom"), isJoin, custom = true) {
+            buttons = emptyList(),
+            exitButton = button("back", text("back-custom"), isJoin, custom = true) {
                 openEditor(it.player, isJoin, catalogPage, draft, original = original)
-            }),
+            },
         ), onDismiss = { invalidate(player) })
     }
 

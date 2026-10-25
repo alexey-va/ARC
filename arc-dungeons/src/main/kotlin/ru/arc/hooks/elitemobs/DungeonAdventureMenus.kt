@@ -379,13 +379,13 @@ internal class DungeonAdventureMenus(
     private fun back(returnTo: () -> Unit) = PaperDialogButton(PaperDialogActionId.of("back"), text("back-label", "<white>‹ Назад"), width = 200, onClick = { returnTo() })
     private fun refresh(action: () -> Unit) = button("refresh", "refresh-label", "<white>Обновить", "Получить текущие данные") { action() }
 
-    /** Paper dialog buttons are a flat two-column grid; refresh completes an odd content row before pagination. */
+    /** Refresh is a real utility action on every page; the flat grid needs no parity filler. */
     private fun paginatedButtons(
         content: List<PaperDialogButton>,
         refresh: PaperDialogButton,
         previous: PaperDialogButton,
         next: PaperDialogButton,
-    ): List<PaperDialogButton> = content + (if (content.size % 2 == 1) listOf(refresh) else emptyList()) + listOf(previous, next)
+    ): List<PaperDialogButton> = content + listOf(refresh, previous, next)
 
     private fun button(id: String, key: String, fallback: String, hint: String, close: Boolean = false, action: (PaperDialogClickContext) -> Unit) =
         PaperDialogButton(PaperDialogActionId.of(id), text(key, fallback), text("$key-tooltip", "<#e8dfd2>$hint"), width = 230, closeDialogBeforeAction = close, onClick = action)

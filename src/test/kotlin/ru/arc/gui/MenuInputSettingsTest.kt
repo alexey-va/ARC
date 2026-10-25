@@ -87,31 +87,25 @@ class MenuInputSettingsTest : TestBase() {
     }
 
     @Test
-    fun `close all removes native escape callback but preserves the back button`() {
-        val back = PaperDialogButton(PaperDialogActionId.of("back"), Component.text("Back"), onClick = mockk())
+    fun `a declared Back remains the native footer under a close preference`() {
+        val back = PaperDialogButton(PaperDialogActionId.of("back"), Component.text("Back"), width = 200, onClick = mockk())
         val action = back.copy(id = PaperDialogActionId.of("action"))
         val original = PaperDialogScreen(Component.text("Settings"), buttons = listOf(action), exitButton = back)
-        val close = MenuEscapeBehavior.apply(original, false)
-        close.exitButton shouldBe null
-        close.buttons shouldBe listOf(action, back)
-        close.canCloseWithEscape shouldBe true
-        close.buttons.all { !it.closeDialogBeforeAction } shouldBe true
-        MenuEscapeBehavior.apply(close, false) shouldBe close
+        MenuEscapeBehavior.footerGoesBack(original, false) shouldBe true
+        MenuEscapeBehavior.apply(original, false) shouldBe original
         MenuEscapeBehavior.apply(original, true) shouldBe original
-    }
-    @Test
-    fun `async dialogs invalidate their visit on native escape while keeping normal back navigation`() {
-        var closed = 0
-        val back = PaperDialogButton(PaperDialogActionId.of("back"), Component.text("Back"), width = 150, onClick = mockk())
-        val action = back.copy(id = PaperDialogActionId.of("action"), width = 230)
-        val exit = PaperDialogButton(PaperDialogActionId.of("close_menu"), Component.text("Close"), closeDialogBeforeAction = true, onClick = { closed++ })
-        val original = PaperDialogScreen(Component.text("Settings"), buttons = listOf(action), exitButton = back)
-        val close = MenuEscapeBehavior.apply(original, false, exit)
-        close.buttons.last().width shouldBe 230
-        close.exitButton shouldBe exit
-        close.exitButton!!.onClick.handle(mockk())
-        closed shouldBe 1
-        MenuEscapeBehavior.apply(original, true, exit) shouldBe original
+        original.canCloseWithEscape shouldBe true
     }
 
+    @Test
+    fun `declared Close and root preference remain distinct from returning footers`() {
+        val close = PaperDialogButton(PaperDialogActionId.of("close_menu"), Component.text("Close"),
+            width = 150, closeDialogBeforeAction = true, onClick = {})
+        val original = PaperDialogScreen(Component.text("Notice"), buttons = emptyList(), exitButton = close)
+        MenuEscapeBehavior.footerGoesBack(original, true) shouldBe false
+        MenuEscapeBehavior.apply(original, false, close).exitButton shouldBe close.copy(width = 200)
+        val automatic = original.copy(exitButton = null)
+        MenuEscapeBehavior.footerGoesBack(automatic, false) shouldBe false
+        MenuEscapeBehavior.footerGoesBack(automatic, true) shouldBe true
+    }
 }

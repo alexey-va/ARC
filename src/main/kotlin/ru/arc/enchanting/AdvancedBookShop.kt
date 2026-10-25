@@ -196,15 +196,6 @@ internal class AdvancedBookShop(
                     ),
                 )
             }
-            add(
-                PaperDialogButton(
-                    PaperDialogActionId.of("return_to_caller"),
-                    config.text("shop.return.label"),
-                    width = WIDTH,
-                    closeDialogBeforeAction = true,
-                    onClick = { returnToCaller(player, flow) },
-                ),
-            )
         }
         openDialog(
             player,
@@ -213,6 +204,10 @@ internal class AdvancedBookShop(
                 title = config.text("shop.title"),
                 body = body,
                 buttons = buttons,
+                exitButton = PaperDialogButton(
+                    PaperDialogActionId.of("return_to_caller"), config.text("shop.back.label"),
+                    width = 200, onClick = { returnToCaller(player, flow) },
+                ),
                 columns = 2,
             ),
             { showSelection(player, flow, page) },
@@ -264,12 +259,10 @@ internal class AdvancedBookShop(
                     width = WIDTH,
                     onClick = { context -> submitPurchase(context.player, flow, selected) },
                 ),
-                PaperDialogButton(
-                    PaperDialogActionId.of("back_to_levels"),
-                    config.text("shop.back.label"),
-                    width = WIDTH,
-                    onClick = { context -> backToLevels(context.player, flow) },
-                ),
+            ),
+            exitButton = PaperDialogButton(
+                PaperDialogActionId.of("back_to_levels"), config.text("shop.back.label"),
+                width = 200, onClick = { context -> backToLevels(context.player, flow) },
             ),
             columns = 1,
         )

@@ -11,12 +11,28 @@ import io.mockk.unmockkObject
 import net.kyori.adventure.text.Component
 import org.junit.jupiter.api.Test
 import ru.arc.dungeons.menu.DungeonsMenus
+import ru.arc.dungeons.menu.MenuEscapeBehavior
 import ru.arc.hooks.elitemobs.EMDungeonQol
 import ru.arc.paper.menu.PaperDialogRuntime
+import ru.arc.paper.menu.PaperDialogActionId
+import ru.arc.paper.menu.PaperDialogButton
 import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.paper.testing.MockBukkitTestRuntime
 
 class DungeonsServiceMenuTest {
+    @Test
+    fun `returning footer stays below dungeon content while explicit Close retains its meaning`() {
+        val back = PaperDialogButton(PaperDialogActionId.of("back"), Component.text("‹ Назад"), width = 230, onClick = {})
+        val item = back.copy(id = PaperDialogActionId.of("item"))
+        val screen = PaperDialogScreen(Component.text("Dungeon"), buttons = listOf(item), exitButton = back)
+        MenuEscapeBehavior.footerGoesBack(screen, false) shouldBe true
+        val prepared = MenuEscapeBehavior.apply(screen, true)
+        prepared.buttons shouldBe listOf(item)
+        prepared.exitButton shouldBe back.copy(width = 200)
+        MenuEscapeBehavior.footerGoesBack(screen.copy(exitButton = back.copy(closeDialogBeforeAction = true)), true) shouldBe false
+        MenuEscapeBehavior.footerGoesBack(screen.copy(exitButton = null), false) shouldBe false
+    }
+
     @Test
     @Suppress("INVISIBLE_MEMBER", "INVISIBLE_REFERENCE") // Use the pinned runtime's headless presenter, retaining real shared history.
     fun `hotkey service opens its own dialog after an ARC menu and after the flow closes`() {

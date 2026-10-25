@@ -46,7 +46,7 @@ class ArcMenusPresentationTest : FreeSpec({
         (closing.buttons + closing.exitButton!!).any(::decorated) shouldBe false
     }
 
-    "ARC child without a declared exit gets a decorated unique Back while content and callbacks survive" {
+    "ARC leaves an undeclared footer to Core and keeps pagination native while callbacks survive" {
         ArcMenus.configureDialogDecoration("arc:dialog_ui")
         var selected = 0
         val choice = button("phrase_0", 299) { selected++ }
@@ -70,46 +70,10 @@ class ArcMenusPresentationTest : FreeSpec({
         }
         prepared.buttons.first().onClick.handle(mockk<PaperDialogClickContext>())
         selected shouldBe 1
-        val footer = prepared.exitButton!!
-        footer.id.value shouldBe "arc_history_exit_2"
-        footer.width shouldBe 200
-        footer.closeDialogBeforeAction shouldBe false
-        decorated(footer) shouldBe true
+        prepared.exitButton shouldBe null
         val paging = prepared.buttons.associateBy { it.id.value }
-        icons(paging.getValue("previous")).isNotEmpty() shouldBe true
-        icons(paging.getValue("next")).isNotEmpty() shouldBe true
-        (icons(paging.getValue("previous")) != icons(paging.getValue("next"))) shouldBe true
-    }
-
-    "Escape close frames the moved Back at its adopted grid width and keeps both actions" {
-        ArcMenus.configureDialogDecoration("arc:dialog_ui")
-        val called = mutableListOf<String>()
-        val choice = button("phrase_0", 299)
-        val back = button("edit", 200) { called += "back" }
-        val close = button("close_menu", 200, close = true) { called += "close" }
-        val screen = PaperDialogScreen(Component.text("Предпросмотр"), body = listOf(content),
-            buttons = listOf(choice), exitButton = back, id = "messages.preview.join")
-
-        val prepared = ArcMenus.prepareDialog(screen, false, close)
-        prepared.buttons.first() shouldBe choice
-        val moved = prepared.buttons.last()
-        moved.id shouldBe back.id
-        moved.width shouldBe 299
-        moved.tooltip shouldBe back.tooltip
-        moved.closeDialogBeforeAction shouldBe false
-        (moved.onClick === back.onClick) shouldBe true
-        decorated(moved) shouldBe true
-        val footer = prepared.exitButton!!
-        footer.id shouldBe close.id
-        footer.width shouldBe 200
-        footer.closeDialogBeforeAction shouldBe true
-        (footer.onClick === close.onClick) shouldBe true
-        decorated(footer) shouldBe true
-        (icons(moved) != icons(footer)) shouldBe true
-        val context = mockk<PaperDialogClickContext>()
-        moved.onClick.handle(context)
-        footer.onClick.handle(context)
-        called shouldBe listOf("back", "close")
+        icons(paging.getValue("previous")).isEmpty() shouldBe true
+        icons(paging.getValue("next")).isEmpty() shouldBe true
     }
 
     "explicit Back footer stays below the grid and preserves its callback even with close preference" {
@@ -130,12 +94,13 @@ class ArcMenusPresentationTest : FreeSpec({
             footer.onClick.handle(mockk<PaperDialogClickContext>())
             returned shouldBe 1
             val ordinary = ArcMenus.prepareDialog(original, false, close())
-            ordinary.buttons.last().id shouldBe back.id
-            ordinary.exitButton!!.id.value shouldBe "close_menu"
+            ordinary.buttons shouldBe original.buttons
+            ordinary.exitButton!!.id shouldBe back.id
+            ordinary.exitButton!!.width shouldBe 200
         }
     }
 
-    "explicit footer dispatches native history mode while the default still closes on Escape" {
+    "declared Back uses native history while automatic roots and declared Close retain Close semantics" {
         MockBukkitTestRuntime.open().use { paper ->
             val player = paper.addPlayer("ProfileFooter")
             val modes = mutableListOf<Boolean>()
@@ -158,9 +123,20 @@ class ArcMenusPresentationTest : FreeSpec({
                 screens.single().exitButton!!.id.value shouldBe "root"
                 screens.single().exitButton!!.closeDialogBeforeAction shouldBe false
                 ArcMenus.openDialog(player, original, close(), null, {})
-                modes shouldBe listOf(false, true)
-                screens.last().buttons.last().id.value shouldBe "root"
+                modes shouldBe listOf(false, false)
+                screens.last().buttons shouldBe original.buttons
+                screens.last().exitButton!!.id.value shouldBe "root"
+                ArcMenus.openDialog(player, original.copy(exitButton = null), close(), null, {})
+                modes shouldBe listOf(false, false, true)
                 screens.last().exitButton!!.id.value shouldBe "close_menu"
+                every { MenuEscapeBehavior.goesBack(player) } returns true
+                ArcMenus.openDialog(player, original.copy(exitButton = close()), close(), null, {})
+                modes shouldBe listOf(false, false, true, true)
+                screens.last().exitButton!!.id.value shouldBe "close_menu"
+                ArcMenus.openDialog(player, original.copy(exitButton = close()), close(), null, {}, preferBackFooter = true)
+                modes shouldBe listOf(false, false, true, true, true)
+                screens.last().exitButton!!.id.value shouldBe "close_menu"
+                screens.last().exitButton!!.closeDialogBeforeAction shouldBe true
             } finally {
                 ArcMenus.close()
                 unmockkConstructor(PaperDialogRuntime::class)
@@ -169,18 +145,14 @@ class ArcMenusPresentationTest : FreeSpec({
         }
     }
 
-    "Escape Back normalizes a declared closing footer before decoration without losing its callback" {
+    "declared Close stays native below an empty action grid under a Back preference" {
         ArcMenus.configureDialogDecoration("arc:dialog_ui")
         val footer = button("close", 200, close = true)
         val screen = PaperDialogScreen(Component.text("Окно"), buttons = emptyList(), exitButton = footer,
             id = "messages.notice")
-
         val prepared = ArcMenus.prepareDialog(screen, true, close())
         prepared.buttons shouldBe emptyList()
-        prepared.exitButton!!.id shouldBe footer.id
-        prepared.exitButton!!.width shouldBe 200
-        prepared.exitButton!!.closeDialogBeforeAction shouldBe false
-        (prepared.exitButton!!.onClick === footer.onClick) shouldBe true
-        decorated(prepared.exitButton!!) shouldBe true
+        prepared.exitButton shouldBe footer
+        decorated(prepared.exitButton!!) shouldBe false
     }
 })

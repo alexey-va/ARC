@@ -9,7 +9,7 @@ import ru.arc.paper.menu.PaperDialogScreen
 
 class MenuEscapeBehaviorTest {
     @Test
-    fun `close preference keeps declared exit width when action grid is empty`() {
+    fun `declared Back stays in a 200 unit footer with no invented grid action`() {
         val exit = PaperDialogButton(
             id = PaperDialogActionId.of("back"),
             label = Component.text("Back"),
@@ -29,8 +29,9 @@ class MenuEscapeBehaviorTest {
             closeButton = close,
         )
 
-        prepared.buttons.single().width shouldBe exit.width
-        prepared.exitButton shouldBe close
+        prepared.buttons shouldBe emptyList()
+        prepared.exitButton shouldBe exit
+        MenuEscapeBehavior.footerGoesBack(prepared, false) shouldBe true
 
         val notice = MenuEscapeBehavior.apply(
             PaperDialogScreen(Component.text("Loading"), buttons = emptyList()),

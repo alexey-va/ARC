@@ -611,7 +611,8 @@ internal class HelpCenterController(
                 id = "help.search",
                 title = text("search-title"),
                 body = listOf(PaperDialogBody(text("search-loading"), width = 500)),
-                buttons = listOf(backButton("back", player, ::openCommands)),
+                buttons = emptyList(),
+                exitButton = backButton("back", player, ::openCommands),
             ),
         )
         gateway.loadHomes(player, settings.loadTimeoutSeconds).handle { homes, _ -> homes?.homes.orEmpty() }

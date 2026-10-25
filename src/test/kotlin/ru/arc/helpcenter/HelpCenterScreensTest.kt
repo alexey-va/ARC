@@ -215,7 +215,7 @@ class HelpCenterScreensTest {
         screen.buttons.map { it.id.value } shouldBe listOf("now_homes", "now_lands")
         val profileFooter = requireNotNull(screen.exitButton)
         profileFooter.id.value shouldBe "root"
-        profileFooter.width shouldBe 150
+        profileFooter.width shouldBe 200
         profileFooter.closeDialogBeforeAction shouldBe false
         plain(profileFooter.label).contains("Назад") shouldBe true
         val profilePoints = body().codePoints().toArray().toSet()
@@ -362,12 +362,12 @@ class HelpCenterScreensTest {
         ) }
         Files.writeString(output.parent.resolve("components.json"), GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create().toJson(components))
         val checkedScreens = screens.filterKeys { !it.endsWith("-plain") }
-        val utilityIds = setOf("search", "settings", "create_home", "rec_home", "back_command", "back", "root", "close_menu")
+        val highlightedActions = setOf("search", "settings")
         for ((name, view) in checkedScreens) {
             for (button in view.buttons + listOfNotNull(view.exitButton)) {
                 withClue("$name/${button.id.value}: ${plain(button.label)}") {
                     plain(button.label).codePoints().anyMatch { it in 0xF9000..0xF908F } shouldBe
-                        (button.id.value in utilityIds)
+                        (button.id.value in highlightedActions || button === view.exitButton && !button.closeDialogBeforeAction)
                 }
             }
         }

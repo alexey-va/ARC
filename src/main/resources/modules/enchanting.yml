@@ -36,15 +36,15 @@ shop:
   level:
     label: '<#d6a5ff>Уровень <level>'
     tooltip: '<#e8dfd2>Цена: <price> <white>💰</white>. Посмотреть перед покупкой.'
-    previous: '<#e8dfd2>Предыдущие уровни'
-    next: '<#e8dfd2>Следующие уровни'
+    previous: '<#92bed8>‹ Предыдущая страница'
+    next: '<#92bed8>Следующая страница ›'
   buy:
     label: '<#70e0a0>Купить за <price> <white>💰</white>'
     tooltip: '<#e8dfd2>Получить одну книгу выбранного зачарования и уровня.'
   back:
-    label: '<#e8dfd2>Изменить уровень'
+    label: '<#ffffff>‹ Назад'
   return:
-    label: '<#e8dfd2>К зачарованию'
+    label: '<#c4a7e7>К зачарованию ›'
   processing-title: '<#d6a5ff>Покупка книги'
   processing-body: '<#e8dfd2>Покупка обрабатывается. Повторно нажимать кнопку не нужно.'
   result-title: '<#d6a5ff>Покупка книги'

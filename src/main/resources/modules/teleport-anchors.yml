@@ -96,14 +96,14 @@ naming:
     network-title: '<#d7a8ff><bold>Сеть путевых якорей'
     network-body: '<#e8dfd2>Владелец: <#ffffff>%owner% · <#e8dfd2>точек: <#ffffff>%count% · <#e8dfd2>страница: <#ffffff>%page%/%pages%<newline><#e8dfd2>Нажмите на точку, чтобы перейти.'
     network-empty: '<#e8dfd2>В сети игрока %owner% пока нет доступных точек.'
-    previous-page: '<#ffffff>Предыдущая страница'
-    next-page: '<#ffffff>Следующая страница'
+    previous-page: '<#92bed8>‹ Предыдущая страница'
+    next-page: '<#92bed8>Следующая страница ›'
     input: '<#e8dfd2>Название'
     access: '<#e8dfd2>Доступ игрокам <#ffffff>(ники через запятую)'
     invalid: '<#ff6b61>Введите название длиной от 1 до %limit% символов.'
     access-invalid: '<#ff6b61>Не найдены игроки: <#ffffff>%players%'
     save: '<#9bd48d>Сохранить изменения'
-    back: '<#ffffff>Назад'
+    back: '<#ffffff>‹ Назад'
     close: '<#ffffff>Закрыть'
 
 items:

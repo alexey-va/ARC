@@ -79,8 +79,7 @@ class DungeonAdventureMenusTest : FreeSpec({
         screens.last().buttons.single { it.id.value == "next" }.onClick.handle(input)
         screens.last().buttons.single { it.id.value == "next" }.onClick.handle(input)
         screens.last().buttons.map { it.id.value }.takeLast(3) shouldBe listOf("refresh", "previous", "next")
-        screens.last().buttons.size % screens.last().columns shouldBe 0
-        screens.last().buttons.indexOfFirst { it.id.value == "previous" } % screens.last().columns shouldBe 0
+        screens.last().buttons.count { it.id.value == "refresh" } shouldBe 1
         val beforeDetail = screens.last().buttons.filter { it.id.value.startsWith("dungeon_") }.map { it.label }
         screens.last().buttons.first { it.id.value.startsWith("dungeon_") }.onClick.handle(input)
         screens.last().id shouldBe "dungeon.catalog.detail"

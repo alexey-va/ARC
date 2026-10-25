@@ -90,7 +90,7 @@ text:
   menu-close-label: "<#ffffff>Закрыть меню"
   dungeons-title: "<#86dcf1>Данжи"
   dungeons-body: "<#e8dfd2>В данжах вас ждут элитные противники, боссы, задания и особое снаряжение.<newline><newline><#9bd48d>Порталы <#e8dfd2>— перейти в Гильдию искателей приключений.<newline><#f4bd6a>Гайд <#e8dfd2>— разобраться в подготовке и прохождении.<newline><#86dcf1>Меню /em <#e8dfd2>— открыть журнал EliteMobs."
-  dungeons-portals-label: "<#9bd48d>› Порталы"
+  dungeons-portals-label: "<#9bd48d>Порталы ›"
   dungeons-portals-tooltip: "<#9bd48d>Куда попадёте<newline><#e8dfd2>В Гильдию искателей приключений: к порталам и специалистам по снаряжению.<newline><newline><#f4bd6a>Что сделать там<newline><#e8dfd2>Выберите данж по уровню, прочитайте условия и подготовьтесь к бою.<newline><#e8dfd2>Нажатие закроет меню и выполнит /pw aguild. Если рядом появился портал — войдите в него; в режиме прямой телепортации перенос начнётся автоматически."
   dungeons-guide-label: "<#f4bd6a>◇ Гайд"
   dungeons-guide-tooltip: "<#e6fff3>Подробно о входе, группах, навыках, наградах и командах.<newline><#e8dfd2>Сначала выберите подходящий раздел для новичка."
@@ -175,7 +175,7 @@ text:
   settings-tablist-capacity-overflow-tooltip: "<#f4bd6a>Сейчас занято <used>/<maximum> строк — превышена вместимость. Этот раздел можно выключить."
   settings-tablist-capacity-rejected: "<#f4bd6a>Не хватает места (<used>/<maximum> строк). Отключите другой раздел."
   settings-options-tablist-title: "<#86dcf1>Список игроков"
-  settings-tablist-skills-back-label: "<#86dcf1>‹ К настройкам списка"
+  settings-tablist-skills-back-label: "<#ffffff>‹ Назад"
   settings-tablist-skills-auto-label: "<#86dcf1>Автоматически: два лучших навыка"
   settings-tablist-skills-unavailable: "<#e8dfd2>Сейчас нет доступных навыков для выбора."
   settings-tablist-skills-choose-body: "<#e8dfd2>Выберите до двух навыков.<newline>Третий выбор заменит первый; повторное нажатие снимает выбор.<newline>Без выбора показываются два наиболее развитых навыка."
@@ -238,7 +238,7 @@ text:
   settings-scoreboard-skills-choose-body: "<#e8dfd2>Выберите до двух навыков.<newline>Третий выбор заменит первый. Повторное нажатие снимает выбор.<newline>Без выбора показываются два наиболее развитых навыка."
   settings-scoreboard-skills-unavailable: "<#e8dfd2>В этом режиме навыки недоступны."
   settings-scoreboard-skills-auto-label: "<#86dcf1>Автоматически: два лучших навыка"
-  settings-scoreboard-skills-back-label: "<#86dcf1>‹ К настройкам панели"
+  settings-scoreboard-skills-back-label: "<#ffffff>‹ Назад"
   settings-options-scoreboard-title: "<#86dcf1>Информационная панель"
   settings-options-item-info-body: "<#e8dfd2>Показывать название блока или мебели ItemsAdder либо Slimefun, на которые вы смотрите.<newline>Технический ID можно включить отдельно. Обычные блоки Minecraft не отображаются."
   settings-options-item-info-title: "<#86dcf1>Информация о блоке"
@@ -401,8 +401,8 @@ text:
   players-clear-label: '<#d7b486>Сбросить поиск'
   refresh-label: '<#d7b486>Обновить'
   refresh-tooltip: '<#e6fff3>Загрузить актуальный список, сохранив фильтр.'
-  page-previous-label: '<#d7b486>← Предыдущая'
-  page-next-label: '<#d7b486>Следующая →'
+  page-previous-label: '<#92bed8>‹ Предыдущая страница'
+  page-next-label: '<#92bed8>Следующая страница ›'
   action-unavailable: '<#ff6b61>Действие сейчас недоступно. Откройте раздел заново.'
   favorites-full: '<#e6fff3>Все четыре места заняты.<newline><#e6fff3>Уберите ненужное действие в избранном, чтобы закрепить новое.'
   favorites-picker-title: '<#f4bd6a>Добавить в избранное'

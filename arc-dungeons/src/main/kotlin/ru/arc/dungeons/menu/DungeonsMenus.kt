@@ -1,6 +1,7 @@
 package ru.arc.dungeons.menu
 
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import org.bukkit.event.inventory.ClickType
@@ -14,6 +15,7 @@ import ru.arc.menu.MenuRegionId
 import ru.arc.menu.MenuTemplateId
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogButton
+import ru.arc.paper.menu.PaperDialogNavigation
 import ru.arc.paper.menu.PaperDialogRuntime
 import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.paper.menu.PaperMenuClickContext
@@ -75,17 +77,22 @@ object DungeonsMenus {
         reopen: (() -> Unit)? = null,
         onDismiss: () -> Unit = {},
     ) {
-        val escapeGoesBack = MenuEscapeBehavior.goesBack(player)
+        val escapeGoesBack = MenuEscapeBehavior.footerGoesBack(screen, MenuEscapeBehavior.goesBack(player))
         val close = closeButton ?: PaperDialogButton(
             id = PaperDialogActionId.of("close_menu"),
-            label = Component.translatable("gui.back"),
+            label = Component.translatable("mco.selectServer.close", NamedTextColor.WHITE),
+            tooltip = Component.translatable("mco.selectServer.close", NamedTextColor.WHITE),
             width = 200,
             closeDialogBeforeAction = true,
             onClick = {},
         )
         requireNotNull(dialogRuntime) { "ArcDungeons dialog runtime is not initialized" }.open(
             player,
-            MenuEscapeBehavior.apply(screen, escapeGoesBack, close),
+            PaperDialogNavigation.bottom(
+                MenuEscapeBehavior.apply(screen, escapeGoesBack, close),
+                screen.buttons.firstOrNull { it.id.value == "previous" },
+                screen.buttons.firstOrNull { it.id.value == "next" },
+            ),
             reopen,
             onDismiss,
             !escapeGoesBack,

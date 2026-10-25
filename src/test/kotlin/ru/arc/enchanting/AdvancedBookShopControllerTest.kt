@@ -124,6 +124,20 @@ class AdvancedBookShopControllerTest {
     }
 
     @Test
+    fun `selection and confirmation keep their return controls only in the footer`() {
+        openConfirmation()
+        assertEquals(listOf("buy_book"), screens.last().buttons.map { it.id.value })
+        val back = checkNotNull(screens.last().exitButton)
+        assertEquals("back_to_levels", back.id.value)
+        assertFalse(back.closeDialogBeforeAction)
+        click(back)
+        assertEquals("enchanting.book.shop.select", screens.last().id)
+        assertEquals("return_to_caller", screens.last().exitButton?.id?.value)
+        assertTrue(screens.last().buttons.none { it.id.value == "return_to_caller" })
+        verify(exactly = 0) { payments.submit(any(), any(), any(), any()) }
+    }
+
+    @Test
     fun `explicit confirm queues one exact book replacement and duplicate clicks do not queue twice`() {
         openConfirmation()
         val staleConfirmButton = screens.last().buttons.single { it.id.value == "buy_book" }

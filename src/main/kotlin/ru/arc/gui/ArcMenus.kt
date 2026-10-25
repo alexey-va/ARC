@@ -1,6 +1,7 @@
 package ru.arc.gui
 
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.entity.Player
 import org.bukkit.event.inventory.ClickType
 import org.bukkit.inventory.ItemStack
@@ -89,10 +90,11 @@ object ArcMenus {
     /** An explicit Back footer uses native Back/history semantics, including Escape, for this visit. */
     fun openDialog(player: Player, screen: PaperDialogScreen, closeButton: ru.arc.paper.menu.PaperDialogButton?, reopen: (() -> Unit)?, onDismiss: () -> Unit, preferBackFooter: Boolean) {
         val close = closeButton ?: ru.arc.paper.menu.PaperDialogButton(
-            ru.arc.paper.menu.PaperDialogActionId.of("close_menu"), Component.translatable("gui.back"),
+            ru.arc.paper.menu.PaperDialogActionId.of("close_menu"), Component.translatable("mco.selectServer.close", NamedTextColor.WHITE),
+            tooltip = Component.translatable("mco.selectServer.close", NamedTextColor.WHITE),
             width = 200, closeDialogBeforeAction = true, onClick = {},
         )
-        val escapeGoesBack = preferBackFooter || MenuEscapeBehavior.goesBack(player)
+        val escapeGoesBack = MenuEscapeBehavior.footerGoesBack(screen, preferBackFooter || MenuEscapeBehavior.goesBack(player))
         requireNotNull(dialogRuntime) { "ARC dialog runtime is not initialized" }
             .open(player, prepareDialog(screen, escapeGoesBack, close), reopen, onDismiss, !escapeGoesBack)
     }
@@ -101,11 +103,10 @@ object ArcMenus {
         prepareDialog(screen, escapeGoesBack, closeButton, preferBackFooter = false)
 
     internal fun prepareDialog(screen: PaperDialogScreen, escapeGoesBack: Boolean, closeButton: ru.arc.paper.menu.PaperDialogButton, preferBackFooter: Boolean): PaperDialogScreen {
-        val back = preferBackFooter || escapeGoesBack
+        val back = MenuEscapeBehavior.footerGoesBack(screen, preferBackFooter || escapeGoesBack)
         return dialogPresentation.screen(
             MenuEscapeBehavior.apply(screen, back, closeButton),
             footerIsBack = back,
-            movedBackId = screen.exitButton?.id.takeUnless { back },
         )
     }
 

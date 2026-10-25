@@ -11,13 +11,12 @@ object MenuEscapeBehavior {
     fun goesBack(player: Player): Boolean = goesBack(HookRegistry.luckPermsHook?.getCachedMeta(player.uniqueId, META_KEY))
     internal fun goesBack(meta: String?): Boolean = meta != "close"
 
+    /** A declared returning footer stays at the bottom; native Escape shares that footer action. */
+    fun footerGoesBack(screen: PaperDialogScreen, preference: Boolean): Boolean =
+        screen.exitButton?.let { !it.closeDialogBeforeAction } ?: preference
+
     fun apply(screen: PaperDialogScreen, back: Boolean, closeButton: PaperDialogButton? = null): PaperDialogScreen {
-        if (back) return screen
-        val exit = screen.exitButton
-        val regularExit = exit?.let {
-            if (closeButton == null) it
-            else it.copy(width = screen.buttons.firstOrNull()?.width ?: it.width)
-        }
-        return screen.copy(buttons = screen.buttons + listOfNotNull(regularExit), exitButton = closeButton)
+        val footer = screen.exitButton ?: closeButton.takeUnless { back }
+        return if (footer == null) screen else screen.copy(exitButton = footer.copy(width = 200))
     }
 }

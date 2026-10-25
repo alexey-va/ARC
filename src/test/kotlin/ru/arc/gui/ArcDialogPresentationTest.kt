@@ -31,42 +31,29 @@ class ArcDialogPresentationTest : FreeSpec({
         decorated.exitButton!!.width shouldBe 150
     }
 
-    "post-Escape moved Back preserves its resolved grid width and original action" {
-        val original = button("edit", 230)
-        val close = button("close", 200).copy(label = Component.text("Закрыть меню"), closeDialogBeforeAction = true)
-        val themed = presentation("arc:dialog_ui").screen(screen.copy(buttons = listOf(original), exitButton = close),
-            footerIsBack = false, movedBackId = original.id)
-        themed.buttons.single().width shouldBe 230
-        (themed.buttons.single().onClick === original.onClick) shouldBe true
-        PlainTextComponentSerializer.plainText().serialize(themed.buttons.single().label)
-            .codePoints().anyMatch { it == 0xF9050 } shouldBe true
-        themed.exitButton!!.width shouldBe 200
-        themed.exitButton!!.closeDialogBeforeAction shouldBe true
-        PlainTextComponentSerializer.plainText().serialize(themed.exitButton!!.label)
-            .codePoints().anyMatch { it == 0xF9004 } shouldBe true
+    "configured Back retains its frame while Close stays native and missing footers stay Core-owned" {
+        val theme = presentation("arc:dialog_ui")
+        val back = theme.screen(screen, true).exitButton!!
+        PlainTextComponentSerializer.plainText().serialize(back.label).codePoints().anyMatch { it == 0xF9050 } shouldBe true
+        (back.onClick === screen.exitButton!!.onClick) shouldBe true
+        val close = button("close", 200).copy(label = Component.text("Close"), closeDialogBeforeAction = true)
+        theme.screen(screen.copy(exitButton = close), false).exitButton shouldBe close
+        theme.screen(screen.copy(exitButton = null), true).exitButton shouldBe null
     }
 
-    "missing Back footer is materialized without colliding with domain actions" {
-        val source = screen.copy(buttons = listOf(button("arc_history_exit_0", 166)), exitButton = null)
-        (presentation("").screen(source, true) === source) shouldBe true
-        val themed = presentation("arc:dialog_ui").screen(source, true)
-        (themed.buttons.single() === source.buttons.single()) shouldBe true
-        themed.exitButton!!.id.value shouldBe "arc_history_exit_1"
-        themed.exitButton!!.width shouldBe 200
-        themed.exitButton!!.closeDialogBeforeAction shouldBe false
-        PlainTextComponentSerializer.plainText().serialize(themed.exitButton!!.label).contains("Назад") shouldBe true
-    }
-
-    "native default exit translates before styling and Back cannot be relabeled as Close" {
-        val source = screen.copy(exitButton = button("exit", 200).copy(label = Component.translatable("gui.back"),
-            closeDialogBeforeAction = true))
-        val back = presentation("arc:dialog_ui").screen(source, true).exitButton!!
-        back.closeDialogBeforeAction shouldBe false
-        PlainTextComponentSerializer.plainText().serialize(back.label).contains("Назад") shouldBe true
-        back.tooltip shouldBe Component.empty()
-        val close = presentation("arc:dialog_ui").screen(source, false).exitButton!!
-        close.closeDialogBeforeAction shouldBe true
-        PlainTextComponentSerializer.plainText().serialize(close.label).contains("Закрыть меню") shouldBe true
+    "every explicit pager family stays native and last on short pages in either font mode" {
+        val pairs = listOf("previous" to "next", "previous_page" to "next_page", "items_previous" to "items_next",
+            "previous_regions" to "next_regions", "previous_levels" to "next_levels", "network_previous" to "network_next")
+        for (font in listOf("", "arc:dialog_ui")) for ((previousId, nextId) in pairs) {
+            val previous = button(previousId, 230).copy(label = Component.text("‹ Previous page"))
+            val next = button(nextId, 230).copy(label = Component.text("Следующая страница ›"))
+            val item = button("item_0", 230).copy(label = Component.text("Дом игрока ›"))
+            val source = screen.copy(buttons = listOf(previous, item, next), columns = 2)
+            val ordered = presentation(font).screen(source, true)
+            ordered.buttons shouldBe listOf(item, previous, next)
+            ordered.columns shouldBe 2
+            presentation(font).screen(source.copy(buttons = listOf(previous, item)), true).buttons shouldBe listOf(item, previous)
+        }
     }
 
     "only pack primitives use the configured font and supplementary IDs are whole scalars" {
@@ -102,36 +89,27 @@ class ArcDialogPresentationTest : FreeSpec({
         }
     }
 
-    "functional glyphs replace only the known static ornamental arrows" {
-        val examples = listOf("next" to ("Следующая →" to "Следующая"),
-            "previous" to ("← Предыдущая" to "Предыдущая"),
-            "create_home" to ("＋ Новый дом ›" to "Новый дом"), "search" to ("✧ Поиск ›" to "Поиск"),
-            "settings" to ("☷ Настройки ›" to "Настройки"),
-            "previous" to ("‹ Предыдущая страница" to "Предыдущая страница"),
-            "next" to ("Следующая страница ›" to "Следующая страница"))
-        for ((id, labels) in examples) {
-            val original = button(id, 230).copy(label = Component.text(labels.first))
+    "technical controls replace their known ornaments without touching catalog captions" {
+        for ((id, caption) in listOf("search" to "✧ Поиск ›", "settings" to "☷ Настройки ›")) {
+            val original = button(id, 230).copy(label = Component.text(caption))
             val decorated = presentation("arc:dialog_ui").screen(screen.copy(buttons = listOf(original)), true).buttons.single()
             val points = PlainTextComponentSerializer.plainText().serialize(decorated.label).codePoints().toArray()
-            val words = buildString { points.filter { it !in 0xF9000..0xF9FFF && it !in 0xF0F01..0xF0F0A }.forEach { appendCodePoint(it) } }
-            words shouldBe labels.second
             points.count { it in 0xF9060..0xF9073 } shouldBe 1
+            points.none { it == '✧'.code || it == '☷'.code || it == '›'.code } shouldBe true
+            (decorated.onClick === original.onClick) shouldBe true
         }
-        val home = button("home_0", 166).copy(label = Component.text("⌖ Утёс ›"))
-        presentation("arc:dialog_ui").screen(screen.copy(buttons = listOf(home)), true).buttons.single().label shouldBe home.label
     }
 
-    "existing save add and native cancel controls keep their own utility families" {
-        for ((id, base) in listOf("save" to 0xF9014, "create" to 0xF9008, "loading_cancel" to 0xF9004,
-            "back" to 0xF9050, "root" to 0xF9050, "back_command" to 0xF9050, "previous" to 0xF900C)) {
-            val source = button(id, 200).copy(label = if (id == "loading_cancel") Component.translatable("gui.cancel")
-                else Component.text("Действие"))
+    "important commits retain distinct accents while repeated utility controls stay native" {
+        for ((id, base) in listOf("save" to 0xF9014, "confirm" to 0xF9000, "delete" to 0xF9044)) {
+            val source = button(id, 200).copy(label = Component.text("Действие"))
             val themed = presentation("arc:dialog_ui").button(source)
-            val text = PlainTextComponentSerializer.plainText().serialize(themed.label)
-            text.codePoints().anyMatch { it == base } shouldBe true
+            PlainTextComponentSerializer.plainText().serialize(themed.label).codePoints().anyMatch { it == base } shouldBe true
             (themed.onClick === source.onClick) shouldBe true
-            if (id == "loading_cancel") text.contains("Отмена") shouldBe true
+        }
+        for (id in listOf("create", "invite", "create_home", "loading_cancel", "previous", "next", "layout_reset")) {
+            val source = button(id, 200)
+            presentation("arc:dialog_ui").button(source) shouldBe source
         }
     }
-
 })
