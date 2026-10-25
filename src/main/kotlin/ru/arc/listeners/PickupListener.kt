@@ -41,11 +41,17 @@ class PickupListener : Listener {
             pending.remove(player.uniqueId)
             if (!player.isOnline) return@Runnable
             val hasAdvancedEnchantments = Bukkit.getPluginManager().isPluginEnabled("AdvancedEnchantments")
+            val hasItemsAdder = Bukkit.getPluginManager().isPluginEnabled("ItemsAdder")
             // One coalesced, main-thread pass over this player's fixed inventory; no container/world scans.
             for (slot in 0 until player.inventory.size) {
                 val original = player.inventory.getItem(slot) ?: continue
                 LegacyTreasureItems.replacement(original)?.let { replacement ->
                     player.inventory.setItem(slot, replacement)
+                }
+                if (hasItemsAdder) {
+                    LegacyItemsAdderAttributes.replacement(original)?.let { replacement ->
+                        player.inventory.setItem(slot, replacement)
+                    }
                 }
                 if (hasAdvancedEnchantments && ru.arc.dungeons.api.ArcBookIdentity.isAdvancedEnchantmentsBook(original)) {
                     val updated = ru.arc.enchanting.presentAdvancedBook(original, player)

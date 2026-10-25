@@ -75,3 +75,11 @@ source or retired enchanter instructions. Unrelated provider metadata is preserv
 Focused tests cover custody, stale inputs, probability boundaries, persistent rates
 and presentation ownership. Protocol QA plus authoritative server inventory readback
 is required for the actual creative and survival gestures; tests alone do not prove it.
+
+AE 9.24.15 also keeps an anvil prior-work penalty in INTEGER PDC
+`advancedenchantments:repaircost`. The native grindstone resets only Minecraft's
+repair-cost component, so ARC synchronizes the AE mirror with the native result,
+including the cost retained by curses. An already-disenchanted single equipment
+item with no native penalty or enchantments may clear its orphan AE penalty by
+passing through the grindstone again. Other providers retain result validation;
+ARC changes no inputs, enchantments, experience or ordinary anvil limits.

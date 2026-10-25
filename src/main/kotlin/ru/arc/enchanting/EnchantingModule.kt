@@ -11,6 +11,7 @@ object EnchantingModule : PluginModule {
     override val name = "Enchanting"
     override val priority = 79
     private var advancedSafety: AdvancedBookSafetyListener? = null
+    private var advancedGrindstone: AdvancedGrindstoneRepairCost? = null
     private var creativeWhiteScrollGuard: CreativeWhiteScrollGuard? = null
     private var bookShop: AdvancedBookShop? = null
     private var nativeShopGuard: NativeEnchanterLocationGuard? = null
@@ -29,6 +30,9 @@ object EnchantingModule : PluginModule {
                 ARC.instance.logger.log(java.util.logging.Level.WARNING, "AE creative white-scroll guard unavailable", failure)
             }
             advancedSafety = AdvancedBookSafetyListener(config).also {
+                Bukkit.getPluginManager().registerEvents(it, ARC.instance)
+            }
+            advancedGrindstone = AdvancedGrindstoneRepairCost().also {
                 Bukkit.getPluginManager().registerEvents(it, ARC.instance)
             }
             bookShop = AdvancedBookShop(config).also { it.start() }
@@ -65,6 +69,8 @@ object EnchantingModule : PluginModule {
         advancedLoot = null
         advancedSafety?.let { HandlerList.unregisterAll(it); it.close() }
         advancedSafety = null
+        advancedGrindstone?.let { HandlerList.unregisterAll(it) }
+        advancedGrindstone = null
         clearAdvancedBookPresentation()
     }
 }
