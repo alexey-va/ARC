@@ -24,6 +24,7 @@ import ru.arc.hooks.luckperms.LuckPermsHook
 import ru.arc.hooks.packetevents.PacketEventsHook
 import ru.arc.hooks.slimefun.BackpackBlockListener
 import ru.arc.hooks.slimefun.SFHook
+import ru.arc.hooks.slimefun.SlimefunTradeListener
 import ru.arc.hooks.viaversion.ViaVersionHook
 import ru.arc.hooks.worldguard.WGHook
 import ru.arc.hooks.yamipa.YamipaHook
@@ -159,6 +160,7 @@ class HookRegistry(
         papiHook?.clearPlaceholderCache()
         if (ARC.instance.runtimeProfile == ArcRuntimeProfile.SLIMEFUN) {
             registerInterfaceHooks()
+            register("Slimefun", true) { registerListener(SlimefunTradeListener()) }
             return
         }
         registerVanillaEvents()
@@ -345,6 +347,7 @@ class HookRegistry(
         }
         register("Slimefun", true) {
             val hook = registerListener(SFHook())
+            registerListener(SlimefunTradeListener())
             registerListener(BackpackBlockListener)
             sfHook = hook
             runCatching { hook.registerOptionalDenizenTags() }
