@@ -96,17 +96,23 @@ private fun claimQuoteDisabled(failure: Throwable) {
 }
 
 /**
- * Exact third-party boundary: Lands 8.6.6, SHA-256 c4444a4716f0f78279ff0d6644c2e93e4abd8dac1eff05d3cd42f494793c4ae9.
+ * Exact third-party boundaries:
+ * Lands 8.6.6, SHA-256 c4444a4716f0f78279ff0d6644c2e93e4abd8dac1eff05d3cd42f494793c4ae9;
+ * Lands 8.9.6, SHA-256 b0057ed700bda1ed190beb4b7d8e38ead8f2c4221999d8021f1445947ad273ca.
  * Its public API has no fee quote. These are the same NORMAL-count and aggregate
  * calculator methods used by Selection.claim; no configuration formula is copied.
  * Bind once at module startup and disable only the preview when the ABI changes.
  */
 internal fun nativeLandsClaimQuote(loader: ClassLoader, version: String): (LandPlayer, Land?, Int) -> Double {
-    require(version == "8.6.6") { "Claim fee preview is verified for Lands 8.6.6; found $version" }
+    val calculatorName = when (version) {
+        "8.6.6" -> "me.angeschossen.lands.cKfg.RLHXh.RLHXh"
+        "8.9.6" -> "me.angeschossen.lands.Vjrip.RLHXh.RLHXh"
+        else -> throw IllegalArgumentException("Claim fee preview is verified for Lands 8.6.6 and 8.9.6; found $version")
+    }
     val playerType = Class.forName("me.angeschossen.lands.Dgduf.RLHXh.lGdKv.RLHXh.Dgduf", false, loader)
     val landType = Class.forName("me.angeschossen.lands.Dgduf.RLHXh.ztTjN.RLHXh.RLHXh", false, loader)
     val claimType = Class.forName("me.angeschossen.lands.Dgduf.RLHXh.RLHXh.RLHXh.Dgduf", false, loader)
-    val calculatorType = Class.forName("me.angeschossen.lands.cKfg.RLHXh.RLHXh", false, loader)
+    val calculatorType = Class.forName(calculatorName, false, loader)
     require(LandPlayer::class.java.isAssignableFrom(playerType) && Land::class.java.isAssignableFrom(landType)) {
         "Lands claim types do not match the installed API"
     }

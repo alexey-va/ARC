@@ -111,13 +111,18 @@ class LandsClaimExpansionQuoteTest : StringSpec({
         shouldThrow<IllegalArgumentException> { nativeLandsClaimQuote(loader, "unverified") }
     }
 
-    "binds the inspected Lands 8.6.6 calculator signatures".config(enabledOrReasonIf = {
-        if (runCatching {
-            Class.forName("me.angeschossen.lands.cKfg.RLHXh.RLHXh", false, Land::class.java.classLoader)
-        }.isSuccess) Enabled.enabled
-        else Enabled.disabled("Exact Lands compatibility check requires -PlandsJar=/path/to/Lands-8.6.6.jar")
-    }) {
-        nativeLandsClaimQuote(Land::class.java.classLoader, "8.6.6").shouldNotBeNull()
+    mapOf(
+        "8.6.6" to "me.angeschossen.lands.cKfg.RLHXh.RLHXh",
+        "8.9.6" to "me.angeschossen.lands.Vjrip.RLHXh.RLHXh",
+    ).forEach { (version, calculatorName) ->
+        "binds the inspected Lands $version calculator signatures".config(enabledOrReasonIf = {
+            if (runCatching {
+                Class.forName(calculatorName, false, Land::class.java.classLoader)
+            }.isSuccess) Enabled.enabled
+            else Enabled.disabled("Exact Lands compatibility check requires -PlandsJar=/path/to/Lands-$version.jar")
+        }) {
+            nativeLandsClaimQuote(Land::class.java.classLoader, version).shouldNotBeNull()
+        }
     }
 })
 
