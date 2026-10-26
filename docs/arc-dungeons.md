@@ -16,7 +16,7 @@ The contract ledger is owned by ArcContracts through a typed host adapter; see
 
 ARC exports `arc-dungeons-api` and `arc-staff-spells-api`. ArcDungeons compiles
 against those contracts without packaging another copy. It obtains SQL, Redis
-and metrics through arc-core 2.7.23 services registered by ARC. It does not own
+and metrics through arc-core 2.7.69 services registered by ARC. It does not own
 another connection pool, Redis client group, Prometheus registry or exporter.
 Distinct connection identities still require distinct host-owned pools.
 

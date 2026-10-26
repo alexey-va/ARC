@@ -33,6 +33,7 @@ import ru.arc.paper.api.ArcMetricsScope
 import ru.arc.paper.metrics.PaperArcMetrics
 import ru.arc.paper.redis.PaperRedisClient
 import ru.arc.paper.runtime.PaperPluginRuntime
+import ru.arc.paper.runtime.PaperPluginHotload
 import ru.arc.staffspells.ArcStaffSpellServiceProvider
 import ru.arc.staffspells.StaffSpellsModule
 import ru.arc.staffspells.api.ArcStaffSpellService
@@ -89,7 +90,14 @@ open class ArcDungeonsPlugin : JavaPlugin() {
 
     override fun onLoad() { instance = this }
 
+    private val hotload = PaperPluginHotload(this) {
+        stopRuntime()
+        mapOf("cleanup" to lifecycleDrain)
+    }
+
     override fun onEnable() {
+        hotload.beginGeneration()
+        hotload.register()
         val host = server.servicesManager.load(ArcDungeonConfiguration::class.java)
         if (host == null) {
             logger.warning("ArcDungeons requires the FULL ARC runtime profile; disabling before initialization")
@@ -391,9 +399,9 @@ open class ArcDungeonsPlugin : JavaPlugin() {
         val primisOwner = primisEncounters
 
         // Completion rights must be captured while the old synchronized native state is reachable.
-        runCatching { progressionOwner?.flushCompletions() }.onFailure {
+        val captureFailure = runCatching { progressionOwner?.flushCompletions() }.onFailure {
             logger.log(Level.SEVERE, "Could not capture pending dungeon completion books before shutdown", it)
-        }
+        }.exceptionOrNull()
 
         // Clear fields before cleanup so every caller sees a consistently detached state,
         // even if individual close operations fail.
@@ -411,6 +419,7 @@ open class ArcDungeonsPlugin : JavaPlugin() {
         StaffSpellsModule.installMasteryCooldown(null)
 
         val actions = mutableListOf<() -> Unit>()
+        captureFailure?.let { problem -> actions.add { throw problem } }
         listeners.forEach { listener -> actions.add { HandlerList.unregisterAll(listener) } }
         sharedXp?.let { actions.add { it.close() } }
         progressionOwner?.let { actions.add { it.close() } }
@@ -435,6 +444,11 @@ open class ArcDungeonsPlugin : JavaPlugin() {
     }
 
     override fun onDisable() {
+        hotload.prepare()
+        hotload.close()
+    }
+
+    private fun stopRuntime() {
         if (stopped) return
         stopped = true
         ++lifecycleEpoch
@@ -456,7 +470,7 @@ open class ArcDungeonsPlugin : JavaPlugin() {
             attempt { spells?.close() }
             spells = null
             attempt { StaffSpellsModule.installDuelAccess(null) }
-            attempt { ModuleRegistry.shutdownAll() }
+            attempt { ModuleRegistry.shutdownAllChecked() }
             lostLootTail = LostLootModule.drained()
             lostLootStorage = LostLootModule.storageDrained()
             closeNative()?.let { problem -> attempt { throw problem } }
@@ -479,9 +493,15 @@ open class ArcDungeonsPlugin : JavaPlugin() {
         // No future in this wait can need another native tick. Ticket retirement is observed separately.
         attempt { storage.join() }
         attempt { lostLootStorage.join() }
+        attempt { hotload.retireGameplayRegistrations() }
+        attempt { ArcLogging.close() }
         val terminalFailure = failure
-        lifecycleDrain = CompletableFuture.allOf(lifecycleDrain, lostLootTail).thenApply {
-            terminalFailure?.let { throw it }
+        lifecycleDrain = CompletableFuture.allOf(lifecycleDrain, lostLootTail).handle { _, nativeFailure ->
+            terminalFailure?.let { problem ->
+                if (nativeFailure != null && problem !== nativeFailure) problem.addSuppressed(nativeFailure)
+                throw problem
+            }
+            nativeFailure?.let { throw it }
             Unit
         }
         lifecycleDrain.whenComplete { _, problem ->

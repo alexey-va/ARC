@@ -32,24 +32,22 @@ class ARCGenerationLifecycleTest : TestBase() {
     }
 
     @Test
-    fun `stop waits accepted storage before a replacement can start`() {
+    fun `prepare reports pending accepted storage without blocking Main`() {
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
-        val returned = CountDownLatch(1)
         plugin.submitBackground { entered.countDown(); check(release.await(15, TimeUnit.SECONDS)) }
         assertTrue(entered.await(5, TimeUnit.SECONDS))
-        val releaseWorker = java.util.concurrent.CompletableFuture.runAsync {
-            try {
-                val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-                while (!plugin.readiness().isCompletedExceptionally && System.nanoTime() < deadline) Thread.yield()
-                assertTrue(plugin.readiness().isCompletedExceptionally)
-                assertFalse(returned.await(50, TimeUnit.MILLISECONDS))
-            } finally { release.countDown() }
-        }
         try {
+            assertTrue(server.dispatchCommand(server.consoleSender, "arc:hotload prepare"))
+            assertTrue(plugin.isEnabled)
+            assertFalse(plugin.closeCompletion().isDone)
+            assertTrue(plugin.readiness().isCompletedExceptionally)
+            assertNotNull(server.commandMap.getCommand("arc:hotload"))
+            assertTrue(server.dispatchCommand(server.consoleSender, "arc:hotload status"))
             server.pluginManager.disablePlugin(plugin)
-            returned.countDown()
-            releaseWorker.get(5, TimeUnit.SECONDS)
+            assertFalse(plugin.closeCompletion().isDone)
+            assertNull(server.commandMap.getCommand("arc:hotload"))
+            release.countDown()
             awaitMainThreadFuture(server, plugin.closeCompletion())
             assertNull(server.servicesManager.load(ArcDungeonConfiguration::class.java))
             server.pluginManager.enablePlugin(plugin)

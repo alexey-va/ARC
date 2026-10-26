@@ -161,6 +161,12 @@ open class ARC : JavaPlugin() {
     private var background: BoundedAsyncExecutor? = null
     private var installedGlobals = false
     private var lifecycleDrain = CompletableFuture.completedFuture(Unit)
+    private var storageClose = CompletableFuture.completedFuture<Void>(null)
+    private var nativeClose = CompletableFuture.completedFuture<Void>(null)
+    private val hotload = ru.arc.paper.runtime.PaperPluginHotload(this) {
+        stopRuntime()
+        linkedMapOf("storage" to storageClose, "native" to nativeClose, "runtime" to lifecycleDrain)
+    }
     private var lifecycleEpoch = 0L
     private var stopped = false
     @Volatile private var ready = CompletableFuture<Void>()
@@ -255,6 +261,12 @@ open class ARC : JavaPlugin() {
     override fun onLoad() { plugin = this }
 
     override fun onEnable() {
+        try { hotload.beginGeneration() } catch (failure: Throwable) {
+            ready = CompletableFuture.failedFuture(failure)
+            logger.log(java.util.logging.Level.SEVERE, "ARC startup refused: previous generation has not stopped cleanly", failure)
+            server.pluginManager.disablePlugin(this)
+            return
+        }
         stopped = false
         installedGlobals = false
         ready = CompletableFuture()
@@ -266,6 +278,7 @@ open class ARC : JavaPlugin() {
             if (stopped || lifecycleEpoch != epoch) return
             try {
                 if (failure != null) throw failure
+                hotload.register()
                 beginRuntime()
             } catch (startupFailure: Throwable) {
                 ready.completeExceptionally(startupFailure)
@@ -416,6 +429,10 @@ open class ARC : JavaPlugin() {
     }
 
     override fun onDisable() {
+        try { hotload.prepare() } finally { hotload.close() }
+    }
+
+    private fun stopRuntime() {
         if (stopped) return
         stopped = true
         ++lifecycleEpoch
@@ -439,7 +456,7 @@ open class ARC : JavaPlugin() {
             attempt { unregisterSlimefunMenuAlias() }
             attempt { unregisterNetworkSpawnAlias() }
             if (runtimeProfile == ArcRuntimeProfile.FULL) attempt { Portal.removeAll() }
-            attempt { ModuleRegistry.shutdownAll() }
+            attempt { ModuleRegistry.shutdownAllChecked() }
             attempt { RtpPlayerRegistry.shutdown() }
             moduleDrains += RtpPlayerRegistry.closeCompletion()
             moduleDrains += ru.arc.onboarding.OnboardingService.closeCompletion()
@@ -470,6 +487,7 @@ open class ARC : JavaPlugin() {
             synchronized(cleanupMonitor) { cleanupSealed = true }
             attempt { Tasks.reset() }
         }
+        attempt { hotload.retireGameplayRegistrations() }
         val oldWorker = background
         background = null
         val storageDrain = oldWorker?.closeAsync {
@@ -477,15 +495,27 @@ open class ARC : JavaPlugin() {
             try { discardPreparedRepositoriesOnWorker() } catch (failure: Throwable) { recordCleanupFailure(failure) }
             cleanupFailure?.let { throw it }
         } ?: CompletableFuture.completedFuture(Unit)
-        // Admission and native callbacks are closed above. Only storage work is awaited here;
-        // host-owned visual cleanup remains a separate tail and never blocks the server thread.
         moduleDrains += storageDrain
-        moduleDrains.forEach { drain -> attempt { drain.join() } }
-        attempt { Logging.closeDiagnosticFile() }
+
         val failure = nativeFailure
-        if (failure == null) sqlDrain.complete(null) else sqlDrain.completeExceptionally(failure)
-        lifecycleDrain = CompletableFuture.allOf(*nativeDrains.toTypedArray()).thenApply {
-            failure?.let { throw it }
+        storageClose = CompletableFuture.allOf(*moduleDrains.toTypedArray())
+        nativeClose = CompletableFuture.allOf(*nativeDrains.toTypedArray())
+        val terminalSql = sqlDrain
+        storageClose.whenComplete { _, problem ->
+            val result = problem ?: failure
+            if (result == null) terminalSql.complete(null) else terminalSql.completeExceptionally(result)
+        }
+        // ArcCore stays enabled: its native cleanup may need future ticks. Do not join it on Main.
+        lifecycleDrain = CompletableFuture.allOf(storageClose, nativeClose,
+            if (failure == null) CompletableFuture.completedFuture(Unit) else CompletableFuture.failedFuture(failure),
+        ).handle { _, problem ->
+            var result = problem
+            for (close in listOf<() -> Unit>({ Logging.closeDiagnosticFile() }, { ru.arc.logging.ArcLogging.close() })) {
+                try { close() } catch (loggingFailure: Throwable) {
+                    if (result == null) result = loggingFailure else if (result !== loggingFailure) result.addSuppressed(loggingFailure)
+                }
+            }
+            result?.let { throw it }
             Unit
         }
         lifecycleDrain.whenComplete { _, problem ->

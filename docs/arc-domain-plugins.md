@@ -17,7 +17,7 @@ Changing an API requires a new immutable API version and a compatible host.
 
 Each child owns its shaded core implementation modules and lifecycle. The
 shared API classes are the deliberate exception. SQL and Redis clients borrow
-ArcCore's arc-core 2.7.23 providers; metrics use owner-scoped meters in ARC's registry.
+ArcCore's arc-core 2.7.69 providers; metrics use owner-scoped meters in ARC's registry.
 Origin's chunk leases share ARC's existing ticket registry, and its NPC
 holograms, auction operations, furniture inspection and payments call typed host
 ports. This change makes no measured claim about heap or throughput savings.
@@ -107,7 +107,7 @@ unchanged. Source tests and production acceptance must verify provider failure,
 payment evidence and recovery behavior rather than treating a successful build
 as an economy check.
 
-ArcContracts 0.1.2 requires the arc-core 2.7.23 API/provider bundled in ARC
+ArcContracts 0.1.2 requires the arc-core 2.7.69 API/provider bundled in ARC
 1.4.393. Deploy them in the same restart batch. Contract gauges use one bounded
 2048-series scope and replace that scope when snapshot keys change, so removed
 contracts and previous status labels do not remain registered. ArcDungeons
