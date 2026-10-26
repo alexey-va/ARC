@@ -132,6 +132,7 @@ class SlimefunRuntimeProfileTest : FreeSpec({
             val oldAlias = runtime.server.commandMap.getCommand("mm")
             (runtime.server.commandMap.knownCommands.values.any { it === oldAlias }) shouldBe true
             runtime.server.pluginManager.disablePlugin(plugin)
+            awaitMainThreadFuture(runtime.server, plugin.closeCompletion())
             runtime.server.commandMap.getCommand("mm") shouldBe null
             runtime.server.commandMap.getCommand("spawn") shouldBe otherSpawn
             runtime.server.commandMap.getCommand("arc:mm") shouldBe null
@@ -151,6 +152,7 @@ class SlimefunRuntimeProfileTest : FreeSpec({
             runtime.server.commandMap.getCommand("spawn") shouldBe runtime.server.commandMap.getCommand("arc:spawn")
             ArcMenus.hasDialogRuntimeForTests() shouldBe true
             runtime.server.pluginManager.disablePlugin(plugin)
+            awaitMainThreadFuture(runtime.server, plugin.closeCompletion())
             runtime.server.commandMap.getCommand("mm") shouldBe null
             runtime.server.commandMap.getCommand("spawn") shouldBe otherSpawn
             runtime.server.commandMap.getCommand("arc:mm") shouldBe null
@@ -181,36 +183,43 @@ class SlimefunRuntimeProfileTest : FreeSpec({
             MockBukkitTestRuntime.open().use { runtime ->
                 loadArcCoreHostForTest()
                 val plugin = loadSlimefunProfilePlugin(SlimefunGlyphProfilePlugin::class.java)
-                awaitMainThreadFuture(runtime.server, plugin.readiness())
-                plugin.runtimeProfile shouldBe ArcRuntimeProfile.SLIMEFUN
-                ModuleRegistry.getRuntimeStatuses().map { it.name }.toSet() shouldBe
-                    setOf("Redis", "ChatGlyphProtection", "Config", "OpsHttp", "Restart", "ItemInfo", "ChatMode", "SlimefunNetworkChat", "SlimefunMenu", "Hooks", "HelpCenter")
-                ModuleRegistry.getRuntimeStatuses().all { it.ready && it.failures == 0L } shouldBe true
-                verify(atLeast = 1) { redis.registerChannelUnique("arc.proxy_player_list", any()) }
-                val listeners = mutableListOf<ChannelListener>()
-                verify(atLeast = 1) { redis.registerChannelUnique("arc.proxy_player_list", capture(listeners)) }
-                listeners.last().consume(
-                    "arc.proxy_player_list",
-                    """[{"username":"SkyblockQA","server":"slimefun","uuid":"00000000-0000-0000-0000-000000000001","joinTime":1},{"username":"SpawnQA","server":"spawn","uuid":"00000000-0000-0000-0000-000000000002","joinTime":1}]""",
-                    "proxy",
-                )
-                PlayerManager.getPlayerNames() shouldBe setOf("SkyblockQA", "SpawnQA")
-                HandlerList.getRegisteredListeners(plugin).any { it.listener is ChatListener } shouldBe true
-                awaitMainThreadFuture(runtime.server, plugin.reload())
-                ModuleRegistry.getRuntimeStatuses().all { it.ready && it.failures == 0L } shouldBe true
-                verify(atLeast = 2) { redis.registerChannelUnique("arc.proxy_player_list", any()) }
-                ARC.networkRegistry shouldBe null
-                ARC.hookRegistry shouldNotBe null
-                runtime.server.pluginManager.disablePlugin(plugin)
+                try {
+                    awaitMainThreadFuture(runtime.server, plugin.readiness())
+                    plugin.runtimeProfile shouldBe ArcRuntimeProfile.SLIMEFUN
+                    ModuleRegistry.getRuntimeStatuses().map { it.name }.toSet() shouldBe
+                        setOf("Redis", "ChatGlyphProtection", "Config", "OpsHttp", "Restart", "ItemInfo", "ChatMode", "SlimefunNetworkChat", "SlimefunMenu", "Hooks", "HelpCenter")
+                    ModuleRegistry.getRuntimeStatuses().all { it.ready && it.failures == 0L } shouldBe true
+                    verify(atLeast = 1) { redis.registerChannelUnique("arc.proxy_player_list", any()) }
+                    val listeners = mutableListOf<ChannelListener>()
+                    verify(atLeast = 1) { redis.registerChannelUnique("arc.proxy_player_list", capture(listeners)) }
+                    listeners.last().consume(
+                        "arc.proxy_player_list",
+                        """[{"username":"SkyblockQA","server":"slimefun","uuid":"00000000-0000-0000-0000-000000000001","joinTime":1},{"username":"SpawnQA","server":"spawn","uuid":"00000000-0000-0000-0000-000000000002","joinTime":1}]""",
+                        "proxy",
+                    )
+                    PlayerManager.getPlayerNames() shouldBe setOf("SkyblockQA", "SpawnQA")
+                    HandlerList.getRegisteredListeners(plugin).any { it.listener is ChatListener } shouldBe true
+                    awaitMainThreadFuture(runtime.server, plugin.reload())
+                    ModuleRegistry.getRuntimeStatuses().all { it.ready && it.failures == 0L } shouldBe true
+                    verify(atLeast = 2) { redis.registerChannelUnique("arc.proxy_player_list", any()) }
+                    ARC.networkRegistry shouldBe null
+                    ARC.hookRegistry shouldNotBe null
+                } finally {
+                    runtime.server.pluginManager.disablePlugin(plugin)
+                    awaitMainThreadFuture(runtime.server, plugin.closeCompletion())
+                }
                 verify(atLeast = 2) { redis.unregisterChannel("arc.proxy_player_list", any()) }
             }
         } finally {
-            ARC.plugin?.closeCompletion()?.get(10, java.util.concurrent.TimeUnit.SECONDS)
-            unmockkObject(RedisModule)
-            ARC.plugin = null
-            ARC.redisManager = null
-            PlayerManager.readMessage("[]")
-            ConfigManager.clear()
+            try {
+                ARC.plugin?.closeCompletion()?.get(10, java.util.concurrent.TimeUnit.SECONDS)
+            } finally {
+                unmockkObject(RedisModule)
+                ARC.plugin = null
+                ARC.redisManager = null
+                PlayerManager.readMessage("[]")
+                ConfigManager.clear()
+            }
         }
     }
 })

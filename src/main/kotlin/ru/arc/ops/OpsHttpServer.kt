@@ -59,7 +59,10 @@ class OpsHttpServer(
     private var httpServer: HttpServer? = null
     private var staffCommandServer: HttpServer? = null
     private var executor: ExecutorService? = null
-    private val staffCommandHandlers = staffCommandHandlers ?: OpsStaffCommandHandlers(configProvider = configProvider)
+    // LuckPerms is optional; a disabled staff endpoint must not load its typed handler.
+    private val staffCommandHandlersDelegate = staffCommandHandlers?.let(::lazyOf)
+        ?: lazy { OpsStaffCommandHandlers(configProvider = configProvider) }
+    private val staffCommandHandlers by staffCommandHandlersDelegate
 
     val actualPort: Int
         get() = httpServer?.address?.port ?: configProvider().bindPort
@@ -107,7 +110,7 @@ class OpsHttpServer(
         executor = newExecutor
         httpServer = server
         staffCommandServer = staffServer
-        staffCommandHandlers.activate()
+        if (cfg.staffCommandsEnabled) staffCommandHandlers.activate()
         if (staffServer != null) info("Staff command listener active on {}:{} (source restricted)", cfg.staffCommandBindHost, staffServer.address.port)
         info(
             "Ops HTTP API listening on {}:{} (console={})",
@@ -132,7 +135,9 @@ class OpsHttpServer(
     }
 
     /** Main-thread-safe admission invalidation; socket shutdown remains on the lifecycle worker. */
-    fun invalidateStaffCommands() = staffCommandHandlers.invalidate()
+    fun invalidateStaffCommands() {
+        if (staffCommandHandlersDelegate.isInitialized()) staffCommandHandlers.invalidate()
+    }
 
     private fun handleStaffListener(exchange: HttpExchange, allowedAddress: InetAddress) {
         val error = when {

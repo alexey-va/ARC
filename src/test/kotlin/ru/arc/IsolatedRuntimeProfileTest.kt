@@ -43,25 +43,33 @@ class IsolatedRuntimeProfileTest : FreeSpec({
             MockBukkitTestRuntime.open().use { runtime ->
                 loadArcCoreHostForTest()
                 val plugin = runtime.loadPlugin(IsolatedGlyphProfilePlugin::class.java)
-                awaitMainThreadFuture(runtime.server, plugin.readiness())
-                plugin.runtimeProfile shouldBe ArcRuntimeProfile.ISOLATED
-                ModuleRegistry.getRuntimeStatuses().map { it.name }.toSet() shouldBe
-                    setOf("Redis", "ChatGlyphProtection", "Config", "OpsHttp", "Restart", "ItemInfo")
-                ModuleRegistry.getRuntimeStatuses().all { it.ready && it.failures == 0L } shouldBe true
-                ARC.networkRegistry shouldBe null
-                ARC.hookRegistry shouldBe null
-                runtime.server.servicesManager.getRegistration(ArcSidebarService::class.java) shouldBe null
-                ArcCommand.INSTANCE.availableSubcommands(runtime.server.consoleSender)
-                    .map { it.configKey }.toSet() shouldBe setOf("help", "reload", "restart")
-                awaitMainThreadFuture(runtime.server, plugin.reload())
-                ModuleRegistry.getRuntimeStatuses().all { it.ready && it.failures == 0L } shouldBe true
+                try {
+                    awaitMainThreadFuture(runtime.server, plugin.readiness())
+                    plugin.runtimeProfile shouldBe ArcRuntimeProfile.ISOLATED
+                    ModuleRegistry.getRuntimeStatuses().map { it.name }.toSet() shouldBe
+                        setOf("Redis", "ChatGlyphProtection", "Config", "OpsHttp", "Restart", "ItemInfo")
+                    ModuleRegistry.getRuntimeStatuses().all { it.ready && it.failures == 0L } shouldBe true
+                    ARC.networkRegistry shouldBe null
+                    ARC.hookRegistry shouldBe null
+                    runtime.server.servicesManager.getRegistration(ArcSidebarService::class.java) shouldBe null
+                    ArcCommand.INSTANCE.availableSubcommands(runtime.server.consoleSender)
+                        .map { it.configKey }.toSet() shouldBe setOf("help", "reload", "restart")
+                    awaitMainThreadFuture(runtime.server, plugin.reload())
+                    ModuleRegistry.getRuntimeStatuses().all { it.ready && it.failures == 0L } shouldBe true
+                } finally {
+                    runtime.server.pluginManager.disablePlugin(plugin)
+                    awaitMainThreadFuture(runtime.server, plugin.closeCompletion())
+                }
             }
         } finally {
-            ARC.plugin?.closeCompletion()?.get(10, java.util.concurrent.TimeUnit.SECONDS)
-            unmockkObject(RedisModule)
-            ARC.plugin = null
-            ARC.redisManager = null
-            ConfigManager.clear()
+            try {
+                ARC.plugin?.closeCompletion()?.get(10, java.util.concurrent.TimeUnit.SECONDS)
+            } finally {
+                unmockkObject(RedisModule)
+                ARC.plugin = null
+                ARC.redisManager = null
+                ConfigManager.clear()
+            }
         }
     }
 
