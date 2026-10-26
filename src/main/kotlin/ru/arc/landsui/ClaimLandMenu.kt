@@ -14,10 +14,15 @@ import ru.arc.paper.actionpanel.ActionPanelLayout
 import ru.arc.paper.actionpanel.ActionPanelLayouts
 import ru.arc.paper.actionpanel.ActionPanelOptions
 import ru.arc.paper.actionpanel.ActionPanelPlacement
+import ru.arc.paper.actionpanel.ActionPanelPoint
+import ru.arc.paper.actionpanel.ActionPanelRect
 import ru.arc.paper.actionpanel.ActionPanelTextStyle
 import ru.arc.paper.actionpanel.PaperActionPanels
 import ru.arc.paper.display.PaperPacketDisplays
 import java.util.UUID
+
+private const val COST_ROW_HEIGHT = 0.24
+private const val COST_ROW_GAP = 0.04
 
 /** Lands owns eligibility and gestures; Core owns the six-action viewer-private world panel. */
 internal class ClaimLandMenu(
@@ -26,7 +31,7 @@ internal class ClaimLandMenu(
     private val labels: Map<LandsUiPanelAction, Component>,
     private val displays: PaperPacketDisplays = PaperPacketDisplays(plugin, "claim-land-menu"),
 ) : AutoCloseable {
-    private data class View(val worldId: UUID, val landId: String, val heading: Component)
+    private data class View(val worldId: UUID, val landId: String, val heading: Component, val expansionCost: Component?)
 
     private val views = mutableMapOf<UUID, View>()
     private var closed = false
@@ -43,7 +48,7 @@ internal class ClaimLandMenu(
             return ActionPanelFrame(
                 view.landId,
                 ActionPanelPlacement.FollowView(view.worldId, FOLLOW),
-                claimLandMenuLayout(view.heading, labels),
+                claimLandMenuLayout(view.heading, labels, view.expansionCost),
                 true,
                 ActionPanelOptions(ActionPanelInputProfile.EXTERNAL_RAY, 4.0, true, true),
                 null,
@@ -55,10 +60,10 @@ internal class ClaimLandMenu(
         override fun activate(player: Player, context: String, action: LandsUiPanelAction) = Unit
     })
 
-    fun show(player: Player, landId: String, landName: String) {
+    fun show(player: Player, landId: String, landName: String, expansionCost: Component? = null) {
         check(!closed) { "Claim land menu is closed" }
         if (views[player.uniqueId]?.worldId?.let { it != player.world.uid } == true) hide(player.uniqueId)
-        views[player.uniqueId] = View(player.world.uid, landId, title(landName))
+        views[player.uniqueId] = View(player.world.uid, landId, title(landName), expansionCost)
         panels.refresh(player)
     }
 
@@ -86,7 +91,8 @@ internal class ClaimLandMenu(
     }
 
     private companion object {
-        val FOLLOW = ActionPanelFollowSettings(2.4, 0.0, 0.0, 1.25, 0.03)
+        // Reserve the footer in every state without shifting the original controls or recapturing aim.
+        val FOLLOW = ActionPanelFollowSettings(2.4, 0.0, -(COST_ROW_HEIGHT + COST_ROW_GAP) / 2.0, 1.25, 0.03)
     }
 }
 
@@ -94,6 +100,7 @@ internal class ClaimLandMenu(
 internal fun claimLandMenuLayout(
     heading: Component,
     labels: Map<LandsUiPanelAction, Component>,
+    expansionCost: Component? = null,
 ): ActionPanelLayout<LandsUiPanelAction> {
     val grid = ActionPanelLayouts.twoColumn(
         LandsUiPanelAction.entries.map { ActionPanelAction(it, labels.getValue(it)) }, heading,
@@ -101,8 +108,12 @@ internal fun claimLandMenuLayout(
     fun style(source: ActionPanelTextStyle) = ActionPanelTextStyle(
         source.scale, source.lineWidth, source.displayWidth, source.displayHeight, 0.025, -1, 2,
     )
+    val bottom = grid.buttons.minOf { button -> button.rect.center.y - button.rect.height / 2.0 }
     return ActionPanelLayout(
         grid.buttons.map { ActionPanelButton(it.action, it.rect, it.text, style(it.style), it.visible, it.enabled) },
-        grid.labels.map { ActionPanelLabel(it.key, it.rect, it.text, style(it.style), true) },
+        grid.labels.map { ActionPanelLabel(it.key, it.rect, it.text, style(it.style), true) } +
+            ActionPanelLabel("expansion-cost",
+                ActionPanelRect(ActionPanelPoint(0.0, bottom - COST_ROW_GAP - COST_ROW_HEIGHT / 2.0, 0.0), 3.0, COST_ROW_HEIGHT),
+                expansionCost ?: Component.empty(), style(ActionPanelTextStyle.status()), true),
     )
 }

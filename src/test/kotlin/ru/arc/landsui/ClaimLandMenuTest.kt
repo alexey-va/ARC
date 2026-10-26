@@ -38,7 +38,7 @@ class ClaimLandMenuTest : FunSpec({
         }
         layout.buttons.first().rect.center.x shouldBe -0.775
         layout.buttons.last().rect.center.y shouldBe -0.26
-        layout.labels.single().let {
+        layout.labels.first().let {
             kotlin.math.abs(it.rect.center.y - 0.535) shouldBeLessThanOrEqual 1e-8
             it.rect.width shouldBe 3.0
             it.rect.height shouldBe 0.24
@@ -47,21 +47,22 @@ class ClaimLandMenuTest : FunSpec({
             it.style.lineWidth shouldBe 240
             it.style.baselineInset shouldBe 0.025
         }
-        claimLandMenuLayout(Component.empty(), labels).labels.single().visible shouldBe true
+        layout.labels.last().text shouldBe Component.empty()
+        claimLandMenuLayout(Component.empty(), labels).labels.first().visible shouldBe true
     }
 
     test("shared runtime keeps identities through head turns, tiny body movement and title changes") {
         val fixture = ClaimMenuFixture()
         with(fixture) {
             menu.show(player, "home", "Дом")
-            made.size shouldBe 7
+            made.size shouldBe 8
             val initial = positions.map { it.clone() }
             eye = eye.clone().apply { yaw = 130f }
             body = body.clone().add(0.02, 0.0, 0.0)
             menu.show(player, "home", "Новый дом")
-            made.size shouldBe 7
+            made.size shouldBe 8
             positions shouldBe initial
-            texts.last() shouldBe Component.text("Новый дом")
+            texts[6] shouldBe Component.text("Новый дом")
             val viewerId = player.uniqueId
             made.forEach { display ->
                 verify { display.isVisibleByDefault = false }
@@ -72,6 +73,54 @@ class ClaimLandMenuTest : FunSpec({
             menu.close()
             made.forEach { verify(exactly = 1) { it.remove() } }
             verify(exactly = 1) { packetOwner.close() }
+        }
+    }
+
+    test("the optional price is below all controls without moving their rectangles") {
+        val labels = LandsUiPanelAction.entries.associateWith { Component.text(it.name) }
+        val free = claimLandMenuLayout(Component.text("Дом"), labels)
+        val price = Component.text("Стоимость: 1250 💰")
+        val paid = claimLandMenuLayout(Component.text("Дом"), labels, price)
+        paid.buttons.map { it.rect } shouldBe free.buttons.map { it.rect }
+        paid.labels.map { it.rect } shouldBe free.labels.map { it.rect }
+        paid.labels.last().let {
+            it.key shouldBe "expansion-cost"
+            it.text shouldBe price
+            kotlin.math.abs(it.rect.center.y + 0.535) shouldBeLessThanOrEqual 1e-8
+            it.rect.width shouldBe 3.0
+            it.rect.height shouldBe 0.24
+            it.style.scale shouldBe 0.48f
+            it.style.interpolationDuration shouldBe 2
+        }
+    }
+
+    test("price updates and clearing retain original placement and the aimed control") {
+        val fixture = ClaimMenuFixture()
+        with(fixture) {
+            menu.show(player, "home", "Дом")
+            made.size shouldBe 8
+            val controls = made.take(7)
+            val initial = positions.take(7).map { it.clone() }
+            kotlin.math.abs(positions.first().y - (eye.y + 0.03)) shouldBeLessThanOrEqual 1e-8
+            texts.last() shouldBe Component.empty()
+            val button = positions.first().clone().add(0.0, 0.23 / 2.0 - 0.025, 0.0)
+            eye = eye.clone().setDirection(button.toVector().subtract(eye.toVector()))
+            menu.target(player) shouldBe LandsUiPanelAction.ADD_MEMBER
+            menu.show(player, "home", "Дом", Component.text("Стоимость: 1000 💰"))
+            made.size shouldBe 8
+            positions.take(7) shouldBe initial
+            menu.target(player) shouldBe LandsUiPanelAction.ADD_MEMBER
+            val priceDisplay = made.last()
+            menu.show(player, "home", "Дом", Component.text("Стоимость: 2100 💰"))
+            made.size shouldBe 8
+            texts.last() shouldBe Component.text("Стоимость: 2100 💰")
+            menu.show(player, "home", "Дом")
+            positions.take(7) shouldBe initial
+            menu.target(player) shouldBe LandsUiPanelAction.ADD_MEMBER
+            texts.last() shouldBe Component.empty()
+            verify(exactly = 0) { priceDisplay.remove() }
+            controls.forEach { verify(exactly = 0) { it.remove() } }
+            menu.close()
         }
     }
 

@@ -52,6 +52,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig, particleCol
         val confirmed = linkedSetOf<GuideChunk>()
         var aimed: GuideChunk? = null
         var radius = 0
+        var expansionCost: Component? = null
     }
 
     fun start() {
@@ -225,6 +226,9 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig, particleCol
                 }
             }
         }
+        session.expansionCost = if (holding && !success && selected != null && placement != null) {
+            claimGuideCostText(text.getValue("cost"), LandsUiModule.claimExpansionCost(player, placement.location, session.radius))
+        } else null
         if (LandsUiModule.hasClaimMenu(player)) {
             session.label?.remove()
             session.label = null
@@ -243,8 +247,10 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig, particleCol
             it.setTransformationMatrix(Matrix4f().scaling(1.30f))
         }.also { session.label = it; player.showEntity(ARC.instance, it) }
         followClaimGuideDisplay(label, labelLocation)
-        val message = claimGuideLandText(text.getValue(state), selected?.name?.take(24))
-        label.text(if (LandsUiModule.isAvailable()) message.append(Component.newline()).append(text.getValue("menu")) else message)
+        var message = claimGuideLandText(text.getValue(state), selected?.name?.take(24))
+        if (LandsUiModule.isAvailable()) message = message.append(Component.newline()).append(text.getValue("menu"))
+        session.expansionCost?.let { message = message.append(Component.newline()).append(it) }
+        label.text(message)
     }
 
     fun isMenuTarget(player: Player): Boolean = LandsUiModule.isClaimMenuTarget(player) || (player.isSneaking &&
@@ -413,6 +419,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig, particleCol
     }
 
     private fun clearVisuals(session: Session) {
+        session.expansionCost = null
         clearGrid(session)
         session.label?.remove()
         session.label = null
@@ -429,6 +436,8 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig, particleCol
 
     fun hasHologram(player: Player): Boolean = LandsUiModule.hasClaimMenu(player) ||
         sessions[player.uniqueId]?.label?.isValid == true
+
+    fun expansionCostText(player: Player): Component? = sessions[player.uniqueId]?.expansionCost
 
     private fun clear(player: Player) {
         particles?.holding(player.uniqueId, false)

@@ -6,6 +6,7 @@ import io.kotest.assertions.withClue
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.minimessage.MiniMessage
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import ru.arc.config.ConfigManager
 import java.nio.file.Files
 
@@ -19,6 +20,11 @@ class LandsUiConfigTest : StringSpec({
             settings.enabled shouldBe true
             settings.commandShortcutsEnabled shouldBe false
             settings.maxListedPlayers shouldBe 12
+            fun plain(key: String) = PlainTextComponentSerializer.plainText()
+                .serialize(MiniMessage.miniMessage().deserialize(settings.text(key)))
+            plain("root-body").startsWith("Поселение — твой приват. Чанк — участок 16×16 блоков.") shouldBe true
+            plain("table-settlements-label") shouldBe "Поселения"
+            plain("table-protected-label") shouldBe "Чанки"
             settings.text("guide-commands-body").contains("/lands edit НАЗВАНИЕ") shouldBe true
             settings.text("guide-commands-body").contains("/lands menu") shouldBe true
             settings.text("guide-body").contains("Выбранное поселение", ignoreCase = true) shouldBe true

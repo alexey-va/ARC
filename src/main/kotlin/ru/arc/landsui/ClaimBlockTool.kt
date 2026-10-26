@@ -77,7 +77,8 @@ internal class ClaimBlockTool(
                 try {
                     val land = menuLand(player)
                     if (land == null) clearMenu(player)
-                    else menu?.show(player, land.ulid.toString(), land.name)
+                    else menu?.show(player, land.ulid.toString(), land.name,
+                        OnboardingModule.claimGuide?.expansionCostText(player))
                     menuRetries.remove(player.uniqueId)
                 } catch (failure: Exception) {
                     clearMenu(player)

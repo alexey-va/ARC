@@ -2,6 +2,11 @@ package ru.arc.onboarding
 
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.TextComponent
+import net.kyori.adventure.text.format.NamedTextColor
+import net.kyori.adventure.text.minimessage.MiniMessage
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Location
 import io.mockk.mockk
 import io.mockk.every
@@ -11,6 +16,20 @@ import org.bukkit.entity.BlockDisplay
 
 class ClaimGuideDisplayTest : StringSpec({
     val world = mockk<World>()
+    "only a positive finite quote gets a price row with a white coin" {
+        val template = MiniMessage.miniMessage().deserialize(OnboardingConfig.CLAIM_TEXT.getValue("cost"))
+        for (cost in listOf(null, 0.0, -1.0, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)) {
+            claimGuideCostText(template, cost) shouldBe null
+        }
+        val plain = PlainTextComponentSerializer.plainText()
+        val paid = requireNotNull(claimGuideCostText(template, 1250.5))
+        plain.serialize(paid) shouldBe "Стоимость: 1250.5 💰"
+        fun textParts(component: Component): List<TextComponent> =
+            listOfNotNull(component as? TextComponent) + component.children().flatMap(::textParts)
+        textParts(paid).single { it.content() == "💰" }.color() shouldBe NamedTextColor.WHITE
+        plain.serialize(requireNotNull(claimGuideCostText(template, 0.001))) shouldBe "Стоимость: 0.001 💰"
+    }
+
     "aiming at the action panel changes only glow and restores it without removing contours" {
         var glowing = true
         val display = mockk<BlockDisplay>(relaxed = true)

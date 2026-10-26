@@ -1,9 +1,18 @@
 package ru.arc.onboarding
 
+import net.kyori.adventure.text.Component
 import org.bukkit.Location
 import org.bukkit.entity.BlockDisplay
 import org.bukkit.entity.Display
 import org.bukkit.entity.TextDisplay
+import java.math.BigDecimal
+
+/** Unknown and free claims have no price row; retain the quoted amount without rounding it to zero. */
+internal fun claimGuideCostText(template: Component, cost: Double?): Component? {
+    if (cost == null || !cost.isFinite() || cost <= 0.0) return null
+    val amount = BigDecimal.valueOf(cost).stripTrailingZeros().toPlainString()
+    return template.replaceText { it.matchLiteral("{cost}").replacement(Component.text(amount)) }
+}
 
 /** Keep the contours visible while the action panel suppresses their glow. */
 internal fun setClaimGuideGlow(displays: Iterable<BlockDisplay>, glowing: Boolean) {

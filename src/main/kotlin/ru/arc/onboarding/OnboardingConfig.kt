@@ -77,6 +77,7 @@ internal class OnboardingConfig private constructor(
             "action-own" to "<white>Расширить — поставь блок за голубой границей",
             "action-occupied" to "<#ff8178>Место занято • <white>Найди свободный участок",
             "menu" to "<gray>Shift + F - меню",
+            "cost" to "<#e8dfd2>Стоимость: <#f4d87a>{cost} <white>💰</white>",
             "boundary-enter" to "<#92bed8>Участок «{land}» <gray>• <white>Земля под защитой",
             "boundary-leave" to "<#ff9f0f>Ты вышел из «{land}» <gray>• <white>Здесь нет привата",
             "grid-legend" to "<gray>Тонкие линии — чанки 16×16 <dark_gray>• <#92bed8>Толстые — приваты",

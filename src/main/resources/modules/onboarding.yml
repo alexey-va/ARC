@@ -65,3 +65,4 @@ claim-guide:
     grid-legend: '<gray>Тонкие линии — чанки 16×16 <dark_gray>• <#92bed8>Толстые — приваты'
     remove: '<white>Встань внутри своего участка → <#ff9f0f>/unclaim <white>— снять защиту здесь'
     menu: '<gray>Shift + F - меню'
+    cost: '<#e8dfd2>Стоимость: <#f4d87a>{cost} <white>💰</white>'

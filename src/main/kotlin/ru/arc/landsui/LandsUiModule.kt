@@ -3,6 +3,7 @@ package ru.arc.landsui
 import me.angeschossen.lands.api.LandsIntegration
 import me.angeschossen.lands.api.items.ItemType
 import org.bukkit.Bukkit
+import org.bukkit.Location
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import ru.arc.ARC
@@ -21,6 +22,7 @@ object LandsUiModule : PluginModule {
     @Volatile private var regionTool: RegionTool? = null
     private var commandShortcuts: ClaimMenuCommandListener? = null
     private var claimTool: ClaimBlockTool? = null
+    private var claimQuote: LandsClaimExpansionQuote? = null
     private var regionAreaLimits: AutoCloseable? = null
 
     override fun init() = start(LandsUiConfig.load(ARC.instance.dataPath).snapshot())
@@ -32,6 +34,7 @@ object LandsUiModule : PluginModule {
         commandShortcuts = null
         claimTool?.close()
         claimTool = null
+        claimQuote = null
         regionTool?.close()
         regionTool = null
         regionAreaLimits?.close()
@@ -48,6 +51,9 @@ object LandsUiModule : PluginModule {
     internal fun isLookingAtClaimMenu(player: Player): Boolean = claimTool?.isLookingAtMenu(player) == true
 
     internal fun isClaimMenuTarget(player: Player): Boolean = claimTool?.isMenuTarget(player) == true
+
+    internal fun claimExpansionCost(player: Player, target: Location, radius: Int): Double? =
+        claimQuote?.quote(player, target, radius)
 
     fun createClaimBlockItem(player: Player): ItemStack? {
         if (!Bukkit.getPluginManager().isPluginEnabled("Lands")) return null
@@ -114,6 +120,7 @@ object LandsUiModule : PluginModule {
         controller = null
         claimTool?.close()
         claimTool = null
+        claimQuote = null
         regionTool?.close()
         regionTool = null
         regionAreaLimits?.close()
@@ -135,6 +142,7 @@ object LandsUiModule : PluginModule {
             return
         }
         regionAreaLimits = RegionAreaLimits.install()
+        claimQuote = LandsClaimExpansionQuote(LandsIntegration.of(ARC.instance), lands)
         val gateway = BukkitLandsUiGateway(roleName = loaded::roleName)
         controller = LandsUiController(loaded, gateway)
         regionTool = RegionTool(loaded, gateway).also { it.start() }
