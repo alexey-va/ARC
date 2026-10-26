@@ -112,8 +112,8 @@ object StaffMobCasterPreviewExport {
                 val key = local.identity ?: index.toString()
                 val previous = previousBounds[key] ?: (at to radius)
                 val impact = spell == StaffSpell.LANCE || impactAge >= 0
-                val visible = staffSweptDistance(eye, previous.first, at) >=
-                    staffEyeClearance(spell, impact) + .15 + maxOf(previous.second, radius)
+                val visible = staffSweptPartClearOfEye(eye, Vector(0.0, -.01, -1.0).normalize(),
+                    previous.first, at, maxOf(previous.second, radius), staffEyeClearance(spell, impact) + .15)
                 currentBounds[key] = at to radius
                 StaffRedesignPreviewExport.part(transformed.copy(visible = transformed.visible && visible), "mob-$spell", index, origin)
             }

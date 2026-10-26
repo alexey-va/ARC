@@ -90,6 +90,9 @@ dungeon-qol:
     section-notes-available: '<white>○ Примечания'
     section-notes-available-tooltip: '<#e8dfd2>Показать раздел «примечания»'
   quests:
+    global-title: '<#c4a7e7>Мои задания'
+    global-intro: '<#e8dfd2>Ваши принятые задания со всех данжей. Прогресс и отслеживание доступны и вне похода.'
+    global-empty: '<#e8dfd2>У вас пока нет принятых заданий.'
     local-title: '<#c4a7e7>Задания здесь'
     local-intro: '<#f2eee8>Задания текущей локации. Связанные миры одного данжа показаны вместе.'
     local-empty: '<#f2eee8>Принятых заданий для этой локации пока нет.'
@@ -168,6 +171,8 @@ dungeon-qol:
   resume-hours: 72
   titles-enabled: true
   messages:
+    spawn-no-permission: '<#e8dfd2>У вас нет доступа к этому переходу на спавн.'
+    spawn-unavailable: '<#e8dfd2>Переход на спавн здесь не настроен. В Гильдию можно перейти кнопкой «Гильдия».'
     help: '<gold>Shift + F</gold> <gray>— меню данжа: старт, сохранения и выход.</gray>'
     unavailable: <red>Данжи сейчас недоступны.</red>
     leave-first: '<#d7b486>Сначала выйдите из текущего данжа: Shift + F → «Выйти из данжа».'
@@ -331,6 +336,12 @@ dungeon-qol:
     list-label: '<#ffb277>Выбрать данж ›'
     about-title: '<#86dcf1>О данже'
   adventure:
+    catalog-unavailable-label: '<white>Каталог недоступен'
+    catalog-unavailable: '<#e8dfd2>На этом сервере нет доступных походов. Основные данжи — на спавне: «Телепорты» → «Гильдия».'
+    party-unavailable-label: '<white>Группа недоступна'
+    party-unavailable: '<#e8dfd2>Группы данжей на этом сервере отключены.'
+    current-unavailable-label: '<white>Нет активного данжа'
+    current-unavailable: '<#e8dfd2>Войдите в данж, чтобы открыть старт, сохранения и выход. Личные разделы доступны уже сейчас.'
     bestiary-label: '<#c4abff>Бестиарий ›'
     bestiary-label-tooltip: 'Противники, способности и шансы добычи; записи открываются после победы'
     crystals-value: <white>💎</white> <#c7a0e8><amount>

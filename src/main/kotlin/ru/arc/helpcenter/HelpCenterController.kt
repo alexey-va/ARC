@@ -117,7 +117,7 @@ internal class HelpCenterController(
     }
 
     private val dungeons by lazy {
-        HelpCenterDungeonsController(settings, navigation, present, ::executeInventory, ::execute)
+        HelpCenterDungeonsController(settings, navigation, present, ::openDungeonMenu, ::execute)
     }
 
     private val enchantments by lazy {
@@ -225,6 +225,9 @@ internal class HelpCenterController(
                     add(rootCategoryButton(player, HelpCenterCategory.ACTIVITIES))
                     add(rootCategoryButton(player, HelpCenterCategory.TRADE))
                     val available = availableCatalog(player).associateBy { it.id }
+                    if ("dungeons" in available) {
+                        add(button("dungeons", text("main-dungeons-label"), text("dungeons-menu-tooltip")) { openDungeonMenu(player) })
+                    }
                     for (id in listOf("rank", "jobs", "skills", "quests", "enchants")) {
                         if (id in available) {
                             add(button(id, text("main-$id-label"), commandTooltip(id)) { executeCatalog(player, id) })
@@ -1193,6 +1196,13 @@ internal class HelpCenterController(
         markNavigation(player)
         return gateway.execute(player, command).also { executed ->
             if (!executed) player.sendMessage(text("action-failed"))
+        }
+    }
+
+    private fun openDungeonMenu(player: Player): Boolean {
+        markNavigation(player)
+        return gateway.openDungeons(player).also { opened ->
+            if (!opened) player.sendMessage(text("action-unavailable"))
         }
     }
 

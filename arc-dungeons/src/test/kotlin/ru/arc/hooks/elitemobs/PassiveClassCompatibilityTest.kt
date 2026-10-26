@@ -61,12 +61,29 @@ import java.util.function.ToIntFunction
 import java.util.logging.Logger
 
 class PassiveClassCompatibilityTest : FreeSpec({
-    "unsupported versions fail before changing any native state" {
-        listOf("10.9.1", "10.9.8-ruscrafting.1", "10.9.9", "10.9.10-custom", "10.9.11").forEach {
-            shouldThrow<IllegalStateException> { PassiveClassCompatibility.requireSupportedVersion(it) }
+    "compatible native APIs install independently of their version label" {
+        listOf("future-compatible-build", "10.9.11-custom", "").forEach { version ->
+            failOnUnsupportedMockBukkitOperation { PassiveHostFixture(version).use { f ->
+                f.adapter.start()
+                PassiveClassCompatibility.isInstalled() shouldBe true
+            } }
         }
-        PassiveClassCompatibility.requireSupportedVersion("10.9.8")
-        PassiveClassCompatibility.requireSupportedVersion("10.9.10")
+    }
+
+    "missing or incompatible native fields fail the actual capability binding" {
+        shouldThrow<NoSuchFieldException> {
+            EliteMobsPassiveAccess.field(IncompatiblePassiveApi::class.java, "abilityEngine", ClassAbilityEngine::class.java)
+        }
+        shouldThrow<IllegalStateException> {
+            EliteMobsPassiveAccess.field(IncompatiblePassiveApi::class.java, "passiveRegistry", StringBuilder::class.java)
+        }.message shouldBe "Unsupported native field: IncompatiblePassiveApi.passiveRegistry"
+    }
+
+    "class surfaces remain unavailable without the optional adapter" {
+        failOnUnsupportedMockBukkitOperation { PassiveHostFixture().use { f ->
+            AdvancedCombatModule.isInitialized() shouldBe true
+            NativeDungeonClassService.view(f.player).availability shouldBe DungeonClassAvailability.DISABLED
+        } }
     }
 
     "install is idempotent and close restores exact native references and command contract" {
@@ -266,7 +283,7 @@ class PassiveClassCompatibilityTest : FreeSpec({
 })
 
 /** Builds the actual stock module with its existing injectable store seam; no native engine copy. */
-private class PassiveHostFixture : AutoCloseable {
+private class PassiveHostFixture(version: String = "compatible-native-build") : AutoCloseable {
     val paper = MockBukkitTestRuntime.open()
     private val previousPlugin = MetadataHandler.PLUGIN
     val native = paper.createSimplePlugin("EliteMobs")
@@ -284,7 +301,7 @@ private class PassiveHostFixture : AutoCloseable {
         try {
             access = EliteMobsPassiveAccess()
             PluginDescriptionFile::class.java.getDeclaredField("version").apply { isAccessible = true }
-                .set(native.description, eliteMobsTestRuntimeVersion())
+                .set(native.description, version)
             MetadataHandler.PLUGIN = native
             val command = PluginCommand::class.java.getDeclaredConstructor(String::class.java, Plugin::class.java)
                 .apply { isAccessible = true }.newInstance("elitemobs", native)
@@ -344,3 +361,8 @@ private class PassiveHostFixture : AutoCloseable {
 
 private fun field(module: AdvancedCombatModule, name: String): Any =
     AdvancedCombatModule::class.java.getDeclaredField(name).apply { isAccessible = true }.get(module)
+
+private class IncompatiblePassiveApi {
+    @Suppress("unused")
+    private val passiveRegistry = "incompatible descriptor"
+}

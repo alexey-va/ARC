@@ -47,6 +47,16 @@ class StaffMobAimTest : FreeSpec({
         }
     }
 
+    "default aim reaches sprinting lateral targets beyond the old three block lead" {
+        val body = Location(null, 0.0, 65.4, 12.0)
+        val step = Vector(.28, 0.0, 0.0)
+        val aim = staffMobPredictedAim(StaffSpell.EMBER, muzzle, body, step, 16.0)
+        (aim.x > 3.0) shouldBe true
+        (aim.x <= 5.0) shouldBe true
+        (staffMobStrafeMiss(StaffSpell.EMBER, muzzle, aim, body, step, 16.0, 2) <
+            staffMobStrafeMiss(StaffSpell.EMBER, muzzle, body, body, step, 16.0, 2)) shouldBe true
+    }
+
     "lead caps both its total horizon and horizontal distance while preserving inputs" {
         val body = Location(null, 0.0, 65.4, 8.0)
         val step = Vector(.3, .2, .4)
@@ -60,7 +70,7 @@ class StaffMobAimTest : FreeSpec({
             (abs(short.z - 8.8) < 1e-9) shouldBe true
             val capped = staffMobPredictedAim(spell, muzzle, body, step, 32.0,
                 maxLeadTicks = Int.MAX_VALUE, launchDelayTicks = Int.MAX_VALUE)
-            (abs(capped.toVector().distance(body.toVector()) - 3.0) < 1e-9) shouldBe true
+            (abs(capped.toVector().distance(body.toVector()) - 5.0) < 1e-9) shouldBe true
             capped.y shouldBe body.y
             staffMobPredictedAim(spell, muzzle, body, step, 32.0, maxLeadTicks = 0) shouldBe body
             val longHorizon = staffMobPredictedAim(spell, muzzle, body, Vector(.01, 0.0, 0.0), 32.0,

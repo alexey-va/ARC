@@ -46,6 +46,8 @@ interface HelpCenterGateway {
     fun selectChatMode(player: Player, mode: HelpCenterChatMode): CompletableFuture<Unit>
 
     fun execute(player: Player, command: String): Boolean
+
+    fun openDungeons(player: Player): Boolean
 }
 
 class BukkitHelpCenterGateway : HelpCenterGateway {
@@ -214,6 +216,12 @@ class BukkitHelpCenterGateway : HelpCenterGateway {
         ChatModeService.selectMode(player.uniqueId, ru.arc.chat.ChatMode.valueOf(mode.name)).thenApply { Unit }
 
     override fun execute(player: Player, command: String): Boolean = Bukkit.dispatchCommand(player, command)
+
+    override fun openDungeons(player: Player): Boolean {
+        val service = ru.arc.dungeons.dungeonService()?.takeIf { it.nativeReady() } ?: return false
+        service.dungeonAction(player, "menu", emptyList())
+        return true
+    }
 
     override fun features(): Set<HelpCenterFeature> = HelpCenterFeature.entries
         .filterTo(linkedSetOf()) { feature ->

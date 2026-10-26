@@ -35,7 +35,7 @@ class StaffMobCasterTest : FreeSpec({
         val raw = StaffTestConfig()
         val config = StaffSpellConfig(raw)
         val original = config.mobCasters
-        original shouldBe StaffMobCasterSettings(true, 50.0, 1.0, 16.0, 32, emptySet())
+        original shouldBe StaffMobCasterSettings(true, 3.0, 2.0, 16.0, 32, emptySet())
 
         raw["dungeon-casters.enabled"] = false
         raw["dungeon-casters.spawn-chance-percent"] = 100.0
@@ -51,7 +51,7 @@ class StaffMobCasterTest : FreeSpec({
 
         config.mobCasters shouldBe StaffMobCasterSettings(false, 100.0, 2.0, 24.0, 12,
             setOf("world", "world_nether"), setOf(EntityType.WOLF, EntityType.ZOMBIE), 6.5, 1.5, 8, 6)
-        original shouldBe StaffMobCasterSettings(true, 50.0, 1.0, 16.0, 32, emptySet())
+        original shouldBe StaffMobCasterSettings(true, 3.0, 2.0, 16.0, 32, emptySet())
         (EntityType.WOLF in original.allowedEntityTypes) shouldBe false
     }
 
@@ -86,7 +86,7 @@ class StaffMobCasterTest : FreeSpec({
             "mob-casters.max-casters" to 1,
             "mob-casters.worlds" to listOf("world"),
         )))
-        config.mobCasters shouldBe StaffMobCasterSettings(true, 50.0, 1.0, 16.0, 32, emptySet())
+        config.mobCasters shouldBe StaffMobCasterSettings(true, 3.0, 2.0, 16.0, 32, emptySet())
     }
 
     "dungeon caster limits clamp finite input and reject nonfinite combat values" {
@@ -110,11 +110,22 @@ class StaffMobCasterTest : FreeSpec({
             raw["dungeon-casters.difficulty"] = invalid
             raw["dungeon-casters.range-blocks"] = invalid
             withClue("nonfinite input $invalid") {
-                config.mobCasters.spawnChancePercent shouldBe 50.0
-                config.mobCasters.difficulty shouldBe 1.0
+                config.mobCasters.spawnChancePercent shouldBe 3.0
+                config.mobCasters.difficulty shouldBe 2.0
                 config.mobCasters.range shouldBe 16.0
             }
         }
+    }
+
+    "defaults make rare trash casters stronger faster and more accurate" {
+        val settings = StaffSpellConfig(StaffTestConfig()).mobCasters
+        settings.spawnChancePercent shouldBe 3.0
+        settings.difficulty shouldBe 2.0
+        settings.recoveryTicks shouldBe 71
+        settings.telegraphTicks shouldBe 17
+        settings.markTelegraphTicks shouldBe 32
+        settings.maxAimLeadTicks shouldBe 18
+        settings.aimLockTicks shouldBe 2
     }
 
     "difficulty keeps a dodge warning while scaling dungeon spell cadence" {

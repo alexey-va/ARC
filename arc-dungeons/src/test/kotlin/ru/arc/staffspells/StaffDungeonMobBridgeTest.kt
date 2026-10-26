@@ -14,6 +14,8 @@ import com.magmaguy.elitemobs.entitytracker.EntityTracker
 import com.magmaguy.elitemobs.instanced.MatchInstance.InstancedRegionState
 import com.magmaguy.elitemobs.instanced.dungeons.DungeonInstance
 import com.magmaguy.elitemobs.mobconstructor.EliteEntity
+import com.magmaguy.elitemobs.mobconstructor.BossType
+import com.magmaguy.elitemobs.powers.scripts.EliteScript
 import com.magmaguy.elitemobs.mobconstructor.custombosses.CustomBossEntity
 import com.magmaguy.elitemobs.mobconstructor.custombosses.InstancedBossEntity
 import com.magmaguy.elitemobs.mobconstructor.custombosses.RegionalBossEntity
@@ -33,6 +35,34 @@ import org.bukkit.event.world.EntitiesUnloadEvent
 import org.bukkit.inventory.ItemStack
 
 class StaffDungeonMobBridgeTest : FreeSpec({
+    "only unscripted NORMAL dungeon trash can enroll and later role or script changes revoke it" {
+        withRegionalBridgeFixture { _, _, _, boss ->
+            val fields = boss.customBossesConfigFields
+            val actor = requireNotNull(resolveStaffDungeonMob(boss))
+            BossType.entries.filter { it != BossType.NORMAL }.forEach { role ->
+                every { fields.bossType } returns role
+                resolveStaffDungeonMob(boss) shouldBe null
+                actor.isCurrent() shouldBe false
+            }
+            every { fields.bossType } returns BossType.NORMAL
+            every { fields.eliteScript } returns listOf(mockk())
+            resolveStaffDungeonMob(boss) shouldBe null
+            actor.isCurrent() shouldBe false
+            every { fields.eliteScript } returns emptyList()
+            val raw = mockk<org.bukkit.configuration.ConfigurationSection>()
+            every { raw.getKeys(false) } returns setOf("script")
+            every { fields.rawEliteScripts } returns raw
+            resolveStaffDungeonMob(boss) shouldBe null
+            every { fields.rawEliteScripts } returns null
+            every { boss.elitePowers } returns hashSetOf(mockk<EliteScript>())
+            resolveStaffDungeonMob(boss) shouldBe null
+            actor.isCurrent() shouldBe false
+            every { boss.elitePowers } returns hashSetOf()
+            actor.isCurrent() shouldBe true
+            (resolveStaffDungeonMob(boss) != null) shouldBe true
+        }
+    }
+
     "existing actors wait out older returns and retain a return observed just before adoption" {
         withRegionalBridgeFixture { h, body, player, _ ->
             val accepted = mutableListOf<StaffDungeonMob>()
@@ -349,6 +379,10 @@ private fun withRegionalBridgeFixture(block: (StaffHarness, Mob, Player, Regiona
 private fun readyDungeonBoss(boss: CustomBossEntity, body: Mob) {
     val fields = mockk<CustomBossesConfigFields>()
     every { fields.isReinforcement } returns false
+    every { fields.bossType } returns BossType.NORMAL
+    every { fields.eliteScript } returns emptyList()
+    every { fields.rawEliteScripts } returns null
+    every { boss.elitePowers } returns hashSetOf()
     every { boss.livingEntity } returns body
     every { boss.customBossesConfigFields } returns fields
     every { boss.isReinforcementOrMount } returns false

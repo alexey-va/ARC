@@ -55,6 +55,7 @@ class HelpCenterScreensTest {
     private var gravesUnavailable = false
     private var gravesOpenCalls = 0
     private var landsOpenCalls = 0
+    private var dungeonOpenCalls = 0
     private val executed = mutableListOf<String>()
 
     @BeforeEach
@@ -76,6 +77,7 @@ class HelpCenterScreensTest {
             it.setPermission("huskhomes.command.edithome.privacy", true)
         }
         gateway = mockk()
+        every { gateway.openDungeons(player) } answers { dungeonOpenCalls++; true }
         every { gateway.features() } returns HelpCenterFeature.entries.toSet()
         every { gateway.pendingRequests(player) } returns HelpCenterPendingRequests()
         every { gateway.onlinePlayers() } returns (1..27).map {
@@ -181,7 +183,7 @@ class HelpCenterScreensTest {
         val screens = linkedMapOf<String, PaperDialogScreen>()
         open(HelpCenterPage.ROOT)
         screens["root"] = screen
-        screen.buttons.size shouldBe 15
+        screen.buttons.size shouldBe 16
         body().contains("Ниже — ваша короткая сводка") shouldBe false
         body().contains("Сейчас") shouldBe false
         body().contains("survival") shouldBe false
@@ -477,14 +479,15 @@ class HelpCenterScreensTest {
     }
 
     @Test
-    fun `EliteMobs inventory returns to the exact guide chapter`() {
+    fun `dungeon guide opens the custom provider without arming an inventory return`() {
         open(HelpCenterPage.ACTIVITIES)
         click("command_dungeons")
         click("dungeons_guide")
         click("dungeons_guide_start")
         assertFalse(screen.buttons.single { it.id.value == "dungeons_menu" }.closeDialogBeforeAction)
         click("dungeons_menu")
-        assertEquals("elitemobs:em", executed.last())
+        assertEquals(1, dungeonOpenCalls)
+        assertTrue(executed.isEmpty())
         player.closeInventory()
         paper.performTicks(3)
         assertEquals("help.dungeons.guide.start", screen.id)
@@ -573,8 +576,14 @@ class HelpCenterScreensTest {
         assertEquals(3, screen.columns)
         assertTrue(screen.buttons.all { it.width == 166 })
         assertEquals(listOf("now", "teams", "travel", "privat", "root_activities",
-            "root_trade", "rank", "jobs", "skills", "quests", "enchants", "mounts", "search", "settings"), screen.buttons.map { it.id.value })
+            "root_trade", "dungeons", "rank", "jobs", "skills", "quests", "enchants", "mounts", "search", "settings"), screen.buttons.map { it.id.value })
         assertTrue(body().contains("Viewer"))
+        val dungeonTooltip = plain(screen.buttons.single { it.id.value == "dungeons" }.tooltip)
+        assertTrue(dungeonTooltip.contains("Личное снаряжение, навыки и задания доступны на любом сервере"))
+        assertFalse(dungeonTooltip.contains("журнал EliteMobs"))
+        click("dungeons")
+        assertEquals(1, dungeonOpenCalls)
+        assertTrue(executed.isEmpty())
         assertFalse(screen.buttons.single { it.id.value == "quests" }.closeDialogBeforeAction)
         click("quests")
         assertEquals(listOf("quests"), executed)
@@ -606,7 +615,7 @@ class HelpCenterScreensTest {
         open(HelpCenterPage.ROOT)
         assertFalse(screen.buttons.any { it.id.value == "teams" })
         assertFalse(screen.buttons.any { it.id.value == "mounts" })
-        assertEquals(12, screen.buttons.size)
+        assertEquals(13, screen.buttons.size)
         open(HelpCenterPage.PLAYERS)
         assertFalse(screen.buttons.any { it.id.value == "command_teams" })
     }
@@ -1334,7 +1343,7 @@ class HelpCenterScreensTest {
         player.addAttachment(paper.createSimplePlugin("MountLabels"), "arc.mounts.use", true)
         open(HelpCenterPage.ROOT)
         assertEquals(listOf("Мой профиль", "Кланы", "Телепортация", "Приваты", "Активности",
-            "Торговля", "Ранги", "Работы", "Навыки", "Квесты", "Зачарования", "Маунты", "Поиск", "Настройки"), screen.buttons.map { plain(it.label) })
+            "Торговля", "Данжи", "Ранги", "Работы", "Навыки", "Квесты", "Зачарования", "Маунты", "Поиск", "Настройки"), screen.buttons.map { plain(it.label) })
         click("search")
         assertTrue(screen.buttons.any { plain(it.label).startsWith("⚡") })
     }

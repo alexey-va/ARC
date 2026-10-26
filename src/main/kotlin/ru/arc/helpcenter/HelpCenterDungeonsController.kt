@@ -9,12 +9,12 @@ import ru.arc.paper.menu.PaperDialogBody
 import ru.arc.paper.menu.PaperDialogButton
 import ru.arc.paper.menu.PaperDialogScreen
 
-/** Navigation and readable chapters before opening EliteMobs' own inventories. */
+/** Navigation and readable chapters share the custom dungeon menu entry. */
 internal class HelpCenterDungeonsController(
     private val settings: HelpCenterSettings,
     private val navigation: HelpCenterNavigation,
     private val show: (Player, PaperDialogScreen) -> Unit,
-    private val executeInventory: (Player, String) -> Boolean,
+    private val openMenu: (Player) -> Boolean,
     private val execute: (Player, String) -> Boolean,
 ) {
     private val miniMessage = MiniMessage.miniMessage()
@@ -64,7 +64,7 @@ internal class HelpCenterDungeonsController(
     }.copy(closeDialogBeforeAction = true)
 
     private fun eliteMenu(player: Player) = button("dungeons_menu", "dungeons-menu-label", "dungeons-menu-tooltip") {
-        executeInventory(player, "elitemobs:em")
+        openMenu(player)
     }
 
     private fun back(action: () -> Unit) = PaperDialogButton(

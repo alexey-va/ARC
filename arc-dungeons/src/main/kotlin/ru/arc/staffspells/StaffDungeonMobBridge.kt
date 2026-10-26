@@ -11,9 +11,11 @@ import com.magmaguy.elitemobs.easyminecraftgoals.internal.AbstractWanderBackToPo
 import com.magmaguy.elitemobs.entitytracker.EntityTracker
 import com.magmaguy.elitemobs.instanced.dungeons.DungeonInstance
 import com.magmaguy.elitemobs.mobconstructor.EliteEntity
+import com.magmaguy.elitemobs.mobconstructor.BossType
 import com.magmaguy.elitemobs.mobconstructor.custombosses.CustomBossEntity
 import com.magmaguy.elitemobs.mobconstructor.custombosses.InstancedBossEntity
 import com.magmaguy.elitemobs.mobconstructor.custombosses.RegionalBossEntity
+import com.magmaguy.elitemobs.powers.scripts.EliteScript
 import org.bukkit.Bukkit
 import org.bukkit.damage.DamageSource
 import org.bukkit.damage.DamageType
@@ -138,7 +140,7 @@ internal fun resolveStaffDungeonMob(elite: EliteEntity, returning: (UUID) -> Boo
     val boss = elite as? CustomBossEntity ?: return null
     val body = boss.livingEntity as? Mob ?: return null
     val bodyId = body.uniqueId
-    if (boss.isReinforcementOrMount || boss.customBossesConfigFields.isReinforcement) return null
+    if (!staffDungeonTrashAllowed(boss)) return null
     val currentScope: () -> Boolean
     val permits: (Player) -> Boolean
     if (boss is InstancedBossEntity) {
@@ -166,7 +168,7 @@ internal fun resolveStaffDungeonMob(elite: EliteEntity, returning: (UUID) -> Boo
         private var mageBehavior: StaffDungeonMageBehavior? = null
         override fun isCurrent() = Bukkit.getPluginManager().isPluginEnabled("EliteMobs") &&
             boss.livingEntity === body && EntityTracker.getEliteMobEntity(body) === boss &&
-            !boss.isDying && currentScope()
+            !boss.isDying && staffDungeonTrashAllowed(boss) && currentScope()
 
         override fun currentTarget(): Player? = if (!returning(bodyId) && mageBehavior?.isReturning != true &&
             boss.isAIActive && !boss.isTriggeredAntiExploit &&
@@ -190,4 +192,12 @@ internal fun resolveStaffDungeonMob(elite: EliteEntity, returning: (UUID) -> Boo
         }
     }
     return actor.takeIf { it.isCurrent() }
+}
+
+/** Native roles distinguish authored trash from bosses; scripts keep exclusive control of their actor. */
+private fun staffDungeonTrashAllowed(boss: CustomBossEntity): Boolean {
+    val fields = boss.customBossesConfigFields
+    return fields.bossType == BossType.NORMAL && !boss.isReinforcementOrMount && !fields.isReinforcement &&
+        fields.eliteScript.isNullOrEmpty() && fields.rawEliteScripts?.getKeys(false).isNullOrEmpty() &&
+        boss.elitePowers.none { it is EliteScript }
 }

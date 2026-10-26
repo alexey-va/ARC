@@ -60,7 +60,8 @@ class EMDungeonQolTest : FreeSpec({
             val player = paper.addPlayer("em-routing")
             val settings = config()
             val qol = EMDungeonQol(settings, resolve = { null })
-            for (command in listOf("/em shareitem", "/em spawntp", "/elitemobs reload", "/em dungeon")) {
+            for (command in listOf("/em shareitem", "/em spawntp", "/elitemobs reload", "/em dungeon",
+                "/elitemobs:em", "/elitemobs:elitemobs")) {
                 val event = PlayerCommandPreprocessEvent(player, command)
                 qol.openEliteMobsMenu(event)
                 event.isCancelled shouldBe false
@@ -74,13 +75,13 @@ class EMDungeonQolTest : FreeSpec({
                 val shown = mutableListOf<ru.arc.paper.menu.PaperDialogScreen>()
                 every { DungeonsMenus.beginDialogFlow(player) } returns Unit
                 every { DungeonsMenus.openDialog(player, any(), any(), any(), any()) } answers { shown += secondArg<ru.arc.paper.menu.PaperDialogScreen>() }
-                for (command in listOf("/em", "/ELITEMOBS", "/elitemobs:em", "/elitemobs:elitemobs")) {
+                for (command in listOf("/em", "/ELITEMOBS")) {
                     val event = PlayerCommandPreprocessEvent(player, command)
                     qol.openEliteMobsMenu(event)
                     event.isCancelled shouldBe true
                     shown.last().id shouldBe "dungeon.main"
                 }
-                verify(exactly = 4) { DungeonsMenus.beginDialogFlow(player) }
+                verify(exactly = 2) { DungeonsMenus.beginDialogFlow(player) }
             } finally {
                 unmockkObject(DungeonsMenus)
             }

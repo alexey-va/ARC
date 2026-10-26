@@ -263,11 +263,23 @@ open class ArcDungeonsPlugin : JavaPlugin() {
                 val hook = emHook ?: EMHook().also { emHook = it }
                 hook.reload()
                 if (passiveClasses == null) {
-                    PassiveClassCompatibility(
-                        this,
-                        openClasses = { player -> dungeonQol?.action(player, "classes") },
-                        openForm = { player, id, atTrainer -> dungeonQol?.openClass(player, id, atTrainer) },
-                    ).also { passiveClasses = it }.start()
+                    attemptOptionalNativeIntegration(
+                        initialize = {
+                            PassiveClassCompatibility(
+                                this,
+                                openClasses = { player -> dungeonQol?.action(player, "classes") },
+                                openForm = { player, id, atTrainer -> dungeonQol?.openClass(player, id, atTrainer) },
+                            ).also { passiveClasses = it }.start()
+                        },
+                        rollback = {
+                            passiveClasses?.close()
+                            passiveClasses = null
+                            null
+                        },
+                        onFailure = { failure -> logger.log(Level.WARNING,
+                            "Passive class adapter unavailable; continuing other EliteMobs integrations", failure) },
+                        requireCleanRollback = true,
+                    )
                 }
                 val levels = arenaLevels
                 if (levels == null) {
@@ -519,11 +531,12 @@ internal fun moduleStatusesWithLostLootReadiness(
     if (status.name == LostLootModule.name) status.copy(ready = status.ready && lostLootReady) else status
 }
 
-/** Runs one optional native integration step without allowing it to abort plugin bootstrap/reload. */
+/** Contains optional failures; owners sharing mutable native state may require a successful rollback. */
 internal fun attemptOptionalNativeIntegration(
     initialize: () -> Unit,
     rollback: () -> Throwable?,
     onFailure: (Throwable) -> Unit,
+    requireCleanRollback: Boolean = false,
 ): Boolean {
     try {
         initialize()
@@ -535,6 +548,7 @@ internal fun attemptOptionalNativeIntegration(
             rollbackFailure
         }
         if (cleanupFailure != null && cleanupFailure !== failure) failure.addSuppressed(cleanupFailure)
+        if (cleanupFailure != null && requireCleanRollback) throw failure
         onFailure(failure)
         return false
     }

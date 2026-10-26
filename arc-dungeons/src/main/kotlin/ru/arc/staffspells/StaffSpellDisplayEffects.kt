@@ -536,11 +536,17 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
                     val eye = player.eyeLocation.toVector().apply {
                         if (ownerRelative) subtract(player.location.toVector())
                     }
-                    val padding = if (ownerRelative) .35
-                        else if (scene.defense != null) .25
-                        else staffEyeClearance(scene.spell, scene.impact) + player.velocity.length() * FRAME_TICKS + 0.15
+                    val motionPadding = player.velocity.length() * FRAME_TICKS
+                    val radius = maxOf(bound?.second ?: 0.0, previous?.second ?: 0.0)
+                    val clear = if (bound == null || previous == null) false
+                        else if (ownerRelative || scene.defense != null)
+                            staffSweptDistance(eye, previous.first, bound.first) >=
+                                (if (ownerRelative) .35 else .25) + radius
+                        else staffSweptPartClearOfEye(eye, player.eyeLocation.direction,
+                            previous.first, bound.first, radius,
+                            staffEyeClearance(scene.spell, scene.impact) + .15, motionPadding)
                     if (scene.renderedParts.getOrNull(index)?.visible == true && bound != null && previous != null &&
-                        staffSweptDistance(eye, previous.first, bound.first) >= padding + maxOf(bound.second, previous.second))
+                        clear)
                         handle.showTo(player)
                     else handle.hideFrom(player)
                 }
@@ -578,7 +584,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
     }
 }
 
-/** Compact flight remains close to the reticle; large explosions retain a wider exclusion. */
+/** Compact flight remains close to the reticle; large explosions protect a longer aim corridor. */
 internal fun staffEyeClearance(spell: StaffSpell, impact: Boolean): Double =
     when {
         impact && spell in setOf(StaffSpell.MARK, StaffSpell.EMBER) -> 3.2
@@ -598,14 +604,37 @@ internal fun staffChargeOrientation(spell: StaffSpell, yaw: Float, direction: Ve
 internal fun staffIcicleFlightOrientation(previous: Quaternionf, direction: Vector3f): Quaternionf =
     Quaternionf().rotationTo(previous.transform(Vector3f(0f, 0f, 1f)), direction).mul(previous)
 
-/** Conservative sphere includes the entire transformed cuboid, not only its anchor. */
+/** Same static camera rule as the runtime; the sphere includes the whole transformed cuboid. */
 internal fun staffPartClearOfEye(part: StaffDisplayPart, origin: Location, rotation: Quaternionf, eye: Location,
     clearance: Double = 3.2): Boolean {
     if (origin.world != eye.world) return false
     val center = rotation.transform(Vector3f(part.center))
-    val distance = eye.toVector().distance(origin.toVector().add(org.bukkit.util.Vector(
-        center.x.toDouble(), center.y.toDouble(), center.z.toDouble())))
-    return distance >= clearance + part.scale.length() * 0.5
+    val at = origin.toVector().add(org.bukkit.util.Vector(center.x.toDouble(), center.y.toDouble(), center.z.toDouble()))
+    return staffSweptPartClearOfEye(eye.toVector(), eye.direction, at, at, part.scale.length() * .5, clearance)
+}
+
+/** Keep a small camera shell and the near aim corridor clear, without erasing the surrounding effect. */
+internal fun staffSweptPartClearOfEye(eye: org.bukkit.util.Vector, forward: org.bukkit.util.Vector,
+    from: org.bukkit.util.Vector, to: org.bukkit.util.Vector, radius: Double,
+    clearance: Double, motionPadding: Double = 0.0): Boolean {
+    val distance = staffSweptDistance(eye, from, to)
+    val shell = minOf(.35, clearance) + motionPadding + radius
+    if (distance < shell) return false
+    // Preserve the existing distant silhouette, including large impact fragments.
+    if (distance >= clearance + motionPadding + radius) return true
+
+    // Closest approach to the finite sightline, including a fragment crossing it between keyframes.
+    val relative = from.clone().subtract(eye)
+    val delta = to.clone().subtract(from)
+    val depth = relative.dot(forward)
+    val depthStep = delta.dot(forward)
+    val lateral = relative.subtract(forward.clone().multiply(depth))
+    val lateralStep = delta.subtract(forward.clone().multiply(depthStep))
+    val t = if (lateralStep.lengthSquared() < .000001) 0.0 else
+        (-lateral.dot(lateralStep) / lateralStep.lengthSquared()).coerceIn(0.0, 1.0)
+    val nearestDepth = depth + depthStep * t
+    if (nearestDepth in 0.0..clearance && lateral.add(lateralStep.multiply(t)).length() < shell) return false
+    return staffSweptDistance(eye.clone().add(forward.clone().multiply(clearance)), from, to) >= shell
 }
 
 internal fun staffSweptDistance(eye: org.bukkit.util.Vector, from: org.bukkit.util.Vector, to: org.bukkit.util.Vector): Double {

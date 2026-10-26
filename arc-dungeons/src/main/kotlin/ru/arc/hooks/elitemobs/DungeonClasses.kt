@@ -69,7 +69,7 @@ internal object NativeDungeonClassService : DungeonClassService {
     private val localization by lazy { DungeonClassLocalization() }
 
     override fun view(player: Player): DungeonClassesView {
-        if (!AdvancedCombatModule.isInitialized()) {
+        if (!PassiveClassCompatibility.isInstalled() || !AdvancedCombatModule.isInitialized()) {
             return DungeonClassesView(DungeonClassAvailability.DISABLED)
         }
         val module = AdvancedCombatModule.get()

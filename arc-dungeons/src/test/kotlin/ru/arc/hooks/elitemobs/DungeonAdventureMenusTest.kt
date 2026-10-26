@@ -34,10 +34,12 @@ class DungeonAdventureMenusTest : FreeSpec({
         permissionGranted = true, maxPlayers = 5, dynamic = false, availableLevels = emptyList(),
     )
 
-    fun fixture(player: Player, entries: List<DungeonCatalogEntry>): Triple<DungeonSaveMenus, DungeonAdventureService, MutableList<PaperDialogScreen>> {
+    fun fixture(player: Player, entries: List<DungeonCatalogEntry>, parties: Boolean = true): Triple<DungeonSaveMenus, DungeonAdventureService, MutableList<PaperDialogScreen>> {
         val dungeon = mockk<EMDungeonQol>(relaxed = true)
         every { dungeon.panelView(player) } returns null
         every { dungeon.lastReturn(player) } returns null
+        every { dungeon.partiesAvailable() } returns parties
+        every { dungeon.spawnTeleportBlockReason(player) } returns null
         val defaults = YamlConfiguration.loadConfiguration(File("src/main/resources/modules/elitemobs.yml"))
         every { dungeon.text(any(), any(), *anyVararg()) } answers {
             val values = thirdArg<Array<out Pair<String, Component>>>()
@@ -56,6 +58,45 @@ class DungeonAdventureMenusTest : FreeSpec({
         val screens = mutableListOf<PaperDialogScreen>()
         val menus = DungeonSaveMenus(dungeon, crystals = { "27" }, adventure = data) { _, screen, _ -> screens += screen }
         return Triple(menus, data, screens)
+    }
+
+    "outside a dungeon personal sections remain usable and local unavailable actions explain their scope" {
+        val player = paper.addPlayer("survival-menu")
+        val (menus, data, screens) = fixture(player, emptyList(), parties = false)
+        val plain = PlainTextComponentSerializer.plainText()
+        menus.main(player)
+        screens.last().id shouldBe "dungeon.main"
+        val main = screens.last()
+        main.buttons.filter { it.id.value in setOf("catalog", "party", "current") }.forEach { button ->
+            button.closeDialogBeforeAction shouldBe false
+            plain.serialize(button.tooltip).isNotBlank() shouldBe true
+            button.onClick.handle(mockk())
+            screens.last().id shouldBe "dungeon.main"
+        }
+        main.buttons.single { it.id.value == "stats" }.onClick.handle(mockk())
+        screens.last().id shouldBe "dungeon.statistics"
+        main.buttons.single { it.id.value == "gear" }.onClick.handle(mockk())
+        screens.last().id shouldBe "dungeon.gear"
+        verify(exactly = 0) { data.enter(any(), any(), any(), any()) }
+    }
+
+    "native spawn travel rechecks its configured destination when the button is pressed" {
+        val player = paper.addPlayer("travel-scope")
+        val dungeon = mockk<EMDungeonQol>(relaxed = true)
+        every { dungeon.insideInstance(player) } returns false
+        every { dungeon.lastReturn(player) } returns null
+        every { dungeon.text(any(), any(), *anyVararg()) } answers { MiniMessage.miniMessage().deserialize(secondArg<String>()) }
+        every { dungeon.spawnTeleportBlockReason(player) } returns null
+        val screens = mutableListOf<PaperDialogScreen>()
+        val menus = DungeonSaveMenus(dungeon, adventure = mockk(relaxed = true)) { _, screen, _ -> screens += screen }
+        menus.travelMenu(player)
+        val stale = screens.last().buttons.single { it.id.value == "spawn" }
+        every { dungeon.spawnTeleportBlockReason(player) } returns Component.text("Спавн не настроен")
+        stale.onClick.handle(mockk())
+        screens.last().id shouldBe "dungeon.travel"
+        val disabled = screens.last().buttons.single { it.id.value == "spawn" }
+        disabled.closeDialogBeforeAction shouldBe false
+        PlainTextComponentSerializer.plainText().serialize(disabled.tooltip) shouldBe "Спавн не настроен"
     }
 
     "catalog searches literal words and combines them with type filters" {
@@ -224,6 +265,7 @@ class DungeonAdventureMenusTest : FreeSpec({
         }
         DungeonSaveMenus(current, crystals = { "27" }, adventure = data) { _, screen, _ -> selected += screen }.panel(player)
         every { data.catalog(player) } returns emptyList()
+        menus.main(player); selected += screens.last()
         menus.catalog(player); selected += screens.last()
         val legacy = LegacyComponentSerializer.builder().character('&').hexColors().useUnusualXRepeatedCharacterHexFormat().build()
         val content = linkedMapOf<String, Map<String, String>>()

@@ -14,7 +14,8 @@ targeting:
     strength: 0.70
     excluded-spells: []
 max-area-targets: 8
-# Only verified EliteMobs dungeon actors receive these additional attacks.
+# Only unscripted NORMAL trash in verified EliteMobs dungeons receives these additional attacks.
+# Bosses, minibosses, scripted actors, reinforcements and mounts retain their native combat.
 # Natural-world mobs, NPCs and other plugins' actors are never enrolled.
 # /arc reload applies changes and removes the previous generation's cosmetic staffs.
 dungeon-casters:
@@ -39,10 +40,10 @@ dungeon-casters:
     - PIGLIN_BRUTE
     - ZOMBIFIED_PIGLIN
   # Percent of eligible EliteMobs dungeon actors; 0 disables additional mage attacks.
-  spawn-chance-percent: 50.0
+  spawn-chance-percent: 3.0
   # 0.25..4: multiplier over native EliteMobs damage; timing divides by sqrt(difficulty).
   # Difficulty 1: native EM damage, 5 s recovery, 1.2 s warning (mark >= 1.6 s).
-  difficulty: 1.0
+  difficulty: 2.0
   range-blocks: 16.0
   max-casters: 32
   combat:
@@ -51,8 +52,8 @@ dungeon-casters:
     distance-tolerance-blocks: 2.0
   aim:
     # Track during preparation, then lock the shot so a direction change can still dodge it.
-    max-lead-ticks: 12
-    lock-before-release-ticks: 4
+    max-lead-ticks: 18
+    lock-before-release-ticks: 2
   # Optional additional world filter; an empty list allows every verified dungeon.
   worlds: []
 # Compatibility fence for older JARs: natural-world enrollment is retired.

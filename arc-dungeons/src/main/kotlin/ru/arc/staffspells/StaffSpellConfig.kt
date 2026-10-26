@@ -92,16 +92,16 @@ internal val STAFF_HOLDING_MOB_TYPES = setOf(
 /** One difficulty dial scales combat; the warning always leaves time to dodge. */
 internal data class StaffMobCasterSettings(
     val enabled: Boolean = true,
-    val spawnChancePercent: Double = 50.0,
-    val difficulty: Double = 1.0,
+    val spawnChancePercent: Double = 3.0,
+    val difficulty: Double = 2.0,
     val range: Double = 16.0,
     val maxCasters: Int = 32,
     val allowedWorlds: Set<String> = emptySet(),
     val allowedEntityTypes: Set<EntityType> = STAFF_HOLDING_MOB_TYPES,
     val preferredDistance: Double = 8.0,
     val distanceTolerance: Double = 2.0,
-    val maxAimLeadTicks: Int = 12,
-    val aimLockTicks: Int = 4,
+    val maxAimLeadTicks: Int = 18,
+    val aimLockTicks: Int = 2,
 ) {
     val recoveryTicks get() = (100 / sqrt(difficulty)).roundToInt().coerceAtLeast(40)
     val telegraphTicks get() = (24 / sqrt(difficulty)).roundToInt().coerceAtLeast(12)
@@ -218,16 +218,16 @@ internal data class StaffSpellHudPositionSettings(
 internal open class StaffSpellConfig(private val config: Config) {
     val mobCasters get() = StaffMobCasterSettings(
         enabled = config.bool("dungeon-casters.enabled", true),
-        spawnChancePercent = number("dungeon-casters.spawn-chance-percent", 50.0, 0.0..100.0),
-        difficulty = number("dungeon-casters.difficulty", 1.0, 0.25..4.0),
+        spawnChancePercent = number("dungeon-casters.spawn-chance-percent", 3.0, 0.0..100.0),
+        difficulty = number("dungeon-casters.difficulty", 2.0, 0.25..4.0),
         range = number("dungeon-casters.range-blocks", 16.0, 4.0..32.0),
         maxCasters = config.integer("dungeon-casters.max-casters", 32).coerceIn(1, 32),
         allowedWorlds = config.stringList("dungeon-casters.worlds").toSet(),
         allowedEntityTypes = dungeonCasterEntityTypes(),
         preferredDistance = number("dungeon-casters.combat.preferred-distance-blocks", 8.0, 2.0..24.0),
         distanceTolerance = number("dungeon-casters.combat.distance-tolerance-blocks", 2.0, 0.5..4.0),
-        maxAimLeadTicks = config.integer("dungeon-casters.aim.max-lead-ticks", 12).coerceIn(0, 20),
-        aimLockTicks = config.integer("dungeon-casters.aim.lock-before-release-ticks", 4).coerceIn(0, 12),
+        maxAimLeadTicks = config.integer("dungeon-casters.aim.max-lead-ticks", 18).coerceIn(0, 20),
+        aimLockTicks = config.integer("dungeon-casters.aim.lock-before-release-ticks", 2).coerceIn(0, 12),
     )
 
     private fun dungeonCasterEntityTypes(): Set<EntityType> {

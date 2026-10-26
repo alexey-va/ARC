@@ -6,15 +6,15 @@ import kotlin.math.sqrt
 
 private const val MAX_MOB_AIM_TICKS = 80
 
-/** Horizontal lead for one fixed launch heading, capped at three blocks and the supplied total lead horizon. */
+/** Horizontal lead for one fixed launch heading, capped at five blocks and the supplied total lead horizon. */
 internal fun staffMobPredictedAim(
     spell: StaffSpell,
     muzzle: Location,
     bodyPoint: Location,
     movement: Vector,
     range: Double,
-    maxLeadTicks: Int = 12,
-    launchDelayTicks: Int = 4,
+    maxLeadTicks: Int = 18,
+    launchDelayTicks: Int = 2,
 ): Location {
     val aim = bodyPoint.clone()
     if (spell != StaffSpell.EMBER && spell != StaffSpell.ICICLE && spell != StaffSpell.LANCE) return aim
@@ -27,7 +27,7 @@ internal fun staffMobPredictedAim(
         !stepSquared.isFinite() || stepSquared > 1.0) return aim
     val horizontalStep = sqrt(movement.x * movement.x + movement.z * movement.z)
     if (horizontalStep == 0.0) return aim
-    val leadLimit = minOf(maxLeadTicks.coerceAtMost(MAX_MOB_AIM_TICKS).toDouble(), 3.0 / horizontalStep)
+    val leadLimit = minOf(maxLeadTicks.coerceAtMost(MAX_MOB_AIM_TICKS).toDouble(), 5.0 / horizontalStep)
     val delay = launchDelayTicks.coerceIn(0, MAX_MOB_AIM_TICKS)
     var travelled = 0.0
     for (age in 1..MAX_MOB_AIM_TICKS) {

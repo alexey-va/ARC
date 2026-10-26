@@ -66,6 +66,7 @@ class DungeonSaveMenusTest : FreeSpec({
     "quest overview and detail distinguish completion from tracking" {
         val player = paper.addPlayer("quest-viewer")
         val dungeon = mockk<EMDungeonQol>(relaxed = true)
+        every { dungeon.panelView(player) } returns null
         every { dungeon.text(any(), any(), *anyVararg()) } answers {
             val values = thirdArg<Array<out Pair<String, Component>>>()
             ru.arc.util.TextUtils.mm(secondArg<String>(),
@@ -90,7 +91,7 @@ class DungeonSaveMenusTest : FreeSpec({
         shown.last().id shouldBe "dungeon.quests"
         shown.last().buttons.map { it.id.value } shouldBe listOf("quest_0", "quest_1", "quest_2", "quest_3", "refresh")
         val plainText = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
-        plainText.serialize(shown.last().title) shouldBe "Задания здесь"
+        plainText.serialize(shown.last().title) shouldBe "Мои задания"
         shown.last().buttons.take(4).map { plainText.serialize(it.label) } shouldBe
             entries!!.map { "${if (it.tracked) "✔" else "○"} ${it.name} ›" }
         val bodyText = shown.last().body.flatMap { body ->
@@ -195,9 +196,16 @@ class DungeonSaveMenusTest : FreeSpec({
         shown.single().id shouldBe "dungeon.main"
         shown.single().columns shouldBe 3
         shown.single().buttons.map { it.id.value } shouldBe listOf(
-            "catalog", "quests", "party", "classes", "skills", "gear", "stats", "bosses", "lost_loot", "travel", "guide", "share",
+            "catalog", "quests", "party", "classes", "skills", "gear", "stats", "bosses", "lost_loot", "travel", "guide", "share", "current",
         )
         shown.single().exitButton!!.closeDialogBeforeAction shouldBe false
+        val unavailableRun = shown.single().buttons.single { it.id.value == "current" }
+        val plain = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+        plain.serialize(unavailableRun.label).contains("Нет активного данжа") shouldBe true
+        plain.serialize(unavailableRun.tooltip).contains("Личные разделы доступны уже сейчас") shouldBe true
+        unavailableRun.onClick.handle(mockk())
+        shown.last().id shouldBe "dungeon.main"
+        verify(exactly = 0) { dungeon.action(any(), any(), any()) }
     }
 
     "global menu reads zero nonzero and unavailable crystal balances" {

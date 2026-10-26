@@ -36,4 +36,21 @@ class PassiveClassContentTest : FreeSpec({
         registry.mechanicTraits("trapper").single().atContributionLevel(30).controlResistanceFraction() shouldBe .1
         registry.mechanicTraits("pathfinder").single().atContributionLevel(30).partyMovementSpeedAdjustment() shouldBe .04
     }
+
+    "compatible native additions survive while retired override forms are skipped with one warning" {
+        val stock = BuiltInClassContent.passiveRegistry()
+        val ids = stock.mappedFormIds() - "cleric"
+        val profiles = ids.associateWith(stock::require) + ("new_native_form" to stock.require("ranger"))
+        val traits = ids.associateWith(stock::traits) + ("new_native_form" to stock.traits("ranger"))
+        val mechanics = ids.associateWith(stock::mechanicTraits) + ("new_native_form" to stock.mechanicTraits("ranger"))
+        val current = EliteMobsPassiveAccess.newRegistry(profiles, traits, mechanics)
+        val warnings = mutableListOf<String>()
+        val balanced = PassiveClassContent.applyBalance(current) { warnings += it }
+        balanced.mappedFormIds() shouldBe current.mappedFormIds()
+        balanced.require("new_native_form") shouldBe current.require("new_native_form")
+        balanced.traits("new_native_form") shouldBe current.traits("new_native_form")
+        balanced.mechanicTraits("new_native_form") shouldBe current.mechanicTraits("new_native_form")
+        warnings.size shouldBe 1
+        warnings.single().contains("cleric") shouldBe true
+    }
 })

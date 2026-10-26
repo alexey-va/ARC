@@ -311,6 +311,14 @@ internal class EMDungeonQol(
 
     internal fun partiesAvailable(): Boolean = com.magmaguy.elitemobs.config.PartyConfig.isEnabled()
 
+    internal fun spawnTeleportBlockReason(player: Player): Component? = when {
+        !player.hasPermission("elitemobs.teleport.spawn") ->
+            text("messages.spawn-no-permission", "<#e8dfd2>У вас нет доступа к этому переходу на спавн.")
+        com.magmaguy.elitemobs.config.DefaultConfig.getDefaultSpawnLocation()?.world == null ->
+            text("messages.spawn-unavailable", "<#e8dfd2>Переход на спавн здесь не настроен. В Гильдию можно перейти кнопкой «Гильдия».")
+        else -> null
+    }
+
     /** Dialog callbacks must still belong to the exact world and native run shown. */
     internal fun panelAction(player: Player, expected: DungeonPanelView, action: String) {
         if (player.world.uid != expected.worldId || current(player)?.run != expected.visit.run) {
@@ -378,7 +386,7 @@ internal class EMDungeonQol(
 
     internal fun action(player: Player, action: String, args: List<String> = emptyList()) {
         when (action) {
-            "menu", "меню" -> menus.panel(player)
+            "menu", "меню" -> if (panelView(player) != null) menus.panel(player) else menus.main(player)
             "global", "общее" -> menus.main(player)
             "list", "список" -> menus.catalog(player)
             "stats", "статистика" -> menus.statistics(player)
@@ -428,14 +436,14 @@ internal class EMDungeonQol(
         }
     }
 
-    /** Replace only the native root screen; all EliteMobs subcommands retain their owner. */
+    /** Bare roots open our menu; explicit namespaces and native subcommands remain an escape route. */
     @EventHandler(ignoreCancelled = true)
     fun openEliteMobsMenu(event: PlayerCommandPreprocessEvent) {
-        if (event.message.trim().lowercase() !in setOf("/em", "/elitemobs", "/elitemobs:em", "/elitemobs:elitemobs")) return
+        if (event.message.trim().lowercase() !in setOf("/em", "/elitemobs")) return
         if (!enabled || closed || !event.player.hasPermission("elitemobs.command")) return
         event.isCancelled = true
         DungeonsMenus.beginDialogFlow(event.player)
-        menus.panel(event.player)
+        action(event.player, "menu")
     }
 
     private fun shopsLocation(): DungeonDestination = DungeonDestination(

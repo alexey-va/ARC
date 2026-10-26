@@ -239,7 +239,7 @@ object StaffSpellPreviewExport {
         StaffSpell.PRISM to arsenalModes(24.0, 1.8, "prism"),
     )
 
-    // First in the exported list: 12 fixed player-eye snapshots at ordinary gameplay scales.
+    // First in the exported list: fixed player-eye snapshots at ordinary gameplay scales.
     private val readabilityPoses = buildList {
         listOf(8.0, 16.0, 24.0).forEach { distance ->
             add(ReadabilityPose(
@@ -288,6 +288,22 @@ object StaffSpellPreviewExport {
             effectOffsetZ = 16.0,
             trajectoryNote = "Primary mark burst centered on a target 16 blocks ahead; no camera dolly or zoom.",
         ))
+        listOf(0.0, .75, 2.0).forEach { distance ->
+            listOf(4, 10, 16).forEach { age ->
+                add(ReadabilityPose(
+                    id = "mark-primary-near-${distance}m-tick-$age",
+                    spell = StaffSpell.MARK,
+                    event = Event("burst", Inputs(0.0, 3.5, 20, impact = true)),
+                    frame = Frame("near-$age", age),
+                    illustrativeDistanceBlocks = distance,
+                    cameraTargetY = 1.62,
+                    cameraTargetZ = 8.0,
+                    effectOffsetY = .9,
+                    effectOffsetZ = distance,
+                    trajectoryNote = "Target-body mark at y=0.9; fixed standing eye, forward aim, including directly inside the effect. Production camera filter; no native-client claim.",
+                ))
+            }
+        }
         listOf(8.0, 16.0).forEach { distance ->
             add(ReadabilityPose(
                 id = "blackhole-secondary-${distance.toInt()}m",
@@ -613,21 +629,24 @@ object StaffSpellPreviewExport {
         return parts to origin
     }
 
-    private fun eyePosition(camera: Map<String, Any>): Vector3f {
-        val point = camera["position"] as Map<*, *>
-        return Vector3f((point["x"] as Number).toFloat(), (point["y"] as Number).toFloat(),
-            (point["z"] as Number).toFloat())
+    private fun cameraPoint(camera: Map<String, Any>, key: String): org.bukkit.util.Vector {
+        val point = camera[key] as Map<*, *>
+        return org.bukkit.util.Vector((point["x"] as Number).toDouble(), (point["y"] as Number).toDouble(),
+            (point["z"] as Number).toDouble())
     }
 
     /** Static preview uses the production spell/impact clearance plus its fixed runtime padding. */
     private fun playerVisibleParts(
         parts: List<StaffDisplayPart>,
-        eye: Vector3f,
+        camera: Map<String, Any>,
         spell: StaffSpell,
         impact: Boolean,
     ) = parts.filter { part ->
-        part.visible && Vector3f(part.center).distance(eye) >=
-            (staffEyeClearance(spell, impact) + 0.15).toFloat() + part.scale.length() * 0.5f
+        val eye = cameraPoint(camera, "position")
+        val forward = cameraPoint(camera, "target").subtract(eye).normalize()
+        val at = org.bukkit.util.Vector(part.center.x.toDouble(), part.center.y.toDouble(), part.center.z.toDouble())
+        part.visible && staffSweptPartClearOfEye(eye, forward, at, at,
+            part.scale.length() * .5, staffEyeClearance(spell, impact) + .15)
     }
 
     private fun state(
@@ -659,7 +678,7 @@ object StaffSpellPreviewExport {
             // the live swept-bounds rule to these source slots for each fixed camera.
             val exportedParts = if (view == "geometry") indexedParts
                 else indexedParts.filter { (_, part) ->
-                    part.visible && playerVisibleParts(listOf(part), eyePosition(camera), spell, inputs.impact).isNotEmpty()
+                    part.visible && playerVisibleParts(listOf(part), camera, spell, inputs.impact).isNotEmpty()
                 }
             ExportedState(mapOf(
                 "id" to (readability?.let { "readability-${it.id}" } ?: "${spell.id}-${event.id}-${frame.id}-$view"),
@@ -688,7 +707,7 @@ object StaffSpellPreviewExport {
                 "cameraMode" to if (readability == null) "standing-or-sneaking" else "player-eye-default-fov-no-autozoom",
                 "illustrativeDistanceBlocks" to (readability?.illustrativeDistanceBlocks ?: 0.0),
                 "partCull" to if (view == "geometry") "source visibility retained; temporal observer culling uses swept bounds" else
-                    "distance(center, eye) >= staffEyeClearance(spell, impact) + 0.15 + part-scale-length / 2",
+                    "production staffSweptPartClearOfEye: camera shell and near aim corridor; stationary observer",
                 "projectiles" to when {
                     inputs.chargeProgress != null -> 0
                     spell == StaffSpell.CHAIN && inputs.secondary -> 3
@@ -750,7 +769,7 @@ object StaffSpellPreviewExport {
             "palette" to palette,
             "coordinates" to mapOf("space" to "spell-local", "origin" to "cast point; +Z forward", "unit" to "block"),
             "cameraNote" to "The first 12 readability-prefixed states use the standing player eye at local (0, 1.62, 0), default 70-degree FOV and no autozoom. They sample centerline CHAIN travel at 8/16/24 blocks, LANCE at 8/16/24 blocks, primary MARK at 16, black holes at 8/16, and the NOVA vine and aimed bloom. Remaining states retain production geometry frames, all four Arsenal inputs and standing/sneaking filters.",
-            "evidence" to "Every geometry frame calls production staffDisplayParts, staffChargeParts or staffLightningTrailParts. Player-filtered states use staffEyeClearance(spell, impact) + 0.15 static padding and half the part-scale length. The legacy offset-target CHAIN route remains explicitly labeled; curated primary routes start at yaw 0 and target straight ahead. These are offline source-driven block-display previews, not native Minecraft lighting, interpolation, particles, sounds or measured client acceptance.",
+            "evidence" to "Every geometry frame calls production staffDisplayParts, staffChargeParts or staffLightningTrailParts. Player-filtered states call production staffSweptPartClearOfEye with the exported camera direction and zero viewer velocity. The legacy offset-target CHAIN route remains explicitly labeled; curated primary routes start at yaw 0 and target straight ahead. These are offline source-driven block-display previews, not native Minecraft lighting, interpolation, particles, sounds or measured client acceptance.",
         )).plus("\n"))
         // A compact continuous shape reel, including weak/full release and every quick gesture.
         // The anchor is fixed for fair silhouette comparisons; it is not a simulated world trajectory.

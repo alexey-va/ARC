@@ -18,6 +18,33 @@ import ru.arc.paper.testing.MockBukkitTestRuntime
 import kotlin.math.abs
 
 class StaffSpellVisualsTest : FreeSpec({
+    "a rupture inside the viewer retains sparse peripheral accents without a close flash" {
+        MockBukkitTestRuntime.open().use {
+            Tasks.withScheduler(TestTaskScheduler()) {
+                val world = mockk<World>(relaxed = true)
+                val observer = mockk<Player>(relaxed = true)
+                val eye = Location(world, 0.0, 1.62, 0.0)
+                every { observer.eyeLocation } returns eye
+                every { world.isChunkLoaded(any<Int>(), any<Int>()) } returns true
+                every { world.getNearbyPlayers(any<Location>(), any<Double>()) } returns listOf(observer)
+                val particles = mutableListOf<Pair<Particle, Location>>()
+                val particleOwner = mockk<PaperViewerParticles>(relaxed = true)
+                every { particleOwner.emit(observer, any<Location>(), any<Particle>(), any<Int>(),
+                    any<Double>(), any<Double>(), any<Double>(), any<Double>(), any(), false) } answers {
+                    particles += arg<Particle>(2) to arg<Location>(1).clone()
+                }
+                val tasks = LifecycleTaskScope()
+                try {
+                    StaffSpellVisuals(tasks, particleOwner).markBurst(Location(world, 0.0, .9, 0.0), 3.5)
+                    particles.isNotEmpty() shouldBe true
+                    particles.none { it.first == Particle.FLASH } shouldBe true
+                    particles.any { it.first == Particle.DUST_COLOR_TRANSITION && it.second.distance(eye) < 3.2 } shouldBe true
+                    particles.all { it.second.distance(eye) >= .5 } shouldBe true
+                } finally { tasks.close() }
+            }
+        }
+    }
+
     "overlapping packet frames are bounded per viewer and resume without a backlog" {
         MockBukkitTestRuntime.open().use {
             Tasks.withScheduler(TestTaskScheduler()) {

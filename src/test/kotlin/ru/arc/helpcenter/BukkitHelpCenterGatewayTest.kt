@@ -23,6 +23,23 @@ import java.util.concurrent.CompletableFuture
 class BukkitHelpCenterGatewayTest : StringSpec({
     afterTest { PlayerManager.readMessage("[]") }
 
+    "dungeon menu uses the current custom provider and fails closed when native data is unavailable" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val plugin = paper.createSimplePlugin("DungeonsGateway")
+            val player = paper.addPlayer("DungeonVisitor")
+            val service = mockk<ru.arc.dungeons.api.ArcDungeonsService>(relaxed = true)
+            org.bukkit.Bukkit.getServicesManager().register(ru.arc.dungeons.api.ArcDungeonsService::class.java,
+                service, plugin, org.bukkit.plugin.ServicePriority.Normal)
+            val gateway = BukkitHelpCenterGateway()
+            every { service.nativeReady() } returns false
+            gateway.openDungeons(player) shouldBe false
+            io.mockk.verify(exactly = 0) { service.dungeonAction(any(), any(), any()) }
+            every { service.nativeReady() } returns true
+            gateway.openDungeons(player) shouldBe true
+            io.mockk.verify(exactly = 1) { service.dungeonAction(player, "menu", emptyList()) }
+        }
+    }
+
     "keeps provider visibility in each personal home snapshot" {
         MockBukkitTestRuntime.open().use { paper ->
             paper.createSimplePlugin("HuskHomes")

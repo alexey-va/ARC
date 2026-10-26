@@ -1460,13 +1460,23 @@ internal class StaffSpellVisuals(
         val clearance = minimumEyeDistance.takeIf { it.isFinite() && it >= 0.0 } ?: IMPACT_CAMERA_CLEARANCE
         val minEyeDistanceSquared = clearance * clearance
         val maxViewerDistanceSquared = 48.0 * 48.0
+        val compact = when (particle) {
+            Particle.DUST, Particle.DUST_COLOR_TRANSITION, Particle.END_ROD, Particle.REVERSE_PORTAL -> true
+            else -> false
+        }
         // Paper 1.21.11 requires Color payload for FLASH; keep this typed default centralized.
         val particleData = data ?: if (particle == Particle.FLASH) Color.WHITE else null
         world.getNearbyPlayers(at, 48.0).forEach { player ->
             val eye = player.eyeLocation
             if (eye.world !== world) return@forEach
             val distanceSquared = eye.distanceSquared(at)
-            if (distanceSquared < minEyeDistanceSquared || distanceSquared > maxViewerDistanceSquared) return@forEach
+            if (distanceSquared > maxViewerDistanceSquared) return@forEach
+            if (distanceSquared < minEyeDistanceSquared) {
+                // Single small accents retain the surrounding contour; flashes and large sprites keep their full guard.
+                val point = at.toVector()
+                if (!compact || !staffSweptPartClearOfEye(eye.toVector(), eye.direction, point, point, .15, clearance))
+                    return@forEach
+            }
             particleOwner.emit(player, at, particle, 1, 0.0, 0.0, 0.0, 0.0, particleData, false)
         }
     }

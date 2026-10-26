@@ -52,6 +52,8 @@ internal class DungeonAdventureMenus(
     fun main(player: Player, feedback: Component? = null) {
         val stats = data.stats(player).orEmpty().associate { it.key to it.value }
         val current = dungeon.panelView(player)
+        val catalogReady = data.catalog(player).isNotEmpty()
+        val partyReady = dungeon.partiesAvailable()
         val rows = listOf(
             label("combatLevel", "Боевой уровень") to value(stats["combatLevel"]),
             label("money", "Кристаллы") to (crystals(player)?.let {
@@ -64,11 +66,20 @@ internal class DungeonAdventureMenus(
             PaperDialogBody(text("intro", "<#e8dfd2>Подберите поход или займитесь своим героем. Внутри данжа /данж и Shift + F открывают быстрые действия."), 500),
             DialogTables.filledBody(rows.map { (label, value) -> listOf(label, value) }, null, 320, listOf(1, 1)),
         )
+        if (!catalogReady) body += PaperDialogBody(noLocalDungeons(), 500)
         feedback?.let { body += PaperDialogBody(it, 500) }
         val buttons = listOf(
-            button("catalog", "catalog-label", "<#ffb277>Каталог данжей ›", "Поиск, уровни и выбор похода") { catalog(player) },
+            if (catalogReady) button("catalog", "catalog-label", "<#ffb277>Каталог данжей ›", "Поиск, уровни и выбор похода") { catalog(player) }
+            else PaperDialogButton(PaperDialogActionId.of("catalog"), text("catalog-unavailable-label", "<white>Каталог недоступен"),
+                noLocalDungeons(), onClick = {
+                    if (data.catalog(player).isNotEmpty()) catalog(player) else main(player)
+                }),
             button("quests", "quests-label", "<#c4abff>Задания ›", "Прогресс, отслеживание и управление заданиями") { local.quests(player) },
-            button("party", "party-label", "<#e5ba73>Группа ›", "Собрать группу и пригласить друзей") { local.party(player) },
+            if (partyReady) button("party", "party-label", "<#e5ba73>Группа ›", "Собрать группу и пригласить друзей") { local.party(player) }
+            else PaperDialogButton(PaperDialogActionId.of("party"), text("party-unavailable-label", "<white>Группа недоступна"),
+                partyUnavailable(), onClick = {
+                    if (dungeon.partiesAvailable()) local.party(player) else main(player, partyUnavailable())
+                }),
             button("classes", "classes-label", "<#c4abff>Классы ›", "Выбор класса, пассивы и ветки развития") { local.classes(player) },
             button("skills", "progression-label", "<#c4abff>Развитие навыков ›", "Опыт, пассивные бонусы, ближайшие способности и книги прохождений") { skills(player) },
             button("gear", "gear-label", "<#86dcf1>Снаряжение ›", "Вещи, боевые параметры и выбранные перки") { gear(player) },
@@ -98,7 +109,11 @@ internal class DungeonAdventureMenus(
             button("current", "current-label", "<#ffb277>Текущий данж ›", "Вернуться к быстрым действиям текущего похода") { local.panel(player) }
                 .copy(width = 166)
         } ?: if (dungeon.insideInstance(player)) button("quit", "quit-label", "<#e5ba73>Выйти из данжа",
-            "Покинуть наблюдение штатным способом", close = true) { dungeon.action(player, "quit") }.copy(width = 166) else null)
+            "Покинуть наблюдение штатным способом", close = true) { dungeon.action(player, "quit") }.copy(width = 166)
+        else PaperDialogButton(PaperDialogActionId.of("current"), text("current-unavailable-label", "<white>Нет активного данжа"),
+            noCurrentDungeon(), width = 166, onClick = {
+                if (dungeon.panelView(player) != null) local.panel(player) else main(player, noCurrentDungeon())
+            }))
         show(player, PaperDialogScreen(id = "dungeon.main", title = text("title", "<#ffb277>Данжи и приключения"),
             body = body, buttons = buttons, exitButton = rootExit(player), columns = 3)) { main(player) }
     }
@@ -333,14 +348,20 @@ internal class DungeonAdventureMenus(
         val body = mutableListOf(PaperDialogBody(text("travel-intro", "<#e8dfd2>Подготовка к походу, торговцы и возвращение к приключениям."), 468))
         if (blocked) body += PaperDialogBody(leaveFirst(), 468)
         feedback?.let { body += PaperDialogBody(it, 468) }
-        fun command(id: String, key: String, fallback: String, hint: String, action: () -> Unit) =
-            button(id, if (blocked) "$key-disabled" else key, if (blocked) "<white>[Недоступно] $fallback" else "<#92bed8>$fallback ›", hint, close = !blocked) {
-                if (dungeon.insideInstance(player)) travel(player, leaveFirst()) else action()
-            }
+        fun command(id: String, key: String, fallback: String, hint: String,
+            unavailable: () -> Component? = { null }, action: () -> Unit): PaperDialogButton {
+            val reason = if (blocked) leaveFirst() else unavailable()
+            return button(id, if (reason != null) "$key-disabled" else key,
+                if (reason != null) "<white>[Недоступно] $fallback" else "<#92bed8>$fallback ›", hint, close = reason == null) {
+                val currentReason = if (dungeon.insideInstance(player)) leaveFirst() else unavailable()
+                if (currentReason != null) travel(player, currentReason) else action()
+            }.let { if (reason == null) it else it.copy(tooltip = reason) }
+        }
         val buttons = listOf(
             command("guild", "guild-label", "Гильдия", "Перейти к порталам и заданиям Гильдии") { dungeon.action(player, "tp") },
             command("shops", "shops-label", "Магазины", "Перейти к торговцам Гильдии") { dungeon.action(player, "shops") },
-            command("spawn", "spawn-label", "Спавн", "Вернуться на спавн") { player.performCommand("elitemobs:em spawntp") },
+            command("spawn", "spawn-label", "Спавн", "Вернуться на спавн",
+                unavailable = { dungeon.spawnTeleportBlockReason(player) }) { player.performCommand("elitemobs:em spawntp") },
             button("return", if (blocked || destination == null) "return-disabled" else "return-label", if (blocked || destination == null) "<white>[Недоступно] Вернуться в данж" else "<#92bed8>Вернуться в данж ›",
                 "Личный портал к месту последнего выхода из обычного данжа", close = !blocked && destination != null) {
                 if (blocked) travel(player, leaveFirst())
@@ -397,6 +418,9 @@ internal class DungeonAdventureMenus(
     private fun clean(value: String) = plainDungeonQuestText(value)
     private fun loading() = text("loading", "<#e8dfd2>Данные героя ещё загружаются. Попробуйте обновить страницу.")
     private fun unavailable() = text("unavailable", "<#e8dfd2>Сейчас недоступно")
+    private fun noLocalDungeons() = text("catalog-unavailable", "<#e8dfd2>На этом сервере нет доступных походов. Основные данжи — на спавне: «Телепорты» → «Гильдия».")
+    private fun partyUnavailable() = text("party-unavailable", "<#e8dfd2>Группы данжей на этом сервере отключены.")
+    private fun noCurrentDungeon() = text("current-unavailable", "<#e8dfd2>Войдите в данж, чтобы открыть старт, сохранения и выход. Личные разделы доступны уже сейчас.")
     private fun noPermission() = text("no-permission", "<#e8dfd2>У вас нет доступа к этому действию.")
     private fun leaveFirst() = text("leave-first", "<#e8dfd2>Сначала завершите текущий поход или выйдите через панель данжа. Просматривать каталог можно прямо здесь.")
     private fun changed() = text("changed", "<#e8dfd2>Список изменился. Страница обновлена; выберите цель заново.")

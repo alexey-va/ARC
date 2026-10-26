@@ -8,6 +8,7 @@ import com.magmaguy.elitemobs.advancedcombat.abilities.AbilityResult
 import com.magmaguy.elitemobs.advancedcombat.abilities.ClassAbilityEngine
 import com.magmaguy.elitemobs.advancedcombat.classes.AbilitySlot
 import com.magmaguy.elitemobs.advancedcombat.classes.ClassLineage
+import com.magmaguy.elitemobs.advancedcombat.content.BuiltInClassContent
 import com.magmaguy.elitemobs.advancedcombat.input.ClassAbilityInputRouter
 import com.magmaguy.elitemobs.advancedcombat.menu.ClassSelectionMenu
 import com.magmaguy.elitemobs.advancedcombat.passives.FixedPassiveRegistry
@@ -33,7 +34,7 @@ import java.util.Locale
 import java.util.function.Function
 
 /**
- * Main-thread, reversible adapter for the audited stock EliteMobs 10.9.8 and 10.9.10 runtimes.
+ * Main-thread, reversible adapter validated against the running EliteMobs API.
  * Native progression, trials, combat listeners and their scheduler remain the owners. Only the
  * engine interface, immutable balance data and menu renderer references lack public setters.
  * Validate every borrowed reference before changing any of them; never restore a previous module's
@@ -52,7 +53,6 @@ internal class PassiveClassCompatibility(
         check(!closed) { "Passive class integration is closed" }
         val native = Bukkit.getPluginManager().getPlugin("EliteMobs") as? JavaPlugin
             ?: error("EliteMobs is unavailable")
-        requireSupportedVersion(native.description.version)
         check(AdvancedCombatModule.isInitialized()) { "EliteMobs Advanced Combat must be enabled and initialized" }
         val module = AdvancedCombatModule.get()
         if (binding?.module === module) return
@@ -62,7 +62,8 @@ internal class PassiveClassCompatibility(
         val access = EliteMobsPassiveAccess()
         val registry = PassiveClassContent.registry()
         val originalRegistry = access.passiveRegistry.get(module) as FixedPassiveRegistry
-        check(PassiveClassContent.fingerprint(originalRegistry) == PassiveClassContent.STOCK_FINGERPRINT) {
+        check(PassiveClassContent.fingerprint(originalRegistry) ==
+            PassiveClassContent.fingerprint(BuiltInClassContent.passiveRegistry())) {
             "Another extension has already replaced the native passive catalog"
         }
         val originalEngine = access.abilityEngine.get(module) as ClassAbilityEngine
@@ -101,7 +102,7 @@ internal class PassiveClassCompatibility(
             manager.commands[manager.commands.indexOf(originalInfo)] = replacementInfo
             AdvancedCombatRuntime.installHudProvider(hud)
             activeOwner = this
-            plugin.logger.info("Passive-only classes installed for stock EliteMobs ${native.description.version}")
+            plugin.logger.info("Passive-only classes installed for EliteMobs ${native.description.version}")
         } catch (failure: Throwable) {
             runCatching(::restore).exceptionOrNull()?.let(failure::addSuppressed)
             throw failure
@@ -188,10 +189,6 @@ internal class PassiveClassCompatibility(
         @Volatile private var activeOwner: PassiveClassCompatibility? = null
         fun isInstalled(): Boolean = activeOwner != null
 
-        internal fun requireSupportedVersion(version: String) = check(version in PassiveClassContent.SUPPORTED_NATIVE_VERSIONS) {
-            "Passive class integration supports stock EliteMobs ${PassiveClassContent.SUPPORTED_NATIVE_VERSIONS.joinToString()}; found $version"
-        }
-
         internal fun renderHud(module: AdvancedCombatModule, player: Player): String {
             val health = CombatHealthFormatter.format(player.health)
             val maximum = CombatHealthFormatter.format(player.getAttribute(Attribute.MAX_HEALTH)?.value ?: player.health)
@@ -262,7 +259,7 @@ internal class EliteMobsPassiveAccess {
             mechanics: Map<String, List<PassiveMechanicTrait>>): FixedPassiveRegistry =
             registryConstructor.newInstance(profiles, traits, mechanics)
 
-        private fun field(owner: Class<*>, name: String, type: Class<*>, static: Boolean = false, final: Boolean = true): Field =
+        internal fun field(owner: Class<*>, name: String, type: Class<*>, static: Boolean = false, final: Boolean = true): Field =
             owner.getDeclaredField(name).also {
                 check(it.type == type && Modifier.isPrivate(it.modifiers) && Modifier.isStatic(it.modifiers) == static &&
                     Modifier.isFinal(it.modifiers) == final && it.trySetAccessible()) { "Unsupported native field: ${owner.simpleName}.$name" }
