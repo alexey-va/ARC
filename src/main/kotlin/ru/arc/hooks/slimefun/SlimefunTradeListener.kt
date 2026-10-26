@@ -4,7 +4,7 @@ import io.github.thebusybiscuit.slimefun4.api.items.SlimefunItem
 import io.github.thebusybiscuit.slimefun4.implementation.Slimefun
 import io.github.thebusybiscuit.slimefun4.implementation.items.VanillaItem
 import io.github.thebusybiscuit.slimefun4.implementation.items.misc.SyntheticEmerald
-import io.papermc.paper.event.player.PlayerPurchaseEvent
+import io.papermc.paper.event.player.PlayerTradeEvent
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
@@ -23,7 +23,7 @@ class SlimefunTradeListener(
     },
 ) : Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    fun onPurchase(event: PlayerPurchaseEvent) {
+    fun onTrade(event: PlayerTradeEvent) {
         val inventory = event.player.openInventory.topInventory as? MerchantInventory ?: return
         if ((0..1).none { slot -> inventory.getItem(slot)?.let(isProtectedItem) == true }) return
         event.isCancelled = true

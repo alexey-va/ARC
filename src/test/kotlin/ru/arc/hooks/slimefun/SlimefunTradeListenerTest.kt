@@ -4,7 +4,6 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
-import io.papermc.paper.event.player.PlayerPurchaseEvent
 import io.papermc.paper.event.player.PlayerTradeEvent
 import org.bukkit.entity.AbstractVillager
 import org.bukkit.entity.Player
@@ -25,7 +24,7 @@ class SlimefunTradeListenerTest : StringSpec({
             var warnings = 0
             val listener = SlimefunTradeListener({ it === hunterTalisman }, { warnings++ })
 
-            listener.onPurchase(event)
+            listener.onTrade(event)
 
             event.isCancelled shouldBe true
             warnings shouldBe 1
@@ -39,24 +38,26 @@ class SlimefunTradeListenerTest : StringSpec({
         every { player.openInventory.topInventory } returns inventory
         every { inventory.getItem(0) } returns emerald
         every { inventory.getItem(1) } returns null
-        val event = PlayerPurchaseEvent(player, mockk(), mockk(), true, true)
+        val event = PlayerTradeEvent(player, mockk(), mockk(), true, true)
         val listener = SlimefunTradeListener({ false }, { error("Normal trade must not warn") })
 
-        listener.onPurchase(event)
+        listener.onTrade(event)
 
         event.isCancelled shouldBe false
     }
 
-    "standalone merchant purchases also reject Slimefun payment" {
+    "two protected inputs produce only one warning" {
         val player = mockk<Player>()
         val inventory = mockk<MerchantInventory>()
         every { player.openInventory.topInventory } returns inventory
-        every { inventory.getItem(0) } returns mockk()
-        val event = PlayerPurchaseEvent(player, mockk(), mockk(), false, true)
-        val listener = SlimefunTradeListener({ true }, {})
+        every { inventory.getItem(any()) } returns mockk()
+        val event = PlayerTradeEvent(player, mockk(), mockk(), true, true)
+        var warnings = 0
+        val listener = SlimefunTradeListener({ true }, { warnings++ })
 
-        listener.onPurchase(event)
+        listener.onTrade(event)
 
         event.isCancelled shouldBe true
+        warnings shouldBe 1
     }
 })
