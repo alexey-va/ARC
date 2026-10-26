@@ -481,6 +481,7 @@ open class ARC : JavaPlugin() {
         // host-owned visual cleanup remains a separate tail and never blocks the server thread.
         moduleDrains += storageDrain
         moduleDrains.forEach { drain -> attempt { drain.join() } }
+        attempt { Logging.closeDiagnosticFile() }
         val failure = nativeFailure
         if (failure == null) sqlDrain.complete(null) else sqlDrain.completeExceptionally(failure)
         lifecycleDrain = CompletableFuture.allOf(*nativeDrains.toTypedArray()).thenApply {

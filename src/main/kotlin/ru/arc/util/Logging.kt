@@ -5,6 +5,7 @@ import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import ru.arc.config.EmptyConfig
 import ru.arc.logging.ArcLogging
+import ru.arc.logging.ArcDiagnosticLogging
 import ru.arc.logging.LogLevel
 import ru.arc.logging.LoggingConfigSource
 import ru.arc.logging.LoggingModuleConfig
@@ -22,6 +23,7 @@ import java.nio.file.Paths
  */
 object Logging {
     private val paperPlatform = PaperLoggingPlatform(brandTag = "ARC")
+    private var diagnosticFile: AutoCloseable? = null
 
     var quietMode: Boolean
         get() = ArcLogging.quietMode
@@ -91,6 +93,17 @@ object Logging {
                 ),
             opsSink = LoggingOpsSink { level, plain -> OpsLogBuffer.append(level, plain) },
         )
+        closeDiagnosticFile()
+        if (configSource.config().bool("diagnostics-file.enabled", true)) {
+            diagnosticFile = ArcDiagnosticLogging.install(Paths.get("logs"))
+        }
+    }
+
+    @JvmStatic
+    fun closeDiagnosticFile() {
+        val retired = diagnosticFile
+        diagnosticFile = null
+        retired?.close()
     }
 
     @JvmStatic
