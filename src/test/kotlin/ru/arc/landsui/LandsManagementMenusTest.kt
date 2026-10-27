@@ -37,13 +37,13 @@ class LandsManagementMenusTest : StringSpec({
                 LandsUiMember(playerId, "Owner", "owner", true, true, false, emptySet()),
                 LandsUiMember(memberId, memberName, "Visitor", false, false, true, setOf("builder")),
             )
-            val view = landsUiTestView(
+            var view = landsUiTestView(
                 context, land,
                 permissions = setOf(LandsUiPermission.NATIVE_MENU, LandsUiPermission.DELETE),
                 members = members,
                 roles = roles,
             ).copy(
-                naturalRules = listOf(LandsUiRule("fire_spread", true, true)),
+                naturalRules = listOf(LandsUiRule("fire_spread", true, true), LandsUiRule("arc_no_pvp", false, true)),
                 effectiveRules = listOf(LandsUiRule("block_break", true, false), LandsUiRule("block_place", false, false)),
             )
             val readonlyRuleLabels = listOf(
@@ -53,7 +53,6 @@ class LandsManagementMenusTest : StringSpec({
                 "interact_door" to "Двери",
                 "interact_trapdoor" to "Люки",
                 "interact_mechanism" to "Кнопки и рычаги",
-                "attack_player" to "PvP",
                 "attack_animal" to "Урон животным",
                 "interact_villager" to "Торговля с жителями",
             )
@@ -65,6 +64,13 @@ class LandsManagementMenusTest : StringSpec({
             every {
                 gateway.change(player, context, LandsUiChange.NaturalFlag("fire_spread", true))
             } returns LandsUiChangeResult.APPLIED
+            every {
+                gateway.change(player, context, LandsUiChange.NaturalFlag("arc_no_pvp", false))
+            } answers {
+                view = view.copy(naturalRules = view.naturalRules.map { if (it.key == "arc_no_pvp") it.copy(enabled = true) else it })
+                LandsUiChangeResult.APPLIED
+            }
+            every { gateway.managementView(player, context) } answers { view }
             every {
                 gateway.change(player, context, LandsUiChange.AssignRole(memberId, "builder"))
             } returns LandsUiChangeResult.APPLIED
@@ -114,10 +120,14 @@ class LandsManagementMenusTest : StringSpec({
                 rulesText.contains("Запрещено") shouldBe true
                 checkNotNull(screen).buttons.single { it.id.value == "environment" }.onClick.handle(click)
                 checkNotNull(screen).id shouldBe "lands.environment"
-                checkNotNull(screen).buttons.map { it.id.value } shouldBe listOf("flag_0")
-                checkNotNull(screen).buttons.single().onClick.handle(click)
+                checkNotNull(screen).buttons.map { it.id.value } shouldBe listOf("flag_0", "flag_1")
+                checkNotNull(screen).buttons.first().onClick.handle(click)
                 verify { gateway.change(player, context, LandsUiChange.NaturalFlag("fire_spread", true)) }
                 checkNotNull(screen).id shouldBe "lands.environment"
+                plainText(checkNotNull(screen).buttons.last().label) shouldBe "✔ PvP · разрешено"
+                checkNotNull(screen).buttons.last().onClick.handle(click)
+                verify { gateway.change(player, context, LandsUiChange.NaturalFlag("arc_no_pvp", false)) }
+                plainText(checkNotNull(screen).buttons.last().label) shouldBe "✕ PvP · запрещено"
 
                 checkNotNull(screen).exitButton!!.onClick.handle(click)
                 checkNotNull(screen).exitButton!!.onClick.handle(click)

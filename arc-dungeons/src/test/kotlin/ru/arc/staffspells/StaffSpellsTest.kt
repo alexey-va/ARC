@@ -1531,6 +1531,7 @@ internal fun withStaffHarness(
     summonActorFactory: ((World, Location, Boolean) -> org.bukkit.entity.AbstractSkeleton)? = null,
     hudFactory: (() -> StaffSpellHud)? = null,
     targetEligible: (Player, LivingEntity) -> Boolean = { _, target -> target !is Player },
+    deniedTarget: (Player, LivingEntity, StaffSpellCast) -> Boolean = { _, _, _ -> false },
     block: (StaffHarness) -> Unit,
 ) {
     failOnUnsupportedMockBukkitOperation {
@@ -1569,6 +1570,7 @@ internal fun withStaffHarness(
                         val cooldowns = StaffTestCooldowns(scheduler)
                         val damage = mockk<StaffSpellDamage>()
                         every { damage.summonCast = any() } returns Unit
+                        every { damage.reportDeniedTarget(any(), any(), any()) } answers { deniedTarget(firstArg(), secondArg(), thirdArg()) }
                         every { damage.inputAllowed(any()) } returns true
                         val captures = mutableListOf<Player>()
                         val hits = mutableListOf<LivingEntity>()

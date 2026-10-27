@@ -391,15 +391,15 @@ internal class LandsManagementMenus(
         player.sendMessage(text("management-denied")); open(player, context)
     }
 
-    private fun ruleText(rule: LandsUiRule): Component = text(
-        if (rule.enabled) "rule-enabled" else "rule-disabled", "rule" to settings.text("rule-${rule.key}"),
-    )
+    private fun ruleText(rule: LandsUiRule): Component = if (rule.key == "arc_no_pvp") {
+        text(if (rule.enabled) "pvp-denied" else "pvp-allowed")
+    } else text(if (rule.enabled) "rule-enabled" else "rule-disabled", "rule" to settings.text("rule-${rule.key}"))
 
     private fun rulesTable(rules: List<LandsUiRule>): List<PaperDialogBody> =
         if (rules.isEmpty()) emptyList() else listOf(DialogTables.body(
             rows = rules.map {
                 text("rule-${it.key}").colorIfAbsent(TextColor.color(0xe8dfd2)) to
-                    text(if (it.enabled) "rules-allowed" else "rules-denied")
+                    text(if (if (it.key == "arc_no_pvp") !it.enabled else it.enabled) "rules-allowed" else "rules-denied")
             },
             headers = text("rules-action-heading") to text("rules-access-heading"),
             frame = DialogTables.Frame.LEGENDARY,

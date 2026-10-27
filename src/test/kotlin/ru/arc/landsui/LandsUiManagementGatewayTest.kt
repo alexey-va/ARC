@@ -233,6 +233,33 @@ class LandsUiManagementGatewayTest : StringSpec({
         verify(exactly = 0) { (fixture.area as Changeable).saveAndPublishToRedis() }
     }
 
+    "the hidden native PvP flag is editable only in the main region with native setting permissions" {
+        listOf(true, false).forEach { main ->
+            val fixture = memberAreaFixture()
+            var banned = false
+            every { fixture.integration.flagRegistry.getNatural("arc_no_pvp") } returns fixture.flag
+            every { fixture.flag.name } returns "arc_no_pvp"
+            every { fixture.flag.togglePermission } returns "lands.setting.arc_no_pvp"
+            every { fixture.flag.isDisplay } returns false
+            every { fixture.flag.isApplyInSubareas } returns false
+            every { fixture.flag.isActiveInWar } returns false
+            every { fixture.land.isInWar } returns true
+            every { fixture.area.isDefault } returns main
+            every { fixture.player.hasPermission("lands.setting.arc_no_pvp") } returns true
+            every { fixture.area.hasRoleFlag(fixture.landPlayer, Flags.SETTING_EDIT_LAND, null, false) } returns true
+            every { fixture.area.hasNaturalFlag(fixture.flag) } answers { banned }
+            every { fixture.area.toggleNaturalFlag(fixture.flag) } answers { banned = !banned; true }
+            every { (fixture.area as Changeable).saveAndPublishToRedis() } returns java.util.concurrent.CompletableFuture.completedFuture(null)
+
+            val result = BukkitLandsUiGateway(fixture.integration).change(fixture.player,
+                LandsUiContext(fixture.landId, LandsUiAccess.MEMBER, fixture.areaId),
+                LandsUiChange.NaturalFlag("arc_no_pvp", expected = false))
+
+            result shouldBe if (main) LandsUiChangeResult.APPLIED else LandsUiChangeResult.DENIED
+            verify(exactly = if (main) 1 else 0) { fixture.area.toggleNaturalFlag(fixture.flag) }
+        }
+    }
+
     "natural flag toggle persists the selected area only" {
         val fixture = memberAreaFixture()
         var enabled = false
@@ -374,6 +401,7 @@ private fun memberAreaFixture(): MemberAreaFixture {
     every { integration.getLandPlayer(actorId) } returns landPlayer
     every { integration.flagRegistry } returns registry
     every { registry.getNatural("fire_spread") } returns flag
+    every { flag.name } returns "fire_spread"
     every { flag.isActiveInWar } returns false
     every { landPlayer.lands } returns setOf(land)
     every { land.exists() } returns true

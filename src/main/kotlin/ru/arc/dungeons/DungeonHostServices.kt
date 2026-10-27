@@ -44,6 +44,7 @@ object DungeonHostServices {
         })
         register(ArcPlayerSaveService::class.java, ArcPlayerSaveService(ru.arc.sync.SyncManager::registerPeriodicSave))
         register(ArcStaffCooldowns::class.java, StaffCooldownClock(Bukkit::getCurrentTick))
+        register(ArcPvpService::class.java, ru.arc.pvp.PvpModule)
         register(ArcParticleQueue::class.java, ArcParticleQueue(ParticleManager::queue))
         register(ArcDungeonNavigation::class.java, object : ArcDungeonNavigation {
             override fun openMain(player: Player) = HelpCenterModule.open(player)

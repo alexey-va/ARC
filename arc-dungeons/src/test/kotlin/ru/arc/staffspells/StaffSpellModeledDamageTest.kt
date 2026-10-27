@@ -166,7 +166,7 @@ class StaffSpellModeledDamageTest : FreeSpec({
             Unit
         }
         var landsAllowed = true
-        val damage = StaffSpellDamage(canAttackPlayer = { _, _ -> landsAllowed })
+        val damage = StaffSpellDamage(canAttackPlayer = { _, _ -> landsAllowed }, notifyDeniedPlayer = { _, _ -> })
         val attack = cast(caster)
         damage.eligible(caster, caster, attack) shouldBe false
         damage.eligible(caster, opponent, attack) shouldBe true

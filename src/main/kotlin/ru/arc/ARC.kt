@@ -258,7 +258,10 @@ open class ARC : JavaPlugin() {
 
     // ==================== Lifecycle ====================
 
-    override fun onLoad() { plugin = this }
+    override fun onLoad() {
+        plugin = this
+        ru.arc.pvp.PvpModule.prepareLandsFlag(this)
+    }
 
     override fun onEnable() {
         try { hotload.beginGeneration() } catch (failure: Throwable) {
@@ -651,6 +654,7 @@ open class ARC : JavaPlugin() {
             ArcParkourModule,
             ItemsCatalogModule,
             ItemLoreModule,
+            ru.arc.pvp.PvpModule,
             LandsUiModule,
             ru.arc.decorinteraction.DecorInteractionModule,
             ru.arc.survival.SurvivalGameplayModule,

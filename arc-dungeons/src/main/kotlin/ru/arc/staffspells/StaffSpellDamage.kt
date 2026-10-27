@@ -32,7 +32,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 /** Server-thread-only spell damage. Mapped EliteMobs weapons carry a cast-time snapshot of native weapon stats. */
 internal class StaffSpellDamage(
     private val duelAccess: StaffSpellDuelAccess? = null,
-    private val canAttackPlayer: (Player, Player) -> Boolean = StaffSpellLandsProtection::canAttack,
+    private val canAttackPlayer: (Player, Player) -> Boolean = StaffSpellPvpProtection::canAttack,
+    private val notifyDeniedPlayer: (Player, Player) -> Unit = StaffSpellPvpProtection::notifyDenied,
 ) {
     private val eliteMobsFailureLogged = AtomicBoolean()
     // The controller supplies its live actor registry; item tags never authorize a summon target.
@@ -62,6 +63,14 @@ internal class StaffSpellDamage(
             duelAccess?.context(target) == null && canAttackPlayer(player, target)
         if (!isEliteMobsEnabled()) return true
         return withEliteMobs(false) { EliteMobsRuntime.canTarget(player, target) }
+    }
+
+    /** Called only for an offensive input or geometrical impact, never for passive acquisition scans. */
+    fun reportDeniedTarget(player: Player, target: LivingEntity, cast: StaffSpellCast): Boolean {
+        if (target !is Player || cast.duelAuthorization != null || target.uniqueId == player.uniqueId ||
+            !isReady(player, target) || !isReadyDuelTarget(player, target) || canAttackPlayer(player, target)) return false
+        notifyDeniedPlayer(player, target)
+        return true
     }
 
     /** Null means the player is invalid or the enabled optional bridge failed. */
@@ -105,6 +114,7 @@ internal class StaffSpellDamage(
         if (!power.isFinite() || power <= 0.0 || !vanillaDamage.isFinite() || vanillaDamage <= 0.0) return false
         // Last mutation boundary: a target moving behind cover before contact must be safe for every spell owner.
         if (player.world != target.world || !visible(player.eyeLocation, target)) return false
+        if (reportDeniedTarget(player, target, cast)) return false
         val authorization = cast.duelAuthorization
         if (authorization != null) {
             if (cast.eliteMobsEnabled ||
@@ -120,7 +130,7 @@ internal class StaffSpellDamage(
 
         val before = target.health + target.absorptionAmount
         // PvP uses configured ordinary damage, attributed to the caster. Native damage events
-        // retain Lands/region/team cancellation; EliteMobs scaling belongs to PvE only.
+        // retain the shared settlement/clan policy and every other native veto; EliteMobs scaling belongs to PvE only.
         if (target is Player) {
             target.damage(vanillaDamage, player)
             return before - target.health - target.absorptionAmount > HEALTH_EPSILON

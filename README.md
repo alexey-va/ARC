@@ -12,8 +12,9 @@ McFine **Paper/Purpur** plugin — treasure hunts, board, and cross-server Redis
 - `ArcCore 0.1.15` installed alongside ARC (shared SQL, Redis and metrics host;
   published by [ArcCorePlugin](https://github.com/alexey-va/ArcCorePlugin))
 
-The already-published `arc-dungeons-api 0.1.1` retains its original Core API
-dependency metadata; the runtime uses the binary-compatible `2.7.69` API.
+`arc-dungeons-api 0.1.2` adds the shared `ArcPvpService` combat contract. The API
+retains its compatible Core dependency metadata; the runtime uses `2.7.69`.
+The already-published `0.1.1` artifacts remain unchanged.
 
 ## Build
 

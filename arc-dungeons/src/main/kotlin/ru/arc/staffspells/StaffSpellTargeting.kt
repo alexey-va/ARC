@@ -161,7 +161,26 @@ internal class StaffSpellTargeting(private val settings: StaffSpellSettings, pri
 
     /** Exact swept collision along the cast line, never soft acquisition. */
     fun lineTargets(player: Player, from: Location, to: Location, width: Double,
-        cast: StaffSpellCast? = null): List<LivingEntity> {
+        cast: StaffSpellCast? = null): List<LivingEntity> = lineCandidates(player, from, to, width, cast)
+        .filter { target ->
+            if (damage.eligible(player, target, cast)) true
+            else {
+                if (cast != null) damage.reportDeniedTarget(player, target, cast)
+                false
+            }
+        }
+
+    /** A deliberate cast at a protected player gets a reason even when ordinary selection excludes them. */
+    fun reportDeniedAim(player: Player, cast: StaffSpellCast): Boolean {
+        if (cast.duelAuthorization != null) return false
+        val eye = player.eyeLocation
+        val end = rayEnd(eye, eye.direction, settings.range)
+        val target = lineCandidates(player, eye, end, .05, cast).firstOrNull() ?: return false
+        return damage.reportDeniedTarget(player, target, cast)
+    }
+
+    private fun lineCandidates(player: Player, from: Location, to: Location, width: Double,
+        cast: StaffSpellCast?): List<LivingEntity> {
         val hitWidth = width * (cast?.enchantments?.radiusMultiplier ?: 1.0)
         val direction = to.toVector().subtract(from.toVector())
         var length = direction.length()
@@ -171,7 +190,7 @@ internal class StaffSpellTargeting(private val settings: StaffSpellSettings, pri
         if (length < .001) return emptyList()
         val midpoint = from.clone().add(direction.clone().multiply(length / 2))
         return from.world.getNearbyLivingEntities(midpoint, length / 2 + hitWidth + 2)
-            .filter { damage.eligible(player, it, cast) }
+            .filter { it.uniqueId != player.uniqueId }
             .mapNotNull { entity ->
                 entity.boundingBox.expand(hitWidth).rayTrace(from.toVector(), direction, length)
                     ?.let { entity to it.hitPosition.distanceSquared(from.toVector()) }

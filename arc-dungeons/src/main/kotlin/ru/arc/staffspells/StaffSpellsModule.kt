@@ -258,6 +258,7 @@ internal class StaffSpellController(
         val recast = key == StaffHotkey.Q && canRecast(player.uniqueId, spell)
         if (!recast && hotkeys.remaining(player.uniqueId, StaffAbility.hotkey(key)) > 0) return
         val cast = damage.capture(player, duelOnly = StaffSpell.isDuelOnly(player.inventory.itemInMainHand)) ?: return
+        val pvpDenied = key == StaffHotkey.Q && targeting.reportDeniedAim(player, cast)
         val tuning = settings.tuningFor(spell, duel = cast.duelAuthorization != null)
         val accepted = if (key == StaffHotkey.F) mobility.cast(player, spell, cast, tuning)
             else if (spell in CONJURATION_SPELLS) conjurations.cast(player, spell, cast, tuning)
@@ -265,7 +266,7 @@ internal class StaffSpellController(
         if (accepted) {
             if (!recast) hotkeys.start(player.uniqueId, StaffAbility.hotkey(key), config.hotkeyCooldown(spell, key))
             beginGcd(player.uniqueId)
-        } else {
+        } else if (!pvpDenied) {
             visuals.cooldownFeedback(player, spell)
             player.sendMessage(config.hotkeyUnavailable(spell, key))
         }
@@ -291,6 +292,7 @@ internal class StaffSpellController(
         }
         if (!canCharge(player, spell, secondary = false)) return false
         val cast = damage.capture(player, duelOnly = StaffSpell.isDuelOnly(player.inventory.itemInMainHand)) ?: return false
+        if (spell != StaffSpell.GRAVITY) targeting.reportDeniedAim(player, cast)
         if (!channels.begin(player, spell, cast, settings.tuningFor(spell, duel = cast.duelAuthorization != null), player.isSneaking)) {
             player.sendActionBar(config.text("no-grab"))
             return false
@@ -309,6 +311,7 @@ internal class StaffSpellController(
     override fun cancelChannel(player: Player) = finishChannel(player, release = false)
     private fun finishChannel(player: Player, release: Boolean) {
         val (spell, cast) = channelInputs.remove(player.uniqueId) ?: return
+        if (release) targeting.reportDeniedAim(player, cast)
         if (release) channels.release(player) else channels.cancel(player.uniqueId)
         beginCooldown(player, spell, secondary = false, settings.tuningFor(spell, duel = cast.duelAuthorization != null).cooldownTicks, cast, startGcd = release)
     }
@@ -372,6 +375,7 @@ internal class StaffSpellController(
             player.sendActionBar(config.text("unavailable"))
             return
         }
+        targeting.reportDeniedAim(player, cast)
         val base = settings.tuningFor(spell, duel = cast.duelAuthorization != null)
         val multiplier = (1.0 + level * 0.75) * if (input.quick) 0.55 else 1.0
         val tuning = base.copy(power = base.power * multiplier, vanillaDamage = base.vanillaDamage * multiplier)

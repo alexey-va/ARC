@@ -12,6 +12,7 @@ import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import ru.arc.lands.currentLands
 import ru.arc.lands.trustedPlayerIds
+import ru.arc.pvp.LandsPvpFlag
 import java.util.UUID
 
 /** Lands-backed implementation for the detailed, permission-aware dialog pages. */
@@ -52,7 +53,10 @@ internal class LandsUiManagementService(
             .filter { it.name in ROLE_RULE_KEYS && it.isDisplay && it.shouldDisplay(area, landPlayer) }
             .toList()
         val naturalFlags = integration.flagRegistry.naturalFlags.asSequence().filterIsInstance<me.angeschossen.lands.api.flags.type.NaturalFlag>()
-            .filter { it.name in NATURAL_RULE_KEYS && it.isDisplay && it.shouldDisplay(area, landPlayer) }
+            .filter { flag ->
+                if (flag.name == LandsPvpFlag.NAME) area.isDefault
+                else flag.name in NATURAL_RULE_KEYS && flag.isDisplay && flag.shouldDisplay(area, landPlayer)
+            }
             .toList()
         val effectiveRules = roleFlags.map { flag ->
             LandsUiRule(flag.name, area.hasRoleFlag(player.uniqueId, flag), false)
@@ -306,7 +310,8 @@ internal class LandsUiManagementService(
         val flag = integration.flagRegistry.getNatural(change.key) ?: return LandsUiChangeResult.NOT_FOUND
         val current = area.hasNaturalFlag(flag)
         if (current != change.expected) return LandsUiChangeResult.STALE
-        if (flag.isActiveInWar && land.isInWar) return LandsUiChangeResult.DENIED
+        if (flag.name == LandsPvpFlag.NAME && !area.isDefault) return LandsUiChangeResult.DENIED
+        if (flag.name != LandsPvpFlag.NAME && flag.isActiveInWar && land.isInWar) return LandsUiChangeResult.DENIED
         if (!canToggleNaturalFlag(player, context, landPlayer, area, flag)) return LandsUiChangeResult.DENIED
         val changeable = area as? Changeable ?: return LandsUiChangeResult.REJECTED
         area.toggleNaturalFlag(flag)
@@ -439,7 +444,8 @@ internal class LandsUiManagementService(
         area: Area,
         flag: me.angeschossen.lands.api.flags.type.NaturalFlag,
     ): Boolean {
-        if (!flag.isDisplay || !flag.shouldDisplay(area, landPlayer) || !player.hasPermission(flag.togglePermission)) return false
+        if (!player.hasPermission(flag.togglePermission)) return false
+        if (flag.name != LandsPvpFlag.NAME && (!flag.isDisplay || !flag.shouldDisplay(area, landPlayer))) return false
         if (!area.isDefault && !flag.isApplyInSubareas) return false
         return if (context.access == LandsUiAccess.ADMIN) {
             player.hasPermission(ADMIN_EDIT_PERMISSION) && player.hasPermission("lands.admin.setting_edit_land")
@@ -517,8 +523,8 @@ internal class LandsUiManagementService(
         const val MAX_SEARCH_QUERY_LENGTH = 64
         val ROLE_RULE_KEYS = setOf(
             "block_break", "block_place", "interact_container", "interact_door", "interact_trapdoor",
-            "interact_mechanism", "attack_animal", "attack_player", "interact_villager",
+            "interact_mechanism", "attack_animal", "interact_villager",
         )
-        val NATURAL_RULE_KEYS = setOf("tnt_griefing", "fire_spread", "animal_spawn", "monster_spawn")
+        val NATURAL_RULE_KEYS = setOf("tnt_griefing", "fire_spread", "animal_spawn", "monster_spawn", LandsPvpFlag.NAME)
     }
 }

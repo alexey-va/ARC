@@ -1,0 +1,9 @@
+# One settlement's main-region flag protects its entire claim, including subareas.
+# Native justTeams settings and every other damage listener retain their vetoes.
+messages:
+  settlement: '<#e7a9a9>В этом поселении PvP запрещено.'
+  team: '<#e7a9a9>В вашем клане отключён урон своим.'
+  ally: '<#e7a9a9>Союзный клан защищён от вашего урона.'
+  team_projectile: '<#e7a9a9>В вашем клане запрещён урон по своим от снарядов.'
+  team_tnt: '<#e7a9a9>В вашем клане запрещён урон по своим от TNT.'
+  unavailable: '<#e7a9a9>Проверка защиты PvP сейчас недоступна.'
