@@ -23,6 +23,7 @@ internal object LandsPvpFlag {
                 require(existing.plugin.name == plugin.name) { "Lands flag $NAME belongs to another plugin" }
                 flag = existing
             } else {
+                // NaturalFlag.of registers the returned object itself in the native Lands factory.
                 val created = NaturalFlag.of(lands, FlagTarget.PLAYER, NAME).apply {
                     setDefaultState(false)
                     setApplyInSubareas(false)
@@ -30,7 +31,6 @@ internal object LandsPvpFlag {
                     setActiveInWar(false)
                     setDisplayName("Запрет PvP")
                 }
-                lands.flagRegistry.register(created)
                 flag = created
             }
         }

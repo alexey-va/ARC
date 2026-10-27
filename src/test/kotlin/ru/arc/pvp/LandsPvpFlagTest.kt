@@ -17,7 +17,7 @@ import org.bukkit.Location
 import org.bukkit.plugin.Plugin
 
 class LandsPvpFlagTest : StringSpec({
-    "cold registration leaves an absent ban disabled during war and a stored ban stays effective" {
+    "the native factory registers once while an absent ban stays disabled during war" {
         val plugin = mockk<Plugin> { every { name } returns "ARC" }
         val lands = mockk<LandsIntegration>()
         val registry = mockk<FlagRegistry>()
@@ -27,10 +27,11 @@ class LandsPvpFlagTest : StringSpec({
         val at = mockk<Location>()
         var activeInWar = true
         var stored = false
+        var registered: NaturalFlag? = null
         every { lands.onLoad(any()) } answers { firstArg<Runnable>().run() }
         every { lands.flagRegistry } returns registry
-        every { registry.getNatural("arc_no_pvp") } returns null
-        every { registry.register(flag) } returns flag
+        every { registry.getNatural("arc_no_pvp") } answers { registered }
+        every { registry.register(any()) } throws IllegalStateException("Native factory already registered arc_no_pvp")
         every { flag.setDefaultState(any()) } returns flag
         every { flag.setApplyInSubareas(any()) } returns flag
         every { flag.setDisplayName(any()) } returns flag
@@ -44,12 +45,16 @@ class LandsPvpFlagTest : StringSpec({
         mockkStatic(LandsIntegration::class, NaturalFlag::class)
         try {
             every { LandsIntegration.of(plugin) } returns lands
-            every { NaturalFlag.of(lands, FlagTarget.PLAYER, "arc_no_pvp") } returns flag
+            // Exact Lands 8.9.6 factory publishes this same object before returning it.
+            every { NaturalFlag.of(lands, FlagTarget.PLAYER, "arc_no_pvp") } answers { registered = flag; flag }
             LandsPvpFlag.install(plugin)
+            registered shouldBe flag
+            LandsPvpFlag.isRegistered() shouldBe true
             verify(exactly = 1) { flag.setDefaultState(false) }
             verify(exactly = 1) { flag.setApplyInSubareas(false) }
             verify(exactly = 1) { flag.setActiveInWar(false) }
-            verify(exactly = 1) { registry.register(flag) }
+            verify(exactly = 1) { NaturalFlag.of(lands, FlagTarget.PLAYER, "arc_no_pvp") }
+            verify(exactly = 0) { registry.register(any()) }
             LandsPvpFlag.prohibits(at) shouldBe false
             stored = true
             LandsPvpFlag.prohibits(at) shouldBe true
