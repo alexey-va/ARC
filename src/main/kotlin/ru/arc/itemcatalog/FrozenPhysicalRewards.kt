@@ -454,6 +454,8 @@ internal data class FrozenPhysicalRecipe(
     val travelAnchorAmount: Int? = null,
     /** Stable approved PlayerParticles preset id; null for legacy and unrelated recipes. */
     val particlePresetId: String? = null,
+    /** Fixed VeinMiner access days; absent from legacy and unrelated recipes. */
+    val veinMinerDays: Int? = null,
     /** Ordered frozen option addresses for a choice voucher; null for other recipes. */
     val choiceOptions: List<FrozenChoiceOption>? = null,
     /** Map geometry and prize address are archived together; no live pool is consulted on redemption. */
@@ -503,6 +505,9 @@ internal data class FrozenPhysicalRecipe(
         }
         if (type != "particle-preset") {
             require(particlePresetId == null) { "Particle preset id requires a particle-preset recipe" }
+        }
+        if (type != "veinminer-access") {
+            require(veinMinerDays == null) { "VeinMiner days require a veinminer-access recipe" }
         }
         if (type != "choice") {
             require(choiceOptions == null) { "Choice options require a choice recipe" }
@@ -618,6 +623,12 @@ internal data class FrozenPhysicalRecipe(
                 require(commandKind == null && commandValue == null && mountId == null && furnitureBoxes == null)
                 require(sealItems == null && sealName == null && sealDescription == null && treasure == null)
                 require(dungeonCaseId == null && dungeonCaseDefinition == null && travelAnchorAmount == null)
+            }
+            "veinminer-access" -> {
+                require(veinMinerDays in VeinMinerAccessEntitlement.DURATIONS) { "Frozen VeinMiner duration is invalid" }
+                require(currency == null && minAmount == null && maxAmount == null && tokenAmount == null)
+                require(commandKind == null && commandValue == null && mountId == null && furnitureBoxes == null)
+                require(sealItems == null && sealName == null && sealDescription == null && treasure == null)
             }
             "choice" -> {
                 require(choiceOptions != null && choiceOptions.size in 3..32) { "Frozen choice options are invalid" }

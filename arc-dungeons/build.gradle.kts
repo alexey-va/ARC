@@ -38,6 +38,7 @@ dependencies {
     compileOnly(libs.fr.black.eyes.lootchest)
     compileOnly(libs.com.zrips.cmi.api)
     compileOnly(libs.com.github.lonedev6.api.itemsadder)
+    compileOnly(libs.com.github.angeschossen.landsapi)
     compileOnly(libs.net.luckperms.api)
     compileOnly(libs.com.github.retrooper.packetevents.spigot) { exclude(group = "io.netty") }
 
@@ -53,6 +54,7 @@ dependencies {
     testRuntimeOnly("io.netty:netty-transport:4.2.7.Final")
     testImplementation(libs.com.zrips.cmi.api)
     testImplementation(libs.com.github.lonedev6.api.itemsadder)
+    testImplementation(libs.com.github.angeschossen.landsapi)
     testImplementation(libs.net.luckperms.api)
     testImplementation(platform("org.junit:junit-bom:6.0.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")

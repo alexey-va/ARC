@@ -30,7 +30,10 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** Server-thread-only spell damage. Mapped EliteMobs weapons carry a cast-time snapshot of native weapon stats. */
-internal class StaffSpellDamage(private val duelAccess: StaffSpellDuelAccess? = null) {
+internal class StaffSpellDamage(
+    private val duelAccess: StaffSpellDuelAccess? = null,
+    private val canAttackPlayer: (Player, Player) -> Boolean = StaffSpellLandsProtection::canAttack,
+) {
     private val eliteMobsFailureLogged = AtomicBoolean()
     // The controller supplies its live actor registry; item tags never authorize a summon target.
     internal var summonCast: (LivingEntity) -> StaffSpellCast? = { null }
@@ -38,6 +41,7 @@ internal class StaffSpellDamage(private val duelAccess: StaffSpellDuelAccess? = 
     fun inputAllowed(player: Player): Boolean = duelAccess?.inputAllowed(player) ?: true
 
     fun eligible(player: Player, target: LivingEntity, cast: StaffSpellCast? = null): Boolean {
+        if (target is Player && target.uniqueId == player.uniqueId) return false
         val authorization = cast?.duelAuthorization
         if (authorization != null) {
             val opponent = if (target is Player) target else {
@@ -53,7 +57,9 @@ internal class StaffSpellDamage(private val duelAccess: StaffSpellDuelAccess? = 
         }
         if (summonCast(target) != null) return false
         if (!isReady(player, target)) return false
-        if (duelAccess?.context(player) != null || target is Player) return false
+        if (duelAccess?.context(player) != null) return false
+        if (target is Player) return isReadyDuelTarget(player, target) && player.world.pvp &&
+            duelAccess?.context(target) == null && canAttackPlayer(player, target)
         if (!isEliteMobsEnabled()) return true
         return withEliteMobs(false) { EliteMobsRuntime.canTarget(player, target) }
     }
@@ -110,9 +116,15 @@ internal class StaffSpellDamage(private val duelAccess: StaffSpellDuelAccess? = 
             target.damage(amount, player)
             return before - target.health - target.absorptionAmount > HEALTH_EPSILON
         }
-        if (cast.eliteMobsEnabled != isEliteMobsEnabled() || target is Player || !eligible(player, target, cast)) return false
+        if (cast.eliteMobsEnabled != isEliteMobsEnabled() || !eligible(player, target, cast)) return false
 
         val before = target.health + target.absorptionAmount
+        // PvP uses configured ordinary damage, attributed to the caster. Native damage events
+        // retain Lands/region/team cancellation; EliteMobs scaling belongs to PvE only.
+        if (target is Player) {
+            target.damage(vanillaDamage, player)
+            return before - target.health - target.absorptionAmount > HEALTH_EPSILON
+        }
         val attempted = if (cast.eliteMobsEnabled) {
             withEliteMobs(false) {
                 EliteMobsRuntime.hit(player, target, cast, power, vanillaDamage, magicStrike)
@@ -132,7 +144,7 @@ internal class StaffSpellDamage(private val duelAccess: StaffSpellDuelAccess? = 
 
     private fun isReady(player: Player, target: LivingEntity): Boolean =
         player.isOnline && player.isValid && !player.isDead && target.isValid && !target.isDead &&
-            !target.isInvulnerable && target !is Player && target !is ArmorStand && player.world == target.world &&
+            !target.isInvulnerable && target !is ArmorStand && player.world == target.world &&
             !target.hasMetadata("NPC") && (target !is Tameable || !target.isTamed)
 
     private fun isReadyDuelTarget(caster: Player, target: Player) =

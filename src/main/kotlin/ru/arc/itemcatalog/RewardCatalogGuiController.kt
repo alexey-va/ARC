@@ -385,6 +385,7 @@ class RewardCatalogGuiController internal constructor(
             is RewardCatalogSource.DungeonCase,
             is RewardCatalogSource.TravelAnchors,
             is RewardCatalogSource.ParticlePreset,
+            is RewardCatalogSource.VeinMinerAccess,
             is RewardCatalogSource.Choice,
             is RewardCatalogSource.PersonalMap,
             -> physical(entry, grant)?.let(::listOf)

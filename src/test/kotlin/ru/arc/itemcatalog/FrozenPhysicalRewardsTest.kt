@@ -232,6 +232,30 @@ class FrozenPhysicalRewardsTest : StringSpec({
         }.isFailure shouldBe true
     }
 
+    "VeinMiner recipes freeze only allowed days and leave legacy archive JSON unchanged" {
+        val gson = Gson()
+        listOf(1, 3, 7).forEach { days ->
+            val recipe = FrozenPhysicalRecipe("veinminer-access", veinMinerDays = days)
+            recipe.validate()
+            gson.fromJson(gson.toJson(recipe), FrozenPhysicalRecipe::class.java) shouldBe recipe
+        }
+        listOf<Int?>(null, 0, 2, 30).forEach { days ->
+            runCatching { FrozenPhysicalRecipe("veinminer-access", veinMinerDays = days).validate() }.isFailure shouldBe true
+        }
+        runCatching {
+            FrozenPhysicalRecipe("veinminer-access", veinMinerDays = 1, tokenAmount = 1).validate()
+        }.isFailure shouldBe true
+        runCatching {
+            FrozenPhysicalRecipe("particle-preset", particlePresetId = "arc_angel", veinMinerDays = 1).validate()
+        }.isFailure shouldBe true
+
+        val legacyJson = """{"type":"money","currency":"vault","minAmount":1.0,"maxAmount":1.0}"""
+        val legacy = gson.fromJson(legacyJson, FrozenPhysicalRecipe::class.java)
+        legacy.veinMinerDays shouldBe null
+        legacy.validate()
+        gson.toJson(legacy) shouldBe legacyJson
+    }
+
     "travel-anchor recipes bind a bounded personal-anchor amount" {
         FrozenPhysicalRecipe(
             type = "travel-anchors",

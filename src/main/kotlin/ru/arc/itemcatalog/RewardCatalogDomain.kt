@@ -12,6 +12,13 @@ sealed interface RewardCatalogSource {
     /** A transferable certificate that permanently unlocks one named particle preset. */
     data class ParticlePreset(val id: String) : RewardCatalogSource
 
+    /** A transferable certificate for a fixed number of VeinMiner days on Survival. */
+    data class VeinMinerAccess(val days: Int) : RewardCatalogSource {
+        init {
+            require(days in VeinMinerAccessEntitlement.DURATIONS) { "Unsupported VeinMiner duration: $days" }
+        }
+    }
+
     data class Pouch(val id: String) : RewardCatalogSource
 
     data class Seal(val categoryId: String) : RewardCatalogSource
@@ -60,6 +67,13 @@ internal object ParticlePresetEntitlements {
         require(id in IDS) { "Unsupported particle preset: $id" }
         return PERMISSION_PREFIX + id
     }
+}
+
+/** The only permission and durations a VeinMiner certificate may grant. */
+internal object VeinMinerAccessEntitlement {
+    const val PERMISSION = "veinminer.veinmine.*"
+    const val SERVER = "survival"
+    val DURATIONS = setOf(1, 3, 7)
 }
 
 data class RewardFurniturePackage(

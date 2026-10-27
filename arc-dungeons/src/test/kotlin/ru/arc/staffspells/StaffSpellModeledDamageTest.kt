@@ -151,6 +151,42 @@ class StaffSpellModeledDamageTest : FreeSpec({
         verify(exactly = 0) { target.damage(any<Double>(), player) }
     }
 
+    "ordinary PvP is attributed to its caster and keeps native damage cancellation" {
+        val world = mockk<World>()
+        val caster = mockk<Player>()
+        val opponent = mockk<Player>()
+        readyPlayers(caster, opponent, world)
+        every { world.pvp } returns true
+        every { opponent.absorptionAmount } returns 0.0
+        var health = 20.0
+        every { opponent.health } answers { health }
+        var cancelled = false
+        every { opponent.damage(any<Double>(), caster) } answers {
+            if (!cancelled) health -= firstArg<Double>()
+            Unit
+        }
+        var landsAllowed = true
+        val damage = StaffSpellDamage(canAttackPlayer = { _, _ -> landsAllowed })
+        val attack = cast(caster)
+        damage.eligible(caster, caster, attack) shouldBe false
+        damage.eligible(caster, opponent, attack) shouldBe true
+        damage.hit(caster, opponent, attack, power = 100.0, vanillaDamage = 6.0) shouldBe true
+        health shouldBe 14.0
+        verify(exactly = 1) { opponent.damage(6.0, caster) }
+        verify(exactly = 0) { AdvancedCombatEnemyAuthorization.canTargetWithMagicWeapon(caster, opponent) }
+        landsAllowed = false
+        damage.eligible(caster, opponent, attack) shouldBe false
+        damage.hit(caster, opponent, attack, power = 100.0, vanillaDamage = 6.0) shouldBe false
+        verify(exactly = 1) { opponent.damage(any<Double>(), caster) }
+        landsAllowed = true
+        cancelled = true
+        damage.hit(caster, opponent, attack, power = 100.0, vanillaDamage = 6.0) shouldBe false
+        health shouldBe 14.0
+        every { world.pvp } returns false
+        damage.hit(caster, opponent, attack, power = 1.0, vanillaDamage = 6.0) shouldBe false
+        verify(exactly = 2) { opponent.damage(any<Double>(), caster) }
+    }
+
     "duel damage uses native configured multiplier and rechecks exact round and opponent policy" {
         val world = mockk<World>()
         val caster = mockk<Player>()

@@ -63,13 +63,23 @@ categories:
 
 Each entry has exactly one source: `treasure` (`pool` + `id`), `preset`,
 `pouch`, `seal`, `itemsadder`, `mount`, `package`, `dungeon-case`,
-`travel-anchors`, `particle-preset`, `choice`, `personal-map`, or inert `planned`.
+`travel-anchors`, `particle-preset`, `veinminer-access`, `choice`, `personal-map`, or inert `planned`.
 Categories are capped at 64, entries at 512 per category and 2,000 in total.
 Names, descriptions and rarity retain authored MiniMessage colors. Stories and
 native equipment metadata are preserved on actual prizes, including seal choices.
 An optional `preview-itemsadder: namespace:item` selects a catalogue-only model;
 missing models use the authored icon. It never changes the reward source or the
 inert icon embedded in a physical voucher or its archived materialization.
+
+`veinminer-access: 1` creates a transferable pass; the allowed durations are 1,
+3 and 7 days. Redemption durably grants only `veinminer.veinmine.*` with
+`server=survival`, covering every Survival world. Spawn may issue the pass
+through LuckPerms without installing VeinMiner locally; activation requires the
+configured Survival backend so extensions share one redemption owner. The timer
+starts at redemption and extends from the later of now and an existing exact
+temporary grant's expiry. Permanent access rejects redemption and preserves
+the pass; an unknown save outcome retains the existing one-time claim for
+administrative recovery.
 
 An optional `tooltip-style: namespace:tooltip/tier` sets the resource-pack frame
 on the catalogue preview and the issued native item or voucher. It only changes

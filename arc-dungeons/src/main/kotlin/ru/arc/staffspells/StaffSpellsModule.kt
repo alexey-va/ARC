@@ -1310,7 +1310,7 @@ internal class StaffSpellController(
                 !visible(player.eyeLocation, victim) || mark.remainingTicks <= 0) continue
             if (victim is Mob) hole.capture(victim, mark.point)
             else if (victim is Player) {
-                // Duel-authorized players keep the old bounded pulse pull; only mobs are resized/held.
+                // Players use bounded pulse pull after an accepted hit; only mobs are resized/held.
                 val pull = mark.point.toVector().subtract(center(victim).toVector())
                 if (pull.lengthSquared() > .04) victim.velocity = pull.normalize().multiply(.48)
                     .apply { y = y.coerceIn(-.15, .18) }

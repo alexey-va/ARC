@@ -123,6 +123,7 @@ class RewardCatalogModuleConfig(private val config: Config) {
                 "treasure" -> parseTreasure(map.getValue(key), "$path.treasure")
                 "preset" -> RewardCatalogSource.Preset(requiredId(map.getValue(key), "$path.preset", PRESET_ID))
                 "particle-preset" -> RewardCatalogSource.ParticlePreset(particlePresetId(map.getValue(key), "$path.particle-preset"))
+                "veinminer-access" -> RewardCatalogSource.VeinMinerAccess(integer(map.getValue(key), "$path.veinminer-access"))
                 "pouch" -> RewardCatalogSource.Pouch(requiredId(map.getValue(key), "$path.pouch", POUCH_ID))
                 "seal" -> RewardCatalogSource.Seal(requiredId(map.getValue(key), "$path.seal", ID))
                 "itemsadder" -> RewardCatalogSource.ItemsAdder(requiredId(map.getValue(key), "$path.itemsadder", ITEMSADDER_ID))
@@ -234,7 +235,7 @@ class RewardCatalogModuleConfig(private val config: Config) {
                     target.source is RewardCatalogSource.FurniturePackage ||
                     target.source is RewardCatalogSource.DungeonCase ||
                     target.source is RewardCatalogSource.TravelAnchors ||
-                    target.source is RewardCatalogSource.ParticlePreset) {
+                    target.source is RewardCatalogSource.ParticlePreset || target.source is RewardCatalogSource.VeinMinerAccess) {
                     "Choice option '${option.id}' must reference a physical-reward source"
                 }
             }
@@ -345,7 +346,8 @@ class RewardCatalogModuleConfig(private val config: Config) {
             }
             require(target.source is RewardCatalogSource.Treasure || target.source is RewardCatalogSource.Mount ||
                 target.source is RewardCatalogSource.FurniturePackage || target.source is RewardCatalogSource.DungeonCase ||
-                target.source is RewardCatalogSource.TravelAnchors || target.source is RewardCatalogSource.ParticlePreset) {
+                target.source is RewardCatalogSource.TravelAnchors || target.source is RewardCatalogSource.ParticlePreset ||
+                target.source is RewardCatalogSource.VeinMinerAccess) {
                 "Personal map '${entry.id}' must reference a concrete physical reward; nested maps and choices are unsupported"
             }
         }
@@ -522,7 +524,7 @@ class RewardCatalogModuleConfig(private val config: Config) {
         private val PLUGIN_ID = Regex("[A-Za-z0-9._-]{1,64}")
         private val SOURCE_KEYS = setOf(
             "treasure", "preset", "particle-preset", "pouch", "seal", "itemsadder", "planned", "mount", "package", "dungeon-case",
-            "travel-anchors", "choice", "personal-map", "native-crate-key",
+            "travel-anchors", "veinminer-access", "choice", "personal-map", "native-crate-key",
         )
 
         fun load(dataPath: Path): RewardCatalogModuleConfig =

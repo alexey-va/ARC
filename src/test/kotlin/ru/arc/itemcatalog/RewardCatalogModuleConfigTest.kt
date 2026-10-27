@@ -129,6 +129,31 @@ class RewardCatalogModuleConfigTest : StringSpec({
         }
     }
 
+    "VeinMiner sources accept only fixed access days without arbitrary permission fields" {
+        val root = Files.createTempDirectory("arc-reward-veinminer")
+        try {
+            fun document(value: String) = """
+                enabled: true
+                categories:
+                  tools:
+                    entries:
+                      access:
+                        veinminer-access: $value
+            """.trimIndent()
+            listOf(1, 3, 7).forEach { days ->
+                writeConfig(root, document(days.toString()))
+                RewardCatalogModuleConfig.load(root).snapshot().categories.single().entries.single().source shouldBe
+                    RewardCatalogSource.VeinMinerAccess(days)
+            }
+            listOf("0", "-1", "2", "30", "1.5", "'1'", "{days: 1, permission: '*'}").forEach { value ->
+                writeConfig(root, document(value))
+                runCatching { RewardCatalogModuleConfig.load(root).snapshot() }.isFailure shouldBe true
+            }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
     "choice source accepts 3..32 unique concrete references and rejects one-option or nested pools" {
         val root = Files.createTempDirectory("arc-reward-choice-config")
         try {

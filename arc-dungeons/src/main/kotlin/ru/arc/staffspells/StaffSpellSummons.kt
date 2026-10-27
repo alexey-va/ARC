@@ -467,7 +467,7 @@ internal class StaffSpellSummons(
             if (currentVolleyTarget(owner, volley) == null || volley.successfulHits >= VOLLEY_MAX_HITS ||
                 volley.hitsByVictim.getOrDefault(victim.uniqueId, 0) >= VOLLEY_MAX_HITS_PER_VICTIM) return false
             if (victim is Player) {
-                val duelMultiplier = cast.duelAuthorization?.context?.damageMultiplier() ?: return false
+                val duelMultiplier = cast.duelAuthorization?.context?.damageMultiplier() ?: 1.0
                 val remaining = VOLLEY_PVP_DAMAGE_LIMIT - volley.pvpDamageByVictim.getOrDefault(victim.uniqueId, 0.0)
                 if (remaining <= 0.0) return false
                 pvpDamage = minOf(vanillaDamage * duelMultiplier, remaining)

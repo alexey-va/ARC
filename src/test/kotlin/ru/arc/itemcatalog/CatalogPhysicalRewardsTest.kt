@@ -103,6 +103,58 @@ class CatalogPhysicalRewardsTest : StringSpec({
         }
     }
 
+    "VeinMiner native and frozen catalog sources dispatch the same fixed duration entitlement" {
+        MockBukkitTestRuntime.open().use {
+            mockkConstructor(VeinMinerAccessRewards::class)
+            val root = Files.createTempDirectory("arc-catalog-veinminer")
+            try {
+                every { anyConstructed<VeinMinerAccessRewards>().ready(3) } returns true
+                val player = mockk<Player>()
+                val permanent = "VeinMiner already permanent"
+                every { anyConstructed<VeinMinerAccessRewards>().canRedeem(player, 3) } returns permanent
+                every { anyConstructed<VeinMinerAccessRewards>().redeem(player, 3) } returns
+                    CompletableFuture.completedFuture(PhysicalRewardOutcome.Rejected(permanent))
+                val entry = RewardCatalogEntry(
+                    "veinminer_3d", "VeinMiner", emptyList(), null, emptyList(),
+                    RewardCatalogSource.VeinMinerAccess(3), CatalogIconStyle("PAPER"),
+                )
+                val settings = RewardCatalogSettings(
+                    true, "Каталог", listOf(RewardCatalogCategory(
+                        "tools", "Инструменты", emptyList(), CatalogIconStyle("CHEST"), listOf(entry),
+                    )), RewardCatalogMessages.DEFAULT,
+                )
+                val rewards = CatalogPhysicalRewards(settings)
+                rewards.isVoucherSource(entry) shouldBe true
+                val materialization = requireNotNull(rewards.materialization(entry))
+                materialization.sourceKey shouldBe "veinminer-access:3"
+                val native = requireNotNull(rewards.resolve(materialization.sourceKey))
+                val otherBackend = CatalogPhysicalRewards(settings)
+                otherBackend.canMaterialize(native.key) shouldBe true
+                otherBackend.resolve(native.key)?.fingerprint shouldBe native.fingerprint
+                rewards.canRedeem(player, native) shouldBe permanent
+                rewards.redeem(player, native, UUID.randomUUID()).get() shouldBe PhysicalRewardOutcome.Rejected(permanent)
+
+                val archive = FrozenPhysicalRewards(root)
+                val archived = requireNotNull(archive.prepare(
+                    native.key, FrozenPhysicalRecipe("veinminer-access", veinMinerDays = 3), native.preview,
+                ))
+                val frozenRewards = CatalogPhysicalRewards(settings.copy(categories = emptyList()), frozen = FrozenPhysicalRewards(root))
+                val frozen = requireNotNull(frozenRewards.resolve(archived.sourceKey))
+                frozenRewards.canMaterialize(frozen.key) shouldBe true
+                frozenRewards.canRedeem(player, frozen) shouldBe permanent
+                frozenRewards.redeem(player, frozen, UUID.randomUUID()).get() shouldBe PhysicalRewardOutcome.Rejected(permanent)
+                verify(exactly = 2) { anyConstructed<VeinMinerAccessRewards>().redeem(player, 3) }
+
+                every { anyConstructed<VeinMinerAccessRewards>().ready(3) } returns false
+                otherBackend.canMaterialize(native.key) shouldBe false
+                frozenRewards.canMaterialize(frozen.key) shouldBe false
+            } finally {
+                unmockkConstructor(VeinMinerAccessRewards::class)
+                root.toFile().deleteRecursively()
+            }
+        }
+    }
+
     "money vouchers report only the confirmed rounded wallet delta" {
         val player = mockk<Player>(relaxed = true)
         val playerId = UUID.randomUUID()

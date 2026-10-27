@@ -62,6 +62,7 @@ internal class CatalogPhysicalRewards(
     private val sealStack: (String, CatalogIconStyle?) -> ItemStack? = { _, _ -> null },
 ) {
     private val particlePresets by lazy { ParticlePresetRewards() }
+    private val veinMinerAccess by lazy { VeinMinerAccessRewards() }
     private val treasureStackFactory by lazy { TreasureStackFactory() }
     private val publishedMaterializations = ConcurrentHashMap<String, PhysicalRewardMaterialization>()
     private val sharedPublishedFingerprints = ConcurrentHashMap.newKeySet<String>()
@@ -81,6 +82,7 @@ internal class CatalogPhysicalRewards(
         is RewardCatalogSource.DungeonCase -> "dungeon-case:${source.id}"
         is RewardCatalogSource.TravelAnchors -> "travel-anchors:${source.amount}"
         is RewardCatalogSource.ParticlePreset -> "particle-preset:${source.id}"
+        is RewardCatalogSource.VeinMinerAccess -> "veinminer-access:${source.days}"
         is RewardCatalogSource.Choice -> "choice:${OneTimeUseFingerprint.sha256(source.options.joinToString("\n") { "${it.id}|${it.categoryId}|${it.entryId}" }.toByteArray()).sha256}"
         is RewardCatalogSource.PersonalMap -> {
             val policy = source.searchPolicy
@@ -111,6 +113,7 @@ internal class CatalogPhysicalRewards(
         is RewardCatalogSource.DungeonCase,
         is RewardCatalogSource.TravelAnchors,
         is RewardCatalogSource.ParticlePreset,
+        is RewardCatalogSource.VeinMinerAccess,
         is RewardCatalogSource.Choice,
         is RewardCatalogSource.PersonalMap,
         -> true
@@ -133,7 +136,7 @@ internal class CatalogPhysicalRewards(
         if (!isVoucherSource(entry)) return null
         val sourceKey = key(entry)
         // Fixed, allowlisted entitlements must resolve on either backend without a local recipe archive.
-        if (entry.source is RewardCatalogSource.ParticlePreset) {
+        if (entry.source is RewardCatalogSource.ParticlePreset || entry.source is RewardCatalogSource.VeinMinerAccess) {
             val spec = resolve(sourceKey) ?: return null
             return PhysicalRewardMaterialization(sourceKey, spec.fingerprint.sha256)
         }
@@ -294,7 +297,8 @@ internal class CatalogPhysicalRewards(
         interactiveCapture?.snapshots.orEmpty().forEach { snapshot -> prepared.putIfAbsent(snapshot.record.fingerprint, snapshot) }
         entries.values.forEach { entry ->
             if (!isVoucherSource(entry) || entry.source is RewardCatalogSource.Choice ||
-                entry.source is RewardCatalogSource.PersonalMap || entry.source is RewardCatalogSource.ParticlePreset
+                entry.source is RewardCatalogSource.PersonalMap || entry.source is RewardCatalogSource.ParticlePreset ||
+                entry.source is RewardCatalogSource.VeinMinerAccess
             ) return@forEach
             val sourceKey = key(entry)
             if (publishedMaterializations.containsKey(sourceKey)) return@forEach
@@ -504,7 +508,9 @@ internal class CatalogPhysicalRewards(
 
     /** Archived references can be delivered only while their native provider is live. */
     fun canMaterialize(key: String): Boolean = runCatching {
-        if (entries[key]?.source is RewardCatalogSource.ParticlePreset) return resolve(key) != null
+        if (entries[key]?.source is RewardCatalogSource.ParticlePreset || entries[key]?.source is RewardCatalogSource.VeinMinerAccess) {
+            return resolve(key) != null
+        }
         frozen?.find(key)?.let { frozenProvidersReady(it.recipe) }
             ?: (archivedSeal(key) != null)
     }.getOrDefault(false)
@@ -591,6 +597,7 @@ internal class CatalogPhysicalRewards(
                 "travel-anchors-v1:${source.amount}"
             }
             is RewardCatalogSource.ParticlePreset -> "particle-preset-v1:${source.id}"
+            is RewardCatalogSource.VeinMinerAccess -> "veinminer-access-v1:${source.days}:${VeinMinerAccessEntitlement.SERVER}"
             else -> return@runCatching null
         }
         val fingerprint = OneTimeUseFingerprint.sha256(("catalog-v1\n$key\n$definition").toByteArray())
@@ -603,6 +610,9 @@ internal class CatalogPhysicalRewards(
             if (!frozenProvidersReady(recipe)) return UNAVAILABLE
             if (recipe.type == "particle-preset") {
                 return particlePresets.canRedeem(player, requireNotNull(recipe.particlePresetId))
+            }
+            if (recipe.type == "veinminer-access") {
+                return veinMinerAccess.canRedeem(player, requireNotNull(recipe.veinMinerDays))
             }
             val requiredSlots = if (recipe.type == "travel-anchors") {
                 TravelAnchorsModule.createPersonalAnchorStacks(
@@ -627,6 +637,9 @@ internal class CatalogPhysicalRewards(
         if (!providersReady(entry)) return UNAVAILABLE
         if (entry.source is RewardCatalogSource.ParticlePreset) {
             return particlePresets.canRedeem(player, entry.source.id)
+        }
+        if (entry.source is RewardCatalogSource.VeinMinerAccess) {
+            return veinMinerAccess.canRedeem(player, entry.source.days)
         }
         val requiredSlots = when (val source = entry.source) {
             is RewardCatalogSource.FurniturePackage -> {
@@ -661,6 +674,7 @@ internal class CatalogPhysicalRewards(
         return when (val source = entry.source) {
             is RewardCatalogSource.Mount -> mountService()?.grantReward(player, source.id)?.thenApply(::mountOutcome)?.toCompletableFuture() ?: completed(rejected())
             is RewardCatalogSource.ParticlePreset -> particlePresets.redeem(player, source.id)
+            is RewardCatalogSource.VeinMinerAccess -> veinMinerAccess.redeem(player, source.days)
             is RewardCatalogSource.FurniturePackage -> {
                 val recipe = freezeRecipe(entry) ?: return completed(rejected())
                 if (!frozenProvidersReady(recipe)) completed(rejected())
@@ -685,6 +699,7 @@ internal class CatalogPhysicalRewards(
         when (val source = entry.source) {
             is RewardCatalogSource.Mount -> FrozenPhysicalRecipe("mount", mountId = source.id)
             is RewardCatalogSource.ParticlePreset -> FrozenPhysicalRecipe("particle-preset", particlePresetId = source.id)
+            is RewardCatalogSource.VeinMinerAccess -> FrozenPhysicalRecipe("veinminer-access", veinMinerDays = source.days)
             is RewardCatalogSource.FurniturePackage -> freezeFurniturePackage(source.id)
             is RewardCatalogSource.Treasure -> {
                 val treasure = treasure(source) ?: return@runCatching null
@@ -878,6 +893,7 @@ internal class CatalogPhysicalRewards(
             dungeonService()?.caseDefinition(requireNotNull(recipe.dungeonCaseId)) == recipe.dungeonCaseDefinition
         "travel-anchors" -> TravelAnchorsModule.isEnabled
         "particle-preset" -> particlePresets.ready(requireNotNull(recipe.particlePresetId))
+        "veinminer-access" -> veinMinerAccess.ready(requireNotNull(recipe.veinMinerDays))
         "choice" -> recipe.choiceOptions.orEmpty().all { option ->
             frozen?.find(option.childKey)?.let { child ->
                 child.fingerprint == option.childFingerprint && frozenProvidersReady(child.recipe)
@@ -1046,7 +1062,7 @@ internal class CatalogPhysicalRewards(
     }
 
     private fun frozenRequiredSlots(recipe: FrozenPhysicalRecipe): Int? = when (recipe.type) {
-        "money", "tokens", "particle-preset" -> 0
+        "money", "tokens", "particle-preset", "veinminer-access" -> 0
         "command" -> if (tokenAmount(requireNotNull(recipe.commandValue)) != null) 0 else 1
         "ae" -> 1
         "mount" -> 0
@@ -1101,6 +1117,7 @@ internal class CatalogPhysicalRewards(
     private fun redeemFrozen(recipe: FrozenPhysicalRecipe, player: Player, operationId: UUID): CompletableFuture<PhysicalRewardOutcome> = when (recipe.type) {
         "mount" -> mountService()?.grantReward(player, requireNotNull(recipe.mountId))?.thenApply(::mountOutcome)?.toCompletableFuture() ?: completed(rejected())
         "particle-preset" -> particlePresets.redeem(player, requireNotNull(recipe.particlePresetId))
+        "veinminer-access" -> veinMinerAccess.redeem(player, requireNotNull(recipe.veinMinerDays))
         else -> completed(redeemFrozenSync(recipe, player, operationId))
     }
 
@@ -1324,6 +1341,11 @@ internal class CatalogPhysicalRewards(
                         "<#d1beff>Включить образ: <#e9a6ff>/pp group load ${source.id}",
                         "<#d1beff>Выбрать или отключить: <#e9a6ff>/pp",
                     )
+                    is RewardCatalogSource.VeinMinerAccess -> listOf(
+                        "",
+                        "<#B8B8B8>Срок доступа: <#70E0A0>${source.days} дн.",
+                        "<#B8B8B8>Активация расходует один пропуск.",
+                    )
                     is RewardCatalogSource.Choice -> listOf("<#ffd166>При использовании выберите одну из трёх наград.")
                     is RewardCatalogSource.PersonalMap -> emptyList()
                     else -> emptyList()
@@ -1331,6 +1353,12 @@ internal class CatalogPhysicalRewards(
                     listOf("<#a6ffce>Активируйте карту в мире выживания.", "<#fff2df>Найдите отмеченное сокровище.")
                 } else if (entry.source is RewardCatalogSource.PersonalMap) {
                     emptyList()
+                } else if (entry.source is RewardCatalogSource.VeinMinerAccess) {
+                    listOf(
+                        "<#B8B8B8>До активации можно передать другому игроку.",
+                        "",
+                        "<#8C8C8C>[<#C7A0E8>▶<#8C8C8C>] <#C7A0E8>ПКМ на Выживании <#B8B8B8>— активировать пропуск",
+                    )
                 } else {
                     listOf("<green>ПКМ с предметом в руке — получить награду.", "<yellow>Можно хранить и передавать до использования.")
                 }).map { TextUtil.mm(it, true) })
@@ -1520,7 +1548,8 @@ internal class CatalogPhysicalRewards(
         entry.requires.all { Bukkit.getPluginManager().isPluginEnabled(it) } &&
             (entry.source !is RewardCatalogSource.DungeonCase || dungeonService()?.nativeReady() == true) &&
             (entry.source !is RewardCatalogSource.TravelAnchors || TravelAnchorsModule.isEnabled) &&
-            (entry.source !is RewardCatalogSource.ParticlePreset || particlePresets.ready(entry.source.id))
+            (entry.source !is RewardCatalogSource.ParticlePreset || particlePresets.ready(entry.source.id)) &&
+            (entry.source !is RewardCatalogSource.VeinMinerAccess || veinMinerAccess.ready(entry.source.days))
     private fun split(stack: ItemStack, amount: Int): List<ItemStack> = (0 until amount step stack.maxStackSize).map { offset ->
         stack.clone().also { it.amount = minOf(stack.maxStackSize, amount - offset) }
     }
