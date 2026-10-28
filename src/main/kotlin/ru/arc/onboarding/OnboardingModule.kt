@@ -34,6 +34,7 @@ object OnboardingModule : PluginModule {
 
     override fun init() {
         OnboardingService.init { particleColors -> attachReady(particleColors) }
+        OptionalOnboardingService.init()
         register(OnboardingPlayerListener())
         registerOptional("Lands") { OnboardingLandsListener() }
         info("Onboarding outcome listeners registered: {}; initial quest preparing", listeners.size)
@@ -61,6 +62,7 @@ object OnboardingModule : PluginModule {
         claimGuide = null
         listeners.forEach(HandlerList::unregisterAll)
         listeners.clear()
+        OptionalOnboardingService.shutdown()
         OnboardingService.shutdown()
     }
 

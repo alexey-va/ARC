@@ -31,9 +31,78 @@ import ru.arc.paper.testing.MockBukkitTestRuntime
 import ru.arc.paper.testing.failOnUnsupportedMockBukkitOperation
 import ru.arc.staffspells.api.StaffHudMode
 import ru.arc.staffspells.api.StaffHudPlacement
+import ru.arc.staffspells.api.QuestGuidanceHudService
 import java.util.UUID
 
 class StaffSpellHudTest : FreeSpec({
+    "quest guidance shares the staff card, requires permission and preserves source and weapon priority" {
+        withHudHarness(ownDisplays = false) { h ->
+            val player = h.player("quest-hud", StaffSpell.EMBER)
+            player.inventory.setItemInMainHand(ItemStack(Material.STONE))
+            val permission = player.addAttachment(h.paper.createSimplePlugin("QuestHudTest"),
+                QuestGuidanceHudService.PERMISSION, false)
+            val optional = QuestGuidanceHudService.Source.OPTIONAL
+            val home = QuestGuidanceHudService.Source.FIRST_HOME
+            val hint = Component.text("Сыграйте в слоты\nБесплатная проба готова")
+            h.hud.showGuidance(player, optional, hint) shouldBe false
+            h.recorder.records.size shouldBe 0
+            permission.setPermission(QuestGuidanceHudService.PERMISSION, true)
+            h.hud.showGuidance(player, optional, hint) shouldBe true
+            val card = h.recorder.records.single()
+            card.attachedPlayerId shouldBe player.uniqueId
+            card.visibleViewers shouldBe setOf(player.uniqueId)
+            card.visibleByDefault shouldBe false
+            h.hud.clear(player.uniqueId) // The staff loop clears its state after unequip.
+            h.scheduler.tick(2)
+            card.removals shouldBe 0
+            h.hud.showGuidance(player, home, Component.text("Сохраните точку дома")) shouldBe true
+            h.hud.showGuidance(player, optional, hint) shouldBe false
+            h.hud.clearGuidance(player.uniqueId, optional)
+            card.removals shouldBe 0
+            text(card.text) shouldBe "Сохраните точку дома"
+            player.inventory.setItemInMainHand(staffItem(StaffSpell.EMBER))
+            h.hud.ready(player, StaffSpell.EMBER, false)
+            h.recorder.records.size shouldBe 1
+            text(card.text) shouldBe "ПКМ · Комета"
+            h.hud.showGuidance(player, home, hint) shouldBe false
+            card.removals shouldBe 0
+            player.inventory.setItemInMainHand(ItemStack(Material.STONE))
+            h.hud.clear(player.uniqueId)
+            h.hud.showGuidance(player, optional, hint) shouldBe true
+            val resumed = h.recorder.records.last()
+            permission.setPermission(QuestGuidanceHudService.PERMISSION, false)
+            h.scheduler.tick(1)
+            resumed.removals shouldBe 1
+            h.recorder.closes shouldBe 0
+        }
+    }
+
+    "quest card follows native movement and respawns in the destination world before cleanup" {
+        withHudHarness { h ->
+            val player = h.player("quest-hud-travel", StaffSpell.EMBER)
+            player.inventory.setItemInMainHand(ItemStack(Material.STONE))
+            player.addAttachment(h.paper.createSimplePlugin("QuestTravelTest"), QuestGuidanceHudService.PERMISSION, true)
+            val source = QuestGuidanceHudService.Source.FIRST_HOME
+            val hint = Component.text("/sethome — сохранить точку дома")
+            h.hud.showGuidance(player, source, hint) shouldBe true
+            val first = h.recorder.records.single()
+            player.teleport(Location(h.world, 4.5, 64.0, 4.5, 90f, 45f))
+            h.scheduler.tick(1)
+            first.teleports.size shouldBe 0
+            first.removals shouldBe 0
+            val other = h.paper.addSimpleWorld("quest-hud-other")
+            player.teleport(Location(other, 0.5, 64.0, 0.5))
+            h.hud.showGuidance(player, source, hint) shouldBe true
+            first.removals shouldBe 1
+            val next = h.recorder.records.last()
+            next.spawn.world shouldBe other
+            next.attachedPlayerId shouldBe player.uniqueId
+            player.gameMode = org.bukkit.GameMode.SPECTATOR
+            h.scheduler.tick(1)
+            next.removals shouldBe 1
+        }
+    }
+
     "unchanged HUD follows without reparsing text and changed state refreshes both surfaces" {
         withHudHarness { h ->
             val player = h.player("staff-hud-unchanged", StaffSpell.EMBER)

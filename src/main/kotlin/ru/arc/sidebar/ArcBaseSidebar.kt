@@ -15,6 +15,8 @@ import ru.arc.config.ConfigManager
 import ru.arc.hooks.HookRegistry
 import ru.arc.onboarding.OnboardingService
 import ru.arc.onboarding.onboardingGuideLines
+import ru.arc.onboarding.OptionalOnboardingService
+import ru.arc.onboarding.optionalQuestGuideLines
 import ru.arc.paper.api.ArcSidebarFrame
 import ru.arc.paper.api.ArcSidebarHandle
 import ru.arc.paper.api.ArcSidebarPriorities
@@ -54,6 +56,8 @@ internal class ArcBaseSidebar(
         val layout = if (serverId.equals("slimefun", ignoreCase = true)) "slimefun.sections" else "sections"
         fun enabled(section: SidebarSection) = section.enabled(HookRegistry.luckPermsHook?.getCachedMeta(player.uniqueId, section.metaKey))
         val guide = OnboardingService.guideView(player)?.let(::onboardingGuideLines)?.takeIf(List<Component>::isNotEmpty)
+            ?: OptionalOnboardingService.activeView(player)?.let { optionalQuestGuideLines(it, OptionalOnboardingService::text) }
+                ?.takeIf(List<Component>::isNotEmpty)
         val rows = composeBaseSidebarSections(
             guide = guide,
             enabled = ::enabled,

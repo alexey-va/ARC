@@ -97,3 +97,66 @@ cannot repeat a payment. Reserve precedes the provider call; ambiguous outcomes
 remain held for recovery and are never blindly paid again. Rewards do not send
 chat messages. Source, mocked provider checks, disk delivery and actual payment
 observations are separate evidence.
+
+## Optional Spawn introductions
+
+`OptionalOnboardingService` owns three independent opt-in journeys. They do not
+replace, reset, or reward the initial home quest. `OptionalQuestJourney` defines
+the steps, `OptionalQuestStore` persists append-only Redis CAS records in
+`arc.onboarding.optional.v1` under `<player UUID>:<adventure|casino|farm>`, and
+`OptionalQuestDialog` / `OptionalQuestHud` render the journal and current goal.
+Reaccepting or reopening a completed journey retains its original completion.
+Join and world-change handling load existing records without enrolling anyone.
+The initial home guide has priority over the optional bossbar and sidebar rows.
+
+`optional-quests` in `modules/onboarding.yml` configures the enable switch, guide
+NPCs, arrival areas, and text. It defaults to disabled outside the configured
+Spawn runtime. NPC 426 (Garret), 452 (casino guide), and 393 (farm guide) use the
+existing personal quest marker and open the corresponding journal on click.
+Their Citizens command traits must be removed when enabling these guides.
+The same journals are available at `/arc onboarding adventure`, `casino`, and
+`farm`; the existing administrative home-test commands remain independent.
+Safe native travel stays available before accepting and after completing the
+introductions: Garret runs `/ag`, the casino guide runs `/rccasino`, and the
+farm guide runs `/arcfarms travel farm`. These routes never enroll a player or
+grant a trial. Primis travel remains available after the guild step; trial
+arming requires an accepted, unfinished casino journey.
+
+- Adventure: visit `em_adventurers_guild` through `/ag`, arrive in `em_primis`,
+  and turn in native `primis_main_quest_1.yml`. `PrimisOnboardingListener` in
+  ArcDungeons observes `QuestRewardEvent` after native reward/turn-in and can
+  recover a missed acknowledgement from EliteMobs' own restored
+  `elitequest.primis_main_quest_1.yml` metadata. An operator or wildcard
+  permission is not completion evidence. Native Primis rewards are unchanged.
+- Casino: check in near poker on the lower floor `(19.5, 33, 26.5)`, billiards
+  on the middle floor `(14.5, 49, 23.5)`, and slots on the upper floor
+  `(2.5, 65, 35.7)` in `rc_atelier_casino`. Each authored area is ±6 blocks in
+  X/Z and from its floor Y through Y+3; these are check-in areas, not building
+  wall bounds. Only actual presence after acceptance credits a visit. Complete
+  the one-time slots, blackjack, and Plinko trials through their physical game
+  controls. ArcCasino owns admissions, money, and durable terminal receipts.
+- Farm: enter the `sp11` farm footprint, X `109..298`, Y `-64..139`, Z
+  `363..575`, and contribute to a completed commercial farm shift.
+  `FarmShiftCoordinator` retains the first commercial event ID for each positive
+  contributor in nullable `PlayerActivityStats.farmIntroductionEventId`, before
+  saving that completion. Historical aggregate completion counts and forced
+  administrative finishes never create this receipt. The ordinary save path
+  replays the successfully saved receipts of online players through its captured
+  lifecycle; a dropped callback, cooldown reset, reload, or temporary Redis failure
+  therefore cannot erase completion evidence. Lumbermill
+  and mine completion never advances this quest. Native shift rewards are unchanged.
+
+`arc-onboarding-api:0.1.1` is owned and packaged by ARC; ArcDungeons, ArcCasino,
+and ArcFarms consume it without embedding its classes. `CasinoIntroService`
+arms the next physical trial and reports `AVAILABLE`, `ARMED`, `PLAYING`, or
+durable `COMPLETE` (`UNAVAILABLE` when the provider cannot admit it).
+`OptionalOnboardingProgressService` acknowledges real Primis, farm, and casino
+results after quest persistence. It never enrolls, pays, or resets a player.
+Failed acknowledgements receive bounded provider retries. Casino state readback
+repairs missed terminal callbacks from the retained casino receipts. Accepted
+Redis writes drain at ARC shutdown; stale runtime callbacks cannot reopen UI.
+
+Focused checks: `./gradlew :test --tests 'ru.arc.onboarding.OptionalQuest*Test'`
+and `:arc-dungeons:test --tests 'ru.arc.hooks.elitemobs.PrimisOnboardingListenerTest'`.
+ArcFarms checks its typed dispatch with
+`./gradlew test --tests 'ru.ruscrafting.farms.paper.farm.shift.FarmOnboardingProgressTest'`.

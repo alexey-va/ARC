@@ -463,6 +463,7 @@ open class ARC : JavaPlugin() {
             attempt { RtpPlayerRegistry.shutdown() }
             moduleDrains += RtpPlayerRegistry.closeCompletion()
             moduleDrains += ru.arc.onboarding.OnboardingService.closeCompletion()
+            moduleDrains += ru.arc.onboarding.OptionalOnboardingService.closeCompletion()
             moduleDrains += ru.arc.investigation.InvestigationModule.storageDrained()
             nativeDrains += ru.arc.investigation.InvestigationModule.drained()
             nativeDrains += HooksModule.drained()

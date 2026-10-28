@@ -9,10 +9,14 @@ import org.bukkit.NamespacedKey
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
+import ru.arc.staffspells.api.QuestGuidanceHudService
 import java.util.UUID
 
 /** One main-thread instruction bar per participating player; no task or inventory mutations. */
-internal class OnboardingHud(private val config: OnboardingConfig) : AutoCloseable {
+internal class OnboardingHud(
+    private val config: OnboardingConfig,
+    private val hologram: QuestHologramHud = QuestHologramHud(QuestGuidanceHudService.Source.FIRST_HOME),
+) : AutoCloseable {
     private val bars = mutableMapOf<UUID, Pair<Player, BossBar>>()
 
     fun refresh(player: Player, guide: OnboardingGuideView?) {
@@ -31,6 +35,10 @@ internal class OnboardingHud(private val config: OnboardingConfig) : AutoCloseab
             hasBuildBook = needsBook && items.any(::isOnboardingBuildBook),
             worldHint = worldHint,
         ) ?: return
+        if (hologram.refresh(player, title)) {
+            clearBar(player.uniqueId)
+            return
+        }
         if (bars[player.uniqueId]?.first?.let { it !== player } == true) clear(player.uniqueId)
         val bar = bars.getOrPut(player.uniqueId) {
             val created = BossBar.bossBar(title, 1f, BossBar.Color.GREEN, BossBar.Overlay.PROGRESS)
@@ -41,10 +49,18 @@ internal class OnboardingHud(private val config: OnboardingConfig) : AutoCloseab
     }
 
     fun clear(playerId: UUID) {
+        hologram.clear(playerId)
+        clearBar(playerId)
+    }
+
+    private fun clearBar(playerId: UUID) {
         bars.remove(playerId)?.let { (player, bar) -> player.hideBossBar(bar) }
     }
 
-    override fun close() = bars.keys.toList().forEach(::clear)
+    override fun close() {
+        hologram.close()
+        bars.keys.toList().forEach(::clearBar)
+    }
 }
 
 /** Read only the durable item identity; ArcBuilder still validates and owns every book action. */

@@ -25,6 +25,7 @@ import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.potion.PotionEffect
 import org.bukkit.potion.PotionEffectType
+import org.bukkit.plugin.ServicePriority
 import ru.arc.config.ConfigManager
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.PluginModule
@@ -32,6 +33,7 @@ import ru.arc.dungeons.ArcDungeonsPlugin
 import ru.arc.dungeons.api.ArcStaffCooldowns
 import ru.arc.paper.display.PaperPacketDisplays
 import ru.arc.paper.particle.PaperViewerParticles
+import ru.arc.staffspells.api.QuestGuidanceHudService
 import java.util.UUID
 import org.bukkit.util.Vector
 import kotlin.math.abs
@@ -45,6 +47,7 @@ object StaffSpellsModule : PluginModule {
     override val name = "StaffSpells"
     override val priority = 85
     private var controller: StaffSpellController? = null
+    private var guidanceHud: QuestGuidanceHudService? = null
     private var duelAccess: StaffSpellDuelAccess? = null
     private var masteryCooldown: ((Player, StaffSpellCast, Long) -> Long)? = null
 
@@ -80,9 +83,10 @@ object StaffSpellsModule : PluginModule {
             }
         }
         val displays = PaperPacketDisplays(plugin, "staff-spells")
+        val hud = StaffSpellHud(displays, config, ownDisplays = false)
         controller = StaffSpellController(config, settings, StaffSpellDamage(duelAccess),
             StaffSpellDisplayEffects(displays), cooldowns, PaperViewerParticles(plugin, "staff-spells"),
-            scenery = scenery, hud = StaffSpellHud(displays, config, ownDisplays = false),
+            scenery = scenery, hud = hud,
             mobSettings = mobSettings).also {
             Bukkit.getPluginManager().registerEvents(it, plugin)
             Bukkit.getPluginManager().registerEvents(it.input, plugin)
@@ -92,10 +96,23 @@ object StaffSpellsModule : PluginModule {
             Bukkit.getPluginManager().registerEvents(it.mobCasters, plugin)
             it.start()
         }
+        guidanceHud = object : QuestGuidanceHudService {
+            override fun show(player: Player, source: QuestGuidanceHudService.Source, text: net.kyori.adventure.text.Component): Boolean {
+                check(Bukkit.isPrimaryThread()) { "Quest guidance must be shown on the Paper thread" }
+                return hud.showGuidance(player, source, text)
+            }
+
+            override fun clear(playerId: UUID, source: QuestGuidanceHudService.Source) {
+                check(Bukkit.isPrimaryThread()) { "Quest guidance must be cleared on the Paper thread" }
+                hud.clearGuidance(playerId, source)
+            }
+        }.also { Bukkit.getServicesManager().register(QuestGuidanceHudService::class.java, it, plugin, ServicePriority.Normal) }
     }
 
     override fun reload() = init()
     override fun shutdown() {
+        guidanceHud?.let { Bukkit.getServicesManager().unregister(QuestGuidanceHudService::class.java, it) }
+        guidanceHud = null
         controller?.let { HandlerList.unregisterAll(it); HandlerList.unregisterAll(it.input); HandlerList.unregisterAll(it.defense); HandlerList.unregisterAll(it.summons); HandlerList.unregisterAll(it.conjurations); HandlerList.unregisterAll(it.mobCasters); it.close() }
         controller = null
     }

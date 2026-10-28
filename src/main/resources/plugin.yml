@@ -101,6 +101,9 @@ commands:
     description: Materialize one exact physical ARC case reward
     usage: /arc-reward-issue <player> <case> <entry>
 permissions:
+  arc.onboarding.hud.hologram:
+    description: Test quest hints at the fixed staff hologram position
+    default: false
   arc.graves.teleport.free:
     description: Teleport to your own graves without the coin fee
     default: false

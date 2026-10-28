@@ -4,6 +4,7 @@ import org.bukkit.command.CommandSender
 import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.tabComplete
 import ru.arc.onboarding.OnboardingService
+import ru.arc.onboarding.OptionalOnboardingService
 
 /** Player journal plus explicit self-only administrator test controls. */
 object OnboardingSubCommand : SubCommand {
@@ -18,6 +19,7 @@ object OnboardingSubCommand : SubCommand {
         when {
             args.isEmpty() -> OnboardingService.open(player)
             args.size != 1 -> sendUsage(sender)
+            args[0].lowercase() in setOf("adventure", "casino", "farm") -> OptionalOnboardingService.open(player, args[0])
             args[0].equals("test", true) -> OnboardingService.enrollSelf(player)
             args[0].equals("restart", true) -> OnboardingService.restartSelf(player)
             args[0].equals("stop", true) -> OnboardingService.stopSelf(player)
@@ -27,6 +29,7 @@ object OnboardingSubCommand : SubCommand {
     }
 
     override fun tabComplete(sender: CommandSender, args: Array<String>): List<String> =
-        if (args.size == 1 && (sender.isOp || sender.hasPermission("arc.admin")))
-            listOf("test", "restart", "stop").tabComplete(args[0]) else emptyList()
+        if (args.size == 1)
+            (listOf("adventure", "casino", "farm") + if (sender.isOp || sender.hasPermission("arc.admin"))
+                listOf("test", "restart", "stop") else emptyList()).tabComplete(args[0]) else emptyList()
 }

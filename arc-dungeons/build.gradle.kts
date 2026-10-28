@@ -29,6 +29,7 @@ dependencies {
     implementation(libs.de.tr7zw.item.nbt.api)
     compileOnly(project(":arc-dungeons-api"))
     compileOnly(project(":arc-staff-spells-api"))
+    compileOnly(project(":arc-onboarding-api"))
     compileOnly("ru.ruscrafting.arc:arc-core-paper-api:2.7.69")
     compileOnly(libs.io.papermc.paper.paper.api)
     // Compile against the oldest supported API; the exact runtime matrix also covers 10.9.10.
@@ -44,6 +45,7 @@ dependencies {
 
     testImplementation(project(":arc-dungeons-api"))
     testImplementation(project(":arc-staff-spells-api"))
+    testImplementation(project(":arc-onboarding-api"))
     testImplementation("ru.ruscrafting.arc:arc-core-paper-api:2.7.69")
     testImplementation("ru.ruscrafting.arc:arc-core-paper-testing:2.7.69")
     testImplementation("com.magmaguy:EliteMobs:10.9.8@jar") { isTransitive = false }
@@ -102,7 +104,7 @@ tasks.shadowJar {
     mergeServiceFiles()
         exclude("ru/arc/paper/runtime/PaperNativeCleanupServiceProvider*.class")
     // These contracts and host implementations have a single runtime owner: ARC.
-    exclude("ru/arc/paper/api/**", "ru/arc/dungeons/api/**", "ru/arc/staffspells/api/**")
+    exclude("ru/arc/paper/api/**", "ru/arc/dungeons/api/**", "ru/arc/staffspells/api/**", "ru/ruscrafting/onboarding/api/**")
     exclude("ru/arc/paper/packet/PaperVisualPacketRuntime*.class")
     exclude("ru/arc/paper/redis/PaperRedisServiceProvider*", "ru/arc/paper/sql/PaperSqlServiceProvider*",
         "ru/arc/paper/metrics/PaperArcMetricsProvider*")

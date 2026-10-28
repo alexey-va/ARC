@@ -310,6 +310,10 @@ open class ArcDungeonsPlugin : JavaPlugin() {
 
         dungeonQol = qol
         listen(EMListener())
+        val onboardingHost = server.pluginManager.getPlugin("ARC")
+        if (onboardingHost != null && runCatching {
+                Class.forName("ru.ruscrafting.onboarding.api.OptionalOnboardingProgressService", false, onboardingHost.javaClass.classLoader)
+            }.isSuccess) listen(PrimisOnboardingListener(this))
         listen(EliteMobsEventAnnouncementGuard())
         PrimisEncounterGuard(nativeWork, logger, { player, reason ->
             val (key, fallback) = when (reason) {

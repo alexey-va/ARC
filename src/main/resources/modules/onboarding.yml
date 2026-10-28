@@ -2,9 +2,56 @@
 # До публичного запуска тест включается администратором только для себя:
 # /arc onboarding test; журнал /arc onboarding; заново /arc onboarding restart.
 worlds:
-  - survival
-  - mining
-  - vanilla
+- survival
+- mining
+- vanilla
+
+# Independent opt-in introductions. Completion never changes the home quest or grants extra rewards.
+# Enable only on the node that owns these Citizens guides and physical destinations.
+optional-quests:
+  enabled: false
+  adventure:
+    npc-id: 426
+  casino:
+    npc-id: 452
+  farm:
+    npc-id: 464
+  arrivals:
+    guild-visited: {world: em_adventurers_guild}
+    primis-visited: {world: em_primis}
+    # Authored check-in areas around existing casino game anchors, not whole-floor wall bounds.
+    casino-ground-visited:
+      world: rc_atelier_casino
+      min-x: 13.5
+      max-x: 25.5
+      min-y: 33.0
+      max-y: 36.0
+      min-z: 20.5
+      max-z: 32.5
+    casino-middle-visited:
+      world: rc_atelier_casino
+      min-x: 8.5
+      max-x: 20.5
+      min-y: 49.0
+      max-y: 52.0
+      min-z: 17.5
+      max-z: 29.5
+    casino-upper-visited:
+      world: rc_atelier_casino
+      min-x: -3.5
+      max-x: 8.5
+      min-y: 65.0
+      max-y: 68.0
+      min-z: 29.7
+      max-z: 41.7
+    farm-visited:
+      world: sp11
+      min-x: 109.0
+      max-x: 298.0
+      min-y: -64.0
+      max-y: 139.0
+      min-z: 363.0
+      max-z: 575.0
 
 quest:
   public-enabled: false

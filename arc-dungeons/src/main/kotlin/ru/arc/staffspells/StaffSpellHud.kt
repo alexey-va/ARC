@@ -21,6 +21,7 @@ import ru.arc.paper.display.PaperPacketDisplays
 import net.luckperms.api.LuckPermsProvider
 import ru.arc.staffspells.api.StaffHudMode
 import ru.arc.staffspells.api.StaffHudPlacement
+import ru.arc.staffspells.api.QuestGuidanceHudService
 import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.cos
@@ -75,7 +76,9 @@ internal class StaffSpellHud(
 ) : AutoCloseable {
     private data class Card(
         val display: PacketTextDisplay,
-        var state: StaffSpellHudState,
+        val worldId: UUID,
+        var state: StaffSpellHudState?,
+        var text: Component,
         var placement: StaffSpellHudPlacement,
         var preference: StaffHudPlacement,
         var bounds: StaffSpellHudBounds,
@@ -94,6 +97,8 @@ internal class StaffSpellHud(
     private val bossBars = mutableMapOf<UUID, TrackedBossBar>()
     private val states = mutableMapOf<UUID, StaffSpellHudState>()
     private val worldIds = mutableMapOf<UUID, UUID>()
+    private data class Guidance(val source: QuestGuidanceHudService.Source, val text: Component, var worldId: UUID)
+    private val guidance = mutableMapOf<UUID, Guidance>()
     private val visual = staffSpellHudVisualSpec()
     private var started = false
     private var closed = false
@@ -125,8 +130,28 @@ internal class StaffSpellHud(
     fun clear(playerId: UUID) {
         states.remove(playerId)
         worldIds.remove(playerId)
-        removeCard(playerId)
+        if (cards[playerId]?.state != null || playerId !in guidance) removeCard(playerId)
         removeBossBar(playerId)
+    }
+
+    fun showGuidance(player: Player, source: QuestGuidanceHudService.Source, text: Component): Boolean {
+        if (closed || !eligible(player) || !player.hasPermission(QuestGuidanceHudService.PERMISSION) ||
+            StaffSpell.from(player.inventory.itemInMainHand) != null) {
+            clearGuidance(player.uniqueId, source)
+            return false
+        }
+        if (guidance[player.uniqueId]?.source == QuestGuidanceHudService.Source.FIRST_HOME &&
+            source == QuestGuidanceHudService.Source.OPTIONAL) return false
+        guidance[player.uniqueId] = Guidance(source, text, player.world.uid)
+        removeBossBar(player.uniqueId)
+        showText(player, text, null, preferences.read(player).placement)
+        return cards[player.uniqueId]?.let { it.state == null && it.display.isValid } == true
+    }
+
+    fun clearGuidance(playerId: UUID, source: QuestGuidanceHudService.Source) {
+        if (guidance[playerId]?.source != source) return
+        guidance.remove(playerId)
+        if (cards[playerId]?.state == null) removeCard(playerId)
     }
 
     private fun update(player: Player, state: StaffSpellHudState) {
@@ -159,17 +184,23 @@ internal class StaffSpellHud(
 
     private fun showHologram(player: Player, state: StaffSpellHudState, placementChoice: StaffHudPlacement) {
         val card = cards[player.uniqueId]
+        val text = if (card?.state == state) card.text else render(state)
+        showText(player, text, state, placementChoice)
+    }
+
+    private fun showText(player: Player, text: Component, state: StaffSpellHudState?, placementChoice: StaffHudPlacement) {
+        if (cards[player.uniqueId]?.worldId?.let { it != player.world.uid } == true) removeCard(player.uniqueId)
+        val card = cards[player.uniqueId]
         if (card != null && card.display.isValid) {
-            if (card.state != state) {
-                val text = render(state)
+            if (card.text != text) {
                 card.display.text(text)
-                card.state = state
+                card.text = text
                 card.bounds = staffSpellHudBounds(PlainTextComponentSerializer.plainText().serialize(text), visual.lineWidth)
             }
+            card.state = state
             syncCard(player, card, placementChoice)
             return
         }
-        val text = render(state)
         val bounds = staffSpellHudBounds(PlainTextComponentSerializer.plainText().serialize(text), visual.lineWidth)
         card?.display?.remove()
         val placement = placement(player, placementChoice, bounds)
@@ -197,7 +228,7 @@ internal class StaffSpellHud(
             attachTo(player)
             showTo(player)
         }
-        cards[player.uniqueId] = Card(display, state, placement, placementChoice, bounds)
+        cards[player.uniqueId] = Card(display, player.world.uid, state, text, placement, placementChoice, bounds)
     }
 
     private fun showBossBar(player: Player, state: StaffSpellHudState) {
@@ -305,6 +336,22 @@ internal class StaffSpellHud(
             states[playerId] = state
             renderSurface(player, state, preferences.read(player))
         }
+        guidance.toMap().forEach { (playerId, hint) ->
+            val player = Bukkit.getPlayer(playerId)
+            if (player == null || !eligible(player) || !player.hasPermission(QuestGuidanceHudService.PERMISSION)) {
+                clearGuidance(playerId, hint.source)
+                return@forEach
+            }
+            if (StaffSpell.from(player.inventory.itemInMainHand) != null) {
+                if (cards[playerId]?.state == null) removeCard(playerId)
+                return@forEach
+            }
+            if (hint.worldId != player.world.uid) {
+                removeCard(playerId)
+                hint.worldId = player.world.uid
+            }
+            showText(player, hint.text, null, preferences.read(player).placement)
+        }
     }
 
     private fun eligible(player: Player) = player.isOnline && player.isValid && !player.isDead &&
@@ -344,6 +391,7 @@ internal class StaffSpellHud(
         if (closed) return
         closed = true
         tasks.close()
+        guidance.toMap().forEach { (playerId, hint) -> clearGuidance(playerId, hint.source) }
         (states.keys + cards.keys + bossBars.keys).toSet().forEach(::clear)
         if (ownDisplays) displays.close()
     }
