@@ -32,3 +32,4 @@ providers.gradleProperty("arcCoreDir").orNull?.let(::file)?.let { arcCoreDir ->
 
 include(":arc-onboarding-api")
 include(":arc-aurora-api")
+include(":arc-aurora")

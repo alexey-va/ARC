@@ -1,0 +1,444 @@
+# ArcAurora: original, restrained biome ambience for vanilla clients.
+# Distances are BLOCKS, times are Minecraft ticks, and colours are sRGB.
+# No resource pack, world lighting, entities, terrain edits or forced chunk loads.
+permission: arcaurora.view
+interval-ticks: 10
+viewers-per-tick: 8
+attempts-per-viewer: 8
+packets-per-viewer: 12
+native-budget-micros: 1500
+
+# Both observed limits must pass before new ambient/event submissions.
+# The rolling window uses available samples; 10 samples at 20 ticks is nominally 10 s.
+ping:
+  max-current-ms: 250
+  max-average-ms: 180
+  window-samples: 10
+  sample-interval-ticks: 20
+
+# Optional exact, single-hop aliases. Read the actual key with /arcaurora biome.
+# Iris namespaces/paths depend on the installed generator pack; none are assumed here.
+# Replace {} with a mapping after verifying your real key, for example:
+# biome-aliases:
+#   'iris:your_verified_woodland': 'minecraft:forest'
+biome-aliases: {}
+
+# Only the highest matching priority is used; equal priorities share the budget.
+# Omitted world selectors mean ['*']; omitted time means the entire day.
+# All shipped profiles reject underwater spawning. Shape size is a radius/half-extent.
+# Most presets use at most 6 points; cubes use 12, one sample on each edge.
+# All use count=1 and fit at least one complete small form into the default budget.
+# Native particles dissipate on the client; each pass picks fresh nearby anchors.
+profiles:
+  # Safe fallback for unclassified vanilla AND custom biome keys.
+  open_air_motes:
+    priority: 0
+    biomes: ['*']
+    weather: CLEAR
+    min-sky-light: 7
+    radius: 16
+    min-distance: 5
+    vertical-min: 2
+    vertical-max: 6
+    shape: POINT
+    particle: minecraft:dust
+    dust-color: '#B7CFC7'
+    dust-size: 0.35
+
+  shaded_motes:
+    priority: 5
+    biomes: ['*']
+    max-sky-light: 6
+    radius: 12
+    min-distance: 4
+    vertical-min: 0
+    vertical-max: 3
+    shape: POINT
+    particle: minecraft:dust
+    dust-color: '#899FA7'
+    dust-size: 0.30
+
+  meadow_pollen:
+    priority: 20
+    biomes: [minecraft:plains, minecraft:sunflower_plains, minecraft:meadow, minecraft:flower_forest]
+    time-start: 0
+    time-end: 12500
+    weather: CLEAR
+    min-sky-light: 8
+    radius: 14
+    min-distance: 4
+    vertical-min: 2
+    vertical-max: 5
+    shape: CIRCLE
+    shape-size: 0.6
+    points: 3
+    particle: minecraft:dust
+    dust-color: '#E8D98E'
+    dust-size: 0.40
+
+  woodland_fireflies:
+    priority: 30
+    # Optional custom-family example: append 'iris:*forest*' only after checking real keys.
+    biomes: [minecraft:forest, minecraft:flower_forest, minecraft:birch_forest, minecraft:old_growth_birch_forest, minecraft:dark_forest, minecraft:taiga, minecraft:old_growth_pine_taiga, minecraft:old_growth_spruce_taiga, minecraft:meadow, minecraft:plains, minecraft:sunflower_plains]
+    time-start: 11500
+    time-end: 23500
+    weather: CLEAR
+    min-sky-light: 2
+    radius: 15
+    min-distance: 4
+    vertical-min: 1.5
+    vertical-max: 4
+    shape: SPHERE
+    shape-size: 0.9
+    points: 6
+    particle: minecraft:firefly
+
+  birch_drift:
+    priority: 20
+    biomes: [minecraft:birch_forest, minecraft:old_growth_birch_forest]
+    time-start: 0
+    time-end: 11499
+    weather: CLEAR
+    min-sky-light: 3
+    radius: 14
+    min-distance: 4
+    vertical-min: 3
+    vertical-max: 7
+    shape: LINE
+    shape-size: 0.9
+    points: 4
+    particle: minecraft:dust
+    dust-color: '#E9DDB0'
+    dust-size: 0.35
+
+  cherry_petals:
+    priority: 25
+    biomes: [minecraft:cherry_grove]
+    weather: CLEAR
+    min-sky-light: 3
+    radius: 14
+    min-distance: 4
+    vertical-min: 3
+    vertical-max: 7
+    shape: POINT
+    particle: minecraft:cherry_leaves
+
+  pale_garden_motes:
+    priority: 30
+    biomes: [minecraft:pale_garden]
+    time-start: 12000
+    time-end: 23500
+    radius: 13
+    min-distance: 5
+    vertical-min: 1
+    vertical-max: 4
+    shape: POINT
+    particle: minecraft:dust
+    dust-color: '#BFC8B8'
+    dust-size: 0.35
+
+  snowy_drift:
+    priority: 25
+    biomes: ['minecraft:*snowy*', 'minecraft:*frozen*', minecraft:ice_spikes, minecraft:grove, minecraft:jagged_peaks]
+    min-sky-light: 8
+    radius: 18
+    min-distance: 5
+    vertical-min: 3
+    vertical-max: 8
+    shape: POINT
+    particle: minecraft:snowflake
+
+  frost_constellations:
+    priority: 35
+    biomes: ['minecraft:*snowy*', 'minecraft:*frozen*', minecraft:ice_spikes, minecraft:grove, minecraft:jagged_peaks]
+    time-start: 13000
+    time-end: 23500
+    weather: CLEAR
+    min-sky-light: 9
+    radius: 18
+    min-distance: 6
+    vertical-min: 3
+    vertical-max: 6
+    shape: SPHERE
+    shape-size: 0.75
+    points: 6
+    particle: minecraft:end_rod
+
+  highland_wisps:
+    priority: 20
+    biomes: ['minecraft:windswept_*', minecraft:stony_peaks]
+    weather: CLEAR
+    min-y: 90
+    min-sky-light: 10
+    radius: 20
+    min-distance: 7
+    vertical-min: 3
+    vertical-max: 7
+    shape: WAVE
+    shape-size: 1.25
+    points: 6
+    particle: minecraft:dust_color_transition
+    dust-color: '#9DBCCF'
+    dust-to-color: '#D6E2DB'
+    dust-size: 0.40
+
+  dune_threads:
+    priority: 25
+    biomes: [minecraft:desert]
+    weather: CLEAR
+    min-sky-light: 10
+    radius: 18
+    min-distance: 6
+    vertical-min: 3
+    vertical-max: 7
+    shape: WAVE
+    shape-size: 1.7
+    points: 6
+    particle: minecraft:dust_color_transition
+    dust-color: '#E7BA65'
+    dust-to-color: '#A47C52'
+    dust-size: 0.40
+
+  badlands_embers:
+    priority: 30
+    biomes: ['minecraft:*badlands*']
+    time-start: 12000
+    time-end: 23500
+    weather: CLEAR
+    min-sky-light: 8
+    radius: 19
+    min-distance: 6
+    vertical-min: 3
+    vertical-max: 8
+    # Twelve sparse edge samples; no persistent or rotating object.
+    shape: CUBE
+    shape-size: 0.8
+    points: 12
+    particle: minecraft:dust_color_transition
+    dust-color: '#E99C69'
+    dust-to-color: '#A55757'
+    dust-size: 0.45
+
+  savanna_seeds:
+    priority: 20
+    biomes: ['minecraft:*savanna*']
+    weather: CLEAR
+    min-sky-light: 8
+    radius: 16
+    min-distance: 5
+    vertical-min: 2
+    vertical-max: 5
+    shape: POINT
+    particle: minecraft:dust
+    dust-color: '#D4B47A'
+    dust-size: 0.40
+
+  jungle_spores:
+    priority: 25
+    biomes: ['minecraft:*jungle*']
+    max-sky-light: 12
+    radius: 14
+    min-distance: 4
+    vertical-min: 1.5
+    vertical-max: 5
+    shape: POINT
+    particle: minecraft:spore_blossom_air
+
+  wetland_lanterns:
+    priority: 30
+    # Optional verified-family example: 'iris:*swamp*'. Unknown keys use the fallbacks.
+    biomes: [minecraft:swamp, minecraft:mangrove_swamp]
+    time-start: 11000
+    time-end: 23500
+    weather: CLEAR
+    min-sky-light: 2
+    radius: 15
+    min-distance: 5
+    vertical-min: 1
+    vertical-max: 4
+    shape: SPHERE
+    shape-size: 0.65
+    points: 4
+    particle: minecraft:dust_color_transition
+    dust-color: '#B9D77A'
+    dust-to-color: '#DFC77D'
+    dust-size: 0.45
+
+  coastal_wisps:
+    priority: 25
+    biomes: ['minecraft:*ocean', 'minecraft:*river', 'minecraft:*beach', minecraft:stony_shore]
+    time-start: 12000
+    time-end: 23500
+    weather: CLEAR
+    min-sky-light: 10
+    radius: 20
+    min-distance: 7
+    vertical-min: 3
+    vertical-max: 7
+    shape: WAVE
+    shape-size: 1.7
+    points: 6
+    particle: minecraft:dust_color_transition
+    dust-color: '#64BDB8'
+    dust-to-color: '#B0D5DC'
+    dust-size: 0.45
+
+  mushroom_halos:
+    priority: 30
+    biomes: [minecraft:mushroom_fields]
+    radius: 14
+    min-distance: 4
+    vertical-min: 1
+    vertical-max: 5
+    shape: RING
+    shape-size: 0.65
+    points: 6
+    particle: minecraft:dust_color_transition
+    dust-color: '#B18ACB'
+    dust-to-color: '#8BC5BC'
+    dust-size: 0.45
+
+  lush_motes:
+    priority: 40
+    biomes: [minecraft:lush_caves]
+    max-sky-light: 4
+    radius: 12
+    min-distance: 3
+    vertical-min: -1
+    vertical-max: 4
+    shape: POINT
+    particle: minecraft:spore_blossom_air
+
+  dripstone_sparks:
+    priority: 40
+    biomes: [minecraft:dripstone_caves]
+    max-sky-light: 4
+    radius: 12
+    min-distance: 3
+    vertical-min: 0
+    vertical-max: 3
+    shape: POINT
+    particle: minecraft:dust
+    dust-color: '#BEA17F'
+    dust-size: 0.35
+
+  deep_dark_echoes:
+    priority: 40
+    biomes: [minecraft:deep_dark]
+    max-sky-light: 2
+    radius: 10
+    min-distance: 4
+    vertical-min: 0
+    vertical-max: 3
+    shape: WAVE
+    shape-size: 0.75
+    points: 4
+    particle: minecraft:dust
+    dust-color: '#628A96'
+    dust-size: 0.30
+
+  nether_embers:
+    priority: 30
+    biomes: [minecraft:nether_wastes, minecraft:basalt_deltas]
+    radius: 16
+    min-distance: 5
+    vertical-min: 2
+    vertical-max: 6
+    shape: POINT
+    particle: minecraft:small_flame
+
+  crimson_threads:
+    priority: 30
+    biomes: [minecraft:crimson_forest]
+    radius: 15
+    min-distance: 4
+    vertical-min: 1
+    vertical-max: 5
+    shape: LINE
+    shape-size: 0.8
+    points: 4
+    particle: minecraft:dust_color_transition
+    dust-color: '#BD6B78'
+    dust-to-color: '#E7A779'
+    dust-size: 0.40
+
+  warped_wisps:
+    priority: 30
+    biomes: [minecraft:warped_forest]
+    radius: 15
+    min-distance: 4
+    vertical-min: 2
+    vertical-max: 6
+    shape: WAVE
+    shape-size: 1.1
+    points: 6
+    particle: minecraft:dust_color_transition
+    dust-color: '#53B9B1'
+    dust-to-color: '#779ECE'
+    dust-size: 0.40
+
+  soul_lights:
+    priority: 30
+    biomes: [minecraft:soul_sand_valley]
+    radius: 16
+    min-distance: 5
+    vertical-min: 2
+    vertical-max: 6
+    shape: SPHERE
+    shape-size: 0.8
+    points: 3
+    particle: minecraft:dust
+    dust-color: '#93D9D5'
+    dust-size: 0.45
+
+  end_constellations:
+    priority: 30
+    biomes: [minecraft:the_end, minecraft:end_highlands, minecraft:end_midlands, minecraft:small_end_islands, minecraft:end_barrens]
+    radius: 18
+    min-distance: 6
+    vertical-min: 3
+    vertical-max: 7
+    shape: CUBE
+    shape-size: 0.75
+    points: 12
+    particle: minecraft:dust_color_transition
+    dust-color: '#AE8BDB'
+    dust-to-color: '#D4C4E6'
+    dust-size: 0.40
+
+# Temporary event ambience replaces ordinary profiles in the leased world.
+# It intentionally bypasses the ordinary permission/toggle and time/biome filters.
+# Ping, loaded-chunk, passable-block and packet-budget gates still apply.
+# These decorative forms do not reveal treasure positions or change rewards.
+event-presets:
+  treasure-hunt:
+    golden_constellations:
+      biomes: ['*']
+      time-start: 0
+      time-end: 23999
+      radius: 15
+      min-distance: 5
+      vertical-min: 2.5
+      vertical-max: 5
+      shape: SPHERE
+      shape-size: 0.8
+      points: 6
+      particle: minecraft:dust_color_transition
+      dust-color: '#E8C66B'
+      dust-to-color: '#F0DEA2'
+      dust-size: 0.45
+    blue_ribbons:
+      biomes: ['*']
+      time-start: 0
+      time-end: 23999
+      radius: 20
+      min-distance: 7
+      vertical-min: 5
+      vertical-max: 8
+      shape: WAVE
+      shape-size: 1.6
+      points: 6
+      particle: minecraft:dust_color_transition
+      dust-color: '#65BAB9'
+      dust-to-color: '#9FBADB'
+      dust-size: 0.45

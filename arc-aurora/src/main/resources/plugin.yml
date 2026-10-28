@@ -1,0 +1,17 @@
+name: ArcAurora
+version: '${version}'
+main: ru.arc.aurora.ArcAuroraPlugin
+api-version: '1.21'
+description: Personal packet-only biome ambience with custom biome support
+depend: [ArcCore, packetevents]
+commands:
+  arcaurora:
+    description: Ambient particles and diagnostics
+    aliases: [aaurora]
+permissions:
+  arcaurora.view:
+    description: Receive ordinary ambient particle effects
+    default: false
+  arcaurora.admin:
+    description: Reload and inspect ArcAurora
+    default: op
