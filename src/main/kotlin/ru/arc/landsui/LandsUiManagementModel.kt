@@ -58,6 +58,7 @@ sealed interface LandsUiChange {
     data class Transfer(val memberId: UUID, val expectedOwnerId: UUID) : LandsUiChange
     data class Delete(val expectedOwnerId: UUID) : LandsUiChange
     data class NaturalFlag(val key: String, val expected: Boolean) : LandsUiChange
+    data class RoleFlag(val roleId: String, val key: String, val expected: Boolean) : LandsUiChange
 }
 
 enum class LandsUiChangeResult { APPLIED, DISPATCHED, DENIED, NOT_FOUND, STALE, INVALID, ACTIVE_SELECTION, REJECTED }

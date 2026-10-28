@@ -39,6 +39,26 @@ internal class LandsManagementMenus(
         }
     }
 
+    fun openDestination(player: Player, context: LandsUiContext, destination: LandsUiDestination) {
+        when (destination) {
+            LandsUiDestination.OVERVIEW -> open(player, context)
+            LandsUiDestination.ADD_MEMBER -> openAddMember(player, context)
+            LandsUiDestination.MEMBERS -> openMembers(player, context)
+            LandsUiDestination.RULES -> openRules(player, context)
+            LandsUiDestination.ROLES -> openRoles(player, context)
+            LandsUiDestination.ENVIRONMENT -> openEnvironment(player, context)
+            LandsUiDestination.TERRITORY -> openTerritory(player, context)
+            LandsUiDestination.SETTINGS -> openSettings(player, context)
+            LandsUiDestination.RENAME -> openEditText(player, context, false)
+            LandsUiDestination.DESCRIPTION -> openEditText(player, context, true)
+            LandsUiDestination.LEAVE -> openLeave(player, context)
+            LandsUiDestination.DELETE -> openDelete(player, context)
+            LandsUiDestination.AREAS -> openAreas(player, context)
+            LandsUiDestination.ROOT, LandsUiDestination.CURRENT, LandsUiDestination.INVITES,
+            LandsUiDestination.CREATE, LandsUiDestination.GUIDE -> openRoot(player)
+        }
+    }
+
     fun openCurrent(player: Player, landId: String): Unit =
         withView(player, LandsUiContext(landId, LandsUiAccess.CURRENT)) { view ->
             // Retain the actual subarea while resolving the member's existing authority.
@@ -64,6 +84,8 @@ internal class LandsManagementMenus(
                 "count" to view.members.size.toString(), "online" to view.members.count { it.online }.toString()),
         ) + if (context.access == LandsUiAccess.CURRENT) emptyList() else listOf(
             text("table-balance-label") to text("table-coins-value", "value" to DecimalFormat("#,##0.##").format(land.balance)),
+        ) + if (context.access != LandsUiAccess.MEMBER) emptyList() else listOf(
+            text("table-expansion-label") to text(if (land.selected) "expansion-selected" else "expansion-not-selected"),
         )
         val buttons = buildList {
             add(button("members", "members-label") { openMembers(player, context) })
@@ -78,6 +100,17 @@ internal class LandsManagementMenus(
             }
             if (context.access != LandsUiAccess.CURRENT && view.permissions.any { it in SETTINGS_PERMISSIONS }) {
                 add(button("settings", "management-settings-label") { openSettings(player, context) })
+            }
+            if (context.access == LandsUiAccess.MEMBER && !land.selected && player.hasPermission("lands.command.edit")) {
+                add(button("select", "select-for-expansion-label") {
+                    if (!player.hasPermission("lands.command.edit") || !gateway.select(player, land.id)) {
+                        player.sendMessage(text("land-gone"))
+                        openRoot(player)
+                    } else {
+                        player.sendMessage(text("selected-for-expansion", "land" to land.name))
+                        open(player, context)
+                    }
+                })
             }
             add(claimBlockButton(player))
             if (context.access != LandsUiAccess.ADMIN && player.hasPermission(ADMIN_PERMISSION)) add(button("admin", "admin-panel-label") {
@@ -217,11 +250,13 @@ internal class LandsManagementMenus(
         val rules = gateway.roleRules(player, context, roleId)
         show(player, PaperDialogScreen(
             id = "lands.role", title = text("role-title", "role" to role.name),
-            body = listOf(PaperDialogBody(text(if (LandsUiPermission.NATIVE_MENU in view.permissions) "role-body" else "role-readonly-body", "area" to view.areaName))) +
-                rulesTable(rules),
-            buttons = if (LandsUiPermission.NATIVE_MENU in view.permissions) listOf(
-                actionButton(player, context, "native", "native-role-settings-label", LandsUiChange.NativeMenu),
-            ) else emptyList(),
+            body = listOf(PaperDialogBody(text(if (rules.any { it.editable }) "role-body" else "role-readonly-body", "area" to view.areaName))) +
+                rulesTable(rules.filterNot { it.editable }),
+            buttons = rules.filter { it.editable }.mapIndexed { index, rule ->
+                button("flag_$index", ruleText(rule)) {
+                    apply(player, context, LandsUiChange.RoleFlag(roleId, rule.key, rule.enabled)) { openRole(player, context, roleId) }
+                }
+            },
             exitButton = back { openRoles(player, context) }, columns = 2,
         )) { openRole(player, context, roleId) }
     }
@@ -254,10 +289,10 @@ internal class LandsManagementMenus(
                         text("setspawn-confirm-body", "land" to view.land.name), text("save-label"), LandsUiChange.SetSpawn,
                         backTo = { openTerritory(player, context) })
                 })
-                if (LandsUiPermission.NATIVE_MENU in view.permissions) add(button("mainblock", "mainblock-label") {
+                if (LandsUiPermission.CLAIM in view.permissions) add(button("mainblock", "mainblock-label") {
                     show(player, PaperDialogScreen(id = "lands.mainblock", title = text("mainblock-title", "land" to view.land.name),
-                        body = listOf(PaperDialogBody(text("mainblock-body"))),
-                        buttons = listOf(actionButton(player, context, "native", "open-lands-label", LandsUiChange.NativeMenu)),
+                        body = listOf(DialogTables.framedBody(text("mainblock-body"), DialogTables.Frame.COMMON, width = 400)),
+                        buttons = listOf(claimBlockButton(player)),
                         exitButton = back { openTerritory(player, context) }))
                 })
             }, exitButton = back { open(player, context) }, columns = 2,
@@ -285,18 +320,37 @@ internal class LandsManagementMenus(
                 if (LandsUiPermission.RENAME in view.permissions) add(button("rename", "rename-label") { openEditText(player, context, false) })
                 if (LandsUiPermission.DESCRIPTION in view.permissions) add(button("description", "description-label") { openEditText(player, context, true) })
                 if (LandsUiPermission.TRANSFER in view.permissions) add(button("transfer", "transfer-label") { openMembers(player, context) })
-                if (LandsUiPermission.NATIVE_MENU in view.permissions) add(actionButton(player, context, "native", "open-lands-label", LandsUiChange.NativeMenu))
-                if (LandsUiPermission.LEAVE in view.permissions) add(button("leave", "leave-label") {
-                    confirm(player, context, "leave", text("leave-label"), text("leave-body", "land" to view.land.name),
-                        text("leave-confirm"), LandsUiChange.Leave, backTo = { openSettings(player, context) })
-                })
-                if (LandsUiPermission.DELETE in view.permissions) add(button("delete", "delete-label") {
-                    confirm(player, context, "delete", text("danger-title", "land" to view.land.name),
-                        text("danger-body", "land" to view.land.name), text("delete-confirm-label"),
-                        LandsUiChange.Delete(view.land.ownerId), backTo = { openSettings(player, context) }, typedName = view.land.name)
-                })
+                if (LandsUiPermission.LEAVE in view.permissions) add(button("leave", "leave-label") { openLeave(player, context) })
+                if (LandsUiPermission.DELETE in view.permissions) add(button("delete", "delete-label") { openDelete(player, context) })
             }, exitButton = back { open(player, context) }, columns = 2,
         )) { openSettings(player, context) }
+    }
+
+    private fun openLeave(player: Player, context: LandsUiContext): Unit = withView(player, context) { view ->
+        if (LandsUiPermission.LEAVE !in view.permissions) return@withView denied(player, context)
+        confirm(player, context, "leave", text("leave-label"), text("leave-body", "land" to view.land.name),
+            text("leave-confirm"), LandsUiChange.Leave, backTo = { openSettings(player, context) })
+    }
+
+    private fun openDelete(player: Player, context: LandsUiContext): Unit = withView(player, context) { view ->
+        if (LandsUiPermission.DELETE !in view.permissions) return@withView denied(player, context)
+        confirm(player, context, "delete", text("danger-title", "land" to view.land.name),
+            text("danger-body", "land" to view.land.name), text("delete-confirm-label"),
+            LandsUiChange.Delete(view.land.ownerId), backTo = { openSettings(player, context) }, typedName = view.land.name)
+    }
+
+    private fun openAreas(player: Player, context: LandsUiContext, requestedPage: Int = 0): Unit = withView(player, context) { view ->
+        val paging = page(view.areas, requestedPage)
+        show(player, PaperDialogScreen(
+            id = "lands.areas", title = text("region-list-title", "land" to view.land.name),
+            body = listOf(PaperDialogBody(text("management-areas-body"))),
+            buttons = paging.items.mapIndexed { index, area ->
+                button("area_$index", text(if (area.main) "main-area-entry" else "region-entry", "area" to area.name)) {
+                    open(player, context.copy(areaId = area.id))
+                }
+            } + pagination(paging) { openAreas(player, context, it) },
+            exitButton = back { open(player, context) }, columns = 2,
+        )) { openAreas(player, context, paging.index) }
     }
 
     private fun openEditText(player: Player, context: LandsUiContext, description: Boolean): Unit = withView(player, context) { view ->
@@ -450,7 +504,7 @@ internal class LandsManagementMenus(
         private const val ADMIN_PERMISSION = "lands.admin.command.edit"
         private val SETTINGS_PERMISSIONS = setOf(
             LandsUiPermission.RENAME, LandsUiPermission.DESCRIPTION, LandsUiPermission.TRANSFER,
-            LandsUiPermission.NATIVE_MENU, LandsUiPermission.LEAVE, LandsUiPermission.DELETE,
+            LandsUiPermission.LEAVE, LandsUiPermission.DELETE,
         )
     }
 }

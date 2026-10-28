@@ -71,14 +71,15 @@ class LandsUiInspectionTest : StringSpec({
                 checkNotNull(screen).buttons.any { it.id.value == "inspect" } shouldBe false
                 bodyText(checkNotNull(screen)).contains("Приват под ногами") shouldBe false
                 bodyText(checkNotNull(screen)).contains("Выбранное") shouldBe true
-                bodyText(checkNotNull(screen)).contains("Запривачено") shouldBe true
-                bodyText(checkNotNull(screen)).contains("/lands trust НИК") shouldBe true
+                bodyText(checkNotNull(screen)).contains("Чанки") shouldBe true
+                bodyText(checkNotNull(screen)).contains("Выбрать для расширения") shouldBe true
+                bodyText(checkNotNull(screen)).contains("/lands ") shouldBe false
                 val getBlock = checkNotNull(screen).buttons.single { it.id.value == "claim_get" }
                 getBlock.closeDialogBeforeAction shouldBe true
 
                 every { gateway.inspectedLand(player) } returns land
                 controller.openRoot(player)
-                checkNotNull(screen).buttons.first().id.value shouldBe "inspect"
+                checkNotNull(screen).buttons.take(2).map { it.id.value } shouldBe listOf("inspect", "claim_get")
                 bodyText(checkNotNull(screen)).contains("HeadPlayer") shouldBe false
                 checkNotNull(screen).buttons.first().onClick.handle(context)
                 val inspection = checkNotNull(screen)

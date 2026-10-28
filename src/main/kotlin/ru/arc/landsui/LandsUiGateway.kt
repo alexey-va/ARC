@@ -25,6 +25,9 @@ interface LandsUiGateway {
     fun inspectedLand(player: Player): LandsUiLand?
     fun administerCurrent(player: Player, landId: String, action: LandsUiAdminAction): LandsUiCommandResult
     fun currentClaim(player: Player): LandsUiClaim?
+    fun invitations(player: Player): List<LandsUiInvitation>
+    fun respondToInvitation(player: Player, invitation: LandsUiInvitation, accept: Boolean): java.util.concurrent.CompletableFuture<LandsUiChangeResult>
+    fun commandContext(player: Player, areaName: String?): LandsUiContext?
     fun managementView(player: Player, context: LandsUiContext): LandsUiManagementView?
     fun roleRules(player: Player, context: LandsUiContext, roleId: String): List<LandsUiRule>
     fun searchLands(player: Player, query: String): List<LandsUiLand>
@@ -54,8 +57,10 @@ enum class LandsUiAdminAction(val command: String, private val commandPermission
 class BukkitLandsUiGateway internal constructor(
     private val integration: LandsIntegration = LandsIntegration.of(ARC.instance),
     roleName: (me.angeschossen.lands.api.role.Role) -> String = { it.name },
+    roleEditing: LandsRoleEditing = LandsRoleEditing.DISABLED,
 ) : LandsUiGateway {
-    private val management = LandsUiManagementService(integration, roleName)
+    private val management = LandsUiManagementService(integration, roleName, roleEditing)
+    private val invitations = LandsUiInvitations(integration)
 
     override fun giveClaimBlock(player: Player): LandsUiClaimBlockResult {
         val landPlayer = integration.getLandPlayer(player.uniqueId) ?: return LandsUiClaimBlockResult.UNAVAILABLE
@@ -186,6 +191,14 @@ class BukkitLandsUiGateway internal constructor(
             LandsUiCommandResult.COMMAND_REJECTED
         }
     }
+
+    override fun invitations(player: Player): List<LandsUiInvitation> = invitations.list(player)
+
+    override fun respondToInvitation(player: Player, invitation: LandsUiInvitation, accept: Boolean) =
+        invitations.respond(player, invitation, accept)
+
+    override fun commandContext(player: Player, areaName: String?): LandsUiContext? =
+        management.commandContext(player, areaName)
 
     override fun managementView(player: Player, context: LandsUiContext): LandsUiManagementView? =
         management.managementView(player, context)

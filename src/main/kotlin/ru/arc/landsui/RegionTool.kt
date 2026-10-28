@@ -337,10 +337,8 @@ internal class RegionTool(private val settings: LandsUiSettings, private val gat
         val areas = land.allAreas.filterIsInstance<LandArea>().filter { !it.isDefault }.sortedBy { it.name }
         val buttons = areas.drop(page * 8).take(8).mapIndexed { index, area ->
             PaperDialogButton(PaperDialogActionId.of("region_$index"), text("region-entry", "area" to area.name),
-                width = 220, closeDialogBeforeAction = true, onClick = {
-                    val name = runCatching { regionToolName(area.name) }.getOrNull()
-                    gateway.selectAndExecute(player, landId, if (name == null) "lands menu" else "lands area $name menu")
-                })
+                width = 220, closeDialogBeforeAction = false,
+                onClick = { LandsUiModule.openArea(player, landId, area.ulid.toString()) })
         }.toMutableList()
         if (page > 0) buttons += action("previous_regions", "region-previous", close = false) { openRegions(player, landId, page - 1) }
         if (areas.size > (page + 1) * 8) buttons += action("next_regions", "region-next", close = false) { openRegions(player, landId, page + 1) }

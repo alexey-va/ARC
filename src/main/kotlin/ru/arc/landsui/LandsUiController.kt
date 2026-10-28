@@ -29,13 +29,37 @@ class LandsUiController(
     private val management by lazy {
         LandsManagementMenus(settings, gateway, ::openRoot, ::claimBlockButton)
     }
+    private val invitations = lazy { LandsInvitesMenus(settings, gateway, ::openRoot) }
 
-    fun close() = tasks.close()
+    fun close() {
+        tasks.close()
+        if (invitations.isInitialized()) invitations.value.close()
+    }
 
     fun openCurrent(player: Player) {
         val landId = gateway.currentLandId(player)
         if (landId != null) openInspection(player, landId) else openRoot(player)
     }
+
+    internal fun openCommand(player: Player, route: LandsUiCommandRoute) {
+        when (route.destination) {
+            LandsUiDestination.ROOT -> openRoot(player)
+            LandsUiDestination.CURRENT -> openCurrent(player)
+            LandsUiDestination.INVITES -> invitations.value.open(player)
+            LandsUiDestination.CREATE -> openCreate(player)
+            LandsUiDestination.GUIDE -> openGuide(player)
+            else -> {
+                val context = gateway.commandContext(player, route.areaName)
+                if (context == null) {
+                    player.sendMessage(text("command-target-unavailable"))
+                    openRoot(player)
+                } else management.openDestination(player, context, route.destination)
+            }
+        }
+    }
+
+    internal fun openArea(player: Player, landId: String, areaId: String) =
+        management.open(player, LandsUiContext(landId, LandsUiAccess.MEMBER, areaId))
 
     fun openRoot(player: Player) {
         val lands = gateway.lands(player)
@@ -58,27 +82,30 @@ class LandsUiController(
                 width = 400,
                 columnWeights = listOf(1, 1),
             ),
-            PaperDialogBody(text("root-body"), width = 400),
-            DialogTables.body(
-                rows = listOf("create", "edit", "claim", "trust", "untrust").map { command ->
-                    text("root-command-$command") to text("root-command-$command-help")
-                },
-                headers = text("root-command-heading") to text("root-command-help-heading"),
-                frame = DialogTables.Frame.COMMON,
-                width = 400,
-                columns = DialogTables.Columns.BALANCED,
-            ),
+            PaperDialogBody(Component.newline()),
+            DialogTables.framedBody(text("root-body"), frame = DialogTables.Frame.COMMON, width = 400),
         )
         if (lands.isEmpty()) body += PaperDialogBody(text("root-empty"))
-        val buttons = listOfNotNull(nearby?.let {
+        val inspect = nearby?.let {
             button("inspect", text("inspect-label"), text("inspect-tooltip")) {
                 val current = gateway.inspectedLand(player)
                 if (current == null) openRoot(player) else openInspection(player, current.id)
             }
-        }) + lands.mapIndexed { index, land ->
+        }
+        val create = button("create", text("create-label"), text("create-tooltip")) { openCreate(player) }
+        val guide = button("guide", text("guide-label"), text("guide-tooltip")) { openGuide(player) }
+        val adminSearch = if (player.hasPermission("lands.admin.command.edit")) {
+            button("admin_search", text("admin-search-label"), text("admin-search-tooltip")) { management.openSearch(player) }
+        } else null
+        val inbox = if (gateway.invitations(player).isNotEmpty()) {
+            button("invites", text("invites-root-label")) { invitations.value.open(player) }
+        } else null
+        val technical = listOfNotNull(inspect) + listOf(claimBlockButton(player), create, guide) + listOfNotNull(inbox, adminSearch)
+        val buttons = technical + lands.mapIndexed { index, land ->
             button(
                 "land_$index",
-                text(if (land.selected) "land-selected-label" else "land-label", "land" to land.name),
+                text(if (land.selected) "land-selected-label" else "land-label", "land" to land.name,
+                    "owner" to (gateway.playerName(land.ownerId) ?: settings.text("owner-unknown"))),
                 text(
                     "land-tooltip",
                     "chunks" to land.chunks.toString(),
@@ -88,15 +115,7 @@ class LandsUiController(
                     "balance" to amountFormat.format(land.balance),
                 ),
             ) { openDetails(player, land.id) }
-        } + listOf(
-            claimBlockButton(player),
-            button("create", text("create-label"), text("create-tooltip")) { openCreate(player) },
-            button("guide", text("guide-label"), text("guide-tooltip")) { openGuide(player) },
-        ) + (if (player.hasPermission("lands.admin.command.edit")) listOf(
-            button("admin_search", text("admin-search-label"), text("admin-search-tooltip")) {
-                management.openSearch(player)
-            },
-        ) else emptyList())
+        }
         show(
             player,
             PaperDialogScreen(

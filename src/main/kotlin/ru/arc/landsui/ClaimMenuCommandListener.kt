@@ -12,11 +12,21 @@ import java.util.Locale
 internal class ClaimMenuCommandListener(
     private val canOpenClaimMenu: () -> Boolean,
     private val openClaimMenu: (Player) -> Unit,
+    private val openLandsMenu: (Player, LandsUiCommandRoute) -> Unit = LandsUiModule::openCommand,
     private val huskHomesEnabled: () -> Boolean = { Bukkit.getPluginManager().isPluginEnabled(HUSK_HOMES_PLUGIN) },
+    private val legacyShortcutsEnabled: () -> Boolean = { true },
 ) : Listener, AutoCloseable {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     fun onPlayerCommand(event: PlayerCommandPreprocessEvent) {
+        val landsRoute = landsUiCommandRoute(event.message)
+        if (landsRoute != null) {
+            if (!canOpenClaimMenu()) return
+            event.isCancelled = true
+            openLandsMenu(event.player, landsRoute)
+            return
+        }
+        if (!legacyShortcutsEnabled()) return
         when (claimCommandRoute(event.message)) {
             ClaimCommandRoute.OPEN_CLAIMS -> {
                 if (event.player.hasPermission(WAND_BYPASS_PERMISSION) || !canOpenClaimMenu()) return

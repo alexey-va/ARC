@@ -1,10 +1,12 @@
 # Lands settlement dialogs
 
 `/mm` → «Приваты», `/privat` and `/arc lands` open the same native Paper dialog.
-The root lists the viewer's settlements and a separate «Приват под ногами» entry.
+The first complete root row holds «Приват под ногами» and «Выдать блок привата»
+when a nearby land exists. Creation and guidance precede the settlement list.
+Settlement buttons show the literal land name followed by the owner in parentheses.
 Opening any settlement card preserves the selected land for subsequent Lands commands;
-`/lands edit НАЗВАНИЕ` remains the explicit selection action.
-Outside protected land the root explains why inspection is unavailable.
+The explicit «Выбрать для расширения» action and `/lands edit НАЗВАНИЕ` change
+that selection. Outside protected land the current-land inspection action is omitted.
 
 Holding a native Lands claim block while standing inside a land you own or belong to shows a
 personal six-button world menu: add a player, members, rules, territory, settings
@@ -52,12 +54,12 @@ focused geometry and dialog-routing tests.
   Self, existing area members and duplicate UUIDs are filtered before paging.
   Manual nickname entry remains available on every page.
 - Rules: the viewer's permissions; role-specific flags for building, containers,
-  doors, trapdoors, mechanisms, animals, PvP and villagers; natural flags for
+  doors, trapdoors, mechanisms, animals and villagers; natural flags for
   TNT, fire spread and creature spawning.
 - Territory: home placement, current-chunk claim/unclaim and the existing
-  main-block guide. Home teleport is a separate overview action; this page has no
+  claim-block expansion guide. Home teleport is a separate overview action; this page has no
   teleport or additional-region selector.
-- Settings: rename, Lands' entry/title message, native advanced settings,
+- Settings: rename, Lands' entry/title message,
   leaving, ownership-transfer proposal and deletion.
 - Admin: explicit mode for a settlement, with search by land name or
   head/member nickname. It requires `lands.admin.command.edit`; each operation
@@ -92,10 +94,12 @@ again. Deletion and transfer bind the owner snapshot and require typed land-name
 confirmation in the dialog. Lands ownership transfer remains an offer that the
 recipient must accept.
 
-The integration is verified against the deployed Lands 8.6.6 JAR. Native player
+The integration is checked against the exact deployed Lands 8.9.6 JAR. Native player
 commands preserve Lands' own limits, economy and mutation checks; accepting a
-command is not reported as completed mutation. Role flags are read-only in ARC; the native settings button opens Lands for
-edits, preserving its configured role allow-edit lists and system-role policy.
+command is not reported as completed mutation. Role ACTION flags are edited in ARC dialogs. `LandsRoleEditing` binds the audited
+8.9.6 native allow-toggle-flags, holder, owner/tenant/priority and event checks
+once at startup. Unknown versions or mismatched bindings leave only role editing
+read-only with an actionable warning; they cannot bypass native policy.
 Natural-flag edits preserve native actor permission, toggle permission, display,
 subarea/war restrictions and persistence rules.
 No console command or administrator impersonation is used.
@@ -109,5 +113,47 @@ Focused menu verification: `./gradlew :test --tests ru.arc.landsui.ClaimLandMenu
 --tests ru.arc.landsui.ClaimBlockMenuInputTest --tests ru.arc.landsui.LandsUiControllerTest
 --tests ru.arc.landsui.LandsUiInspectionTest --tests ru.arc.landsui.LandsUiConfigTest
 --tests ru.arc.landsui.LandsManagementMenusTest --tests ru.arc.landsui.LandsUiManagementGatewayTest
--PlandsJar=/path/to/Lands-8.6.6.jar`. A build/test pass does not establish live
+-PlandsJar=/path/to/Lands-8.9.6.jar`. A build/test pass does not establish live
 activation or ordinary-client visual acceptance; report those separately.
+
+
+## Command entrypoints and guidance (2026-10-28)
+
+`ClaimMenuCommandListener` uses `LandsUiCommandRoute` to route `/trust`, `/untrust`,
+`/lands`, `/land`, their `lands:` namespace, and incomplete member actions into
+ARC dialogs. Menu paths such as `/lands member menu`, `/lands area AREA menu`,
+`/lands menu land roles`, `options`, `claims`, and `areas` reuse the same screens.
+`/lands invites` and `/lands menu personal invites` use the native dialog inbox. A nonempty inbox also appears in the root utility
+controls. Responses revalidate the invitation snapshot and use the native command
+preflight for bans, limits and trust-owner policy; a dispatched request is not
+reported as completed membership or ownership change.
+Explicit action arguments remain Lands commands; unrelated namespaces, storage
+inventories, administrative commands and unrelated Lands modules are preserved.
+
+`LandsUiManagementService.commandContext` resolves the configured edit-by-location
+policy or the existing edit land, then the exact requested area. Opening a page
+never selects another land. A missing/revoked target returns to the root; it cannot
+fall back to another settlement. The overview's explicit selection button is the
+only new action that changes which settlement is used for expansion.
+
+The root and its guides explain the next menu action instead of listing a command
+manual. Regular announcement defaults and HelpCenter guidance use verified menu
+entrypoints. Runtime copies preserve per-node presentation and the single Spawn
+announcement producer; Survival continues receiving the network rotation.
+
+Source checks use the exact unmodified Lands 8.9.6 runtime JAR (SHA-256
+`b0057ed700bda1ed190beb4b7d8e38ead8f2c4221999d8021f1445947ad273ca`).
+Focused checks include `LandsUiCommandRouteTest`, `LandsUiCommandMenusTest`,
+`LandsUiInvitationsTest`, the existing Lands UI tests, `DenizenReplacementSubCommandsTest`,
+`HelpCenterConfigTest` and `AnnounceManagerReloadTest`. Source tests, config/JAR
+delivery, JVM activation and observation in a real Minecraft client remain
+separate evidence.
+
+
+Economic scope: this change preserves native prices, claim limits, membership
+limits, fees and rewards. Direct before/after delta is zero Vault, zero premium
+tokens, zero EliteMobs crystals and zero new item/XP rewards. Faster access can
+change use of existing actions; that usage effect was not measured. The unrelated
+EconomyShopGUI SELL-to-contract transition is unchanged. The book-application
+help fallback now describes the existing `EliteEnchantingController.applyDirect`
+path; no payment logic was changed.

@@ -22,17 +22,23 @@ class LandsUiConfigTest : StringSpec({
             settings.maxListedPlayers shouldBe 12
             fun plain(key: String) = PlainTextComponentSerializer.plainText()
                 .serialize(MiniMessage.miniMessage().deserialize(settings.text(key)))
-            plain("root-body").startsWith("Поселение — твой приват. Чанк — участок 16×16 блоков.") shouldBe true
+            plain("root-body").contains("Новый приват: на свободной земле нажми «Создать поселение».") shouldBe true
+            plain("root-body").contains("Выбрать для расширения") shouldBe true
+            plain("root-body").contains("/lands ") shouldBe false
             plain("table-settlements-label") shouldBe "Поселения"
             plain("table-protected-label") shouldBe "Чанки"
-            settings.text("guide-commands-body").contains("/lands edit НАЗВАНИЕ") shouldBe true
-            settings.text("guide-commands-body").contains("/lands menu") shouldBe true
+            plain("root-title") shouldBe "Приваты"
+            settings.text("guide-commands-body").contains("«Участники»") shouldBe true
+            settings.text("guide-commands-body").contains("/lands ") shouldBe false
             settings.text("guide-body").contains("Выбранное поселение", ignoreCase = true) shouldBe true
             settings.text("guide-body").contains("Открытие карточки сохраняет этот выбор") shouldBe true
             settings.text("add-body").contains("Страница <page> из <pages>") shouldBe true
             settings.text("add-body").contains("до <limit> игроков на странице") shouldBe true
-            listOf("root-body", "guide-body", "guide-expand-body", "region-select-land").forEach { key ->
-                withClue(key) { settings.text(key).contains("/lands edit НАЗВАНИЕ") shouldBe true }
+            listOf("guide-body", "guide-expand-body", "region-select-land").forEach { key ->
+                withClue(key) {
+                    settings.text(key).contains("Выбрать для расширения") shouldBe true
+                    settings.text(key).contains("/lands edit") shouldBe false
+                }
             }
             mapOf(
                 "rules-label" to "<#86dcf1>Разрешения ›",

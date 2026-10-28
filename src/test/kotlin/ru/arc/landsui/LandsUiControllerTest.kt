@@ -42,7 +42,7 @@ class LandsUiControllerTest : StringSpec({
             every { gateway.currentLandId(player) } returns land.id
             every { gateway.land(player, land.id) } returns land
             every { gateway.managementView(player, context) } returns landsUiTestView(
-                context, land, permissions = setOf(LandsUiPermission.TRUST, LandsUiPermission.NATIVE_MENU),
+                context, land, permissions = setOf(LandsUiPermission.TRUST, LandsUiPermission.RENAME),
             )
             every { gateway.managementView(player, currentContext) } returns landsUiTestView(currentContext, land)
             val settings = try {
@@ -119,7 +119,7 @@ class LandsUiControllerTest : StringSpec({
             val memberContext = LandsUiContext(land.id, LandsUiAccess.MEMBER)
             val currentContext = LandsUiContext(land.id, LandsUiAccess.CURRENT)
             every { gateway.managementView(player, memberContext) } returns landsUiTestView(
-                memberContext, land, permissions = setOf(LandsUiPermission.TRUST, LandsUiPermission.NATIVE_MENU),
+                memberContext, land, permissions = setOf(LandsUiPermission.TRUST, LandsUiPermission.RENAME),
             )
             every { gateway.managementView(player, currentContext) } returns landsUiTestView(currentContext, land)
             val settings = try {
@@ -317,7 +317,7 @@ class LandsUiControllerTest : StringSpec({
             var mainView = landsUiTestView(mainContext, land, permissions = setOf(
                 LandsUiPermission.TRUST, LandsUiPermission.SPAWN, LandsUiPermission.BORDERS,
                 LandsUiPermission.CLAIM, LandsUiPermission.UNCLAIM, LandsUiPermission.SET_SPAWN,
-                LandsUiPermission.NATIVE_MENU,
+                LandsUiPermission.RENAME,
             )).copy(currentClaim = LandsUiClaim(land.id, player.world.uid, 0, 0))
             var currentView = landsUiTestView(currentContext.copy(areaId = "main"), land)
             every { gateway.managementView(player, memberContext) } answers { mainView }
@@ -354,12 +354,12 @@ class LandsUiControllerTest : StringSpec({
                     val card = checkNotNull(screen)
                     card.id shouldBe "lands.details"
                     card.buttons.map { it.id.value } shouldBe listOf(
-                        "members", "add_member", "rules", "roles", "territory", "spawn", "settings", "claim_get", "admin",
+                        "members", "add_member", "rules", "roles", "territory", "spawn", "settings", "select", "claim_get", "admin",
                     )
                     val plain = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
                     card.buttons.map { plain.serialize(it.label) } shouldBe listOf(
                         "Участники ›", "Добавить игрока ›", "Разрешения ›", "Роли ›", "Территория ›",
-                        "Спавн поселения ›", "Управление ›", "Выдать блок привата", "[Админ] Управление ›",
+                        "Спавн поселения ›", "Управление ›", "Выбрать для расширения", "Выдать блок привата", "[Админ] Управление ›",
                     )
                     controller.openCurrent(player)
                     assertSameCard(card)
@@ -391,7 +391,7 @@ class LandsUiControllerTest : StringSpec({
                     every { gateway.change(player, mainContext, LandsUiChange.Spawn) } returns LandsUiChangeResult.DENIED
                     teleport.onClick.handle(click)
                     checkNotNull(screen).buttons.map { it.id.value } shouldBe
-                        listOf("members", "rules", "roles", "territory", "claim_get", "admin")
+                        listOf("members", "rules", "roles", "territory", "select", "claim_get", "admin")
                     verify(exactly = 2) { gateway.change(player, mainContext, LandsUiChange.Spawn) }
 
                     // A current-land entry keeps the actual subarea instead of silently using the default region.
@@ -406,7 +406,7 @@ class LandsUiControllerTest : StringSpec({
                     subareaText.contains("Ферма") shouldBe true
                     subareaText.contains("Участник") shouldBe true
                     subarea.buttons.map { it.id.value } shouldBe
-                        listOf("members", "rules", "roles", "territory", "claim_get", "admin")
+                        listOf("members", "rules", "roles", "territory", "select", "claim_get", "admin")
                     controller.openPanelAction(player, land.id, LandsUiPanelAction.OVERVIEW)
                     assertSameCard(subarea)
                     subarea.buttons.single { it.id.value == "members" }.onClick.handle(click)

@@ -1,5 +1,6 @@
 package ru.arc.landsui
 
+import com.google.gson.GsonBuilder
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
@@ -18,10 +19,11 @@ import ru.arc.paper.menu.PaperDialogClickContext
 import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import java.nio.file.Files
+import java.nio.file.Path
 import java.util.UUID
 
 class LandsManagementMenusTest : StringSpec({
-    "role rules stay read-only while natural flags and member actions use the management flow" {
+    "role rules expose only editable actions while natural flags and member actions use the management flow" {
         MockBukkitTestRuntime.open().use {
             val data = Files.createTempDirectory("lands-management")
             val playerId = UUID.randomUUID()
@@ -59,8 +61,12 @@ class LandsManagementMenusTest : StringSpec({
             val readonlyRoleRules = readonlyRuleLabels.map { (key, _) -> LandsUiRule(key, true, false) }
             val gateway = mockk<LandsUiGateway>(relaxed = true)
             every { gateway.managementView(player, context) } returns view
-            every { gateway.roleRules(player, context, "builder") } returns readonlyRoleRules
-            every { gateway.change(player, context, LandsUiChange.NativeMenu) } returns LandsUiChangeResult.DISPATCHED
+            var roleRules = readonlyRoleRules
+            every { gateway.roleRules(player, context, "builder") } answers { roleRules }
+            every { gateway.change(player, context, LandsUiChange.RoleFlag("builder", "block_break", true)) } answers {
+                roleRules = roleRules.map { if (it.key == "block_break") it.copy(enabled = false) else it }
+                LandsUiChangeResult.APPLIED
+            }
             every {
                 gateway.change(player, context, LandsUiChange.NaturalFlag("fire_spread", true))
             } returns LandsUiChangeResult.APPLIED
@@ -101,10 +107,28 @@ class LandsManagementMenusTest : StringSpec({
                 roleScreen.body.last().width shouldBe 320
                 val roleText = roleScreen.body.joinToString("\n") { plainText(it.text) }
                 readonlyRuleLabels.forEach { (_, label) -> roleText.contains(label) shouldBe true }
-                roleScreen.buttons.map { it.id.value } shouldBe listOf("native")
-                roleScreen.buttons.single().closeDialogBeforeAction shouldBe true
-                roleScreen.buttons.single().onClick.handle(click)
-                verify { gateway.change(player, context, LandsUiChange.NativeMenu) }
+                roleScreen.buttons shouldBe emptyList()
+                verify(exactly = 0) { gateway.change(player, context, LandsUiChange.NativeMenu) }
+
+                roleRules = readonlyRoleRules.map { if (it.key == "block_break") it.copy(editable = true) else it }
+                checkNotNull(screen).exitButton!!.onClick.handle(click)
+                checkNotNull(screen).buttons.single { it.id.value == "role_0" }.onClick.handle(click)
+                checkNotNull(screen).buttons.map { it.id.value } shouldBe listOf("flag_0")
+                plainText(checkNotNull(screen).buttons.single().label) shouldBe "✔ Разрушение блоков · разрешено"
+                checkNotNull(screen).buttons.single().closeDialogBeforeAction shouldBe false
+                checkNotNull(screen).buttons.single().onClick.handle(click)
+                verify { gateway.change(player, context, LandsUiChange.RoleFlag("builder", "block_break", true)) }
+                checkNotNull(screen).id shouldBe "lands.role"
+                plainText(checkNotNull(screen).buttons.single().label) shouldBe "✕ Разрушение блоков · запрещено"
+
+                val exports = linkedMapOf("role-mixed" to exportLandsDialogScreen(checkNotNull(screen)))
+                roleRules = roleRules.map { it.copy(editable = true) }
+                checkNotNull(screen).exitButton!!.onClick.handle(click)
+                checkNotNull(screen).buttons.single { it.id.value == "role_0" }.onClick.handle(click)
+                exports["role-editor"] = exportLandsDialogScreen(checkNotNull(screen))
+                val output = Path.of("build/reports/lands-command-ui/roles.json")
+                Files.createDirectories(output.parent)
+                Files.writeString(output, GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create().toJson(exports))
 
                 checkNotNull(screen).exitButton!!.onClick.handle(click)
                 checkNotNull(screen).exitButton!!.onClick.handle(click)

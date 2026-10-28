@@ -44,6 +44,44 @@ class LandsUiManagementGatewayTest : StringSpec({
         }
     }
 
+    "command menus preserve selected land and resolve named areas without selecting" {
+        val fixture = adminFixture()
+        every { fixture.landPlayer.getEditLand(false) } returns fixture.land
+        val playerId = fixture.player.uniqueId
+        every { fixture.land.isTrusted(playerId) } returns true
+        val gateway = BukkitLandsUiGateway(fixture.integration)
+        gateway.commandContext(fixture.player, "Green_House") shouldBe
+            LandsUiContext(fixture.landId, LandsUiAccess.MEMBER, fixture.areaId)
+        gateway.commandContext(fixture.player, "Missing") shouldBe null
+        verify(exactly = 0) { fixture.landPlayer.setEditLand(any()) }
+        verify(exactly = 0) { fixture.player.performCommand(any()) }
+    }
+
+    "command menus cannot promote a foreign selected land without native admin authority" {
+        val fixture = adminFixture()
+        every { fixture.landPlayer.getEditLand(false) } returns fixture.land
+        val playerId = fixture.player.uniqueId
+        every { fixture.land.isTrusted(playerId) } returns false
+        every { fixture.player.hasPermission("lands.admin.command.edit") } returns false
+        BukkitLandsUiGateway(fixture.integration).commandContext(fixture.player, "Green_House") shouldBe null
+        verify(exactly = 0) { fixture.landPlayer.setEditLand(any()) }
+    }
+
+    "location mode does not fall back to the edit land while the player is in wilderness" {
+        val fixture = adminFixture()
+        val location = mockk<Location>()
+        val world = mockk<World>()
+        every { fixture.mainConfig.getBoolean("general.edit-by-loc") } returns true
+        every { fixture.player.location } returns location
+        every { location.world } returns world
+        every { location.blockX } returns 32
+        every { location.blockZ } returns 64
+        every { fixture.integration.getLandByUnloadedChunk(world, 2, 4) } returns null
+        BukkitLandsUiGateway(fixture.integration).commandContext(fixture.player, null) shouldBe null
+        verify(exactly = 0) { fixture.landPlayer.getEditLand(any()) }
+        verify(exactly = 0) { fixture.landPlayer.setEditLand(any()) }
+    }
+
     "admin trust targets the selected subarea with the area-scoped native permission" {
         val fixture = adminFixture()
         val command = "lands area Green_House member trust NewBuilder"

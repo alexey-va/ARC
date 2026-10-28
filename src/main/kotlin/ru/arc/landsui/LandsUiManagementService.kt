@@ -1,6 +1,8 @@
 package ru.arc.landsui
 
 import me.angeschossen.lands.api.LandsIntegration
+import me.angeschossen.lands.api.events.player.role.PlayerToggleRoleFlagEvent
+import me.angeschossen.lands.api.flags.enums.RoleFlagCategory
 import me.angeschossen.lands.api.framework.holder.Changeable
 import me.angeschossen.lands.api.flags.type.Flags
 import me.angeschossen.lands.api.land.Area
@@ -19,7 +21,24 @@ import java.util.UUID
 internal class LandsUiManagementService(
     private val integration: LandsIntegration,
     private val roleName: (Role) -> String,
+    private val roleEditing: LandsRoleEditing = LandsRoleEditing.DISABLED,
 ) {
+    fun commandContext(player: Player, areaName: String?): LandsUiContext? {
+        val landPlayer = integration.getLandPlayer(player.uniqueId) ?: return null
+        val land = if (editByLocationEnabled()) currentLand(player) else landPlayer.getEditLand(false)
+        if (land == null || !land.exists()) return null
+        val access = when {
+            land.isTrusted(player.uniqueId) -> LandsUiAccess.MEMBER
+            player.hasPermission(ADMIN_EDIT_PERMISSION) -> LandsUiAccess.ADMIN
+            else -> return null
+        }
+        val area = if (areaName == null) land.defaultArea else areas(land).firstOrNull {
+            it.name.equals(areaName, ignoreCase = true) ||
+                CMDTarget.parseCMDName(it.name).equals(areaName, ignoreCase = true)
+        } ?: return null
+        return LandsUiContext(land.ulid.toString(), access, area.ulid.toString())
+    }
+
     fun managementView(player: Player, context: LandsUiContext): LandsUiManagementView? {
         val landPlayer = integration.getLandPlayer(player.uniqueId) ?: return null
         val land = resolveLand(player, landPlayer, context) ?: return null
@@ -93,7 +112,8 @@ internal class LandsUiManagementService(
             .filterIsInstance<me.angeschossen.lands.api.flags.type.RoleFlag>()
             .filter { it.name in ROLE_RULE_KEYS && it.isDisplay && it.shouldDisplay(area, landPlayer) }
             .map { flag ->
-                LandsUiRule(flag.name, role.hasFlag(flag), false)
+                LandsUiRule(flag.name, role.hasFlag(flag), context.access != LandsUiAccess.CURRENT &&
+                    roleEditing.canEdit(player, landPlayer, land, area, role, flag))
             }
             .toList()
     }
@@ -271,6 +291,7 @@ internal class LandsUiManagementService(
                 dispatch(player, landPlayer, land, "lands delete confirm")
             }
             is LandsUiChange.NaturalFlag -> changeNaturalFlag(player, context, landPlayer, land, area, change)
+            is LandsUiChange.RoleFlag -> changeRoleFlag(player, context, landPlayer, land, area, change)
         }
     }
 
@@ -316,6 +337,37 @@ internal class LandsUiManagementService(
         val changeable = area as? Changeable ?: return LandsUiChangeResult.REJECTED
         area.toggleNaturalFlag(flag)
         if (area.hasNaturalFlag(flag) == change.expected) return LandsUiChangeResult.REJECTED
+        changeable.saveAndPublishToRedis()
+        return LandsUiChangeResult.APPLIED
+    }
+
+    private fun changeRoleFlag(
+        player: Player,
+        context: LandsUiContext,
+        landPlayer: LandPlayer,
+        land: Land,
+        area: Area,
+        change: LandsUiChange.RoleFlag,
+    ): LandsUiChangeResult {
+        if (change.key !in ROLE_RULE_KEYS) return LandsUiChangeResult.INVALID
+        val flag = integration.flagRegistry.getRole(change.key) ?: return LandsUiChangeResult.NOT_FOUND
+        val role = roles(area).firstOrNull { roleId(it) == change.roleId } ?: return LandsUiChangeResult.NOT_FOUND
+        if (role.hasFlag(flag) != change.expected) return LandsUiChangeResult.STALE
+        if (flag.category != RoleFlagCategory.ACTION || !flag.isDisplay || !flag.shouldDisplay(area, landPlayer) ||
+            !roleEditing.canEdit(player, landPlayer, land, area, role, flag)
+        ) return LandsUiChangeResult.DENIED
+        if (!flag.updatePredicate.test(role)) return LandsUiChangeResult.DENIED
+        val changeable = role as? Changeable ?: return LandsUiChangeResult.REJECTED
+        if (roleEditing.isCancelled(PlayerToggleRoleFlagEvent(role, flag, landPlayer))) return LandsUiChangeResult.REJECTED
+        // Event listeners may revoke access, replace the role, or alter its state synchronously.
+        if (resolveLand(player, landPlayer, context) !== land || resolveArea(player, land, context) !== area ||
+            roles(area).none { it === role } || role.hasFlag(flag) != change.expected
+        ) return LandsUiChangeResult.STALE
+        if (!roleEditing.canEdit(player, landPlayer, land, area, role, flag) || !flag.updatePredicate.test(role)) {
+            return LandsUiChangeResult.DENIED
+        }
+        role.toggleFlag(flag)
+        if (role.hasFlag(flag) == change.expected) return LandsUiChangeResult.REJECTED
         changeable.saveAndPublishToRedis()
         return LandsUiChangeResult.APPLIED
     }

@@ -1,29 +1,18 @@
-# =============================================================================
-# announce.yml — ротация объявлений в чат (AnnounceModule).
-# config.delay-seconds — пауза между циклами выбора сообщения.
-# messages.<id> — одно объявление: type, weight, conditions, servers (spawn|survival|…).
-# Ротация только на main-server (spawn). servers: all — доставка на все ноды через Redis.
-# =============================================================================
-
+# Ротация объявлений только на main-server (spawn), раз в 30 минут.
+# Три строки, по одной пустой строке сверху и снизу. Внешний отступ 0 px.
+# U+E532: arc:announce_bell_large, height 27 / ascent 26, advance 25.
+# Пиксельные пробелы U+F0F01..05: колонка значка 28 px, текста 31 px; глифа по центру (1 + 25 + 5 px).
+# Глифа находится на третьей строке и занимает всю высоту блока.
+# Клик по двум строкам текста открывает соответствующее меню/справку.
+# Нижняя строка показывает прямую команду темы; все три строки открывают её.
+# Глифа и отступы некликабельны.
+# Все темы имеют одинаковый вес 1; parkour исключён из получателей.
 config:
-  # Интервал между показами (секунды). spawn: 1800 = 30 мин
   delay-seconds: 1800
 messages:
   '1':
-    message: '<dark_gray>● <gray>Варп с данжами: <gold>/ag'
-    servers: all
-    player-specific: false
-    cache: true
-    conditions:
-      - type: permission
-        permission: arc.chat.notify
-    type: chat
-    serialization-type: mini_message
-    weight: 1
-    personal: false
-  '3':
-    message: '<dark_gray>● <gray>Приватить землю можно <green>блоками<gray> из: <gold>/kit start'
-    servers: all
+    message: '<newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#F28E85>Исследуйте данжи</#F28E85></hover></click><newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Откройте «Данжи» в главном меню.</#E8DFD2></hover></click><newline>󰼁<white></white>󰼃󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Меню сервера — </#E8DFD2><#FFB2A8>/mm</#FFB2A8></hover></click><newline>'
+    servers: [spawn, survival]
     player-specific: false
     cache: true
     conditions:
@@ -34,8 +23,8 @@ messages:
     weight: 1
     personal: false
   '4':
-    message: '<gold>Квесты <white>· Монеты и опыт путей выдаются автоматически.<newline>  <click:run_command:"/quests"><yellow>/quests</yellow></click> <white>— задания на сегодня.<newline>  <click:run_command:"/rank"><yellow>/rank</yellow></click> <white>— условия и преимущества следующего ранга.'
-    servers: all
+    message: '<newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#F0CE75>Выполняйте квесты</#F0CE75></hover></click><newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Откройте «Квесты» в главном меню.</#E8DFD2></hover></click><newline>󰼁<white></white>󰼃󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Меню сервера — </#E8DFD2><#FFE3A1>/mm</#FFE3A1></hover></click><newline>'
+    servers: [spawn, survival]
     player-specific: false
     cache: true
     conditions:
@@ -45,10 +34,21 @@ messages:
     serialization-type: mini_message
     weight: 1
     personal: false
-  # '6'/'7' — survival-only; rotation runs on spawn only.
-  '8':
-    message: '<dark_gray>● <gray>Если застряли, пишите: <gold>/stuck'
-    servers: all
+  '6':
+    message: '<newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#75D3C6>Путешествуйте на маунтах</#75D3C6></hover></click><newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Откройте «Маунты» в главном меню.</#E8DFD2></hover></click><newline>󰼁<white></white>󰼃󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Меню сервера — </#E8DFD2><#A0E7DB>/mm</#A0E7DB></hover></click><newline>'
+    servers: [spawn, survival]
+    player-specific: false
+    cache: true
+    conditions:
+      - type: permission
+        permission: arc.chat.notify
+    type: chat
+    serialization-type: mini_message
+    weight: 1
+    personal: false
+  '7':
+    message: '<newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#B9D881>Торгуйте с другими игроками</#B9D881></hover></click><newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Торговля → Аукцион.</#E8DFD2></hover></click><newline>󰼁<white></white>󰼃󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Меню сервера — </#E8DFD2><#D1EBA6>/mm</#D1EBA6></hover></click><newline>'
+    servers: [spawn, survival]
     player-specific: false
     cache: true
     conditions:
@@ -59,20 +59,8 @@ messages:
     weight: 1
     personal: false
   '9':
-    message: '<dark_gray>● <gray>Гайды по серверу: <gold>/help'
-    servers: all
-    player-specific: false
-    cache: true
-    conditions:
-      - type: permission
-        permission: arc.chat.notify
-    type: chat
-    serialization-type: mini_message
-    weight: 1
-    personal: false
-  '10':
-    message: '<dark_gray>● <gray>Меню сервера: <gold>/m'
-    servers: all
+    message: '<newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#91BDF5>Не знаете, с чего начать?</#91BDF5></hover></click><newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Поиск: опишите, что хотите сделать.</#E8DFD2></hover></click><newline>󰼁<white></white>󰼃󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Меню сервера — </#E8DFD2><#B9D6FF>/mm</#B9D6FF></hover></click><newline>'
+    servers: [spawn, survival]
     player-specific: false
     cache: true
     conditions:
@@ -83,8 +71,8 @@ messages:
     weight: 1
     personal: false
   '11':
-    message: '<dark_gray>● <gray>Общая ферма: <gold>/farm'
-    servers: all
+    message: '<newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#8ED18B>Помогайте на общей ферме</#8ED18B></hover></click><newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Активности → Фермы.</#E8DFD2></hover></click><newline>󰼁<white></white>󰼃󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Меню сервера — </#E8DFD2><#B5E7AC>/mm</#B5E7AC></hover></click><newline>'
+    servers: [spawn, survival]
     player-specific: false
     cache: true
     conditions:
@@ -95,8 +83,8 @@ messages:
     weight: 1
     personal: false
   '12':
-    message: '<dark_gray>● <gray>Общая шахта: <gold>/mine'
-    servers: all
+    message: '<newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#C4A3ED>Повышайте свой ранг</#C4A3ED></hover></click><newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Откройте «Ранги» в главном меню.</#E8DFD2></hover></click><newline>󰼁<white></white>󰼃󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Меню сервера — </#E8DFD2><#DDC4FF>/mm</#DDC4FF></hover></click><newline>'
+    servers: [spawn, survival]
     player-specific: false
     cache: true
     conditions:
@@ -107,8 +95,8 @@ messages:
     weight: 1
     personal: false
   '13':
-    message: '<dark_gray>● <gray>Варп в <dark_aqua>энд<gray>: <dark_aqua>/warp end'
-    servers: all
+    message: '<newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#78CFC3>Найдите место для нового дома</#78CFC3></hover></click><newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Телепортация → Случайное место.</#E8DFD2></hover></click><newline>󰼁<white></white>󰼃󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Меню сервера — </#E8DFD2><#A7E6DB>/mm</#A7E6DB></hover></click><newline>'
+    servers: [spawn, survival]
     player-specific: false
     cache: true
     conditions:
@@ -116,11 +104,11 @@ messages:
         permission: arc.chat.notify
     type: chat
     serialization-type: mini_message
-    weight: 3
+    weight: 1
     personal: false
   '14':
-    message: '<dark_gray>● <gray>Чтобы создать новое поселение пишите: <gold>/lands create <gray>[имя]'
-    servers: all
+    message: '<newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/privat"><hover:show_text:"Нажмите, чтобы открыть меню приватов."><#9BD5B0>Создайте своё поселение</#9BD5B0></hover></click><newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/privat"><hover:show_text:"Нажмите, чтобы открыть меню приватов."><#E8DFD2>Создание, территория и участники — в меню.</#E8DFD2></hover></click><newline>󰼁<white></white>󰼃󰼁<click:run_command:"/privat"><hover:show_text:"Нажмите, чтобы открыть меню приватов."><#E8DFD2>Меню приватов — </#E8DFD2><#C0EAD0>/privat</#C0EAD0></hover></click><newline>'
+    servers: [spawn, survival]
     player-specific: false
     cache: true
     conditions:
@@ -128,26 +116,71 @@ messages:
         permission: arc.chat.notify
     type: chat
     serialization-type: mini_message
-    weight: 30
+    weight: 1
     personal: false
-
-  #'13':
-  #  message: '<dark_gray>● <gray>Бесплатный VIP: <gold>/free'
-  #  servers: all
-  #  player-specific: false
-  #  cache: true
-  #  conditions:
-  #  - type: permission
-  #    permission: arc.chat.notify
-  #  - type: permission
-  #    permission: '!group.vip'
-  #  type: chat
-  #  serialization-type: mini_message
-  #  weight: 1
-  #  personal: false
-  '2':
-    message: '<dark_gray>● <gray>Добавить игрока в приват: <gold>/trust <white>[имя]'
-    servers: all
+  '15':
+    message: '<newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E9B17F>Зарабатывайте привычными делами</#E9B17F></hover></click><newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Откройте «Работы» в главном меню.</#E8DFD2></hover></click><newline>󰼁<white></white>󰼃󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Меню сервера — </#E8DFD2><#FFD2A8>/mm</#FFD2A8></hover></click><newline>'
+    servers: [spawn, survival]
+    player-specific: false
+    cache: true
+    conditions:
+      - type: permission
+        permission: arc.chat.notify
+    type: chat
+    serialization-type: mini_message
+    weight: 1
+    personal: false
+  '16':
+    message: '<newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#83C9E8>Развивайте навыки персонажа</#83C9E8></hover></click><newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Откройте «Навыки» в главном меню.</#E8DFD2></hover></click><newline>󰼁<white></white>󰼃󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Меню сервера — </#E8DFD2><#B0E1F4>/mm</#B0E1F4></hover></click><newline>'
+    servers: [spawn, survival]
+    player-specific: false
+    cache: true
+    conditions:
+      - type: permission
+        permission: arc.chat.notify
+    type: chat
+    serialization-type: mini_message
+    weight: 1
+    personal: false
+  '17':
+    message: '<newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#C69BED>Улучшайте своё снаряжение</#C69BED></hover></click><newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Главное меню → Зачарования.</#E8DFD2></hover></click><newline>󰼁<white></white>󰼃󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Меню сервера — </#E8DFD2><#E1BCFF>/mm</#E1BCFF></hover></click><newline>'
+    servers: [spawn, survival]
+    player-specific: false
+    cache: true
+    conditions:
+      - type: permission
+        permission: arc.chat.notify
+    type: chat
+    serialization-type: mini_message
+    weight: 1
+    personal: false
+  '18':
+    message: '<newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8A1C5>Соберите друзей в свой клан</#E8A1C5></hover></click><newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Откройте «Кланы» в главном меню.</#E8DFD2></hover></click><newline>󰼁<white></white>󰼃󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Меню сервера — </#E8DFD2><#F4C0DD>/mm</#F4C0DD></hover></click><newline>'
+    servers: [spawn, survival]
+    player-specific: false
+    cache: true
+    conditions:
+      - type: permission
+        permission: arc.chat.notify
+    type: chat
+    serialization-type: mini_message
+    weight: 1
+    personal: false
+  '19':
+    message: '<newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#F08E99>Испытайте себя в поединке</#F08E99></hover></click><newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Активности → Дуэли.</#E8DFD2></hover></click><newline>󰼁<white></white>󰼃󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Меню сервера — </#E8DFD2><#FFB8C0>/mm</#FFB8C0></hover></click><newline>'
+    servers: [spawn, survival]
+    player-specific: false
+    cache: true
+    conditions:
+      - type: permission
+        permission: arc.chat.notify
+    type: chat
+    serialization-type: mini_message
+    weight: 1
+    personal: false
+  '20':
+    message: '<newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#A1D878>Проверьте ловкость на паркуре</#A1D878></hover></click><newline>󰼅󰼄󰼃󰼂󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Активности → Паркур.</#E8DFD2></hover></click><newline>󰼁<white></white>󰼃󰼁<click:run_command:"/mm"><hover:show_text:"Нажмите, чтобы открыть главное меню сервера."><#E8DFD2>Меню сервера — </#E8DFD2><#C9EDA6>/mm</#C9EDA6></hover></click><newline>'
+    servers: [spawn, survival]
     player-specific: false
     cache: true
     conditions:

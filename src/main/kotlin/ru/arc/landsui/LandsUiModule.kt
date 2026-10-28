@@ -81,6 +81,17 @@ object LandsUiModule : PluginModule {
         active.openCurrent(player)
     }
 
+    internal fun openCommand(player: Player, route: LandsUiCommandRoute) {
+        ArcMenus.beginDialogFlow(player)
+        val active = controller ?: return open(player)
+        active.openCommand(player, route)
+    }
+
+    internal fun openArea(player: Player, landId: String, areaId: String) {
+        val active = controller ?: return open(player)
+        active.openArea(player, landId, areaId)
+    }
+
     fun openAddMember(player: Player, landId: String) {
         ArcMenus.beginDialogFlow(player)
         val active = controller ?: return open(player)
@@ -126,12 +137,12 @@ object LandsUiModule : PluginModule {
         regionAreaLimits?.close()
         regionAreaLimits = null
         settings = loaded
-        if (loaded.commandShortcutsEnabled) {
-            commandShortcuts = ClaimMenuCommandListener(
-                canOpenClaimMenu = ::isAvailable,
-                openClaimMenu = ::openCurrent,
-            ).also { Bukkit.getPluginManager().registerEvents(it, ARC.instance) }
-        }
+        commandShortcuts = ClaimMenuCommandListener(
+            canOpenClaimMenu = ::isAvailable,
+            openClaimMenu = ::openCurrent,
+            openLandsMenu = ::openCommand,
+            legacyShortcutsEnabled = { loaded.commandShortcutsEnabled },
+        ).also { Bukkit.getPluginManager().registerEvents(it, ARC.instance) }
         if (!loaded.enabled) {
             info("Lands UI module disabled by configuration")
             return
@@ -143,7 +154,7 @@ object LandsUiModule : PluginModule {
         }
         regionAreaLimits = RegionAreaLimits.install()
         claimQuote = LandsClaimExpansionQuote(LandsIntegration.of(ARC.instance), lands)
-        val gateway = BukkitLandsUiGateway(roleName = loaded::roleName)
+        val gateway = BukkitLandsUiGateway(roleName = loaded::roleName, roleEditing = LandsRoleEditing.bind(lands))
         controller = LandsUiController(loaded, gateway)
         regionTool = RegionTool(loaded, gateway).also { it.start() }
         claimTool = ClaimBlockTool(loaded).also { it.start() }
