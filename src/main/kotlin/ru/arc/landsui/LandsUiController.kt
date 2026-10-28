@@ -82,11 +82,9 @@ class LandsUiController(
                 DialogTables.FactsLayout.ROWS,
                 DialogTables.PanelSpec(DialogTables.PanelSkin.NAVY, 320, 1, true),
             ),
-            PaperDialogBody(Component.newline()),
-            PaperDialogBody(DialogDecoration.library().divider(320, DialogDecoration.Divider(
-                DialogDecoration.Glyph(0xF9104, 13), DialogDecoration.Glyph(0xF9106, 13), DialogDecoration.Glyph(0xF9105, 13),
-            )), width = 320),
-            PaperDialogBody(Component.newline()),
+            PaperDialogBody(DialogDecoration.library().divider(240, DialogDecoration.Divider(
+                DialogDecoration.Glyph(0xF9106, 13), DialogDecoration.Glyph(0xF9106, 13), DialogDecoration.Glyph(0xF9106, 13),
+            )), width = 240),
             DialogTables.filledBody(
                 rows = listOf(listOf(text("root-body"))),
                 headers = null,
