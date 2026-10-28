@@ -4,6 +4,9 @@
 The first complete root row holds «Приват под ногами» and «Выдать блок привата»
 when a nearby land exists. Creation and guidance precede the settlement list.
 Settlement buttons show the literal land name followed by the owner in parentheses.
+The three-row summary fits its contents in a compact filled panel (up to 320
+logical pixels). The instruction block has an opaque filled background at 400
+pixels; a shared library divider and real blank spacing separate the two groups.
 Opening any settlement card preserves the selected land for subsequent Lands commands;
 The explicit «Выбрать для расширения» action and `/lands edit НАЗВАНИЕ` change
 that selection. Outside protected land the current-land inspection action is omitted.

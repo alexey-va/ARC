@@ -8,6 +8,7 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import org.bukkit.entity.Player
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.gui.ArcMenus
+import ru.arc.paper.menu.DialogDecoration
 import ru.arc.paper.menu.DialogTables
 import ru.arc.gui.MenuEscapeBehavior
 import ru.arc.paper.menu.PaperDialogActionId
@@ -66,8 +67,8 @@ class LandsUiController(
         val nearby = gateway.inspectedLand(player)
         val selected = lands.firstOrNull { it.selected }
         val body = mutableListOf(
-            DialogTables.filledBody(
-                rows = listOf(
+            DialogTables.factsBody(
+                listOf(
                     text("table-settlements-label") to text("table-count-value", "count" to lands.size.toString()),
                     text("table-selected-label") to text(
                         "table-selected-value",
@@ -77,13 +78,21 @@ class LandsUiController(
                         "table-protected-value",
                         "chunks" to lands.sumOf { it.chunks }.toString(),
                     ),
-                ).map { (label, value) -> listOf(label, value) },
-                headers = null,
-                width = 400,
-                columnWeights = listOf(1, 1),
+                ).map { (label, value) -> label.append(Component.text(":")) to value },
+                DialogTables.FactsLayout.ROWS,
+                DialogTables.PanelSpec(DialogTables.PanelSkin.NAVY, 320, 1, true),
             ),
             PaperDialogBody(Component.newline()),
-            DialogTables.framedBody(text("root-body"), frame = DialogTables.Frame.COMMON, width = 400),
+            PaperDialogBody(DialogDecoration.library().divider(320, DialogDecoration.Divider(
+                DialogDecoration.Glyph(0xF9104, 13), DialogDecoration.Glyph(0xF9106, 13), DialogDecoration.Glyph(0xF9105, 13),
+            )), width = 320),
+            PaperDialogBody(Component.newline()),
+            DialogTables.filledBody(
+                rows = listOf(listOf(text("root-body"))),
+                headers = null,
+                width = 400,
+                columnWeights = listOf(1),
+            ),
         )
         if (lands.isEmpty()) body += PaperDialogBody(text("root-empty"))
         val inspect = nearby?.let {
