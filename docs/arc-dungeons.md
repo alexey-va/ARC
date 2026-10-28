@@ -69,6 +69,13 @@ composition; they do not establish native-client appearance or live activation.
 
 ## Delivery and verification
 
+`hooks/elitemobs/EMListener.kt` denies vanilla right-click item use for EliteMobs
+`ENDER_EYE` charms in either hand. This protects `rapid_mutator_drop_charm.yml`
+(Mutated Eye / Мутировавший Глаз) from being launched or inserted into an End
+portal frame while preserving block interactions and native continuous night
+vision. The guard uses EliteMobs item identity rather than translated names;
+ordinary eyes remain usable. Focused coverage: `EMEnderEyeCharmGuardTest`.
+
 The first extraction requires ARC 1.4.391 and ArcDungeons 0.1.0 to be delivered
 and activated together, with ArcDuels 0.11.9 where installed. Installing only the
 new ARC would leave the extracted features unavailable; installing ArcDungeons

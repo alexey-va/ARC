@@ -5,15 +5,19 @@ import com.magmaguy.elitemobs.api.DungeonStartEvent
 import com.magmaguy.elitemobs.api.EliteExplosionEvent
 import com.magmaguy.elitemobs.api.EliteMobDeathEvent
 import com.magmaguy.elitemobs.api.WorldInstanceEvent
+import com.magmaguy.elitemobs.api.utils.EliteItemManager
 import com.magmaguy.elitemobs.instanced.dungeons.DungeonInstance
 import com.magmaguy.elitemobs.items.customitems.CustomItem
 import com.magmaguy.elitemobs.items.customloottable.CustomLootEntry
 import com.magmaguy.elitemobs.items.customloottable.EliteCustomLootEntry
 import com.magmaguy.elitemobs.treasurechest.TreasureChest
 import org.bukkit.Location
+import org.bukkit.Material
+import org.bukkit.event.Event
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
+import org.bukkit.event.block.Action
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerTeleportEvent
 import org.bukkit.event.player.PlayerJoinEvent
@@ -49,6 +53,16 @@ class EMListener internal constructor(
     @EventHandler(priority = EventPriority.HIGHEST)
     fun dropBossEnchantmentSupply(event: EliteMobDeathEvent) {
         bossEnchantmentRewards.addToNativeDeathDrops(event)
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    fun guardEnderEyeCharm(event: PlayerInteractEvent) {
+        if (event.action != Action.RIGHT_CLICK_AIR && event.action != Action.RIGHT_CLICK_BLOCK) return
+        val item = event.item ?: return
+        if (item.type != Material.ENDER_EYE || !EliteItemManager.isEliteMobsItem(item)) return
+
+        // Passive charms must not inherit the eye's vanilla launch or portal-insertion action.
+        event.setUseItemInHand(Event.Result.DENY)
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
