@@ -13,6 +13,15 @@ auto-start:
 highlight:
   enabled: false
   color: '#ffc242'
+boss-bar-relay:
+  source-server: spawn
+  viewer-worlds: [survival]
+  heartbeat-ticks: 100
+  stale-seconds: 15
+event-ambience:
+  enabled: true
+  world: rc_origin_spawn
+  time: 18000
 grapple:
   enabled: true
   # Permanent access is bounded to the main mine, excluding its off-site expeditions.

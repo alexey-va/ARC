@@ -539,7 +539,7 @@ object TreasureModule : PluginModule {
         grapple?.close()
         grapple = null
         TreasureHuntRegistry.attachGrapple(null)
-        TreasureHuntManager.stopAll()
+        TreasureHuntRegistry.shutdown()
         Treasures.shutdown()
     }
 }

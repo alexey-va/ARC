@@ -76,7 +76,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.482"
+version = "1.4.483"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.69"
@@ -153,6 +153,7 @@ repositories {
 }
 
 dependencies {
+    compileOnly(project(":arc-aurora-api"))
     implementation(project(":arc-onboarding-api"))
     // Keep the server API ahead of HuskHomes' bundled older Adventure classes.
     compileOnly("net.kyori:adventure-api:4.26.1")
@@ -269,6 +270,7 @@ dependencies {
     testImplementation("ru.ruscrafting.arc:arc-core-paper-testing:$arcCoreVersion")
     testImplementation(landsCompileDependency)
     testImplementation(libs.net.advancedplugins.advancedenchantments) { isTransitive = false }
+    testImplementation(project(":arc-aurora-api"))
     testImplementation(libs.com.github.retrooper.packetevents.spigot) { exclude(group = "io.netty") }
     testImplementation("org.mockito:mockito-core:5.14.2")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
@@ -416,6 +418,7 @@ tasks {
     }
 
     shadowJar {
+        exclude("ru/arc/aurora/api/**")
         archiveClassifier.set("")
 
         mergeServiceFiles()
