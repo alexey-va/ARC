@@ -1,0 +1,202 @@
+package ru.arc.aurora
+
+import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.core.spec.style.FreeSpec
+import io.kotest.matchers.shouldBe
+import org.bukkit.Color
+import org.bukkit.Particle
+import org.bukkit.configuration.file.YamlConfiguration
+
+class AuroraConfigTest : FreeSpec({
+    "defaults form one complete detached settings snapshot" {
+        val source = profileConfig()
+        val settings = AuroraConfig.parse(source)
+        settings.permission shouldBe "arcaurora.view"
+        listOf(settings.intervalTicks, settings.viewersPerTick, settings.attemptsPerViewer,
+            settings.packetsPerViewer, settings.nativeBudgetMicros) shouldBe listOf(10, 8, 8, 12, 1500)
+        settings.ping shouldBe AuroraPingSettings()
+        val profile = settings.profiles.single()
+        profile.id shouldBe "ambient"
+        profile.particle shouldBe Particle.END_ROD
+        profile.particleData shouldBe null
+        profile.biomes shouldBe listOf("*")
+        profile.matches("iris:unknown_biome", "world", 15000, false, false, 80.0, 12, false) shouldBe true
+        profile.matches("minecraft:plains", "world", 0, false, false, 80.0, 12, true) shouldBe false
+        source.set("profiles.ambient.biomes", listOf("minecraft:desert"))
+        source.set("profiles.ambient.radius", 24)
+        profile.biomes shouldBe listOf("*")
+        profile.radius shouldBe 12.0
+    }
+
+    "custom Iris and unknown biome keys use full namespaced globs without a registry" {
+        val profile = AuroraConfig.parse(profileConfig(
+            "biomes" to listOf("plains", "iris:deep/*_forest", "unknown_namespace:*"),
+            "worlds" to listOf("survival.*"),
+        )).profiles.single()
+        profile.biomes shouldBe listOf("minecraft:plains", "iris:deep/*_forest", "unknown_namespace:*")
+        fun matches(key: String, world: String = "survival.nether") =
+            profile.matches(key, world, 0, false, false, 80.0, 15, false)
+        listOf("plains", "minecraft:plains", "iris:deep/blue_forest", "unknown_namespace:new_biome")
+            .forEach { matches(it) shouldBe true }
+        listOf("iris:blue_forest", "iris:deep/blue_forest_hills", "prefixminecraft:plains", "minecraft:plains_suffix")
+            .forEach { matches(it) shouldBe false }
+        matches("plains", "survivalXnether") shouldBe false
+        matches("plains", "prefixsurvival.nether") shouldBe false
+        shouldThrow<AuroraConfigException> {
+            AuroraConfig.parse(profileConfig("biomes" to listOf("iris:forest?")))
+        }.path shouldBe "profiles.ambient.biomes"
+    }
+
+    "aliases are normalized exact single-hop mappings and do not constrain unknown keys" {
+        val settings = AuroraConfig.parse(yaml("""
+            biome-aliases:
+              plains: iris:lowland
+              iris:lowland: iris:wetland
+              iris.pack:deep.forest: iris:deep/forest
+            profiles:
+              ambient:
+                biomes: [iris:lowland]
+        """))
+        settings.biomeAliases shouldBe mapOf("minecraft:plains" to "iris:lowland", "iris:lowland" to "iris:wetland",
+            "iris.pack:deep.forest" to "iris:deep/forest")
+        settings.canonicalBiomeKey("plains") shouldBe "iris:lowland"
+        settings.canonicalBiomeKey("iris:unregistered") shouldBe "iris:unregistered"
+        settings.canonicalBiomeKey("iris.pack:deep.forest") shouldBe "iris:deep/forest"
+        settings.profiles.single().matches(settings.canonicalBiomeKey("plains"), "world", 0,
+            false, false, 80.0, 15, false) shouldBe true
+        shouldThrow<AuroraConfigException> {
+            AuroraConfig.parse(yaml("biome-aliases:\n  'iris:*': minecraft:plains"))
+        }.path shouldBe "biome-aliases.iris:*"
+        shouldThrow<AuroraConfigException> {
+            AuroraConfig.parse(yaml("biome-aliases:\n  plains: iris:first\n  minecraft:plains: iris:second"))
+        }.path shouldBe "biome-aliases.minecraft:plains"
+    }
+
+    "time wraps midnight with inclusive endpoints and absolute time normalization" {
+        val profile = AuroraConfig.parse(profileConfig("time-start" to 23000, "time-end" to 1000)).profiles.single()
+        fun matches(time: Long) = profile.matches("plains", "world", time, false, false, 80.0, 15, false)
+        listOf(23000L, 23999L, 0L, 1000L, 47000L, -1L).forEach { matches(it) shouldBe true }
+        listOf(22999L, 1001L, 12000L).forEach { matches(it) shouldBe false }
+        val instant = profile.copy(timeStart = 4000, timeEnd = 4000)
+        instant.matches("plains", "world", 4000L, false, false, 80.0, 15, false) shouldBe true
+        instant.matches("plains", "world", 4001L, false, false, 80.0, 15, false) shouldBe false
+    }
+
+    "weather and environment predicates preserve their individual boundaries" {
+        val profile = AuroraConfig.parse(profileConfig(
+            "weather" to "rain", "min-y" to 60, "max-y" to 90,
+            "min-sky-light" to 10, "max-sky-light" to 14, "underwater" to true,
+        )).profiles.single()
+        fun matches(storm: Boolean = true, thunder: Boolean = false, y: Double = 60.0,
+            light: Int = 10, water: Boolean = false) =
+            profile.matches("plains", "world", 0, storm, thunder, y, light, water)
+        matches(water = true) shouldBe true
+        matches(y = 90.0, light = 14) shouldBe true
+        matches(storm = false) shouldBe false
+        matches(thunder = true) shouldBe false
+        matches(y = 59.999) shouldBe false
+        matches(y = 90.001) shouldBe false
+        matches(y = Double.NaN) shouldBe false
+        matches(light = 9) shouldBe false
+        matches(light = 15) shouldBe false
+        profile.copy(weather = AuroraWeather.THUNDER)
+            .matches("plains", "world", 0, true, true, 60.0, 10, false) shouldBe true
+        profile.copy(weather = AuroraWeather.CLEAR)
+            .matches("plains", "world", 0, false, true, 60.0, 10, false) shouldBe true
+    }
+
+    "invalid numeric fields fail the entire candidate at the precise path" {
+        listOf(
+            "radius" to Double.NaN, "radius" to Double.POSITIVE_INFINITY, "radius" to 1.99,
+            "min-distance" to 13.0, "points" to 1.5, "points" to 25, "count" to -1,
+            "time-start" to 24000, "offset-x" to -0.1, "speed" to 1.01,
+            "shape-size" to "large", "max-y" to -2049, "max-sky-light" to 16,
+        ).forEach { (field, value) ->
+            shouldThrow<AuroraConfigException> { AuroraConfig.parse(profileConfig(field to value)) }
+                .path shouldBe "profiles.ambient.$field"
+        }
+        shouldThrow<AuroraConfigException> {
+            AuroraConfig.parse(profileConfig("min-y" to 100, "max-y" to 99))
+        }.path shouldBe "profiles.ambient.max-y"
+        shouldThrow<AuroraConfigException> {
+            AuroraConfig.parse(profileConfig("vertical-min" to 5, "vertical-max" to 4))
+        }.path shouldBe "profiles.ambient.vertical-max"
+        shouldThrow<AuroraConfigException> {
+            AuroraConfig.parse(yaml("viewers-per-tick: '8'"))
+        }.path shouldBe "viewers-per-tick"
+        shouldThrow<AuroraConfigException> {
+            AuroraConfig.parse(yaml("permission: ''"))
+        }.path shouldBe "permission"
+    }
+
+    "malformed sections and selectors are rejected rather than silently defaulted" {
+        shouldThrow<AuroraConfigException> { AuroraConfig.parse(yaml("profiles: []")) }
+            .path shouldBe "profiles"
+        shouldThrow<AuroraConfigException> { AuroraConfig.parse(yaml("profiles:\n  ambient: false")) }
+            .path shouldBe "profiles.ambient"
+        shouldThrow<AuroraConfigException> { AuroraConfig.parse(profileConfig("biomes" to listOf("plains", 7))) }
+            .path shouldBe "profiles.ambient.biomes[1]"
+        shouldThrow<AuroraConfigException> { AuroraConfig.parse(profileConfig("worlds" to emptyList<String>())) }
+            .path shouldBe "profiles.ambient.worlds"
+        shouldThrow<AuroraConfigException> { AuroraConfig.parse(profileConfig("underwater" to "false")) }
+            .path shouldBe "profiles.ambient.underwater"
+    }
+
+    "dust payloads are ready for the exact Paper particle type and unsupported payloads fail parsing" {
+        val dust = AuroraConfig.parse(profileConfig(
+            "particle" to "minecraft:dust", "dust-color" to "#12aBcD", "dust-size" to 0.8,
+        )).profiles.single()
+        dust.particle shouldBe Particle.DUST
+        val options = dust.particleData as Particle.DustOptions
+        options.color shouldBe Color.fromRGB(0x12abcd)
+        options.size shouldBe 0.8F
+        val transition = AuroraConfig.parse(profileConfig(
+            "particle" to "dust_color_transition", "dust-color" to "#112233", "dust-to-color" to "#445566",
+        )).profiles.single().particleData as Particle.DustTransition
+        transition.color shouldBe Color.fromRGB(0x112233)
+        transition.toColor shouldBe Color.fromRGB(0x445566)
+        listOf("minecraft:block", "minecraft:flash", "minecraft:unknown_particle").forEach { particle ->
+            shouldThrow<AuroraConfigException> { AuroraConfig.parse(profileConfig("particle" to particle)) }
+                .path shouldBe "profiles.ambient.particle"
+        }
+        shouldThrow<AuroraConfigException> { AuroraConfig.parse(profileConfig("particle" to "dust")) }
+            .path shouldBe "profiles.ambient.dust-color"
+        shouldThrow<AuroraConfigException> { AuroraConfig.parse(profileConfig("dust-color" to "#xyzxyz")) }
+            .path shouldBe "profiles.ambient.dust-color"
+    }
+
+    "profile count is bounded across ordinary profiles and all event presets" {
+        val source = YamlConfiguration()
+        repeat(127) { source.createSection("profiles.biome_$it") }
+        source.createSection("event-presets.festival.spark")
+        val accepted = AuroraConfig.parse(source)
+        accepted.profiles.size shouldBe 127
+        accepted.eventPresets.getValue("festival").single().id shouldBe "spark"
+        source.createSection("event-presets.festival.extra")
+        shouldThrow<AuroraConfigException> { AuroraConfig.parse(source) }
+            .path shouldBe "event-presets.festival"
+        accepted.eventPresets.getValue("festival").size shouldBe 1
+    }
+
+    "ping settings parse one validated nested policy" {
+        AuroraConfig.parse(yaml("""
+            ping:
+              max-current-ms: 300
+              max-average-ms: 200
+              window-samples: 12
+              sample-interval-ticks: 30
+        """)).ping shouldBe AuroraPingSettings(300, 200, 12, 30)
+        listOf("max-current-ms" to 0, "max-average-ms" to 10001,
+            "window-samples" to 121, "sample-interval-ticks" to 1201).forEach { (field, value) ->
+            shouldThrow<AuroraConfigException> { AuroraConfig.parse(yaml("ping:\n  $field: $value")) }
+                .path shouldBe "ping.$field"
+        }
+    }
+})
+
+private fun profileConfig(vararg values: Pair<String, Any>): YamlConfiguration = YamlConfiguration().apply {
+    createSection("profiles.ambient")
+    values.forEach { (field, value) -> set("profiles.ambient.$field", value) }
+}
+
+private fun yaml(text: String): YamlConfiguration = YamlConfiguration().apply { loadFromString(text.trimIndent()) }

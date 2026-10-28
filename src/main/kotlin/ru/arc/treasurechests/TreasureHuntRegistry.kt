@@ -1,10 +1,19 @@
 package ru.arc.treasurechests
 
+import org.bukkit.Bukkit
 import org.bukkit.NamespacedKey
 import org.bukkit.World
 import org.bukkit.block.Block
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
+import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority
+import org.bukkit.event.HandlerList
+import org.bukkit.event.Listener
+import org.bukkit.event.player.PlayerChangedWorldEvent
+import org.bukkit.event.player.PlayerJoinEvent
+import org.bukkit.event.server.ServiceRegisterEvent
+import org.bukkit.event.server.ServiceUnregisterEvent
 import ru.arc.ARC
 import ru.arc.common.chests.CustomChest
 import ru.arc.common.chests.ItemsAdderChest
@@ -18,6 +27,7 @@ import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil.mm
 import java.util.UUID
+import java.util.Locale
 
 /**
  * Реестр активных охот за сокровищами.
@@ -25,15 +35,20 @@ import java.util.UUID
  * Делегирует в TreasureHuntService для основной логики.
  * Этот объект существует для обратной совместимости.
  */
-object TreasureHuntRegistry {
+object TreasureHuntRegistry : Listener {
     private var service: TreasureHuntService? = null
     private var moduleConfig: TreasureHuntModuleConfig? = null
+    private var bossBarRelay: TreasureHuntBossBarRelay? = null
+    private var lastBossBarPublicationAt = 0L
+    private var eventAmbience: HuntEventAmbience? = null
+    private var auroraApiPresent: Boolean? = null
 
     /**
      * Initialize service with dependencies.
      */
     fun init() {
         if (ARC.plugin == null) return
+        shutdown()
 
         val scheduler: TaskScheduler = Tasks.scheduler
 
@@ -95,9 +110,87 @@ object TreasureHuntRegistry {
             }
 
         moduleConfig = TreasureHuntModuleConfig.load(ARC.instance.dataPath)
-        service = TreasureHuntService(moduleConfig!!, scheduler, announcer, chestSpawner)
+        eventAmbience = HuntEventAmbience(
+            scheduler = scheduler,
+            settingsProvider = { moduleConfig?.eventAmbienceSettings ?: HuntEventAmbienceSettings() },
+            startWorldAurora = { worldId ->
+                if (Bukkit.getPluginManager().isPluginEnabled("ArcAurora") && hasAuroraApi()) {
+                    HuntAuroraEventAdapter.start(worldId)
+                } else {
+                    null
+                }
+            },
+        )
+        service = TreasureHuntService(moduleConfig!!, scheduler, announcer, chestSpawner) { hunts ->
+            bossBarRelay?.onHuntsChanged(hunts)
+            eventAmbience?.onActiveHuntsChanged(hunts)
+        }
+        reloadBossBarRelay()
+        Bukkit.getPluginManager().registerEvents(this, ARC.instance)
 
         info("TreasureHuntRegistry initialized")
+    }
+
+    fun shutdown() {
+        service?.shutdown()
+        service = null
+        closeBossBarRelay()
+        eventAmbience?.close()
+        eventAmbience = null
+        auroraApiPresent = null
+        HandlerList.unregisterAll(this)
+    }
+
+    private fun reloadBossBarRelay() {
+        closeBossBarRelay()
+        val redis = ARC.redisManager ?: return
+        val settings = moduleConfig?.bossBarRelaySettings ?: return
+        bossBarRelay = TreasureHuntBossBarRelay(
+            redis,
+            Tasks.scheduler,
+            ARC.serverName.orEmpty().lowercase(Locale.ROOT),
+            settings,
+            initialLastSentAt = lastBossBarPublicationAt,
+        ).also { it.onHuntsChanged(getActiveHunts()) }
+    }
+
+    private fun closeBossBarRelay() {
+        val relay = bossBarRelay ?: return
+        relay.close()
+        lastBossBarPublicationAt = maxOf(lastBossBarPublicationAt, relay.lastPublishedAt)
+        bossBarRelay = null
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    fun onPlayerJoin(event: PlayerJoinEvent) = refreshAudience(event.player)
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    fun onPlayerWorldChanged(event: PlayerChangedWorldEvent) = refreshAudience(event.player)
+
+    @EventHandler
+    fun onServiceRegistered(event: ServiceRegisterEvent) {
+        if (event.provider.plugin.name == "ArcAurora") {
+            auroraApiPresent = null
+            eventAmbience?.refresh()
+        }
+    }
+
+    @EventHandler
+    fun onServiceUnregistered(event: ServiceUnregisterEvent) {
+        if (event.provider.plugin.name == "ArcAurora") {
+            auroraApiPresent = null
+            eventAmbience?.refresh()
+        }
+    }
+
+    private fun hasAuroraApi(): Boolean = auroraApiPresent ?: huntAuroraApiAvailable(ARC.instance.javaClass.classLoader).also {
+        auroraApiPresent = it
+        if (!it) warn("[hunt-ambience] ArcAurora is enabled but its service API is unavailable; event effects skipped")
+    }
+
+    private fun refreshAudience(player: Player) {
+        service?.onPlayerWorldChanged(player)
+        bossBarRelay?.refreshAudience()
     }
 
     // === Публичный API ===
@@ -303,6 +396,7 @@ object TreasureHuntRegistry {
      */
     fun onPlayerQuit(player: Player) {
         service?.onPlayerQuit(player)
+        bossBarRelay?.onPlayerQuit(player)
     }
 
     /**
@@ -315,6 +409,8 @@ object TreasureHuntRegistry {
         if (existing == null) {
             init()
         } else {
+            reloadBossBarRelay()
+            eventAmbience?.refresh()
             existing.reloadConfig(moduleConfig!!)
         }
         info("Treasure hunt types reloaded")

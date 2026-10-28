@@ -47,6 +47,12 @@ class TreasureHuntModuleConfig(
     internal val grappleSettings: TreasureHuntGrappleSettings
         get() = TreasureHuntGrappleSettings.load(config.section("grapple"))
 
+    internal val bossBarRelaySettings: TreasureHuntBossBarRelaySettings
+        get() = TreasureHuntBossBarRelaySettings.load(config.section("boss-bar-relay"))
+
+    internal val eventAmbienceSettings: HuntEventAmbienceSettings
+        get() = HuntEventAmbienceSettings.load(config.section("event-ambience"))
+
     val aliases: Map<String, String>
         get() = config.map("aliases")
 

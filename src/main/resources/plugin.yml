@@ -9,6 +9,7 @@ depend:
   - ArcCore
   - packetevents
 softdepend:
+  - ArcAurora
   - Parties
   - Lands
   - Citizens
