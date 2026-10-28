@@ -20,7 +20,10 @@ trap 'unset password; rm -rf "$work_dir"' EXIT
 chmod 700 "$work_dir"
 
 for relative in "$@"; do
-  [[ "$relative" == ru/ruscrafting/arc/arc-dungeons-api/* ]] || fail "Only the Dungeons library API may be published by this helper"
+  case "$relative" in
+    ru/ruscrafting/arc/arc-dungeons-api/*|ru/ruscrafting/arc/arc-aurora-api/*|ru/ruscrafting/arc/arc-aurora/*) ;;
+    *) fail "Only the declared Dungeons/Aurora artifacts may be published by this helper" ;;
+  esac
   case "$relative" in
     /*|*../*|../*|*\\*) fail "Artifact paths must be relative Maven repository paths" ;;
     *.jar|*.pom|*.module) ;;
