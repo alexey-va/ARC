@@ -93,6 +93,10 @@ class HelpCenterConfigTest : StringSpec({
             settings.action("rtp-vanilla") shouldBe "arc rtp vanilla"
             settings.action("rtp-mining") shouldBe "arc rtp mining"
             settings.action("rtp-biomes") shouldBe "arc rtp survival"
+            settings.action("quest-display") shouldBe "rank quest-display"
+            PlainTextComponentSerializer.plainText().serialize(
+                MiniMessage.miniMessage().deserialize(settings.text("settings-quest-display-label")),
+            ) shouldBe "Отображение квестов ›"
             settings.text("travel-title").contains("Телепортация") shouldBe true
             settings.text("guide-body").contains("Мир строительства") shouldBe false
             settings.command("privat").label.contains("Приват") shouldBe true

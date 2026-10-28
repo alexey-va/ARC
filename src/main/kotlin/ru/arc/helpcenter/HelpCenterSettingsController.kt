@@ -63,11 +63,16 @@ internal class HelpCenterSettingsController(
             button("settings_${section.key}", text("settings-${section.key}-label"), text("settings-${section.key}-tooltip")) {
                 openSection(player, section)
             }
-        } + listOf(
+        } + listOfNotNull(
             button("settings_join_messages", text("settings-join-messages-label"), text("settings-join-messages-tooltip")) {
                 navigation.visit(player) { open(player) }
                 JoinMessageGuiFactory.show(player, isJoin = true)
             },
+            if (HelpCenterFeature.RANKS in gateway.features()) {
+                button("settings_quest_display", text("settings-quest-display-label"), text("settings-quest-display-tooltip")) {
+                    if (!gateway.execute(player, settings.action("quest-display"))) player.sendMessage(text("action-failed"))
+                }
+            } else null,
         ) + if (player.hasPermission("tab.group.admin")) listOf(
             button("legacy_admin", text("legacy-settings-admin", "state" to state(entries.getValue("admin"))), text("legacy-settings-admin-tooltip")) {
                 legacy.execute(player, "admin")

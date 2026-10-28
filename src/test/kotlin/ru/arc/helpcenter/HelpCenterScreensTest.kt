@@ -809,7 +809,7 @@ class HelpCenterScreensTest {
             every { ru.arc.misc.JoinMessageGuiFactory.show(player, true, 0) } returns Unit
             open(HelpCenterPage.SETTINGS)
             assertEquals(2, screen.columns)
-            assertEquals(5, screen.buttons.map { it.label.color() }.distinct().size)
+            assertEquals(6, screen.buttons.map { it.label.color() }.distinct().size)
             val join = screen.buttons.single { it.id.value == "settings_join_messages" }
             assertEquals("Сообщения при входе ›", plain(join.label))
             assertFalse(join.closeDialogBeforeAction)
@@ -819,6 +819,42 @@ class HelpCenterScreensTest {
         } finally {
             io.mockk.unmockkObject(ru.arc.misc.JoinMessageGuiFactory)
         }
+    }
+
+    @Test
+    fun `quest display opens from settings without closing the native flow and hides without ranks`() {
+        open(HelpCenterPage.SETTINGS)
+        val display = screen.buttons.single { it.id.value == "settings_quest_display" }
+        assertEquals("Отображение квестов ›", plain(display.label))
+        assertEquals(0xc4abff, display.label.color()?.value())
+        assertFalse(display.closeDialogBeforeAction)
+        val settingsScreenCount = screenCount
+
+        click("settings_quest_display")
+
+        assertEquals(listOf("rank quest-display"), executed)
+        assertEquals(0, dialogCloses)
+        assertEquals(settingsScreenCount, screenCount)
+
+        every { gateway.features() } returns HelpCenterFeature.entries.toSet() - HelpCenterFeature.RANKS
+        open(HelpCenterPage.SETTINGS)
+        assertFalse(screen.buttons.any { it.id.value == "settings_quest_display" })
+        assertEquals(5, screen.buttons.size)
+    }
+
+    @Test
+    fun `quest display dispatch failure keeps settings open and reports the existing failure message`() {
+        every { gateway.execute(player, "rank quest-display") } returns false
+        open(HelpCenterPage.SETTINGS)
+        val settingsScreenCount = screenCount
+
+        click("settings_quest_display")
+
+        verify(exactly = 1) { gateway.execute(player, "rank quest-display") }
+        assertEquals("help.category.settings", screen.id)
+        assertEquals(0, dialogCloses)
+        assertEquals(settingsScreenCount, screenCount)
+        assertTrue((player as PlayerMock).nextMessage()?.contains("Команда не выполнилась") == true)
     }
 
     @Test
@@ -929,7 +965,7 @@ class HelpCenterScreensTest {
         )
         expected.forEach { (group, ids) ->
             open(HelpCenterPage.SETTINGS)
-            assertEquals(5, screen.buttons.size)
+            assertEquals(6, screen.buttons.size)
             click("settings_$group")
             assertEquals(ids, screen.buttons.map { it.id.value })
             assertTrue(screen.buttons.all { it.width == 230 && !it.closeDialogBeforeAction })

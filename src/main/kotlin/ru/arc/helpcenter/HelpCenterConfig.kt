@@ -84,6 +84,7 @@ class HelpCenterConfig(private val config: Config) {
             "rtp-vanilla" to "arc rtp vanilla",
             "rtp-mining" to "arc rtp mining",
             "rtp-biomes" to "arc rtp survival",
+            "quest-display" to "rank quest-display",
         )
 
         fun load(dataPath: Path): HelpCenterConfig {
@@ -412,6 +413,8 @@ class HelpCenterConfig(private val config: Config) {
             "settings-hub-body" to "<#e8dfd2>Настройте игру под себя.<newline><#e8dfd2>Shift + F: <#e8dfd2><shortcut><#e8dfd2>    Escape: <#e8dfd2><escape>",
             "settings-join-messages-label" to "<#c4a7e7>Сообщения при входе ›",
             "settings-join-messages-tooltip" to "<#e8dfd2>Выберите приветственные фразы или отредактируйте свою целиком.<newline><#e8dfd2>Внутри также доступны сообщения при выходе.<newline>Доступ зависит от вашей привилегии.",
+            "settings-quest-display-label" to "<#c4abff>Отображение квестов ›",
+            "settings-quest-display-tooltip" to "<#e8dfd2>Выберите способ отображения прогресса квестов.",
             "settings-world-tooltip" to "<italic:false><#e8dfd2>Тропинки, границы земель и полёт.<newline>Доступ к порталам и их оформление.",
             "settings-world-label" to "<italic:false><#9bd48d>Мир и перемещение ›",
             "settings-social-tooltip" to "<italic:false><#e8dfd2>Канал чата, уведомления и запросы телепортации.",

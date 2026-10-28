@@ -12,6 +12,7 @@ actions:
   rtp-vanilla: 'arc rtp vanilla'
   rtp-mining: 'arc rtp mining'
   rtp-biomes: 'arc rtp survival'
+  quest-display: 'rank quest-display'
 
 # All player-visible copy is configurable. ARC merges new defaults on reload.
 text:
@@ -329,6 +330,8 @@ text:
   settings-hub-body: "<#e8dfd2>Настройте игру под себя.<newline><#e8dfd2>Shift + F: <#e8dfd2><shortcut><#e8dfd2>    Escape: <#e8dfd2><escape>"
   settings-join-messages-label: "<#c4a7e7>Сообщения при входе ›"
   settings-join-messages-tooltip: "<#e8dfd2>Выберите приветственные фразы или отредактируйте свою целиком.<newline><#e8dfd2>Внутри также доступны сообщения при выходе.<newline>Доступ зависит от вашей привилегии."
+  settings-quest-display-label: "<#c4abff>Отображение квестов ›"
+  settings-quest-display-tooltip: "<#e8dfd2>Выберите способ отображения прогресса квестов."
   settings-world-tooltip: "<italic:false><#e8dfd2>Тропинки, границы земель и полёт.<newline>Доступ к порталам и их оформление."
   settings-world-label: "<italic:false><#9bd48d>Мир и перемещение ›"
   settings-social-tooltip: "<italic:false><#e8dfd2>Канал чата, уведомления и запросы телепортации."
