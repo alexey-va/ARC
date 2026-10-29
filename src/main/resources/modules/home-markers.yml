@@ -12,5 +12,5 @@ colors:
 text:
   home: "Дом"
   warp: "Варп"
-  label: "<kind> · <white><name><newline><#E8DFD2>Shift + ПКМ · Настройки"
+  label: "<kind> · <white><name>"
   unavailable: "<#F4BD6A>Не удалось открыть настройки точки. Попробуйте ещё раз."

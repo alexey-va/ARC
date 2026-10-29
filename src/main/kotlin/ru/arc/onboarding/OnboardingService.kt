@@ -173,10 +173,12 @@ object OnboardingService : OnboardingBuildProgressService {
         val progress = current.players[player.uniqueId]?.takeIf { it.status == OnboardingStatus.ACTIVE } ?: return null
         if (current.invalidPlaytimes[player.uniqueId] == progress.runId) return null
         val clock = current.played[player.uniqueId]?.takeIf { it.first == progress.runId }?.second
-        if (clock?.expired == true) return null
+        val remainingTicks = clock?.remainingTicks(awaitsBuild(progress))
+            ?: if (awaitsBuild(progress)) OnboardingPlaytime.BUILD_SUGGESTION_TICKS else OnboardingPlaytime.LIMIT_TICKS
+        if (remainingTicks <= 0) return null
         return OnboardingGuideView(
             OnboardingQuestView(progress.runId, true, progress.milestones),
-            clock?.remainingTicks ?: OnboardingPlaytime.LIMIT_TICKS,
+            remainingTicks,
             OnboardingGuideReward(current.config.coinsPerStep, current.config.tokensPerStep),
         )
     }
@@ -514,11 +516,14 @@ object OnboardingService : OnboardingBuildProgressService {
                 else message(player, "<red>Не удалось сохранить квест. Прогресс не подтверждён, попробуй ещё раз.")
                 return@whenCompleteSync
             }
+            val previousProgress = current.players[playerId]
             if (progress == null) current.players.remove(playerId) else current.players[playerId] = progress
             refreshHud(current, player)
             complete(current, progress)
             current.players[playerId]?.let { updated ->
-                samplePlaytime(current, player)
+                val enteredBuild = awaitsBuild(updated) &&
+                    (previousProgress == null || previousProgress.runId != updated.runId || !awaitsBuild(previousProgress))
+                samplePlaytime(current, player, force = enteredBuild)
                 reconcileRewards(current, player, updated)
             }
         }
@@ -542,15 +547,18 @@ object OnboardingService : OnboardingBuildProgressService {
             return
         }
         val pending = (previous?.handle { _, _ -> Unit } ?: CompletableFuture.completedFuture(Unit))
-            .thenCompose { store.sample(player.uniqueId, progress.runId, server, counter) }
+            .thenCompose { store.sample(player.uniqueId, progress.runId, server, counter,
+                suggestBuild = OnboardingMilestone.FOOTHOLD_COMPLETE in progress.milestones) }
         current.playtimeTails[key] = pending
         current.pending += pending
         pending.whenComplete { _, _ ->
-            current.playtimeTails.remove(key, pending)
             current.pending.remove(pending)
         }
         pending.whenCompleteSync(current.tasks) { state, failure ->
-            if (runtime !== current || current.players[player.uniqueId]?.runId != progress.runId) return@whenCompleteSync
+            // A queued transition sample supersedes its predecessor, including its cached deadline.
+            if (!current.playtimeTails.remove(key, pending) || runtime !== current) return@whenCompleteSync
+            val latest = current.players[player.uniqueId]?.takeIf { it.runId == progress.runId && it.status == OnboardingStatus.ACTIVE }
+                ?: return@whenCompleteSync
             if (failure != null || state == null) {
                 if (current.playtimeFailures.add(player.uniqueId)) warn("Initial quest playtime was not confirmed for {}", player.uniqueId, failure)
                 if (current.players[player.uniqueId]?.status == OnboardingStatus.ACTIVE &&
@@ -564,14 +572,16 @@ object OnboardingService : OnboardingBuildProgressService {
             current.playtimeFailures.remove(player.uniqueId)
             current.played[player.uniqueId] = progress.runId to state
             refreshHud(current, player)
-            if (state.expired) expireActiveRun(current, player, progress.runId)
+            if (state.remainingTicks(awaitsBuild(latest)) <= 0) {
+                expireActiveRun(current, player, progress.runId, awaitingBuildOnly = !state.expired)
+            }
         }
     }
 
-    private fun expireActiveRun(current: Runtime, player: Player, runId: String) {
+    private fun expireActiveRun(current: Runtime, player: Player, runId: String, awaitingBuildOnly: Boolean = false) {
         val key = "${player.uniqueId}:$runId"
         if (!current.expiring.add(key)) return
-        enqueue(current, player.uniqueId) { requireNotNull(current.store).expireActive(player.uniqueId, runId) }
+        enqueue(current, player.uniqueId) { requireNotNull(current.store).expireActive(player.uniqueId, runId, awaitingBuildOnly) }
             .whenCompleteSync(current.tasks) { updated, failure ->
                 current.expiring.remove(key)
                 if (failure == null && runtime === current && updated != null && current.players[player.uniqueId]?.runId == runId) {
@@ -581,6 +591,9 @@ object OnboardingService : OnboardingBuildProgressService {
                 }
             }
     }
+
+    private fun awaitsBuild(progress: OnboardingProgress): Boolean =
+        OnboardingMilestone.FOOTHOLD_COMPLETE in progress.milestones && OnboardingMilestone.AUTOBUILD_STARTED !in progress.milestones
 
     private fun reconcileRewards(current: Runtime, player: Player, progress: OnboardingProgress) {
         val rewards = current.rewards ?: return

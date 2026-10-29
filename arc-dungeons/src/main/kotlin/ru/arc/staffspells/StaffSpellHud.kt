@@ -10,6 +10,8 @@ import org.bukkit.Location
 import org.bukkit.entity.Display
 import org.bukkit.entity.Player
 import org.bukkit.entity.TextDisplay
+import org.bukkit.event.inventory.InventoryType
+import org.bukkit.plugin.Plugin
 import org.bukkit.util.Transformation
 import org.bukkit.util.Vector
 import org.joml.Quaternionf
@@ -73,6 +75,7 @@ internal class StaffSpellHud(
     private val tasks: LifecycleTaskScope = LifecycleTaskScope(),
     private val preferences: StaffSpellHudPreferencesReader = CachedStaffSpellHudPreferences,
     private val ownDisplays: Boolean = true,
+    private val nanoTime: () -> Long = System::nanoTime,
 ) : AutoCloseable {
     private data class Card(
         val display: PacketTextDisplay,
@@ -82,6 +85,8 @@ internal class StaffSpellHud(
         var placement: StaffSpellHudPlacement,
         var preference: StaffHudPlacement,
         var bounds: StaffSpellHudBounds,
+        var guidanceSource: QuestGuidanceHudService.Source? = null,
+        var frozenOrigin: Location? = null,
     )
     private data class TrackedBossBar(
         val bar: BossBar,
@@ -97,8 +102,11 @@ internal class StaffSpellHud(
     private val bossBars = mutableMapOf<UUID, TrackedBossBar>()
     private val states = mutableMapOf<UUID, StaffSpellHudState>()
     private val worldIds = mutableMapOf<UUID, UUID>()
-    private data class Guidance(val source: QuestGuidanceHudService.Source, val text: Component, var worldId: UUID)
-    private val guidance = mutableMapOf<UUID, Guidance>()
+    private data class Guidance(val source: QuestGuidanceHudService.Source, val text: Component,
+        val verticalOffset: Double = 0.0)
+    private data class SuppressionKey(val owner: Plugin, val surface: String)
+    private val guidance = mutableMapOf<UUID, MutableMap<QuestGuidanceHudService.Source, Guidance>>()
+    private val suppressions = mutableMapOf<UUID, MutableMap<SuppressionKey, Long>>()
     private val visual = staffSpellHudVisualSpec()
     private var started = false
     private var closed = false
@@ -135,23 +143,94 @@ internal class StaffSpellHud(
     }
 
     fun showGuidance(player: Player, source: QuestGuidanceHudService.Source, text: Component): Boolean {
-        if (closed || !eligible(player) || !player.hasPermission(QuestGuidanceHudService.PERMISSION) ||
-            StaffSpell.from(player.inventory.itemInMainHand) != null) {
-            clearGuidance(player.uniqueId, source)
+        return acceptGuidance(player, Guidance(source, text))
+    }
+
+    fun showClaim(player: Player, text: Component, verticalOffset: Double): Boolean {
+        require(verticalOffset.isFinite() && verticalOffset in -6.0..10.0) { "Claim HUD offset must be in -6..10" }
+        return acceptGuidance(player, Guidance(QuestGuidanceHudService.Source.CLAIM, text, verticalOffset))
+    }
+
+    private fun acceptGuidance(player: Player, hint: Guidance): Boolean {
+        if (closed || !eligible(player) || (hint.source != QuestGuidanceHudService.Source.CLAIM &&
+                !player.hasPermission(QuestGuidanceHudService.PERMISSION))) {
+            clearGuidance(player.uniqueId, hint.source)
             return false
         }
-        if (guidance[player.uniqueId]?.source == QuestGuidanceHudService.Source.FIRST_HOME &&
-            source == QuestGuidanceHudService.Source.OPTIONAL) return false
-        guidance[player.uniqueId] = Guidance(source, text, player.world.uid)
-        removeBossBar(player.uniqueId)
-        showText(player, text, null, preferences.read(player).placement)
-        return cards[player.uniqueId]?.let { it.state == null && it.display.isValid } == true
+        guidance.getOrPut(player.uniqueId, ::linkedMapOf)[hint.source] = hint
+        refreshGuidance(player)
+        return true
     }
 
     fun clearGuidance(playerId: UUID, source: QuestGuidanceHudService.Source) {
-        if (guidance[playerId]?.source != source) return
+        val hints = guidance[playerId] ?: return
+        if (hints.remove(source) == null) return
+        if (hints.isEmpty()) guidance.remove(playerId)
+        if (cards[playerId]?.guidanceSource == source) removeCard(playerId)
+        if (!closed) Bukkit.getPlayer(playerId)?.let(::refreshGuidance)
+    }
+
+    fun setSuppressed(owner: Plugin, playerId: UUID, surfaceKey: String, suppressed: Boolean) {
+        require(surfaceKey.isNotBlank() && surfaceKey.length <= 100) { "HUD surface key must be nonblank and at most 100 characters" }
+        if (closed) return
+        val key = SuppressionKey(owner, surfaceKey)
+        if (suppressed) suppressions.getOrPut(playerId, ::linkedMapOf)[key] = nanoTime() + GUIDANCE_LEASE_NANOS
+        else suppressions[playerId]?.let { leases ->
+            leases.remove(key)
+            if (leases.isEmpty()) suppressions.remove(playerId)
+        }
+        Bukkit.getPlayer(playerId)?.let(::refreshGuidance)
+    }
+
+    fun clearSuppressionOwner(owner: Plugin) {
+        suppressions.keys.toList().forEach { playerId ->
+            val leases = suppressions.getValue(playerId)
+            leases.keys.removeIf { it.owner === owner }
+            if (leases.isEmpty()) suppressions.remove(playerId)
+            Bukkit.getPlayer(playerId)?.let(::refreshGuidance)
+        }
+    }
+
+    fun clearViewerGuidance(playerId: UUID) {
         guidance.remove(playerId)
-        if (cards[playerId]?.state == null) removeCard(playerId)
+        suppressions.remove(playerId)
+        if (cards[playerId]?.guidanceSource != null) removeCard(playerId)
+    }
+
+    fun isClaimTarget(player: Player): Boolean {
+        val card = cards[player.uniqueId] ?: return false
+        if (!player.isSneaking || card.guidanceSource != QuestGuidanceHudService.Source.CLAIM ||
+            !card.display.isValid) return false
+        val hint = guidance[player.uniqueId]?.get(QuestGuidanceHudService.Source.CLAIM) ?: return false
+        syncCard(player, card, StaffHudPlacement.TOP, hint)
+        val origin = card.frozenOrigin ?: return false
+        return guidanceCardHit(player.eyeLocation, origin, card.bounds, card.placement.pose.textScale)
+    }
+
+    private fun refreshGuidance(player: Player) {
+        val hints = guidance[player.uniqueId] ?: return
+        if (!eligible(player)) { clearViewerGuidance(player.uniqueId); return }
+        if (!player.hasPermission(QuestGuidanceHudService.PERMISSION)) {
+            hints.keys.removeIf { it != QuestGuidanceHudService.Source.CLAIM }
+        }
+        if (hints.isEmpty()) { clearViewerGuidance(player.uniqueId); return }
+        if (StaffSpell.from(player.inventory.itemInMainHand) != null) {
+            if (cards[player.uniqueId]?.state == null) removeCard(player.uniqueId)
+            return
+        }
+        val hint = hints[QuestGuidanceHudService.Source.CLAIM]
+            ?: hints[QuestGuidanceHudService.Source.FIRST_HOME]
+            ?: hints.getValue(QuestGuidanceHudService.Source.OPTIONAL)
+        val leases = suppressions[player.uniqueId]
+        leases?.entries?.removeIf { (_, expires) -> nanoTime() - expires >= 0L }
+        if (leases?.isEmpty() == true) suppressions.remove(player.uniqueId)
+        if (player.openInventory.type !in setOf(InventoryType.CRAFTING, InventoryType.CREATIVE) ||
+            (hint.source != QuestGuidanceHudService.Source.CLAIM && !leases.isNullOrEmpty())) {
+            if (cards[player.uniqueId]?.state == null) removeCard(player.uniqueId)
+            return
+        }
+        removeBossBar(player.uniqueId)
+        showText(player, hint.text, null, StaffHudPlacement.TOP, hint)
     }
 
     private fun update(player: Player, state: StaffSpellHudState) {
@@ -188,7 +267,8 @@ internal class StaffSpellHud(
         showText(player, text, state, placementChoice)
     }
 
-    private fun showText(player: Player, text: Component, state: StaffSpellHudState?, placementChoice: StaffHudPlacement) {
+    private fun showText(player: Player, text: Component, state: StaffSpellHudState?, placementChoice: StaffHudPlacement,
+        hint: Guidance? = null) {
         if (cards[player.uniqueId]?.worldId?.let { it != player.world.uid } == true) removeCard(player.uniqueId)
         val card = cards[player.uniqueId]
         if (card != null && card.display.isValid) {
@@ -198,12 +278,21 @@ internal class StaffSpellHud(
                 card.bounds = staffSpellHudBounds(PlainTextComponentSerializer.plainText().serialize(text), visual.lineWidth)
             }
             card.state = state
-            syncCard(player, card, placementChoice)
+            if (card.guidanceSource != hint?.source) {
+                if (card.frozenOrigin != null) {
+                    card.display.interpolationDuration = 0
+                    card.display.transformation = card.placement.transformation
+                }
+                card.frozenOrigin = null
+                card.display.attachTo(player)
+            }
+            card.guidanceSource = hint?.source
+            syncCard(player, card, placementChoice, hint)
             return
         }
         val bounds = staffSpellHudBounds(PlainTextComponentSerializer.plainText().serialize(text), visual.lineWidth)
         card?.display?.remove()
-        val placement = placement(player, placementChoice, bounds)
+        val placement = placement(player, placementChoice, bounds, hint)
         val at = player.location
         if (at.world?.isChunkLoaded(at.blockX shr 4, at.blockZ shr 4) == false) {
             removeCard(player.uniqueId)
@@ -229,7 +318,11 @@ internal class StaffSpellHud(
             attachTo(player)
             showTo(player)
         }
-        cards[player.uniqueId] = Card(display, player.world.uid, state, text, placement, placementChoice, bounds)
+        val replacement = Card(display, player.world.uid, state, text, placement, placementChoice, bounds, hint?.source)
+        cards[player.uniqueId] = replacement
+        if (hint?.source == QuestGuidanceHudService.Source.CLAIM && player.isSneaking) {
+            syncCard(player, replacement, placementChoice, hint)
+        }
     }
 
     private fun showBossBar(player: Player, state: StaffSpellHudState) {
@@ -261,15 +354,34 @@ internal class StaffSpellHud(
         tracked.state = state
     }
 
-    private fun syncCard(player: Player, card: Card, placementChoice: StaffHudPlacement) {
-        val placement = placement(player, placementChoice, card.bounds)
+    private fun syncCard(player: Player, card: Card, placementChoice: StaffHudPlacement, hint: Guidance? = null) {
+        if (hint?.source == QuestGuidanceHudService.Source.CLAIM && player.isSneaking) {
+            if (card.frozenOrigin == null) {
+                val origin = guidanceCardOrigin(player.eyeLocation, player.height - player.eyeHeight,
+                    card.placement.transformation.translation)
+                card.frozenOrigin = origin
+                card.display.interpolationDuration = 0
+                card.display.teleportDuration = 0
+                card.display.teleport(origin)
+                card.display.detach()
+                card.display.transformation = Transformation(Vector3f(), Quaternionf(),
+                    Vector3f(card.placement.pose.textScale), Quaternionf())
+            }
+            return
+        }
+        val wasFrozen = card.frozenOrigin != null
+        if (wasFrozen) {
+            card.frozenOrigin = null
+            card.display.attachTo(player)
+        }
+        val placement = placement(player, placementChoice, card.bounds, hint)
         // Mounted movement and CENTER billboard orientation run on the local client. Only this
         // eye-height/wall correction is interpolated; changing sides or a wall pull-in must snap.
         // Compare with the last applied pose so small changes accumulate instead of being lost.
-        if (card.placement.transformation.translation.distanceSquared(placement.transformation.translation) >=
+        if (wasFrozen || card.placement.transformation.translation.distanceSquared(placement.transformation.translation) >=
                 POSITION_EPSILON_SQUARED ||
             abs(card.placement.pose.textScale - placement.pose.textScale) >= SCALE_EPSILON) {
-            val smooth = card.preference == placementChoice &&
+            val smooth = !wasFrozen && card.preference == placementChoice &&
                 placement.clipFraction >= card.placement.clipFraction - 1.0e-6
             card.display.interpolationDuration = if (smooth) visual.interpolationTicks else 0
             card.display.transformation = placement.transformation
@@ -337,21 +449,14 @@ internal class StaffSpellHud(
             states[playerId] = state
             renderSurface(player, state, preferences.read(player))
         }
-        guidance.toMap().forEach { (playerId, hint) ->
+        val now = nanoTime()
+        suppressions.entries.removeIf { (_, leases) ->
+            leases.entries.removeIf { (_, expires) -> now - expires >= 0L }
+            leases.isEmpty()
+        }
+        guidance.keys.toList().forEach { playerId ->
             val player = Bukkit.getPlayer(playerId)
-            if (player == null || !eligible(player) || !player.hasPermission(QuestGuidanceHudService.PERMISSION)) {
-                clearGuidance(playerId, hint.source)
-                return@forEach
-            }
-            if (StaffSpell.from(player.inventory.itemInMainHand) != null) {
-                if (cards[playerId]?.state == null) removeCard(playerId)
-                return@forEach
-            }
-            if (hint.worldId != player.world.uid) {
-                removeCard(playerId)
-                hint.worldId = player.world.uid
-            }
-            showText(player, hint.text, null, preferences.read(player).placement)
+            if (player == null) clearViewerGuidance(playerId) else refreshGuidance(player)
         }
     }
 
@@ -363,6 +468,7 @@ internal class StaffSpellHud(
         player: Player,
         preference: StaffHudPlacement,
         bounds: StaffSpellHudBounds,
+        hint: Guidance? = null,
     ): StaffSpellHudPlacement {
         val eye = player.eyeLocation
         val direction = eye.direction.normalize()
@@ -370,7 +476,8 @@ internal class StaffSpellHud(
         val cameraRight = Vector(-cos(yaw), 0.0, -sin(yaw))
         val cameraDown = direction.clone().crossProduct(cameraRight).normalize()
         val passengerGap = player.height - player.eyeHeight
-        val position = staffHudPosition(config.hudPosition, preference, bounds, passengerGap)
+        val position = if (hint == null) staffHudPosition(config.hudPosition, preference, bounds, passengerGap)
+            else guidanceHudPosition(config.hudPosition, bounds, passengerGap, hint.verticalOffset)
         val basePose = staffSpellHudPose(position)
         val baseOffset = direction.clone().multiply(basePose.forwardOffset)
             .add(cameraDown.clone().multiply(basePose.cameraDownOffset))
@@ -392,7 +499,8 @@ internal class StaffSpellHud(
         if (closed) return
         closed = true
         tasks.close()
-        guidance.toMap().forEach { (playerId, hint) -> clearGuidance(playerId, hint.source) }
+        guidance.keys.toList().forEach(::clearViewerGuidance)
+        suppressions.clear()
         (states.keys + cards.keys + bossBars.keys).toSet().forEach(::clear)
         if (ownDisplays) displays.close()
     }
@@ -401,6 +509,7 @@ internal class StaffSpellHud(
         const val POSITION_EPSILON_SQUARED = 0.000001
         const val SCALE_EPSILON = 0.0005f
         const val BAR_PROGRESS_EPSILON = 0.0005f
+        const val GUIDANCE_LEASE_NANOS = 3_000_000_000L
     }
 }
 
@@ -486,6 +595,39 @@ internal fun staffHudPosition(
     val vertical = max(abs(position.verticalBlocks),
         radius + anchorError + distance * STAFF_HUD_AIM_SLOPE)
     return position.copy(forwardBlocks = distance, verticalBlocks = side * vertical)
+}
+
+/** Raise guidance a quarter block; longer claim cards retain a 5% top margin at the reference 70° FOV. */
+internal fun guidanceHudPosition(
+    position: StaffSpellHudPositionSettings,
+    bounds: StaffSpellHudBounds,
+    passengerGap: Double,
+    verticalOffset: Double = 0.0,
+): StaffSpellHudPositionSettings = staffHudPosition(position, StaffHudPlacement.TOP, bounds, passengerGap).let {
+    val upperEdge = position.forwardBlocks * Math.tan(Math.toRadians(35.0)) * 0.9
+    val highestCenter = (upperEdge - bounds.verticalRadius * position.scale).coerceAtLeast(0.0)
+    it.copy(verticalBlocks = -minOf(-it.verticalBlocks + 0.25, highestCenter) - verticalOffset)
+}
+
+/** Convert the mounted camera-local origin once when Shift turns the claim hint into a target. */
+internal fun guidanceCardOrigin(eye: Location, passengerGap: Double, translation: Vector3f): Location {
+    val rotated = Quaternionf().rotationYXZ(Math.toRadians(180.0 - eye.yaw).toFloat(),
+        Math.toRadians(-eye.pitch.toDouble()).toFloat(), 0f).transform(Vector3f(translation))
+    return eye.clone().add(rotated.x.toDouble(), passengerGap + rotated.y, rotated.z.toDouble())
+}
+
+/** CENTER keeps the frozen card facing the current camera, so recheck its actual text footprint. */
+internal fun guidanceCardHit(eye: Location, origin: Location, bounds: StaffSpellHudBounds, scale: Float): Boolean {
+    if (eye.world != origin.world) return false
+    val direction = eye.direction
+    val offset = origin.toVector().subtract(eye.toVector())
+    val depth = offset.dot(direction)
+    if (depth <= 0.0 || depth > 6.0) return false
+    val yaw = Math.toRadians(eye.yaw.toDouble())
+    val right = Vector(cos(yaw), 0.0, sin(yaw))
+    val up = direction.clone().crossProduct(right).normalize()
+    return abs(offset.dot(right)) <= bounds.halfWidth * scale + 0.10 &&
+        offset.dot(up) in (-bounds.verticalRadius * 2 * scale - 0.10)..0.10
 }
 
 /** CENTER billboard rotates this local translation with the client camera before rendering. */

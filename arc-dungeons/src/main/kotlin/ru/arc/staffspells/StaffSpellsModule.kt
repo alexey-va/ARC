@@ -22,6 +22,7 @@ import org.bukkit.event.player.PlayerInteractAtEntityEvent
 import org.bukkit.event.player.PlayerInteractEntityEvent
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerQuitEvent
+import org.bukkit.event.server.PluginDisableEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.potion.PotionEffect
 import org.bukkit.potion.PotionEffectType
@@ -48,6 +49,7 @@ object StaffSpellsModule : PluginModule {
     override val priority = 85
     private var controller: StaffSpellController? = null
     private var guidanceHud: QuestGuidanceHudService? = null
+    private var guidanceLifecycle: Listener? = null
     private var duelAccess: StaffSpellDuelAccess? = null
     private var masteryCooldown: ((Player, StaffSpellCast, Long) -> Long)? = null
 
@@ -106,13 +108,36 @@ object StaffSpellsModule : PluginModule {
                 check(Bukkit.isPrimaryThread()) { "Quest guidance must be cleared on the Paper thread" }
                 hud.clearGuidance(playerId, source)
             }
+
+            override fun showClaim(player: Player, text: net.kyori.adventure.text.Component, verticalOffset: Double): Boolean {
+                check(Bukkit.isPrimaryThread()) { "Claim guidance must be shown on the Paper thread" }
+                return hud.showClaim(player, text, verticalOffset)
+            }
+
+            override fun isClaimTarget(player: Player): Boolean {
+                check(Bukkit.isPrimaryThread()) { "Claim guidance must be inspected on the Paper thread" }
+                return hud.isClaimTarget(player)
+            }
+
+            override fun setSuppressed(owner: org.bukkit.plugin.Plugin, playerId: UUID, surfaceKey: String, suppressed: Boolean) {
+                check(Bukkit.isPrimaryThread()) { "Guidance suppression must be updated on the Paper thread" }
+                hud.setSuppressed(owner, playerId, surfaceKey, suppressed)
+            }
         }.also { Bukkit.getServicesManager().register(QuestGuidanceHudService::class.java, it, plugin, ServicePriority.Normal) }
+        guidanceLifecycle = object : Listener {
+            @EventHandler fun disabled(event: PluginDisableEvent) = hud.clearSuppressionOwner(event.plugin)
+            @EventHandler fun quit(event: PlayerQuitEvent) = hud.clearViewerGuidance(event.player.uniqueId)
+            @EventHandler fun world(event: PlayerChangedWorldEvent) = hud.clearViewerGuidance(event.player.uniqueId)
+            @EventHandler fun death(event: PlayerDeathEvent) = hud.clearViewerGuidance(event.entity.uniqueId)
+        }.also { Bukkit.getPluginManager().registerEvents(it, plugin) }
     }
 
     override fun reload() = init()
     override fun shutdown() {
         guidanceHud?.let { Bukkit.getServicesManager().unregister(QuestGuidanceHudService::class.java, it) }
         guidanceHud = null
+        guidanceLifecycle?.let(HandlerList::unregisterAll)
+        guidanceLifecycle = null
         controller?.let { HandlerList.unregisterAll(it); HandlerList.unregisterAll(it.input); HandlerList.unregisterAll(it.defense); HandlerList.unregisterAll(it.summons); HandlerList.unregisterAll(it.conjurations); HandlerList.unregisterAll(it.mobCasters); it.close() }
         controller = null
     }

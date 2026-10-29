@@ -259,9 +259,9 @@ class HomeMarkerSceneTest : StringSpec({
         settings.modelId shouldBe ""
         settings.refreshTicks shouldBe 100L
         PlainTextComponentSerializer.plainText().serialize(settings.label(marker)) shouldBe
-            "Дом · <red>дом\nShift + ПКМ · Настройки"
+            "Дом · <red>дом"
         PlainTextComponentSerializer.plainText().serialize(settings.label(marker.copy(kind = HomeMarkerKind.WARP))) shouldBe
-            "Варп · <red>дом\nShift + ПКМ · Настройки"
+            "Варп · <red>дом"
         shouldThrow<IllegalArgumentException> { settings.copy(scale = Float.NaN) }
         shouldThrow<IllegalArgumentException> { settings.copy(viewDistance = 0.0) }
     }

@@ -31,9 +31,9 @@ internal class OnboardingPlaytimeStore(private val redis: RedisOperations, gson:
             values.single()?.let { codec.decode(it).state() }
         }
 
-    fun sample(playerId: UUID, runId: String, serverId: String, counter: Int): CompletableFuture<OnboardingPlaytime> =
+    fun sample(playerId: UUID, runId: String, serverId: String, counter: Int, suggestBuild: Boolean = false): CompletableFuture<OnboardingPlaytime> =
         updater.update(field(playerId, runId)) { current ->
-            RedisHashDecision.Write(PlaytimeWire.from((current?.state() ?: OnboardingPlaytime.empty()).sample(serverId, counter)))
+            RedisHashDecision.Write(PlaytimeWire.from((current?.state() ?: OnboardingPlaytime.empty()).sample(serverId, counter, suggestBuild)))
         }.thenApply { result ->
             when (result) {
                 is RedisHashUpdateResult.Changed -> requireNotNull(result.after).state()
@@ -63,12 +63,21 @@ internal class OnboardingPlaytimeStore(private val redis: RedisOperations, gson:
                     require(value.isJsonPrimitive && value.asJsonPrimitive.isString) { "Playtime backend must be a string" }
                 }
             }
+            val nullableLong = object : JsonRootContract {
+                override fun validate(value: JsonElement) {
+                    if (!value.isJsonNull) {
+                        require(value.isJsonPrimitive && value.asJsonPrimitive.isNumber) { "Build suggestion start must be an integer" }
+                        value.asBigDecimal.longValueExact()
+                    }
+                }
+            }
             val server = JsonObjectContract(setOf("server", "baseline", "maximum"), fieldContracts = mapOf(
                 "server" to string, "baseline" to integer, "maximum" to integer,
             ))
             return BoundedJsonCodec(gson, PlaytimeWire::class.java,
-                JsonObjectContract(setOf("version", "servers"), fieldContracts = mapOf(
+                JsonObjectContract(allowedFields = setOf("version", "servers", "buildSuggestedAtTicks"), requiredFields = setOf("version", "servers"), fieldContracts = mapOf(
                     "version" to integer, "servers" to JsonArrayContract(maxEntries = OnboardingPlaytime.MAX_SERVERS, elementContract = server),
+                    "buildSuggestedAtTicks" to nullableLong,
                 )),
                 JsonResourceBounds(4096, maxDepth = 4, maxContainerEntries = 16, maxTotalNodes = 128, maxStringCharacters = 36),
             ) { it.state() }
@@ -76,18 +85,18 @@ internal class OnboardingPlaytimeStore(private val redis: RedisOperations, gson:
     }
 }
 
-private data class PlaytimeWire(val version: Int, val servers: List<PlaytimeServerWire>?) {
+private data class PlaytimeWire(val version: Int, val servers: List<PlaytimeServerWire>?, val buildSuggestedAtTicks: Long? = null) {
     fun state(): OnboardingPlaytime {
         require(version == 1) { "Unsupported onboarding playtime version" }
         val values = requireNotNull(servers)
         require(values.map { it.server }.distinct().size == values.size) { "Duplicate onboarding playtime backend" }
-        return OnboardingPlaytime.create(values.associate { requireNotNull(it.server) to OnboardingServerTicks(it.baseline, it.maximum) })
+        return OnboardingPlaytime.create(values.associate { requireNotNull(it.server) to OnboardingServerTicks(it.baseline, it.maximum) }, buildSuggestedAtTicks)
     }
 
     companion object {
         fun from(state: OnboardingPlaytime) = PlaytimeWire(1, state.servers.map { (server, ticks) ->
             PlaytimeServerWire(server, ticks.baseline, ticks.maximum)
-        })
+        }, state.buildSuggestedAtTicks)
     }
 }
 

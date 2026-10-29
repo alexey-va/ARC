@@ -70,6 +70,61 @@ class OnboardingStoreTest : FreeSpec({
         store.load(playerId).join() shouldBe next
     }
 
+    "BUILD invitation expiry stops an unstarted quest without marking construction completed" {
+        val store = OnboardingStore(InMemoryRedis(), Gson())
+        val playerId = UUID.randomUUID()
+        val run = store.enroll(playerId).join()
+        store.expireActive(playerId, run.runId, awaitingBuildOnly = true).join() shouldBe null
+        store.accept(playerId, run.runId).join()
+        store.observe(playerId, run.runId, OnboardingMilestone.FIRST_RTP).join()
+        store.expireActive(playerId, run.runId, awaitingBuildOnly = true).join() shouldBe null
+        val home = OnboardingPlace.fromChunk("survival", 1, 2)
+        val ready = store.observe(playerId, run.runId, OnboardingMilestone.HOME_CREATED, home, verifiedFoothold = true).join()!!
+        val stopped = store.expireActive(playerId, run.runId, awaitingBuildOnly = true).join()!!
+        stopped.status shouldBe OnboardingStatus.STOPPED
+        stopped.milestones shouldBe ready.milestones
+        (OnboardingMilestone.AUTOBUILD_COMPLETE in stopped.milestones) shouldBe false
+        store.observe(playerId, run.runId, OnboardingMilestone.AUTOBUILD_STARTED, home, operationId = UUID.randomUUID().toString()).join() shouldBe null
+        store.load(playerId).join() shouldBe stopped
+    }
+
+    "a queued BUILD invitation expiry cannot stop construction started before its CAS commits" {
+        val redis = InMemoryRedis()
+        val store = OnboardingStore(redis, Gson())
+        val playerId = UUID.randomUUID()
+        val run = store.enroll(playerId).join()
+        val home = OnboardingPlace.fromChunk("survival", 1, 2)
+        store.accept(playerId, run.runId).join()
+        store.observe(playerId, run.runId, OnboardingMilestone.FIRST_RTP).join()
+        store.observe(playerId, run.runId, OnboardingMilestone.HOME_CREATED, home, verifiedFoothold = true).join()
+        val entered = CompletableFuture<Unit>()
+        val release = CompletableFuture<Unit>()
+        val hold = AtomicBoolean(true)
+        val delayed = object : RedisOperations by redis {
+            override fun compareAndSetMapEntry(key: String, mapKey: String, expectedValue: String?, replacementValue: String?): CompletableFuture<Boolean> =
+                if (hold.compareAndSet(true, false)) {
+                    entered.complete(Unit)
+                    release.thenCompose { redis.compareAndSetMapEntry(key, mapKey, expectedValue, replacementValue) }
+                } else redis.compareAndSetMapEntry(key, mapKey, expectedValue, replacementValue)
+        }
+        val expiry = OnboardingStore(delayed, Gson()).expireActive(playerId, run.runId, awaitingBuildOnly = true)
+        try {
+            entered.get(5, TimeUnit.SECONDS)
+            expiry.isDone shouldBe false
+            val operationId = UUID.randomUUID().toString()
+            val started = store.observe(playerId, run.runId, OnboardingMilestone.AUTOBUILD_STARTED, home, operationId = operationId).join()!!
+            release.complete(Unit)
+            expiry.get(5, TimeUnit.SECONDS) shouldBe null
+            store.load(playerId).join() shouldBe started
+            store.expireActive(playerId, run.runId, awaitingBuildOnly = true).join() shouldBe null
+            val completed = store.observe(playerId, run.runId, OnboardingMilestone.AUTOBUILD_COMPLETE, home, operationId = operationId).join()!!
+            completed.status shouldBe OnboardingStatus.COMPLETED
+            store.expireActive(playerId, run.runId, awaitingBuildOnly = true).join() shouldBe null
+        } finally {
+            release.complete(Unit)
+        }
+    }
+
     "restarting a quest does not inherit or complete the preceding construction operation" {
         val redis = InMemoryRedis()
         val store = OnboardingStore(redis, Gson())

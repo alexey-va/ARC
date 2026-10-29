@@ -58,7 +58,7 @@ class StaffSpellHudTest : FreeSpec({
             h.scheduler.tick(2)
             card.removals shouldBe 0
             h.hud.showGuidance(player, home, Component.text("Сохраните точку дома")) shouldBe true
-            h.hud.showGuidance(player, optional, hint) shouldBe false
+            h.hud.showGuidance(player, optional, hint) shouldBe true
             h.hud.clearGuidance(player.uniqueId, optional)
             card.removals shouldBe 0
             text(card.text) shouldBe "Сохраните точку дома"
@@ -66,7 +66,7 @@ class StaffSpellHudTest : FreeSpec({
             h.hud.ready(player, StaffSpell.EMBER, false)
             h.recorder.records.size shouldBe 1
             text(card.text) shouldBe "ПКМ · Комета"
-            h.hud.showGuidance(player, home, hint) shouldBe false
+            h.hud.showGuidance(player, home, hint) shouldBe true
             card.removals shouldBe 0
             player.inventory.setItemInMainHand(ItemStack(Material.STONE))
             h.hud.clear(player.uniqueId)
@@ -77,6 +77,128 @@ class StaffSpellHudTest : FreeSpec({
             resumed.removals shouldBe 1
             h.recorder.closes shouldBe 0
         }
+    }
+
+    "claim guidance is mounted without quest permission and temporarily freezes only for Shift aiming" {
+        withHudHarness { h ->
+            val player = h.player("claim-mounted", StaffSpell.EMBER)
+            player.inventory.setItemInMainHand(ItemStack(Material.STONE))
+            player.addAttachment(h.paper.createSimplePlugin("ClaimHudTest"), QuestGuidanceHudService.PERMISSION, false)
+            h.hud.showClaim(player, Component.text("Поставь блок\nShift + F — меню"), 0.0) shouldBe true
+            val card = h.recorder.records.single()
+            card.attachedPlayerId shouldBe player.uniqueId
+            player.teleport(Location(h.world, 5.0, 64.0, 6.0, 25f, 15f))
+            h.scheduler.tick(1)
+            card.teleports.size shouldBe 0
+            player.isSneaking = true
+            h.scheduler.tick(1)
+            card.attachedPlayerId shouldBe null
+            val frozen = card.teleports.single().clone()
+            h.hud.isClaimTarget(player) shouldBe false
+            val direction = frozen.toVector().add(Vector(0.0, 0.15, 0.0)).subtract(player.eyeLocation.toVector())
+            player.teleport(player.location.setDirection(direction))
+            h.scheduler.tick(1)
+            card.teleports.single() shouldBe frozen
+            h.hud.isClaimTarget(player) shouldBe true
+            player.isSneaking = false
+            h.scheduler.tick(1)
+            card.attachedPlayerId shouldBe player.uniqueId
+            card.removals shouldBe 0
+            card.teleports.size shouldBe 1
+            h.hud.clearGuidance(player.uniqueId, QuestGuidanceHudService.Source.CLAIM)
+            card.removals shouldBe 1
+        }
+    }
+
+    "claim and independently leased foreground surfaces hide quests without losing their latest content" {
+        withHudHarness { h ->
+            val player = h.player("quest-priority", StaffSpell.EMBER)
+            player.inventory.setItemInMainHand(ItemStack(Material.STONE))
+            val owner = h.paper.createSimplePlugin("BuilderHudOwner")
+            val secondOwner = h.paper.createSimplePlugin("OtherHudOwner")
+            player.addAttachment(owner, QuestGuidanceHudService.PERMISSION, true)
+            val home = QuestGuidanceHudService.Source.FIRST_HOME
+            h.hud.showGuidance(player, home, Component.text("Первая цель")) shouldBe true
+            h.hud.showClaim(player, Component.text("Защити землю"), 0.0) shouldBe true
+            h.hud.showGuidance(player, home, Component.text("Следующая цель")) shouldBe true
+            text(h.recorder.records.last().text) shouldBe "Защити землю"
+            h.hud.clearGuidance(player.uniqueId, QuestGuidanceHudService.Source.CLAIM)
+            text(h.recorder.records.last().text) shouldBe "Следующая цель"
+            val quest = h.recorder.records.last()
+            h.hud.setSuppressed(owner, player.uniqueId, "book", true)
+            quest.removals shouldBe 1
+            h.hud.setSuppressed(owner, player.uniqueId, "selection", true)
+            h.hud.setSuppressed(secondOwner, player.uniqueId, "panel", true)
+            val count = h.recorder.records.size
+            h.hud.showGuidance(player, home, Component.text("Сохранённая цель")) shouldBe true
+            h.hud.setSuppressed(owner, player.uniqueId, "book", false)
+            h.hud.clearSuppressionOwner(owner)
+            h.scheduler.tick(1)
+            h.recorder.records.size shouldBe count
+            h.clock[0] += 3_000_000_001L
+            h.scheduler.tick(1)
+            text(h.recorder.records.last().text) shouldBe "Сохранённая цель"
+            h.recorder.records.size shouldBe count + 1
+            h.hud.setSuppressed(secondOwner, player.uniqueId, "panel", true)
+            h.hud.clearViewerGuidance(player.uniqueId)
+            h.hud.showGuidance(player, home, Component.text("Новая сессия")) shouldBe true
+            text(h.recorder.records.last().text) shouldBe "Новая сессия"
+            player.activeBossBars().count() shouldBe 0
+        }
+    }
+
+    "ordinary inventory views keep guidance and a chest hides it until closed" {
+        withHudHarness { h ->
+            val player = h.player("quest-inventory", StaffSpell.EMBER)
+            player.inventory.setItemInMainHand(ItemStack(Material.STONE))
+            player.addAttachment(h.paper.createSimplePlugin("InventoryHudTest"), QuestGuidanceHudService.PERMISSION, true)
+            val source = QuestGuidanceHudService.Source.FIRST_HOME
+            h.hud.showGuidance(player, source, Component.text("Цель")) shouldBe true
+            val card = h.recorder.records.single()
+            player.openInventory(org.bukkit.Bukkit.createInventory(null, 9))
+            h.scheduler.tick(1)
+            card.removals shouldBe 1
+            h.hud.showGuidance(player, source, Component.text("Обновлённая цель")) shouldBe true
+            h.recorder.records.size shouldBe 1
+            player.closeInventory()
+            player.gameMode = org.bukkit.GameMode.CREATIVE
+            h.scheduler.tick(1)
+            h.recorder.records.size shouldBe 2
+            text(h.recorder.records.last().text) shouldBe "Обновлённая цель"
+        }
+    }
+
+    "guidance rises above the old top card while long claim text stays inside the reference viewport" {
+        val position = StaffSpellHudPositionSettings()
+        val cases = linkedMapOf(
+            "quest" to "ПКМ блоком привата по земле — защитить участок",
+            "claim-free" to "Ничейная земля\nПоставь блок — создай приват\nShift + F - меню",
+            "claim-expand-cost" to "Расширить «Мой дом»\nПоставь блок на ничейной земле\nShift + F - меню\nСтоимость: 1250 💰",
+        )
+        val rows = cases.map { (name, text) ->
+            val bounds = staffSpellHudBounds(text, staffSpellHudVisualSpec().lineWidth)
+            val before = staffHudPosition(position, StaffHudPlacement.TOP, bounds, 0.18)
+            val after = guidanceHudPosition(position, bounds, 0.18)
+            fun project(pose: StaffSpellHudPositionSettings): List<Double> {
+                val radius = bounds.verticalRadius * pose.scale
+                val denominator = 2 * pose.forwardBlocks * Math.tan(Math.toRadians(35.0))
+                return listOf(0.5 + (pose.verticalBlocks - radius) / denominator,
+                    0.5 + (pose.verticalBlocks + radius) / denominator)
+            }
+            val current = project(after)
+            (current.first() >= 0.05 - 1.0e-9) shouldBe true
+            (current.last() < 0.30) shouldBe true
+            if (name == "quest") (before.verticalBlocks - after.verticalBlocks) shouldBe 0.25
+            mapOf("case" to name, "text" to text, "beforeTop" to project(before), "afterTop" to current)
+        }
+        val output = java.nio.file.Path.of("build/reports/guidance-hud/projection.json")
+        java.nio.file.Files.createDirectories(output.parent)
+        java.nio.file.Files.writeString(output, com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(mapOf(
+            "verticalFovDegrees" to 70,
+            "source" to "StaffSpellHud.kt: guidanceHudPosition and staffSpellHudBounds",
+            "evidence" to "Source-derived conservative card bounds; native client rendering and motion unverified.",
+            "cases" to rows,
+        )) + "\n")
     }
 
     "quest card follows native movement and respawns in the destination world before cleanup" {
@@ -555,6 +677,7 @@ private class HudDisplayRecorder {
                 Unit
             }
             every { handle.attachTo(any<Player>()) } answers { record.attachedPlayerId = firstArg<Player>().uniqueId }
+            every { handle.detach() } answers { record.attachedPlayerId = null }
             every { handle.teleportDuration = any() } answers { record.teleportTicks = firstArg<Int>() }
             every { handle.interpolationDuration = any() } answers { record.transformTicks = firstArg<Int>() }
             every { handle.text(any()) } answers {
@@ -584,6 +707,7 @@ private data class HudHarness(
     val rayHitDistance: MutableList<Double?>,
     val preferences: HudPreferenceBox,
     val config: StaffSpellConfig,
+    val clock: MutableList<Long>,
 ) {
     fun player(name: String, spell: StaffSpell): Player = paper.addPlayer(name).apply {
         teleport(Location(world, 0.5, 64.0, 0.5))
@@ -598,6 +722,7 @@ private data class HudPreferenceBox(var value: StaffSpellHudPreferences = StaffS
 private fun withHudHarness(ownDisplays: Boolean = true, block: (HudHarness) -> Unit) = failOnUnsupportedMockBukkitOperation {
     val scheduler = TestTaskScheduler()
     val rayHitDistance = mutableListOf<Double?>(null)
+    val clock = mutableListOf(0L)
     mockkConstructor(WorldMock::class)
     try {
         every { anyConstructed<WorldMock>().isChunkLoaded(any<Int>(), any<Int>()) } returns true
@@ -636,9 +761,10 @@ private fun withHudHarness(ownDisplays: Boolean = true, block: (HudHarness) -> U
                     "messages.staff-hud.bossbar-channel" to "<input> · <ability> · Глыба готова",
                 ))))
                 val hud = StaffSpellHud(recorder.displays, config,
-                    preferences = StaffSpellHudPreferencesReader { preferences.value }, ownDisplays = ownDisplays).also(StaffSpellHud::start)
+                    preferences = StaffSpellHudPreferencesReader { preferences.value }, ownDisplays = ownDisplays,
+                    nanoTime = { clock.single() }).also(StaffSpellHud::start)
                 try {
-                    block(HudHarness(scheduler, world, recorder, hud, paper, rayHitDistance, preferences, config))
+                    block(HudHarness(scheduler, world, recorder, hud, paper, rayHitDistance, preferences, config, clock))
                 } finally {
                     hud.close()
                     recorder.closes shouldBe if (ownDisplays) 1 else 0

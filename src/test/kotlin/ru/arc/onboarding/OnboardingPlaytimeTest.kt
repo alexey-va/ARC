@@ -39,6 +39,71 @@ class OnboardingPlaytimeTest : FreeSpec({
         resumed.sample(player, run, "survival", 176_100).join().remainingTicks shouldBe 0L
     }
 
+    "BUILD invitation starts once at transition and persists across refreshes reconnects and backends" {
+        val redis = InMemoryRedis()
+        val player = UUID.randomUUID()
+        val run = UUID.randomUUID().toString()
+        val store = OnboardingPlaytimeStore(redis, Gson())
+        store.sample(player, run, "spawn", 1_000).join()
+        val beforeBuild = store.sample(player, run, "spawn", 121_000).join()
+        beforeBuild.buildSuggestedAtTicks shouldBe null
+        beforeBuild.remainingTicks shouldBe 96_000L
+        val offered = store.sample(player, run, "spawn", 121_000, suggestBuild = true).join()
+        offered.buildSuggestedAtTicks shouldBe 120_000L
+        offered.remainingTicks(awaitingBuild = true) shouldBe 18_000L
+        store.sample(player, run, "spawn", 127_000, suggestBuild = true).join().remainingTicks(awaitingBuild = true) shouldBe 12_000L
+
+        val resumed = OnboardingPlaytimeStore(redis, Gson())
+        resumed.load(player, run).join()?.buildSuggestedAtTicks shouldBe 120_000L
+        // Neither an unchanged offline counter nor a new backend grants a new invitation.
+        resumed.sample(player, run, "spawn", 127_000, suggestBuild = true).join().remainingTicks(awaitingBuild = true) shouldBe 12_000L
+        resumed.sample(player, run, "survival", 50_000, suggestBuild = true).join().remainingTicks(awaitingBuild = true) shouldBe 12_000L
+        val lastTick = resumed.sample(player, run, "survival", 61_999, suggestBuild = true).join()
+        lastTick.remainingTicks(awaitingBuild = true) shouldBe 1L
+        val expiredInvitation = resumed.sample(player, run, "survival", 62_000, suggestBuild = true).join()
+        expiredInvitation.buildSuggestedAtTicks shouldBe 120_000L
+        expiredInvitation.remainingTicks(awaitingBuild = true) shouldBe 0L
+        // A genuine construction still receives the existing overall completion window.
+        expiredInvitation.remainingTicks(awaitingBuild = false) shouldBe 78_000L
+        expiredInvitation.expired shouldBe false
+    }
+
+    "BUILD invitation cannot extend an almost expired overall allowance" {
+        val redis = InMemoryRedis()
+        val player = UUID.randomUUID()
+        val run = UUID.randomUUID().toString()
+        val store = OnboardingPlaytimeStore(redis, Gson())
+        store.sample(player, run, "spawn", 1_000).join()
+        val offered = store.sample(player, run, "spawn", 211_000, suggestBuild = true).join()
+        offered.buildSuggestedAtTicks shouldBe 210_000L
+        offered.remainingTicks(awaitingBuild = true) shouldBe 6_000L
+        val expired = store.sample(player, run, "spawn", 217_000, suggestBuild = true).join()
+        expired.remainingTicks(awaitingBuild = true) shouldBe 0L
+        expired.remainingTicks(awaitingBuild = false) shouldBe 0L
+        expired.expired shouldBe true
+    }
+
+    "legacy playtime initializes the optional BUILD invitation only on its first BUILD sample" {
+        val redis = InMemoryRedis()
+        val player = UUID.randomUUID()
+        val run = UUID.randomUUID().toString()
+        val store = OnboardingPlaytimeStore(redis, Gson())
+        val legacy = """{"version":1,"servers":[{"server":"spawn","baseline":1000,"maximum":2000}]}"""
+        listOf(legacy, legacy.dropLast(1) + ",\"buildSuggestedAtTicks\":null}").forEach { raw ->
+            redis.setHash(OnboardingPlaytimeStore.HASH_KEY, mapOf("$player:$run" to raw))
+            val restored = store.load(player, run).join()!!
+            restored.buildSuggestedAtTicks shouldBe null
+            restored.remainingTicks(awaitingBuild = true) shouldBe 18_000L
+            store.sample(player, run, "spawn", 2_000).join().buildSuggestedAtTicks shouldBe null
+            val offered = store.sample(player, run, "spawn", 3_000, suggestBuild = true).join()
+            offered.buildSuggestedAtTicks shouldBe 2_000L
+            offered.remainingTicks(awaitingBuild = true) shouldBe 18_000L
+            val resumed = OnboardingPlaytimeStore(redis, Gson()).sample(player, run, "spawn", 4_000, suggestBuild = true).join()
+            resumed.buildSuggestedAtTicks shouldBe 2_000L
+            resumed.remainingTicks(awaitingBuild = true) shouldBe 17_000L
+        }
+    }
+
     "a delayed old-run sample cannot spend or reset the replacement run allowance" {
         val redis = InMemoryRedis()
         val player = UUID.randomUUID()
@@ -56,13 +121,17 @@ class OnboardingPlaytimeTest : FreeSpec({
                     release.thenCompose { redis.compareAndSetMapEntry(key, mapKey, expectedValue, replacementValue) }
                 } else redis.compareAndSetMapEntry(key, mapKey, expectedValue, replacementValue)
         }
-        val pending = OnboardingPlaytimeStore(delayed, Gson()).sample(player, oldRun, "spawn", 41_000)
+        val pending = OnboardingPlaytimeStore(delayed, Gson()).sample(player, oldRun, "spawn", 41_000, suggestBuild = true)
         try {
             entered.get(5, TimeUnit.SECONDS)
             pending.isDone shouldBe false
-            store.sample(player, newRun, "spawn", 41_000).join().playedTicks shouldBe 0L
+            val replacement = store.sample(player, newRun, "spawn", 41_000).join()
+            replacement.playedTicks shouldBe 0L
+            replacement.buildSuggestedAtTicks shouldBe null
             release.complete(Unit)
-            pending.get(5, TimeUnit.SECONDS).playedTicks shouldBe 40_000L
+            val oldSample = pending.get(5, TimeUnit.SECONDS)
+            oldSample.playedTicks shouldBe 40_000L
+            oldSample.buildSuggestedAtTicks shouldBe 40_000L
             store.sample(player, newRun, "spawn", 41_100).join().playedTicks shouldBe 100L
             redis.getHash(OnboardingPlaytimeStore.HASH_KEY).keys shouldBe setOf("$player:$oldRun", "$player:$newRun")
         } finally {
@@ -111,6 +180,12 @@ class OnboardingPlaytimeTest : FreeSpec({
             valid.replace("\"maximum\":2000", "\"maximum\":null"),
             valid.replace("\"maximum\":2000", "\"maximum\":\"2000\""),
             valid.replace("\"maximum\":2000", "\"maximum\":2000,\"unknown\":1"),
+            valid.dropLast(1) + ",\"buildSuggestedAtTicks\":-1}",
+            valid.dropLast(1) + ",\"buildSuggestedAtTicks\":1001}",
+            valid.dropLast(1) + ",\"buildSuggestedAtTicks\":1.5}",
+            valid.dropLast(1) + ",\"buildSuggestedAtTicks\":\"1\"}",
+            valid.dropLast(1) + ",\"buildSuggestedAtTicks\":true}",
+            valid.dropLast(1) + ",\"buildSuggestedAtTicks\":9223372036854775808}",
             valid.dropLast(1) + ",\"unknown\":true}",
         )
         invalid.forEach { raw ->

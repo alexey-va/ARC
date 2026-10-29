@@ -19,7 +19,7 @@ internal data class HomeMarkerSettings(
     val warpColor: Color = Color.fromRGB(0xFFC14D),
     private val homeLabel: String = "Дом",
     private val warpLabel: String = "Варп",
-    private val labelTemplate: String = "<kind> · <white><name><newline><#E8DFD2>Shift + ПКМ · Настройки",
+    private val labelTemplate: String = "<kind> · <white><name>",
     val failureMessage: Component = MiniMessage.miniMessage().deserialize(
         "<#F4BD6A>Не удалось открыть настройки точки. Попробуйте ещё раз.",
     ),
@@ -58,7 +58,7 @@ internal class HomeMarkerConfig(private val source: Config) {
         warpColor = color("colors.warp", "#FFC14D"),
         homeLabel = source.string("text.home", "Дом"),
         warpLabel = source.string("text.warp", "Варп"),
-        labelTemplate = source.string("text.label", "<kind> · <white><name><newline><#E8DFD2>Shift + ПКМ · Настройки"),
+        labelTemplate = source.string("text.label", "<kind> · <white><name>"),
         failureMessage = MiniMessage.miniMessage().deserialize(source.string(
             "text.unavailable", "<#F4BD6A>Не удалось открыть настройки точки. Попробуйте ещё раз.",
         )),

@@ -30,7 +30,8 @@ import ru.arc.util.Logging.error
 import java.util.UUID
 
 /** Read-only Lands guidance. All entities are transient and visible to just their owner. */
-internal class ClaimBlockGuide(private val config: OnboardingConfig, particleColors: Set<Int>) : Listener, AutoCloseable {
+internal class ClaimBlockGuide(private val config: OnboardingConfig, particleColors: Set<Int>,
+    private val hud: ClaimGuideHud = ClaimGuideHud()) : Listener, AutoCloseable {
     private val integration = LandsIntegration.of(ARC.instance)
     private val tasks = LifecycleTaskScope()
     private val particles = ClaimGuideParticles.create(particleColors)
@@ -40,7 +41,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig, particleCol
     private val text = OnboardingConfig.CLAIM_TEXT.keys.associateWith(config::claimText)
     private var tick = 0L
 
-    private class Session(val world: UUID) {
+    private class Session(val viewerId: UUID, val world: UUID) {
         val borders = mutableMapOf<GuideBorder, BlockDisplay>()
         val posts = mutableMapOf<GuideChunk, BlockDisplay>()
         val walls = mutableMapOf<GuideBorder, BlockDisplay>()
@@ -115,7 +116,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig, particleCol
             return
         }
         if (session == null) {
-            session = Session(player.world.uid).also { it.anchor = player.eyeLocation }
+            session = Session(player.uniqueId, player.world.uid).also { it.anchor = player.eyeLocation }
             sessions[player.uniqueId] = session
 
         }
@@ -229,7 +230,11 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig, particleCol
         session.expansionCost = if (holding && !success && selected != null && placement != null) {
             claimGuideCostText(text.getValue("cost"), LandsUiModule.claimExpansionCost(player, placement.location, session.radius))
         } else null
-        if (LandsUiModule.hasClaimMenu(player)) {
+        var message = claimGuideLandText(text.getValue(state), selected?.name?.take(24))
+        if (LandsUiModule.isAvailable()) message = message.append(Component.newline()).append(text.getValue("menu"))
+        session.expansionCost?.let { message = message.append(Component.newline()).append(it) }
+        val menuOpen = LandsUiModule.hasClaimMenu(player)
+        if (hud.refresh(player, message, view.labelOffset, menuOpen) || menuOpen) {
             session.label?.remove()
             session.label = null
             return
@@ -247,13 +252,10 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig, particleCol
             it.setTransformationMatrix(Matrix4f().scaling(1.30f))
         }.also { session.label = it; player.showEntity(ARC.instance, it) }
         followClaimGuideDisplay(label, labelLocation)
-        var message = claimGuideLandText(text.getValue(state), selected?.name?.take(24))
-        if (LandsUiModule.isAvailable()) message = message.append(Component.newline()).append(text.getValue("menu"))
-        session.expansionCost?.let { message = message.append(Component.newline()).append(it) }
         label.text(message)
     }
 
-    fun isMenuTarget(player: Player): Boolean = LandsUiModule.isClaimMenuTarget(player) || (player.isSneaking &&
+    fun isMenuTarget(player: Player): Boolean = LandsUiModule.isClaimMenuTarget(player) || hud.isTarget(player) || (player.isSneaking &&
         sessions[player.uniqueId]?.label?.takeIf { it.isValid }
             ?.let { claimGuideButtonHit(player.eyeLocation, it.location, halfWidth = 3.8, height = 1.3) } == true)
 
@@ -419,6 +421,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig, particleCol
     }
 
     private fun clearVisuals(session: Session) {
+        hud.clear(session.viewerId)
         session.expansionCost = null
         clearGrid(session)
         session.label?.remove()
@@ -435,7 +438,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig, particleCol
     }
 
     fun hasHologram(player: Player): Boolean = LandsUiModule.hasClaimMenu(player) ||
-        sessions[player.uniqueId]?.label?.isValid == true
+        hud.hasHologram(player.uniqueId) || sessions[player.uniqueId]?.label?.isValid == true
 
     fun expansionCostText(player: Player): Component? = sessions[player.uniqueId]?.expansionCost
 
@@ -468,6 +471,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig, particleCol
         tasks.close()
         particles?.close()
         sessions.values.forEach(::clearVisuals)
+        hud.close()
         sessions.clear()
         views.clear()
         failedViewers.clear()
