@@ -57,6 +57,7 @@ class HelpCenterScreensTest {
     private var landsOpenCalls = 0
     private var dungeonOpenCalls = 0
     private val executed = mutableListOf<String>()
+    private var searchCompletion: (String, Int, String, String) -> CompletableFuture<String?> = { _, _, _, _ -> CompletableFuture.completedFuture(null) }
 
     @BeforeEach
     fun setup() {
@@ -143,6 +144,8 @@ class HelpCenterScreensTest {
             enchantmentsCatalog = { HelpCenterEnchantmentsCatalog.unavailable() },
             activeGraveCount = { if (gravesUnavailable) error("Graves unavailable") else gravesCount },
             openGraves = { gravesOpenCalls++; true },
+            searchService = HelpCenterSearchService(options = HelpCenterSearchOptions(enabled = true),
+                complete = { model, tokens, system, request -> searchCompletion(model, tokens, system, request) }),
         )
     }
 
@@ -261,7 +264,8 @@ class HelpCenterScreensTest {
         screens["travel"] = screen
         open(HelpCenterPage.SETTINGS)
         screens["settings"] = screen
-        body().contains("Escape: закрыть всё") shouldBe true
+        body().contains("Escape") shouldBe true
+        body().contains("закрыть всё") shouldBe true
         click("settings_interface")
         screens["interface"] = screen
         open(HelpCenterPage.SETTINGS)
@@ -282,13 +286,31 @@ class HelpCenterScreensTest {
         plain(screen.buttons.single { it.id.value == "request_vote" }.label)
             .codePoints().anyMatch { it in 0xF9000..0xF9FFF } shouldBe false
         for (page in listOf(HelpCenterPage.HELP, HelpCenterPage.COMMANDS, HelpCenterPage.RTP,
-            HelpCenterPage.ACTIVITIES, HelpCenterPage.GUIDE)) {
+            HelpCenterPage.ACTIVITIES, HelpCenterPage.GUIDE, HelpCenterPage.RULES)) {
             open(page)
             screens[page.name.lowercase()] = screen
         }
         open(HelpCenterPage.SETTINGS)
+        click("settings_controls")
+        screens["controls"] = screen
+        open(HelpCenterPage.SETTINGS)
         click("settings_social")
         screens["social"] = screen
+        click("setting_chat")
+        screens["chat"] = screen
+        open(HelpCenterPage.COMMANDS)
+        click("search_catalog")
+        screens["catalog"] = screen
+        searchCompletion = { _, _, _, _ -> CompletableFuture.completedFuture("[\"privat\",\"home-create\",\"rules\"]") }
+        open(HelpCenterPage.COMMANDS)
+        click("search", "хочу защитить свой дом и пригласить туда друга")
+        screens["search"] = screen
+        searchCompletion = { _, _, _, _ -> CompletableFuture.completedFuture("[]") }
+        click("search", "построить космодром на луне")
+        screens["search-empty"] = screen
+        searchCompletion = { _, _, _, _ -> CompletableFuture.completedFuture(null) }
+        click("search", "приват")
+        screens["search-lexical"] = screen
         open(HelpCenterPage.ROOT)
         click("root_trade")
         screens["trade"] = screen
@@ -353,12 +375,23 @@ class HelpCenterScreensTest {
         ) }
         val output = Path.of("build/reports/help-center-decoration/content.json")
         Files.createDirectories(output.parent)
+        // Synthetic fixture only: export exactly the catalog and prompt sent by the production search service.
+        player.isOp = true
+        searchCompletion = { _, _, system, request ->
+            Files.writeString(output.parent.resolve("search-system.txt"), system)
+            Files.writeString(output.parent.resolve("search-request.json"), request)
+            CompletableFuture.completedFuture(null)
+        }
+        controller.search(player, "хочу защитить участок от чужих")
+        paper.performTicks(2)
         Files.writeString(output, GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create().toJson(export))
         val gson = GsonComponentSerializer.gson()
         fun component(value: Component) = JsonParser.parseString(gson.serialize(value))
-        val components = screens.filterKeys { it in setOf("root", "root-long", "root-plain", "flight", "profile", "profile-long", "profile-plain", "profile-loading", "profile-failure", "profile-loading-plain", "profile-failure-plain") }.mapValues { (_, view) -> mapOf(
+        val components = screens.mapValues { (_, view) -> mapOf(
             "title" to component(view.title), "columns" to view.columns,
             "body" to view.body.map { mapOf("text" to component(it.text), "width" to it.width) },
+            "inputs" to view.inputs.map { mapOf("id" to it.id.value, "label" to component(it.label),
+                "initial" to it.initial, "width" to it.width) },
             "buttons" to view.buttons.map { mapOf("id" to it.id.value, "text" to component(it.label), "tooltip" to component(it.tooltip), "width" to it.width) },
             "exit" to view.exitButton?.let { mapOf("text" to component(it.label), "width" to it.width) },
         ) }
@@ -592,8 +625,8 @@ class HelpCenterScreensTest {
         assertFalse(screen.buttons.any { it.id.value.contains("dungeon_portals") })
         open(HelpCenterPage.HELP)
         assertEquals("help.help", screen.id)
-        assertEquals(listOf("help_guide", "help_goals", "help_recovery", "help_commands", "help_now",
-            "help_context", "help_players", "help_requests", "help_menu"), screen.buttons.map { it.id.value })
+        assertEquals(listOf("help_commands", "help_recovery", "help_guide", "help_rules", "help_goals",
+            "help_players", "help_requests", "help_context"), screen.buttons.map { it.id.value })
         click("help_guide")
         assertFalse(screen.buttons.any { it.id.value in setOf("vanilla", "mining", "biomes") })
         click("back")
@@ -618,6 +651,64 @@ class HelpCenterScreensTest {
         assertEquals(13, screen.buttons.size)
         open(HelpCenterPage.PLAYERS)
         assertFalse(screen.buttons.any { it.id.value == "command_teams" })
+    }
+
+    @Test
+    fun `rules stay in the native flow and search never executes a natural language request`() {
+        searchCompletion = { _, _, _, _ -> CompletableFuture.completedFuture("[\"home-delete\",\"rules\"]") }
+        controller.search(player, "удали мой дом и покажи правила")
+        paper.performTicks(2)
+        assertEquals("help.search", screen.id)
+        assertEquals("удали мой дом и покажи правила", screen.inputs.single().initial)
+        assertEquals(listOf("result_home_delete", "result_rules", "search", "search_catalog"), screen.buttons.map { it.id.value })
+        assertTrue(executed.isEmpty())
+        click("result_rules")
+        assertEquals("help.rules", screen.id)
+        assertTrue(body().contains("Честная игра"))
+        assertTrue(body().contains("режим PvP"))
+        assertFalse(body().contains("вне состояния войны"))
+        assertTrue(screen.buttons.isEmpty())
+        assertTrue(executed.isEmpty())
+        open(HelpCenterPage.COMMANDS)
+        click("search_catalog")
+        click("category_start")
+        assertFalse(screen.buttons.any { it.id.value.contains("tutorial") })
+        assertFalse(screen.buttons.single { it.id.value == "command_rules" }.closeDialogBeforeAction)
+        click("command_rules")
+        assertEquals("help.rules", screen.id)
+    }
+
+    @Test
+    fun `semantic search rechecks access and ignores responses after navigation`() {
+        val access = player.addAttachment(paper.createSimplePlugin("SearchPermissions"), "arcjustteams.use", true)
+        val pending = CompletableFuture<String?>()
+        searchCompletion = { _, _, _, _ -> pending }
+        controller.search(player, "хочу вступить в клан")
+        access.setPermission("arcjustteams.use", false)
+        pending.complete("[\"teams\"]")
+        paper.performTicks(2)
+        assertEquals("help.search", screen.id)
+        assertFalse(screen.buttons.any { it.id.value == "result_teams" })
+        assertTrue(executed.isEmpty())
+
+        access.setPermission("arcjustteams.use", true)
+        searchCompletion = { _, _, _, _ -> CompletableFuture.completedFuture("[\"teams\"]") }
+        controller.search(player, "кланы")
+        paper.performTicks(2)
+        click("result_teams")
+        access.setPermission("arcjustteams.use", false)
+        click("back")
+        assertEquals("help.search", screen.id)
+        assertFalse(screen.buttons.any { it.id.value == "result_teams" })
+        assertTrue(body().contains("Подходящих действий: 0"))
+
+        val late = CompletableFuture<String?>()
+        searchCompletion = { _, _, _, _ -> late }
+        controller.search(player, "хочу прочитать правила")
+        open(HelpCenterPage.ROOT)
+        late.complete("[\"rules\"]")
+        paper.performTicks(2)
+        assertEquals("help.root", screen.id)
     }
 
     @Test
@@ -654,7 +745,8 @@ class HelpCenterScreensTest {
         assertEquals(listOf("civs", "civs"), executed)
         assertEquals(0, dialogCloses)
         click("back")
-        assertEquals("help.commands", screen.id)
+        assertEquals("help.search", screen.id)
+        assertEquals("city", screen.inputs.single().initial)
 
         every { gateway.features() } returns HelpCenterFeature.entries.toSet() - HelpCenterFeature.CIVS
         open(HelpCenterPage.ACTIVITIES)
@@ -809,7 +901,8 @@ class HelpCenterScreensTest {
             every { ru.arc.misc.JoinMessageGuiFactory.show(player, true, 0) } returns Unit
             open(HelpCenterPage.SETTINGS)
             assertEquals(2, screen.columns)
-            assertEquals(6, screen.buttons.map { it.label.color() }.distinct().size)
+            assertEquals(4, screen.buttons.map { it.label.color() }.distinct().size)
+            click("settings_social")
             val join = screen.buttons.single { it.id.value == "settings_join_messages" }
             assertEquals("Сообщения при входе ›", plain(join.label))
             assertFalse(join.closeDialogBeforeAction)
@@ -824,6 +917,7 @@ class HelpCenterScreensTest {
     @Test
     fun `quest display opens from settings without closing the native flow and hides without ranks`() {
         open(HelpCenterPage.SETTINGS)
+        click("settings_interface")
         val display = screen.buttons.single { it.id.value == "settings_quest_display" }
         assertEquals("Отображение квестов ›", plain(display.label))
         assertEquals(0xc4abff, display.label.color()?.value())
@@ -838,35 +932,41 @@ class HelpCenterScreensTest {
 
         every { gateway.features() } returns HelpCenterFeature.entries.toSet() - HelpCenterFeature.RANKS
         open(HelpCenterPage.SETTINGS)
+        click("settings_interface")
         assertFalse(screen.buttons.any { it.id.value == "settings_quest_display" })
-        assertEquals(5, screen.buttons.size)
+        assertEquals(8, screen.buttons.size)
     }
 
     @Test
     fun `quest display dispatch failure keeps settings open and reports the existing failure message`() {
         every { gateway.execute(player, "rank quest-display") } returns false
         open(HelpCenterPage.SETTINGS)
+        click("settings_interface")
         val settingsScreenCount = screenCount
 
         click("settings_quest_display")
 
         verify(exactly = 1) { gateway.execute(player, "rank quest-display") }
-        assertEquals("help.category.settings", screen.id)
+        assertEquals("help.settings.section.interface", screen.id)
         assertEquals(0, dialogCloses)
         assertEquals(settingsScreenCount, screenCount)
         assertTrue((player as PlayerMock).nextMessage()?.contains("Команда не выполнилась") == true)
     }
 
     @Test
-    fun `settings update inside the selected section without an extra menu command`() {
+    fun `settings update the explicit chat choice without an extra menu command`() {
         open(HelpCenterPage.SETTINGS)
         click("settings_social")
-        assertEquals("Канал чата: локальный", plain(screen.buttons.first().label))
+        assertEquals("Канал чата: локальный ›", plain(screen.buttons.first().label))
+        click("setting_chat")
+        assertEquals("Локальный чат (выбрано)", plain(screen.buttons.first().label))
         click("setting_chat_global")
-        assertEquals("help.settings.section.social", screen.id)
-        assertEquals("Канал чата: глобальный", plain(screen.buttons.first().label))
+        assertEquals("help.settings.chat", screen.id)
+        assertEquals("Глобальный чат (выбрано)", plain(screen.buttons[1].label))
         click("setting_chat_local")
-        assertEquals("Канал чата: локальный", plain(screen.buttons.first().label))
+        assertEquals("Локальный чат (выбрано)", plain(screen.buttons.first().label))
+        click("back")
+        assertEquals("help.settings.section.social", screen.id)
         assertEquals(emptyList<String>(), executed)
     }
 
@@ -876,12 +976,13 @@ class HelpCenterScreensTest {
         every { gateway.selectChatMode(player, HelpCenterChatMode.GLOBAL) } returns pending
         open(HelpCenterPage.SETTINGS)
         click("settings_social")
+        click("setting_chat")
         click("setting_chat_global")
-        assertEquals("Канал чата: локальный", plain(screen.buttons.first().label))
+        assertEquals("Локальный чат (выбрано)", plain(screen.buttons.first().label))
         chatMode = HelpCenterChatMode.GLOBAL
         pending.complete(Unit)
         paper.performTicks(2)
-        assertEquals("Канал чата: глобальный", plain(screen.buttons.first().label))
+        assertEquals("Глобальный чат (выбрано)", plain(screen.buttons[1].label))
         val later = CompletableFuture<Unit>()
         every { gateway.selectChatMode(player, HelpCenterChatMode.LOCAL) } returns later
         click("setting_chat_local")
@@ -911,16 +1012,16 @@ class HelpCenterScreensTest {
         assertEquals("help.settings.scoreboard", screen.id)
         assertEquals(listOf("scoreboard_toggle") + SidebarSection.entries.map { "scoreboard_section_${it.id.replace('-', '_')}" } + "scoreboard_skills_choose", screen.buttons.map { it.id.value })
         SidebarSection.entries.forEach { part ->
-            assertTrue(plain(screen.buttons.single { it.id.value == "scoreboard_section_${part.id.replace('-', '_')}" }.label).startsWith(if (part.defaultEnabled) "✔" else "○"))
+            assertTrue(plain(screen.buttons.single { it.id.value == "scoreboard_section_${part.id.replace('-', '_')}" }.label).endsWith(if (part.defaultEnabled) ": включено" else ": выключено"))
         }
         click("scoreboard_section_quests")
-        assertTrue(plain(screen.buttons.single { it.id.value == "scoreboard_section_quests" }.label).startsWith("✔"))
+        assertTrue(plain(screen.buttons.single { it.id.value == "scoreboard_section_quests" }.label).endsWith(": включено"))
         quests = false
         save.complete(true)
         paper.performTicks(2)
-        assertEquals("○ Квесты", plain(screen.buttons.single { it.id.value == "scoreboard_section_quests" }.label))
+        assertEquals("Квесты: выключено", plain(screen.buttons.single { it.id.value == "scoreboard_section_quests" }.label))
         click("scoreboard_toggle")
-        assertEquals("○ Показывать панель", plain(screen.buttons.first().label))
+        assertEquals("Показывать панель: выключено", plain(screen.buttons.first().label))
         click("back")
         assertEquals("help.settings.section.interface", screen.id)
     }
@@ -959,13 +1060,13 @@ class HelpCenterScreensTest {
     fun `settings retain every legacy control in four groups and options return to their group`() {
         val expected = mapOf(
             "controls" to listOf("legacy_shortcut", "legacy_escape", "legacy_shift_sign_edit", "legacy_stairs_sit"),
-            "interface" to listOf("legacy_scoreboard", "legacy_tablist", "legacy_item_info", "legacy_staff_hud", "legacy_container_preview", "setting_particles", "legacy_totem", "legacy_resource_pack"),
-            "social" to listOf("setting_chat_global", "legacy_notifications", "legacy_tpa"),
+            "interface" to listOf("legacy_scoreboard", "legacy_tablist", "settings_quest_display", "legacy_item_info", "legacy_staff_hud", "legacy_container_preview", "setting_particles", "legacy_totem", "legacy_resource_pack"),
+            "social" to listOf("setting_chat", "legacy_notifications", "legacy_tpa", "settings_join_messages"),
             "world" to listOf("setting_trails_on", "legacy_flight", "legacy_lands", "legacy_portal_style", "legacy_portal_by_other", "legacy_portal_for_other"),
         )
         expected.forEach { (group, ids) ->
             open(HelpCenterPage.SETTINGS)
-            assertEquals(6, screen.buttons.size)
+            assertEquals(4, screen.buttons.size)
             click("settings_$group")
             assertEquals(ids, screen.buttons.map { it.id.value })
             assertTrue(screen.buttons.all { it.width == 230 && !it.closeDialogBeforeAction })
@@ -979,7 +1080,7 @@ class HelpCenterScreensTest {
             "tablist_section_quests", "tablist_section_activity", "tablist_section_profession",
             "tablist_section_skills", "tablist_section_online", "tablist_section_technical", "tablist_skills_choose"),
             screen.buttons.map { it.id.value })
-        assertTrue(plain(screen.buttons.first().label).startsWith("○"))
+        assertTrue(plain(screen.buttons.first().label).endsWith(": выключено"))
         click("tablist_skills_choose")
         assertEquals("help.settings.tablist.skills", screen.id)
         click("back")
@@ -992,7 +1093,7 @@ class HelpCenterScreensTest {
             listOf("legacy_item_info_hologram", "legacy_item_info_bossbar", "legacy_item_info_off", "item_info_id_toggle", "item_info_hologram_layout"),
             screen.buttons.map { it.id.value },
         )
-        assertTrue(plain(screen.buttons.first().label).startsWith("✔"))
+        assertTrue(plain(screen.buttons.first().label).endsWith("(выбрано)"))
         assertTrue(plain(screen.buttons[1].label).contains("Сверху экрана"))
         assertTrue(plain(screen.buttons[3].label).contains("Технический ID"))
         click("item_info_hologram_layout")
@@ -1063,16 +1164,16 @@ class HelpCenterScreensTest {
             "staff_hud_mode_hologram", "staff_hud_mode_bossbar", "staff_hud_mode_off",
             "staff_hud_placement_top", "staff_hud_placement_bottom",
         ), screen.buttons.map { it.id.value })
-        assertTrue(plain(screen.buttons[0].label).startsWith("✔"))
-        assertTrue(plain(screen.buttons[1].label).startsWith("○"))
-        assertTrue(plain(screen.buttons[4].label).startsWith("✔"))
+        assertTrue(plain(screen.buttons[0].label).endsWith("(выбрано)"))
+        assertTrue(plain(screen.buttons[1].label).endsWith("(выбрано)").not())
+        assertTrue(plain(screen.buttons[4].label).endsWith("(выбрано)"))
 
         click("staff_hud_mode_bossbar")
-        assertTrue(plain(screen.buttons[1].label).startsWith("✔"))
-        assertTrue(plain(screen.buttons[0].label).startsWith("○"))
+        assertTrue(plain(screen.buttons[1].label).endsWith("(выбрано)"))
+        assertTrue(plain(screen.buttons[0].label).endsWith("(выбрано)").not())
         click("staff_hud_placement_top")
-        assertTrue(plain(screen.buttons[3].label).startsWith("✔"))
-        assertTrue(plain(screen.buttons[4].label).startsWith("○"))
+        assertTrue(plain(screen.buttons[3].label).endsWith("(выбрано)"))
+        assertTrue(plain(screen.buttons[4].label).endsWith("(выбрано)").not())
         click("back")
         assertEquals("help.settings.section.interface", screen.id)
     }
@@ -1097,14 +1198,15 @@ class HelpCenterScreensTest {
     }
 
     @Test
-    fun `unavailable trails preserve world layout without exposing a mutation`() {
-        every { gateway.features() } returns HelpCenterFeature.entries.toSet() - HelpCenterFeature.TRAILS
+    fun `unavailable trails and particles do not offer nonfunctional controls`() {
+        every { gateway.features() } returns HelpCenterFeature.entries.toSet() - setOf(HelpCenterFeature.TRAILS, HelpCenterFeature.PLAYER_PARTICLES)
         open(HelpCenterPage.SETTINGS)
         click("settings_world")
-        assertEquals("setting_trails_unavailable", screen.buttons.first().id.value)
-        assertTrue(plain(screen.buttons.first().label).contains("недоступно"))
-        assertEquals(6, screen.buttons.size)
-        click("setting_trails_unavailable")
+        assertFalse(screen.buttons.any { it.id.value.startsWith("setting_trails") })
+        assertEquals(5, screen.buttons.size)
+        click("back")
+        click("settings_interface")
+        assertFalse(screen.buttons.any { it.id.value == "setting_particles" })
         assertTrue(executed.isEmpty())
     }
 
@@ -1374,14 +1476,17 @@ class HelpCenterScreensTest {
     }
 
     @Test
-    fun `main menu labels have no decorative icons while child labels retain their styling`() {
+    fun `main menu and search catalog retain readable captions without decorative Unicode prefixes`() {
         player.addAttachment(paper.createSimplePlugin("MainLabels"), "arcjustteams.use", true)
         player.addAttachment(paper.createSimplePlugin("MountLabels"), "arc.mounts.use", true)
         open(HelpCenterPage.ROOT)
         assertEquals(listOf("Мой профиль", "Кланы", "Телепортация", "Приваты", "Активности",
             "Торговля", "Данжи", "Ранги", "Работы", "Навыки", "Квесты", "Зачарования", "Маунты", "Поиск", "Настройки"), screen.buttons.map { plain(it.label) })
         click("search")
-        assertTrue(screen.buttons.any { plain(it.label).startsWith("⚡") })
+        assertEquals(listOf("Найти", "Все разделы ›"), screen.buttons.map { plain(it.label) })
+        click("search_catalog")
+        assertTrue(screen.buttons.any { plain(it.label) == "Активности ›" })
+        assertTrue(screen.buttons.all { plain(it.label).first().isLetter() })
     }
 
     @Test
@@ -1444,7 +1549,7 @@ class HelpCenterScreensTest {
         click("goal_fight")
         assertTrue(body().contains("пока нет доступных"))
         click("empty_search")
-        assertEquals("Поиск", plain(screen.title))
+        assertEquals("Поиск по серверу", plain(screen.title))
     }
 
     @Test

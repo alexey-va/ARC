@@ -18,6 +18,17 @@ class HelpCenterPresentationTest : FreeSpec({
     fun presentation(font: String) = HelpCenterPresentation(HelpCenterSettings(
         true, 12, 8, 3, emptyMap(), emptyMap(), emptyMap(), emptyMap(), font,
     ))
+    "substantive prose uses a complete filled panel and preserves the portable opt out" {
+        val text = Component.text("Опишите задачу своими словами.\nКак защитить дом?")
+        val decorated = presentation("arc:dialog_ui").panel(text, 468)
+        val visible = PlainTextComponentSerializer.plainText().serialize(decorated.text)
+        visible.contains("Опишите задачу своими словами.") shouldBe true
+        visible.contains("Как защитить дом?") shouldBe true
+        visible.codePoints().anyMatch { it in 0x100000..0x101834 } shouldBe true
+        val fallback = presentation("").panel(text, 468)
+        PlainTextComponentSerializer.plainText().serialize(fallback.text) shouldBe
+            PlainTextComponentSerializer.plainText().serialize(text)
+    }
     "diagnostic checklist separates complete entries in decorated and portable presentations" {
         val entries = listOf(true to Component.text("Готово\nПодробности"), false to Component.text("Осталось"))
         val serializer = PlainTextComponentSerializer.plainText()

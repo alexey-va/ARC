@@ -61,7 +61,7 @@ class HelpCenterPlannerTest : StringSpec({
         HelpCenterPlanner.search(entries, "прогресс", 5).map { it.id } shouldContainExactly listOf("rank")
     }
 
-    "understands player intent and ignores conversational filler" {
+    "ranks configured words after removing conversational filler" {
         HelpCenterPlanner.search(entries, "как удалить моё поселение", 5).first().id shouldBe "land_delete"
         HelpCenterPlanner.search(entries, "хочу перенести точку дома", 5).first().id shouldBe "home_move"
     }
@@ -110,6 +110,44 @@ class HelpCenterPlannerTest : StringSpec({
         HelpCenterPlanner.search(entries, "   ", 2).map { it.id } shouldContainExactly listOf("privat", "land_delete")
     }
 
+    "unknown conversational words do not bury useful configured vocabulary" {
+        val local = listOf(
+            HelpCenterSearchEntry("protect", "Защита территории", "Управление доступом", "чужие ломали постройку гриферы", HelpCenterSearchAction.OpenPage(HelpCenterPage.PRIVAT)),
+            HelpCenterSearchEntry("death", "Вернуться назад", "Прошлая позиция", "умер смерть вещи", HelpCenterSearchAction.OpenPage(HelpCenterPage.TRAVEL)),
+            HelpCenterSearchEntry("teams", "Кланы", "Играть вместе", "друг друзья компания", HelpCenterSearchAction.OpenPage(HelpCenterPage.PLAYERS)),
+            HelpCenterSearchEntry("enchants", "Зачарования", "Чары для снаряжения", "чары магия", HelpCenterSearchAction.OpenPage(HelpCenterPage.ENCHANTMENTS)),
+        )
+        HelpCenterPlanner.search(local, "чтобы чужие не ломали", 4).first().id shouldBe "protect"
+        HelpCenterPlanner.search(local, "вернуться туда где умер", 4).first().id shouldBe "death"
+        HelpCenterPlanner.search(local, "хочу играть вместе с другом", 4).first().id shouldBe "teams"
+        HelpCenterPlanner.search(local, "зачарованя", 4).first().id shouldBe "enchants"
+    }
+
+    "production catalog resolves common paraphrases locally with AI disabled" {
+        val catalog = HelpCenterConfig.COMMANDS.map { (id, text) ->
+            HelpCenterSearchEntry(id, text.label, text.description, text.keywords, HelpCenterSearchAction.OpenPage(HelpCenterPage.ROOT))
+        } + HelpCenterConfig.INTENTS.map { (id, text) ->
+            HelpCenterSearchEntry(id, text.label, text.description, text.keywords, HelpCenterSearchAction.OpenPage(HelpCenterPage.ROOT))
+        }
+        HelpCenterPlanner.search(catalog, "чтобы чужие не ломали", 8).first().id shouldBe "privat"
+        HelpCenterPlanner.search(catalog, "вернуться туда где умер", 8).first().id shouldBe "back"
+        HelpCenterPlanner.search(catalog, "хочу играть вместе с другом", 8).any { it.id == "teams" } shouldBe true
+        HelpCenterPlanner.search(catalog, "зачарованя", 8).first().id shouldBe "enchants"
+        HelpCenterPlanner.search(catalog, "не удалять дом", 8).any { it.id == "home-delete" } shouldBe false
+    }
+
+    "negated actions do not surface their opposite and negative toggle labels remain usable" {
+        val local = entries + listOf(
+            HelpCenterSearchEntry("home-delete", "Удалить дом", "Удалить сохранённую точку", "снести стереть дом", HelpCenterSearchAction.OpenPage(HelpCenterPage.TRAVEL)),
+            HelpCenterSearchEntry("trails-on", "Протаптывать тропинки", "Создавать дорожки", "тропа ходьба", HelpCenterSearchAction.OpenPage(HelpCenterPage.SETTINGS)),
+            HelpCenterSearchEntry("trails-off", "Не протаптывать тропинки", "Отключить дорожки", "тропа ходьба", HelpCenterSearchAction.OpenPage(HelpCenterPage.SETTINGS)),
+        )
+        HelpCenterPlanner.search(local, "не удалять дом", 5).any { it.id == "home-delete" } shouldBe false
+        HelpCenterPlanner.search(local, "не хочу удалять дом", 5).any { it.id == "home-delete" } shouldBe false
+        HelpCenterPlanner.search(local, "хочу протаптывать тропинки", 5).first().id shouldBe "trails-on"
+        HelpCenterPlanner.search(local, "не хочу протаптывать тропинки", 5).first().id shouldBe "trails-off"
+    }
+
     "builds only bounded player commands" {
         HelpCenterCommands.home("base_2") shouldBe "home base_2"
         HelpCenterCommands.createHome("Дом-2") shouldBe "sethome Дом-2"
@@ -136,6 +174,7 @@ class HelpCenterPlannerTest : StringSpec({
         HelpCenterPage.from("мое") shouldBe HelpCenterPage.MY
         HelpCenterPage.from("про меня") shouldBe HelpCenterPage.MY
         HelpCenterPage.from("privat") shouldBe HelpCenterPage.PRIVAT
+        HelpCenterPage.from("правила") shouldBe HelpCenterPage.RULES
         HelpCenterPage.from("unknown") shouldBe null
     }
 
