@@ -1,11 +1,14 @@
 package ru.arc.onboarding
 
 import com.google.gson.Gson
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonParser
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import ru.arc.redis.InMemoryRedis
 import ru.arc.redis.RedisOperations
+import ru.arc.redis.safety.JsonObjectContract
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionException
@@ -13,6 +16,21 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 class OnboardingPlaytimeTest : FreeSpec({
+    "counter wire remains readable by original strict v1 readers even when Gson serializes nulls" {
+        val redis = InMemoryRedis()
+        val player = UUID.randomUUID()
+        val run = UUID.randomUUID().toString()
+        val store = OnboardingPlaytimeStore(redis, GsonBuilder().serializeNulls().create())
+        val originalReader = JsonObjectContract(setOf("version", "servers"))
+        store.sample(player, run, "spawn", 1_000).join()
+        originalReader.validate(JsonParser.parseString(redis.getHash(OnboardingPlaytimeStore.HASH_KEY).getValue("$player:$run")))
+        store.sample(player, run, "spawn", 1_000, suggestBuild = true).join().buildSuggestedAtTicks shouldBe 0L
+        val record = JsonParser.parseString(redis.getHash(OnboardingPlaytimeStore.HASH_KEY).getValue("$player:$run"))
+        originalReader.validate(record)
+        record.asJsonObject.keySet() shouldBe setOf("version", "servers")
+        OnboardingPlaytimeStore(redis, Gson()).load(player, run).join()?.buildSuggestedAtTicks shouldBe 0L
+    }
+
     "acceptance and backend arrival start baselines while only observed play ticks consume three hours" {
         val redis = InMemoryRedis()
         val player = UUID.randomUUID()
@@ -89,18 +107,112 @@ class OnboardingPlaytimeTest : FreeSpec({
         val run = UUID.randomUUID().toString()
         val store = OnboardingPlaytimeStore(redis, Gson())
         val legacy = """{"version":1,"servers":[{"server":"spawn","baseline":1000,"maximum":2000}]}"""
-        listOf(legacy, legacy.dropLast(1) + ",\"buildSuggestedAtTicks\":null}").forEach { raw ->
-            redis.setHash(OnboardingPlaytimeStore.HASH_KEY, mapOf("$player:$run" to raw))
-            val restored = store.load(player, run).join()!!
-            restored.buildSuggestedAtTicks shouldBe null
-            restored.remainingTicks(awaitingBuild = true) shouldBe 18_000L
-            store.sample(player, run, "spawn", 2_000).join().buildSuggestedAtTicks shouldBe null
-            val offered = store.sample(player, run, "spawn", 3_000, suggestBuild = true).join()
-            offered.buildSuggestedAtTicks shouldBe 2_000L
-            offered.remainingTicks(awaitingBuild = true) shouldBe 18_000L
-            val resumed = OnboardingPlaytimeStore(redis, Gson()).sample(player, run, "spawn", 4_000, suggestBuild = true).join()
-            resumed.buildSuggestedAtTicks shouldBe 2_000L
-            resumed.remainingTicks(awaitingBuild = true) shouldBe 17_000L
+        redis.setHash(OnboardingPlaytimeStore.HASH_KEY, mapOf("$player:$run" to legacy))
+        val restored = store.load(player, run).join()!!
+        restored.buildSuggestedAtTicks shouldBe null
+        restored.remainingTicks(awaitingBuild = true) shouldBe 18_000L
+        store.sample(player, run, "spawn", 2_000).join().buildSuggestedAtTicks shouldBe null
+        redis.getHash(OnboardingPlaytimeStore.BUILD_SUGGESTION_HASH_KEY) shouldBe emptyMap()
+        val offered = store.sample(player, run, "spawn", 3_000, suggestBuild = true).join()
+        offered.buildSuggestedAtTicks shouldBe 2_000L
+        offered.remainingTicks(awaitingBuild = true) shouldBe 18_000L
+        val resumed = OnboardingPlaytimeStore(redis, Gson()).sample(player, run, "spawn", 4_000, suggestBuild = true).join()
+        resumed.buildSuggestedAtTicks shouldBe 2_000L
+        resumed.remainingTicks(awaitingBuild = true) shouldBe 17_000L
+    }
+
+    "a sample composes later old-node counters after committing its separate BUILD anchor" {
+        val redis = InMemoryRedis()
+        val player = UUID.randomUUID()
+        val run = UUID.randomUUID().toString()
+        OnboardingPlaytimeStore(redis, Gson()).sample(player, run, "spawn", 1_000).join()
+        val entered = CompletableFuture<Unit>()
+        val release = CompletableFuture<Unit>()
+        val hold = AtomicBoolean(true)
+        val delayed = object : RedisOperations by redis {
+            override fun compareAndSetMapEntry(key: String, mapKey: String, expectedValue: String?, replacementValue: String?): CompletableFuture<Boolean> =
+                if (key == OnboardingPlaytimeStore.BUILD_SUGGESTION_HASH_KEY && hold.compareAndSet(true, false)) {
+                    entered.complete(Unit)
+                    release.thenCompose { redis.compareAndSetMapEntry(key, mapKey, expectedValue, replacementValue) }
+                } else redis.compareAndSetMapEntry(key, mapKey, expectedValue, replacementValue)
+        }
+        val pending = OnboardingPlaytimeStore(delayed, Gson()).sample(player, run, "spawn", 2_000, suggestBuild = true)
+        try {
+            entered.get(5, TimeUnit.SECONDS)
+            pending.isDone shouldBe false
+            val before = redis.getHash(OnboardingPlaytimeStore.HASH_KEY).getValue("$player:$run")
+            val oldRecord = JsonParser.parseString(before).asJsonObject
+            JsonObjectContract(setOf("version", "servers")).validate(oldRecord)
+            oldRecord.getAsJsonArray("servers").single().asJsonObject.addProperty("maximum", 3_000)
+            redis.compareAndSetMapEntry(OnboardingPlaytimeStore.HASH_KEY, "$player:$run", before, Gson().toJson(oldRecord)).join() shouldBe true
+            release.complete(Unit)
+            val composed = pending.get(5, TimeUnit.SECONDS)
+            composed.playedTicks shouldBe 2_000L
+            composed.buildSuggestedAtTicks shouldBe 1_000L
+            composed.remainingTicks(awaitingBuild = true) shouldBe 17_000L
+            OnboardingPlaytimeStore(redis, Gson()).load(player, run).join() shouldBe composed
+        } finally {
+            release.complete(Unit)
+        }
+    }
+
+    "competing nodes initialize one BUILD anchor and later samples cannot replace its winner" {
+        val redis = InMemoryRedis()
+        val player = UUID.randomUUID()
+        val run = UUID.randomUUID().toString()
+        val second = OnboardingPlaytimeStore(redis, Gson())
+        second.sample(player, run, "spawn", 1_000).join()
+        val entered = CompletableFuture<Unit>()
+        val release = CompletableFuture<Unit>()
+        val hold = AtomicBoolean(true)
+        val delayed = object : RedisOperations by redis {
+            override fun compareAndSetMapEntry(key: String, mapKey: String, expectedValue: String?, replacementValue: String?): CompletableFuture<Boolean> =
+                if (key == OnboardingPlaytimeStore.BUILD_SUGGESTION_HASH_KEY && hold.compareAndSet(true, false)) {
+                    entered.complete(Unit)
+                    release.thenCompose { redis.compareAndSetMapEntry(key, mapKey, expectedValue, replacementValue) }
+                } else redis.compareAndSetMapEntry(key, mapKey, expectedValue, replacementValue)
+        }
+        val first = OnboardingPlaytimeStore(delayed, Gson()).sample(player, run, "spawn", 2_000, suggestBuild = true)
+        try {
+            entered.get(5, TimeUnit.SECONDS)
+            val winner = second.sample(player, run, "spawn", 3_000, suggestBuild = true).join()
+            winner.buildSuggestedAtTicks shouldBe 2_000L
+            val anchor = redis.getHash(OnboardingPlaytimeStore.BUILD_SUGGESTION_HASH_KEY)
+            release.complete(Unit)
+            first.get(5, TimeUnit.SECONDS) shouldBe winner
+            val later = second.sample(player, run, "spawn", 4_000, suggestBuild = true).join()
+            later.buildSuggestedAtTicks shouldBe 2_000L
+            later.remainingTicks(awaitingBuild = true) shouldBe 17_000L
+            redis.getHash(OnboardingPlaytimeStore.BUILD_SUGGESTION_HASH_KEY) shouldBe anchor
+        } finally {
+            release.complete(Unit)
+        }
+    }
+
+    "loading the anchor before the final counter snapshot survives another node starting BUILD" {
+        val redis = InMemoryRedis()
+        val player = UUID.randomUUID()
+        val run = UUID.randomUUID().toString()
+        val second = OnboardingPlaytimeStore(redis, Gson())
+        second.sample(player, run, "spawn", 1_000).join()
+        val entered = CompletableFuture<Unit>()
+        val release = CompletableFuture<Unit>()
+        val hold = AtomicBoolean(true)
+        val delayed = object : RedisOperations by redis {
+            override fun loadMapEntries(key: String, vararg mapKeys: String): CompletableFuture<List<String?>> =
+                if (key == OnboardingPlaytimeStore.BUILD_SUGGESTION_HASH_KEY && hold.compareAndSet(true, false)) {
+                    entered.complete(Unit)
+                    release.thenCompose { redis.loadMapEntries(key, *mapKeys) }
+                } else redis.loadMapEntries(key, *mapKeys)
+        }
+        val loading = OnboardingPlaytimeStore(delayed, Gson()).load(player, run)
+        try {
+            entered.get(5, TimeUnit.SECONDS)
+            val current = second.sample(player, run, "spawn", 3_000, suggestBuild = true).join()
+            release.complete(Unit)
+            loading.get(5, TimeUnit.SECONDS) shouldBe current
+        } finally {
+            release.complete(Unit)
         }
     }
 
@@ -134,6 +246,7 @@ class OnboardingPlaytimeTest : FreeSpec({
             oldSample.buildSuggestedAtTicks shouldBe 40_000L
             store.sample(player, newRun, "spawn", 41_100).join().playedTicks shouldBe 100L
             redis.getHash(OnboardingPlaytimeStore.HASH_KEY).keys shouldBe setOf("$player:$oldRun", "$player:$newRun")
+            redis.getHash(OnboardingPlaytimeStore.BUILD_SUGGESTION_HASH_KEY).keys shouldBe setOf("$player:$oldRun")
         } finally {
             release.complete(Unit)
         }
@@ -180,12 +293,7 @@ class OnboardingPlaytimeTest : FreeSpec({
             valid.replace("\"maximum\":2000", "\"maximum\":null"),
             valid.replace("\"maximum\":2000", "\"maximum\":\"2000\""),
             valid.replace("\"maximum\":2000", "\"maximum\":2000,\"unknown\":1"),
-            valid.dropLast(1) + ",\"buildSuggestedAtTicks\":-1}",
-            valid.dropLast(1) + ",\"buildSuggestedAtTicks\":1001}",
-            valid.dropLast(1) + ",\"buildSuggestedAtTicks\":1.5}",
-            valid.dropLast(1) + ",\"buildSuggestedAtTicks\":\"1\"}",
-            valid.dropLast(1) + ",\"buildSuggestedAtTicks\":true}",
-            valid.dropLast(1) + ",\"buildSuggestedAtTicks\":9223372036854775808}",
+            valid.dropLast(1) + ",\"buildSuggestedAtTicks\":null}",
             valid.dropLast(1) + ",\"unknown\":true}",
         )
         invalid.forEach { raw ->
@@ -193,6 +301,29 @@ class OnboardingPlaytimeTest : FreeSpec({
             runCatching { store.load(player, run).join() }.isFailure shouldBe true
             runCatching { store.sample(player, run, "spawn", 3_000).join() }.isFailure shouldBe true
             redis.getHash(OnboardingPlaytimeStore.HASH_KEY) shouldBe mapOf("$player:$run" to raw)
+        }
+    }
+
+    "malformed separate BUILD anchors fail closed without replacing the anchor or counters" {
+        val redis = InMemoryRedis()
+        val player = UUID.randomUUID()
+        val run = UUID.randomUUID().toString()
+        val store = OnboardingPlaytimeStore(redis, Gson())
+        store.sample(player, run, "spawn", 1_000).join()
+        store.sample(player, run, "spawn", 2_000).join()
+        val counters = redis.getHash(OnboardingPlaytimeStore.HASH_KEY)
+        val invalid = listOf(
+            "{broken", "null", "0", "\"0\"", "[]", "{}", """{"ticks":null}""",
+            """{"ticks":-1}""", """{"ticks":1001}""", """{"ticks":0.5}""",
+            """{"ticks":"0"}""", """{"ticks":true}""", """{"ticks":9223372036854775808}""",
+            """{"ticks":0,"unknown":1}""", """{"ticks":0,"ticks":0}""",
+        )
+        invalid.forEach { raw ->
+            redis.setHash(OnboardingPlaytimeStore.BUILD_SUGGESTION_HASH_KEY, mapOf("$player:$run" to raw))
+            runCatching { store.load(player, run).join() }.isFailure shouldBe true
+            runCatching { store.sample(player, run, "spawn", 2_000, suggestBuild = true).join() }.isFailure shouldBe true
+            redis.getHash(OnboardingPlaytimeStore.HASH_KEY) shouldBe counters
+            redis.getHash(OnboardingPlaytimeStore.BUILD_SUGGESTION_HASH_KEY) shouldBe mapOf("$player:$run" to raw)
         }
     }
 
