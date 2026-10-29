@@ -126,6 +126,9 @@ repositories {
     maven("https://repo.olziedev.com/") {
         content { includeModule("com.olziedev", "playerwarps-api") }
     }
+    maven("https://repo.rosewooddev.io/repository/public/") {
+        content { includeGroup("dev.esophose") }
+    }
     maven("https://repo.rus-crafting.ru/grocermc/")
     maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://oss.sonatype.org/content/groups/public/")
@@ -199,6 +202,7 @@ dependencies {
     compileOnly("com.willfp:eco:2026.33") { isTransitive = false }
 
     // server-provided
+    compileOnly("dev.esophose:playerparticles:8.13") { isTransitive = false }
     // ArcExcellentCrates owns this service contract at runtime; never shade it into ARC.
     compileOnly(crateApiDependency)
     compileOnly(libs.io.papermc.paper.paper.api)

@@ -73,6 +73,8 @@ object HelpCenterModule : PluginModule {
             inventoryReturn = HelpCenterInventoryReturnRuntime(ARC.instance),
             inviteToLand = { player, target -> LandsUiModule.openInvite(player, target.id, target.name) },
             enchantmentsGuide = HelpCenterEnchantmentsGuideConfig.load(ARC.instance.dataPath).snapshot(),
+            cosmeticsGateway = ru.arc.cosmetics.CosmeticsCoreGateway(ARC.instance),
+            particlesGateway = ru.arc.cosmetics.PlayerParticlesGateway(ARC.instance),
         )
         info("Help center module initialized")
     }

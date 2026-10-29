@@ -49,6 +49,8 @@ internal class HelpCenterController(
     private val activeGraveCount: (Player) -> Int = { player -> GravesModule.activeCount(player) },
     private val openGraves: (Player) -> Boolean = { player -> GravesModule.open(player) },
     private val searchService: HelpCenterSearchService = HelpCenterSearchService(options = settings.searchAi),
+    private val cosmeticsGateway: ru.arc.cosmetics.CosmeticsCoreGateway? = null,
+    private val particlesGateway: ru.arc.cosmetics.PlayerParticlesGateway? = null,
 ) {
     private val presentation = HelpCenterPresentation(settings)
     private val present: (Player, PaperDialogScreen) -> Unit = showDialog
@@ -133,12 +135,18 @@ internal class HelpCenterController(
             ::executeCatalog, ::executeInventory, ::openSettingsRoot)
     }
 
+    private val cosmetics by lazy {
+        if (cosmeticsGateway != null && particlesGateway != null)
+            HelpCenterCosmeticsController(settings, navigation, present, cosmeticsGateway, particlesGateway) else null
+    }
+
     fun close() {
         active = false
         navigation.close()
         tasks.close()
         searchService.close()
         personalSettings.close()
+        cosmetics?.close()
         hub.close()
         inventoryReturn.close()
     }
@@ -250,6 +258,9 @@ internal class HelpCenterController(
                             executeCatalog(player, "mounts")
                         })
                     }
+                    if (cosmetics?.canOpen(player) == true) add(button("cosmetics", text("main-cosmetics-label"), text("cosmetics-tooltip")) {
+                        cosmetics?.open(player) { openRoot(player) }
+                    })
                     add(button("search", text("commands-label"), text("commands-tooltip")) { openCommands(player) })
                     add(button("settings", text("category-settings-label"), text("category-settings-tooltip")) { openSettings(player) })
                 }.map {
