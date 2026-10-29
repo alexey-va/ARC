@@ -40,6 +40,17 @@ repeated source blocks are collapsed; empty directory results disappear from
 the specialized files. Unknown atlas source types are preserved. Texture
 resolution and model geometry are not reduced.
 
+After directory expansion, the specialized blocks atlas omits the six vanilla
+`gui/title/background/panorama_0` through `_5` sprites accidentally imported by
+a broad `gui/` directory source. Minecraft loads the title panorama directly
+through its standalone cube-map texture, independently of the blocks atlas.
+The pass retains explicit single sources/aliases, pack PNG replacements and any
+ID referenced by an effective non-atlas JSON. Unsupported atlas sources or an
+unparseable consumer disable this omission. A sprite-map check permits only
+these six removals; all other sprites, image files, models and the items atlas
+remain unchanged. The manifest records `unusedPanoramaSourcesRemoved`. The
+universal archive retains its original imports.
+
 The same default production flow then calls the bundled `resourcepack_fonts.py`
 for each catalogued client variant. It groups compatible single-glyph bitmap
 providers in `minecraft:default` and `minecraft:uniform` into content-addressed

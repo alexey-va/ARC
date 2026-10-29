@@ -171,6 +171,62 @@ class ResourcePackVariantsTest(unittest.TestCase):
         self.assertEqual(manifest["packs"][0]["stats"]["duplicateSourcesRemoved"], 2)
         self.assertEqual(manifest["packs"][1]["stats"]["duplicateSourcesRemoved"], 2)
 
+    def test_omits_only_implicit_unused_vanilla_block_panoramas(self):
+        panoramas = sorted(variants.VANILLA_PANORAMAS)
+        atlas = make_atlas([
+            {"type": "directory", "source": "gui", "prefix": "gui/"},
+            {"type": "single", "resource": panoramas[0]},
+            {"type": "single", "resource": panoramas[5], "sprite": "demo:panorama_alias"},
+        ])
+        write_pack(self.input_zip, {
+            "pack.mcmeta": json.dumps(pack_metadata()).encode(),
+            "assets/minecraft/atlases/blocks.json": atlas,
+            "assets/minecraft/atlases/items.json": atlas,
+            "assets/demo/models/item/example.json": json.dumps({"textures": {"0": panoramas[1]}}).encode(),
+            "assets/demo/models/item/example2.json": json.dumps({"textures": {"0": panoramas[2].split(":")[1]}}).encode(),
+            "assets/minecraft/textures/gui/title/background/panorama_3.png": b"custom replacement",
+            "assets/demo/textures/gui/icon.png": b"custom gui",
+        })
+        self.write_catalog([{
+            "version": "26.3", "protocol": 777, "format": [97, 1],
+            "textures": panoramas + ["minecraft:gui/sprites/widget/button"],
+        }])
+
+        manifest = self.build()
+
+        with zipfile.ZipFile(self.root / "out" / "RusCraftingResource.zip") as archive:
+            self.assertEqual(archive.read("assets/minecraft/atlases/blocks.json"), atlas)
+        with zipfile.ZipFile(self.root / "out" / "RusCraftingResource-26.3.zip") as archive:
+            blocks = variants._evaluate_sources(json.loads(archive.read("assets/minecraft/atlases/blocks.json"))["sources"], set(panoramas) | {"demo:gui/icon", "minecraft:gui/sprites/widget/button"})
+            items = json.loads(archive.read("assets/minecraft/atlases/items.json"))["sources"]
+            for resource in panoramas[:4]:
+                self.assertEqual(blocks[resource], resource)
+            self.assertNotIn(panoramas[4], blocks)
+            self.assertNotIn(panoramas[5], blocks)
+            self.assertEqual(blocks["demo:panorama_alias"], panoramas[5])
+            self.assertEqual(blocks["demo:gui/icon"], "demo:gui/icon")
+            self.assertIn({"type": "minecraft:single", "resource": panoramas[4]}, items)
+            self.assertEqual(archive.read("assets/minecraft/textures/gui/title/background/panorama_3.png"), b"custom replacement")
+        self.assertEqual(manifest["packs"][1]["stats"]["unusedPanoramaSourcesRemoved"], 2)
+
+    def test_panorama_omission_keeps_unknown_atlas_and_unparseable_consumers(self):
+        panorama = "minecraft:gui/title/background/panorama_0"
+        files = {"assets/demo/models/item/bad.json": b"not JSON"}
+        self.assertEqual(variants._unused_vanilla_panoramas(files, frozenset([panorama])), set())
+        atlas = make_atlas([
+            {"type": "directory", "source": "gui", "prefix": "gui/"},
+            {"type": "future:procedural"},
+        ])
+        write_pack(self.input_zip, {
+            "pack.mcmeta": json.dumps(pack_metadata()).encode(),
+            "assets/minecraft/atlases/blocks.json": atlas,
+        })
+        self.write_catalog([{"version": "26.3", "format": [97, 1], "textures": [panorama]}])
+        manifest = self.build()
+        with zipfile.ZipFile(self.root / "out" / "RusCraftingResource-26.3.zip") as archive:
+            self.assertEqual(archive.read("assets/minecraft/atlases/blocks.json"), atlas)
+        self.assertEqual(manifest["packs"][1]["stats"]["unusedPanoramaSourcesRemoved"], 0)
+
     def test_unknown_atlas_source_is_preserved_without_partial_rewrite(self):
         atlas = make_atlas([
             {"type": "directory", "source": "items", "prefix": "items/"},
