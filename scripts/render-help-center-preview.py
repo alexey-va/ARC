@@ -27,7 +27,7 @@ def main():
     components = json.loads(components_path.read_text())
     sources = [root / "src/main/kotlin/ru/arc/helpcenter" / name for name in (
         "HelpCenterController.kt", "HelpCenterHubController.kt", "HelpCenterSettingsController.kt",
-        "HelpCenterPresentation.kt", "HelpCenterConfig.kt",
+        "HelpCenterPresentation.kt", "HelpCenterConfig.kt", "HelpCenterGuideCatalog.kt",
     )] + [root / "src/main/resources/modules/help-center.yml"]
     if not args.checkpoint and any(path.stat().st_mtime > min(content_path.stat().st_mtime, components_path.stat().st_mtime) for path in sources):
         raise SystemExit("Stale export: run :test --tests ru.arc.helpcenter.HelpCenterScreensTest")

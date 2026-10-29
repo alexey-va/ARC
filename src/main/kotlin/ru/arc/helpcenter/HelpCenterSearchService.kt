@@ -78,15 +78,20 @@ internal class HelpCenterSearchService(
         val byId = catalog.associateBy { it.id }
         require(byId.size == catalog.size) { "Help search catalog IDs must be unique" }
         val aiLimit = minOf(limit, 6, options.maxOutputTokens / 16)
-        val request = gson.toJson(mapOf(
+        fun encodeRequest(includeDescriptions: Boolean) = gson.toJson(mapOf(
             "query" to query,
             "limit" to aiLimit,
             "catalog" to catalog.map { entry ->
-                listOf(entry.id, entry.label.take(64), entry.description.take(96))
+                listOf(entry.id, entry.label.take(64), if (includeDescriptions) entry.description.take(96) else "")
             },
         ))
         fun fallback() = local(HelpCenterSearchMode.LEXICAL)
-        val requestBytes = request.toByteArray(Charsets.UTF_8)
+        var request = encodeRequest(includeDescriptions = true)
+        var requestBytes = request.toByteArray(Charsets.UTF_8)
+        if (requestBytes.size + SYSTEM_PROMPT_BYTES > MAX_REQUEST_BYTES) {
+            request = encodeRequest(includeDescriptions = false)
+            requestBytes = request.toByteArray(Charsets.UTF_8)
+        }
         if (requestBytes.size + SYSTEM_PROMPT_BYTES > MAX_REQUEST_BYTES) return CompletableFuture.completedFuture(fallback())
         // Cache only a digest and validated IDs, never the query or a Player/action snapshot.
         val cacheKey = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(requestBytes))

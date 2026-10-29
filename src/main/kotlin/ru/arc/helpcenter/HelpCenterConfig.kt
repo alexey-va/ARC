@@ -29,6 +29,7 @@ data class HelpCenterSettings(
     private val intents: Map<String, HelpCenterIntentText>,
     val decorationFont: String = "",
     val searchAi: HelpCenterSearchOptions = HelpCenterSearchOptions(),
+    private val guides: Map<String, HelpCenterGuideText> = HelpCenterGuideCatalog.topics.associate { it.id to it.defaults },
 ) {
     fun text(key: String): String = text.getValue(key)
 
@@ -37,6 +38,8 @@ data class HelpCenterSettings(
     fun command(id: String): HelpCenterCommandText = commands.getValue(id)
 
     fun intent(id: String): HelpCenterIntentText = intents.getValue(id)
+
+    fun guide(id: String): HelpCenterGuideText = guides.getValue(id)
 }
 
 class HelpCenterConfig(private val config: Config) {
@@ -86,6 +89,15 @@ class HelpCenterConfig(private val config: Config) {
                     keywords = required("intents.$id.keywords", fallback.keywords),
                 )
             },
+            guides = HelpCenterGuideCatalog.topics.associate { topic ->
+                val fallback = topic.defaults
+                topic.id to HelpCenterGuideText(
+                    title = required("guides.${topic.id}.title", fallback.title),
+                    description = required("guides.${topic.id}.description", fallback.description),
+                    body = required("guides.${topic.id}.body", fallback.body),
+                    keywords = required("guides.${topic.id}.keywords", fallback.keywords),
+                )
+            },
         )
     }
 
@@ -111,6 +123,18 @@ class HelpCenterConfig(private val config: Config) {
         }
 
         private val DEFAULT_TEXT = linkedMapOf(
+            "search-guide-label" to "<#f4bd6a><label> · справка",
+            "guide-catalog-label" to "<#f4bd6a>Справочник возможностей ›",
+            "guide-catalog-tooltip" to "<#e8dfd2>Что есть на сервере, как начать и где найти нужные действия.",
+            "guide-catalog-body" to "<#e8dfd2>Здесь <count> тем об игровых возможностях сети. Выберите раздел: каждая тема объясняет, как начать, и ведёт к доступным действиям.",
+            "guide-category-tooltip" to "<#e8dfd2><topics>",
+            "guide-category-body" to "<#e8dfd2>Тем в разделе: <#ffffff><count><#e8dfd2> · страница <page>/<pages><newline>Выберите возможность, чтобы узнать, как ей пользоваться.",
+            "guide-topic-label" to "<#f4bd6a><label>",
+            "guide-topic-title" to "<#f4bd6a><title>",
+            "guide-topic-body" to "<#ffffff><description><newline><newline><#e8dfd2><body>",
+            "guide-previous-label" to "<#ffffff>‹ Предыдущая страница",
+            "guide-next-label" to "<#ffffff>Следующая страница ›",
+            "guide-slimefun-menu-label" to "<#85dfc4>Меню Slimefun ›",
             "action-open-label" to "<italic:false><#ffffff>Открыть ›",
             "settings-toggle-off" to "<italic:false><#ffffff><label>: выключено",
             "settings-toggle-on" to "<italic:false><#9bd48d><label>: включено",
@@ -127,7 +151,7 @@ class HelpCenterConfig(private val config: Config) {
             "rules-title" to "<italic:false><#86dcf1>Правила сервера",
             "rules-tooltip" to "<italic:false><#e8dfd2>Прочитать правила, не выходя из меню.",
             "search-catalog-title" to "<italic:false><#86dcf1>Разделы справочника",
-            "search-catalog-tooltip" to "<italic:false><#e8dfd2>Просмотреть доступные действия по темам.",
+            "search-catalog-tooltip" to "<italic:false><#e8dfd2>Просмотреть игровые возможности и руководства по темам.",
             "search-catalog-label" to "<italic:false><#ffffff>Все разделы ›",
             "root-sections-heading" to "<italic:false><#86dcf1>Разделы сервера",
             "my-resources-heading" to "<italic:false><#e6fff3>Ресурсы и территория",
@@ -564,7 +588,7 @@ class HelpCenterConfig(private val config: Config) {
             "root-label" to "<#ffffff>‹ Назад",
             "not-available" to "—",
             "help-title" to "<italic:false><#86dcf1>Справка по серверу",
-            "help-body" to "<italic:false><#e8dfd2>Найдите нужное действие или разберите проблему.<newline>Первые шаги и правила можно прочитать здесь.",
+            "help-body" to "<#e8dfd2>Справочник объясняет игровые возможности сети: заработок, развитие, технологии, общение и путешествия. Поиск найдёт тему или доступное действие. Здесь же — первые шаги, правила и помощь с проблемами.",
             "help-guide-label" to "<#f4bd6a>Первые шаги ›",
             "help-goals-label" to "<#ffb277>Подобрать занятие ›",
             "help-recovery-label" to "<#ff8b82>Решить проблему ›",
@@ -965,6 +989,7 @@ class HelpCenterConfig(private val config: Config) {
         )
 
         internal val COMMANDS = linkedMapOf(
+            "resource-contracts" to HelpCenterCommandText("Ресурсные контракты", "Действующие закупки ресурсов, условия и место сдачи", "ресурсные контракты закупки заказы сдать ресурсы заработок деньги"),
             "parkour" to HelpCenterCommandText("Паркур", "Выбрать трассу и начать прохождение", "прыжки трассы карты parkour pa pkr"),
             "teams" to HelpCenterCommandText("Кланы", "Создать клан, пригласить друзей и открыть управление", "команда клан гильдия друзья party teams team clans arcjustteams играть вместе вступить участники"),
             "menu" to HelpCenterCommandText("Главное меню", "Все игровые разделы", "разделы сервер mm"),
@@ -984,7 +1009,7 @@ class HelpCenterConfig(private val config: Config) {
             "duels" to HelpCenterCommandText("Дуэли", "Сразиться с другим игроком", "пвп бой поединок"),
             "giveaways" to HelpCenterCommandText("Розыгрыши", "Активные розыгрыши сервера", "giveaway конкурс приз"),
             "dungeons" to HelpCenterCommandText("Данжи", "Порталы, подробный гайд и журнал EliteMobs", "данж подземелье боссы элитные мобы"),
-            "farms" to HelpCenterCommandText("Фермы", "Управление игровыми фермами", "ферма урожай животные"),
+            "farms" to HelpCenterCommandText("Фермы", "Общие заказы фермы и шахты", "ферма фермы урожай шахта руда добыча общие заказы"),
             "civs" to HelpCenterCommandText("Города с жителями", "Основать город, строить здания и назначать жителей", "город жители поселение строительство рабочие civs city"),
             "shops" to HelpCenterCommandText("Магазины", "Магазины игроков и сервера", "рынок купить продать"),
             "loot" to HelpCenterCommandText("Потерянная добыча", "Забрать сохранённые вещи и продать ненужное", "добыча лут потерял сундук продать"),
@@ -993,10 +1018,10 @@ class HelpCenterConfig(private val config: Config) {
             "bank" to HelpCenterCommandText("Банк", "Открыть личный банковский счёт", "деньги счет вклад"),
             "rank" to HelpCenterCommandText("Ранги", "Текущий ранг и следующие цели", "уровень развитие"),
             "rankup" to HelpCenterCommandText("Повысить ранг", "Проверить требования повышения", "уровень развитие"),
-            "jobs" to HelpCenterCommandText("Работы", "Профессии и заработок", "деньги профессия"),
-            "quests" to HelpCenterCommandText("Ежедневные задания", "Задания ранга, прогресс и награды", "квест развитие ежедневные контракты дейлики"),
+            "jobs" to HelpCenterCommandText("Работы", "Профессии, прогресс и заработок за игровые действия", "деньги заработок заработать работа работы профессия профессии jobs arcjobs ecojobs"),
+            "quests" to HelpCenterCommandText("Задания и квесты", "Персональные задания, прогресс и награды", "квест квесты развитие ежедневные недельные задания дейлики цели"),
             "skills" to HelpCenterCommandText("Навыки", "Навыки и их развитие", "auraskills способности развитие"),
-            "slimefun" to HelpCenterCommandText("Книга технологий", "Открыть справочник Slimefun", "slimefun сф механизмы рецепты"),
+            "slimefun" to HelpCenterCommandText("Slimefun: технологии", "Как перейти к технологиям и открыть местное меню", "slimefun слайм фан слаймфан слаймфун слимфан слимефун сф sf механизмы рецепты"),
             "items" to HelpCenterCommandText("Новые предметы", "Каталог дополнительных предметов", "itemsadder предметы рецепты"),
             "enchants" to HelpCenterCommandText("Зачарования", "Зачарования по снаряжению, особые предметы и способы получения", "энчанты чары магия улучшить броню меч инструмент"),
             "enchanter" to HelpCenterCommandText("Зачарователь", "Магазин особых зачарований", "купить чары энчанты"),

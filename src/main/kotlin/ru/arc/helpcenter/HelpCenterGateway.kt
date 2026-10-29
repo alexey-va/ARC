@@ -11,10 +11,12 @@ import net.william278.huskhomes.api.HuskHomesAPI
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import ru.arc.ARC
+import ru.arc.config.ArcRuntimeProfile
 import ru.arc.chat.ChatModeService
 import ru.arc.core.modules.EconomyModule
 import ru.arc.hooks.HookRegistry
 import ru.arc.lands.currentLands
+import ru.arc.slimefunmenu.SlimefunMenuModule
 import ru.arc.util.TextUtil
 import ru.arc.util.displayNamePlain
 import ru.arc.xserver.playerlist.PlayerManager
@@ -48,6 +50,10 @@ interface HelpCenterGateway {
     fun execute(player: Player, command: String): Boolean
 
     fun openDungeons(player: Player): Boolean
+
+    fun canOpenSlimefunMenu(): Boolean = false
+
+    fun openSlimefunMenu(player: Player): Boolean = false
 }
 
 class BukkitHelpCenterGateway : HelpCenterGateway {
@@ -220,6 +226,15 @@ class BukkitHelpCenterGateway : HelpCenterGateway {
     override fun openDungeons(player: Player): Boolean {
         val service = ru.arc.dungeons.dungeonService()?.takeIf { it.nativeReady() } ?: return false
         service.dungeonAction(player, "menu", emptyList())
+        return true
+    }
+
+    override fun canOpenSlimefunMenu(): Boolean =
+        ARC.instance.isEnabled && ARC.instance.runtimeProfile == ArcRuntimeProfile.SLIMEFUN
+
+    override fun openSlimefunMenu(player: Player): Boolean {
+        if (!player.isOnline || !canOpenSlimefunMenu()) return false
+        SlimefunMenuModule.open(player)
         return true
     }
 

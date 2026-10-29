@@ -78,6 +78,8 @@ class HelpCenterScreensTest {
             it.setPermission("huskhomes.command.edithome.privacy", true)
         }
         gateway = mockk()
+        every { gateway.canOpenSlimefunMenu() } returns false
+        every { gateway.openSlimefunMenu(player) } returns true
         every { gateway.openDungeons(player) } answers { dungeonOpenCalls++; true }
         every { gateway.features() } returns HelpCenterFeature.entries.toSet()
         every { gateway.pendingRequests(player) } returns HelpCenterPendingRequests()
@@ -105,7 +107,7 @@ class HelpCenterScreensTest {
             executed += command
             if (command == "g") chatMode = HelpCenterChatMode.GLOBAL
             if (command == "l") chatMode = HelpCenterChatMode.LOCAL
-            if (command in setOf("sf open_guide", "cmi flightcharge recharge", "elitemobs:em", "skills")) player.openInventory(Bukkit.createInventory(null, 9))
+            if (command in setOf("enchanter", "cmi flightcharge recharge", "elitemobs:em", "skills")) player.openInventory(Bukkit.createInventory(null, 9))
             true
         }
         ConfigManager.clear()
@@ -124,7 +126,7 @@ class HelpCenterScreensTest {
         controller = newController(plugin)
     }
 
-    private fun newController(plugin: Plugin, font: String = "", closeEscape: Boolean = false): HelpCenterController {
+    private fun newController(plugin: Plugin, font: String = "", closeEscape: Boolean = false, ai: Boolean = true): HelpCenterController {
         val inventoryReturn = HelpCenterInventoryReturnRuntime(plugin, returnOnClose = { true })
         val settings = HelpCenterConfig.load(directory).snapshot().copy(decorationFont = font)
         ArcMenus.configureDialogDecoration(settings.decorationFont)
@@ -144,7 +146,7 @@ class HelpCenterScreensTest {
             enchantmentsCatalog = { HelpCenterEnchantmentsCatalog.unavailable() },
             activeGraveCount = { if (gravesUnavailable) error("Graves unavailable") else gravesCount },
             openGraves = { gravesOpenCalls++; true },
-            searchService = HelpCenterSearchService(options = HelpCenterSearchOptions(enabled = true),
+            searchService = HelpCenterSearchService(options = HelpCenterSearchOptions(enabled = ai),
                 complete = { model, tokens, system, request -> searchCompletion(model, tokens, system, request) }),
         )
     }
@@ -301,6 +303,38 @@ class HelpCenterScreensTest {
         open(HelpCenterPage.COMMANDS)
         click("search_catalog")
         screens["catalog"] = screen
+        click("category_trade")
+        screens["guides-trade"] = screen
+        click("guide_next")
+        screens["guides-trade-2"] = screen
+        click("guide_previous")
+        click("guide_earning")
+        screens["guide-earning"] = screen
+        click("guide_odd_jobs")
+        screens["guide-odd-jobs"] = screen
+        open(HelpCenterPage.FEATURES)
+        click("category_technology")
+        click("guide_slimefun")
+        screens["guide-slimefun"] = screen
+        assertFalse(screen.buttons.any { it.id.value == "guide_slimefun_menu" })
+        assertTrue(body().contains("портал Slimefun"))
+        open(HelpCenterPage.FEATURES)
+        click("category_trade")
+        click("guide_bank")
+        screens["guide-bank"] = screen
+        open(HelpCenterPage.FEATURES)
+        click("category_activities")
+        click("guide_farms")
+        screens["guide-farms"] = screen
+        controller.close()
+        controller = newController(plugin, "arc:dialog_ui", closeEscape = true, ai = false)
+        open(HelpCenterPage.COMMANDS)
+        click("search", "слайм фан")
+        screens["search-slimefun"] = screen
+        click("search", "подработки")
+        screens["search-odd-jobs"] = screen
+        controller.close()
+        controller = newController(plugin, "arc:dialog_ui", closeEscape = true)
         searchCompletion = { _, _, _, _ -> CompletableFuture.completedFuture("[\"privat\",\"home-create\",\"rules\"]") }
         open(HelpCenterPage.COMMANDS)
         click("search", "хочу защитить свой дом и пригласить туда друга")
@@ -625,7 +659,7 @@ class HelpCenterScreensTest {
         assertFalse(screen.buttons.any { it.id.value.contains("dungeon_portals") })
         open(HelpCenterPage.HELP)
         assertEquals("help.help", screen.id)
-        assertEquals(listOf("help_commands", "help_recovery", "help_guide", "help_rules", "help_goals",
+        assertEquals(listOf("help_features", "help_commands", "help_recovery", "help_guide", "help_rules", "help_goals",
             "help_players", "help_requests", "help_context"), screen.buttons.map { it.id.value })
         click("help_guide")
         assertFalse(screen.buttons.any { it.id.value in setOf("vanilla", "mining", "biomes") })
@@ -673,9 +707,79 @@ class HelpCenterScreensTest {
         click("search_catalog")
         click("category_start")
         assertFalse(screen.buttons.any { it.id.value.contains("tutorial") })
-        assertFalse(screen.buttons.single { it.id.value == "command_rules" }.closeDialogBeforeAction)
-        click("command_rules")
+        click("guide_rules")
+        assertFalse(screen.buttons.single { it.id.value == "guide_page_rules" }.closeDialogBeforeAction)
+        click("guide_page_rules")
         assertEquals("help.rules", screen.id)
+    }
+
+    @Test
+    fun `local guides remain readable without local providers and never execute a search phrase`() {
+        controller.close()
+        controller = newController(paper.createSimplePlugin("LocalFeatureGuides"), ai = false)
+        searchCompletion = { _, _, _, _ -> error("Local guide search must not contact AI") }
+        every { gateway.features() } returns emptySet()
+        for ((query, id) in listOf("слайм фан" to "slimefun", "заработок" to "earning", "деньги" to "money",
+            "банк" to "bank", "быстрая продажа" to "sell", "подработки" to "odd-jobs")) {
+            controller.search(player, query)
+            paper.performTicks(2)
+            assertTrue(screen.buttons.any { it.id.value == "result_guide_${id.replace('-', '_')}" }, query)
+            assertEquals(query, screen.inputs.single().initial)
+            click("result_guide_${id.replace('-', '_')}")
+            assertEquals("help.guide.$id", screen.id)
+            assertTrue(body().length > 100)
+            assertTrue(executed.isEmpty())
+            assertFalse(screen.buttons.any { it.id.value in setOf("command_bank", "command_jobs", "guide_slimefun_menu") })
+            click("back")
+            assertEquals("help.search", screen.id)
+            assertEquals(query, screen.inputs.single().initial)
+        }
+    }
+
+    @Test
+    fun `guide actions recheck permissions and native slimefun is offered only on its server`() {
+        val access = player.addAttachment(paper.createSimplePlugin("GuideActionAccess"), "bank.open.command", true)
+        open(HelpCenterPage.FEATURES)
+        click("category_trade")
+        click("guide_bank")
+        assertTrue(screen.buttons.any { it.id.value == "command_bank" })
+        access.setPermission("bank.open.command", false)
+        click("command_bank")
+        assertTrue(executed.isEmpty())
+
+        open(HelpCenterPage.TECHNOLOGY)
+        click("command_slimefun")
+        assertEquals("help.guide.slimefun", screen.id)
+        assertTrue(executed.isEmpty())
+
+        open(HelpCenterPage.FEATURES)
+        click("category_technology")
+        click("guide_slimefun")
+        assertFalse(screen.buttons.any { it.id.value == "guide_slimefun_menu" })
+        assertFalse(screen.buttons.any { it.id.value == "command_slimefun" })
+        assertTrue(body().contains("портал Slimefun"))
+        every { gateway.canOpenSlimefunMenu() } returns true
+        click("back")
+        click("guide_slimefun")
+        assertFalse(screen.buttons.single { it.id.value == "guide_slimefun_menu" }.closeDialogBeforeAction)
+        click("guide_slimefun_menu")
+        verify(exactly = 1) { gateway.openSlimefunMenu(player) }
+        assertTrue(executed.isEmpty())
+    }
+
+    @Test
+    fun `guide category pagination retains every topic and its return page`() {
+        open(HelpCenterPage.FEATURES)
+        click("category_trade")
+        val firstPage = screen.buttons.map { it.id.value }.filter { it.startsWith("guide_") && it != "guide_next" }
+        click("guide_next")
+        val secondPage = screen.buttons.map { it.id.value }.filter { it.startsWith("guide_") && it != "guide_previous" }
+        (firstPage + secondPage).toSet() shouldBe HelpCenterGuideCatalog.topics
+            .filter { it.category == HelpCenterCategory.TRADE }.map { "guide_${it.id.replace('-', '_')}" }.toSet()
+        click("guide_autosell")
+        click("back")
+        screen.id shouldBe "help.guides.trade"
+        assertTrue(body().contains("2/2"))
     }
 
     @Test
@@ -786,10 +890,10 @@ class HelpCenterScreensTest {
         click("root_trade")
         assertTrue(body().contains("итоговую сумму"))
         assertEquals(
-            listOf("command_shops", "command_loot", "command_sell", "command_auction", "command_bank"),
+            listOf("command_shops", "command_loot", "command_sell", "command_auction", "command_resource_contracts", "command_bank"),
             screen.buttons.map { it.id.value },
         )
-        assertEquals(5, screen.buttons.map { it.label.color() }.distinct().size)
+        assertTrue(screen.buttons.map { it.label.color() }.distinct().size >= 5)
     }
 
     @Test
@@ -1312,8 +1416,8 @@ class HelpCenterScreensTest {
     @Test
     fun `external inventory returns to the originating technology section once`() {
         open(HelpCenterPage.TECHNOLOGY)
-        assertFalse(screen.buttons.single { it.id.value == "command_slimefun" }.closeDialogBeforeAction)
-        click("command_slimefun")
+        assertFalse(screen.buttons.single { it.id.value == "command_enchanter" }.closeDialogBeforeAction)
+        click("command_enchanter")
         player.closeInventory()
         paper.performTicks(2)
         assertEquals("Технологии", plain(screen.title))
@@ -1359,7 +1463,7 @@ class HelpCenterScreensTest {
     @Test
     fun `explicit navigation cancels a pending external inventory return`() {
         open(HelpCenterPage.TECHNOLOGY)
-        click("command_slimefun")
+        click("command_enchanter")
         controller.open(player, HelpCenterPage.PLAYERS)
         player.closeInventory()
         paper.performTicks(2)

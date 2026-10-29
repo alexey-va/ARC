@@ -13,6 +13,7 @@ enum class HelpCenterPage(vararg val aliases: String) {
     NOW("now", "сейчас"),
     MY("my", "мое", "моё", "про меня"),
     GUIDE("guide", "гайд", "start", "начало"),
+    FEATURES("features", "справочник", "возможности"),
     DUNGEONS_GUIDE("dungeons-guide", "dungeon-guide", "данжи-гайд"),
     COMMANDS("commands", "команды"),
     RTP("rtp"),
@@ -77,6 +78,7 @@ enum class HelpCenterFeature(val pluginName: String?) {
     LANDS("Lands"),
     VOTES("ArcVotes"),
     BANK("Bank"),
+    CONTRACTS("ArcContracts"),
     PLAYER_PARTICLES("PlayerParticles"),
     HUSK_HOMES("HuskHomes"),
     PLAYER_WARPS("PlayerWarps"),
@@ -130,6 +132,8 @@ sealed interface HelpCenterSearchAction {
     data class Execute(val command: String) : HelpCenterSearchAction
 
     data class OpenPage(val page: HelpCenterPage) : HelpCenterSearchAction
+
+    data class OpenGuide(val guideId: String) : HelpCenterSearchAction
 
     data object CreateHome : HelpCenterSearchAction
 }
@@ -265,11 +269,11 @@ object HelpCenterPlanner {
         val content = allQueryTokens.filterNot { it.surface in STOP_WORDS }
         val queryTokens = content.filterNot { it.surface == "не" }.distinctBy { it.root }.ifEmpty { return emptyList() }
         val candidates = entries.filterNot { conflictsWithNegation(content, HelpCenterLexicon.terms(it.label)) }
-        val direct = candidates.map { it to directScore(it, needle) }.filter { it.second != Int.MAX_VALUE }
-        if (direct.isNotEmpty()) {
-            return direct.sortedWith(compareBy<Pair<HelpCenterSearchEntry, Int>> { it.second }.thenBy { it.first.id })
-                .take(limit).map { it.first }
-        }
+        val compactNeedle = queryTokens.joinToString("") { it.surface }
+        val direct = candidates.map { it to directScore(it, needle, compactNeedle) }
+            .filter { it.second != Int.MAX_VALUE }
+            .sortedWith(compareBy<Pair<HelpCenterSearchEntry, Int>> { it.second }.thenBy { it.first.id })
+            .map { it.first }
         val matches = candidates.map { entry -> entry to tokenScores(entry, queryTokens) }
         // Unknown conversational words do not bury useful configured matches. Rare catalog words
         // carry more weight than generic words shared by many menu entries.
@@ -283,23 +287,23 @@ object HelpCenterPlanner {
             }
         }
         val totalWeight = weights.sum()
-        if (totalWeight == 0) return emptyList()
+        if (totalWeight == 0) return direct.take(limit)
         val scored = matches.mapNotNull { (entry, costs) ->
             val matchedWeight = costs.indices.sumOf { if (costs[it] == Int.MAX_VALUE) 0 else weights[it] }
             if (matchedWeight * 2 < totalWeight) return@mapNotNull null
             val cost = costs.filter { it != Int.MAX_VALUE }.sum()
             entry to TOKEN_SCORE + (totalWeight - matchedWeight) * MISSING_TOKEN_PENALTY + cost
         }.sortedWith(compareBy<Pair<HelpCenterSearchEntry, Int>> { it.second }.thenBy { it.first.id })
-        val best = scored.firstOrNull()?.second ?: return emptyList()
-        return scored
+        val best = scored.firstOrNull()?.second ?: return direct.take(limit)
+        val fuzzy = scored
             .asSequence()
             .filter { (_, score) -> score <= best + FUZZY_WINDOW }
-            .take(limit)
             .map { it.first }
             .toList()
+        return (direct + fuzzy).distinctBy { it.id }.take(limit)
     }
 
-    private fun directScore(entry: HelpCenterSearchEntry, needle: String): Int {
+    private fun directScore(entry: HelpCenterSearchEntry, needle: String, compactNeedle: String): Int {
         val command = entry.command?.let(::normalize)?.removePrefix("/")
         val label = normalize(entry.label)
         val description = normalize(entry.description)
@@ -309,6 +313,10 @@ object HelpCenterPlanner {
         if (label == needle) return 1
         if (command?.startsWith(needle) == true) return 2
         if (haystack.contains(needle)) return 3
+        // Plugin names and configured phrases remain searchable with or without spaces.
+        if (compactNeedle.length >= 4 && listOf(command.orEmpty(), label, description, keywords).any { field ->
+                HelpCenterLexicon.terms(field).joinToString("") { it.surface }.contains(compactNeedle)
+            }) return 3
         return Int.MAX_VALUE
     }
 
@@ -344,13 +352,13 @@ object HelpCenterPlanner {
             minOf(query.surface.length, candidate.surface.length) >= 3 &&
             (query.surface.startsWith(candidate.surface) || candidate.surface.startsWith(query.surface))
         ) return 2
-        if (commonPrefix(query.root, candidate.root) >= 4) return 3
+        if (commonPrefix(query.root, candidate.root) >= maxOf(4, minOf(query.root.length, candidate.root.length) - 1)) return 3
         val trigramSimilarity = maxOf(
             HelpCenterLexicon.trigramSimilarity(query.surface, candidate.surface),
             HelpCenterLexicon.trigramSimilarity(query.root, candidate.root),
             HelpCenterLexicon.trigramSimilarity(query.surface, HelpCenterLexicon.phoneticCyrillic(candidate.surface)),
         )
-        if (trigramSimilarity >= TRIGRAM_THRESHOLD) return 4
+        if (minOf(query.surface.length, candidate.surface.length) >= 5 && trigramSimilarity >= TRIGRAM_THRESHOLD) return 4
         val allowedDistance = when {
             query.surface.length >= 8 -> 2
             query.surface.length >= 4 -> 1

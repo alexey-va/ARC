@@ -75,7 +75,8 @@ internal class HelpCenterController(
     }
     private val catalogById = catalog.associateBy { it.id }
     private val searchCatalog: List<HelpCenterSearchEntry> = buildList {
-        catalog.forEach { command ->
+        // Slimefun's menu route is explained by its always-visible network guide.
+        catalog.filterNot { it.id == "slimefun" }.forEach { command ->
             add(
                 HelpCenterSearchEntry(
                     id = command.id,
@@ -103,6 +104,7 @@ internal class HelpCenterController(
                 ),
             )
         }
+        addAll(HelpCenterGuideCatalog.searchEntries(settings))
     }
     private val hub by lazy {
         HelpCenterHubController(
@@ -149,6 +151,7 @@ internal class HelpCenterController(
             HelpCenterPage.RULES -> openRules(player)
             HelpCenterPage.NOW, HelpCenterPage.MY -> openNow(player)
             HelpCenterPage.GUIDE -> openGuide(player)
+            HelpCenterPage.FEATURES -> openSearchCatalog(player)
             HelpCenterPage.DUNGEONS_GUIDE -> openDungeonsGuide(player)
             HelpCenterPage.COMMANDS -> openCommands(player)
             HelpCenterPage.RTP -> openRtp(player)
@@ -270,6 +273,7 @@ internal class HelpCenterController(
                 title = text("help-title"),
                 body = listOf(presentation.panel(text("help-body"), 468)),
                 buttons = listOf(
+                    button("help_features", text("guide-catalog-label"), text("guide-catalog-tooltip")) { openSearchCatalog(player) },
                     button("help_commands", text("help-commands-label"), text("commands-tooltip")) { openCommands(player) },
                     button("help_recovery", text("help-recovery-label"), text("recovery-tooltip")) {
                         openRecovery(player, HelpCenterPage.HELP)
@@ -449,20 +453,89 @@ internal class HelpCenterController(
         present(player, PaperDialogScreen(
                 id = "help.catalog",
                 title = text("search-catalog-title"),
-                body = emptyList(),
-                buttons = listOf(
-                    categoryButton(player, HelpCenterCategory.START),
-                    categoryButton(player, HelpCenterCategory.TRAVEL),
-                    categoryButton(player, HelpCenterCategory.PROTECTION),
-                    categoryButton(player, HelpCenterCategory.ACTIVITIES),
-                    categoryButton(player, HelpCenterCategory.TRADE),
-                    categoryButton(player, HelpCenterCategory.PROGRESS),
-                    categoryButton(player, HelpCenterCategory.TECHNOLOGY),
-                    button("category_settings", text("category-settings-label"), text("category-settings-tooltip")) { openSettings(player) },
-                ).map { it.copy(width = 230) },
+                body = listOf(presentation.panel(text("guide-catalog-body", "count" to HelpCenterGuideCatalog.topics.size.toString()), 468)),
+                buttons = HelpCenterCategory.entries.map { category ->
+                    val topics = HelpCenterGuideCatalog.topics.filter { it.category == category }
+                    button("category_${category.configId}", text("category-${category.configId}-label"),
+                        text("guide-category-tooltip", "topics" to topics.joinToString("\n") { settings.guide(it.id).title })) {
+                        openGuideCategory(player, category)
+                    }.copy(width = 230)
+                },
                 exitButton = backButton("back", player, ::openCommands),
                 columns = 2,
             ))
+    }
+
+    private fun openGuideCategory(player: Player, category: HelpCenterCategory, requestedPage: Int = 0) {
+        val topics = HelpCenterGuideCatalog.topics.filter { it.category == category }
+        val pages = maxOf(1, (topics.size + GUIDE_PAGE_SIZE - 1) / GUIDE_PAGE_SIZE)
+        val page = requestedPage.coerceIn(0, pages - 1)
+        markNavigation(player) { openGuideCategory(player, category, page) }
+        present(player, PaperDialogScreen(
+            id = "help.guides.${category.configId}",
+            title = text("category-${category.configId}-title"),
+            body = listOf(presentation.panel(text("guide-category-body", "count" to topics.size.toString(),
+                "page" to (page + 1).toString(), "pages" to pages.toString()), 468)),
+            buttons = buildList {
+                topics.drop(page * GUIDE_PAGE_SIZE).take(GUIDE_PAGE_SIZE).forEach { topic ->
+                    add(guideButton(player, topic.id) { openGuideCategory(player, category, page) })
+                }
+                if (page > 0) add(button("guide_previous", text("guide-previous-label")) { openGuideCategory(player, category, page - 1) })
+                if (page + 1 < pages) add(button("guide_next", text("guide-next-label")) { openGuideCategory(player, category, page + 1) })
+            }.map { it.copy(width = 230) },
+            exitButton = backButton("back", player, ::openSearchCatalog),
+            columns = 2,
+        ))
+    }
+
+    private fun guideButton(player: Player, id: String, returnTo: () -> Unit): PaperDialogButton {
+        val guide = settings.guide(id)
+        return button("guide_${id.replace('-', '_')}", text("guide-topic-label", "label" to guide.title),
+            text("search-result-tooltip", "description" to guide.description)) { openFeatureGuide(player, id, returnTo) }
+    }
+
+    private fun openFeatureGuide(player: Player, id: String, returnTo: () -> Unit) {
+        val topic = HelpCenterGuideCatalog.byId[id] ?: return
+        val guide = settings.guide(id)
+        val reopen = { openFeatureGuide(player, id, returnTo) }
+        markNavigation(player, reopen)
+        val available = availableCatalog(player).associateBy { it.id }
+        val features = gateway.features()
+        val buttons = topic.actions.mapNotNull { action ->
+            when (action) {
+                is HelpCenterGuideAction.Command -> available[action.id]?.let { commandButton(player, it) }
+                is HelpCenterGuideAction.Topic -> guideButton(player, action.id, reopen)
+                is HelpCenterGuideAction.Page -> {
+                    val allowed = when (action.page) {
+                        HelpCenterPage.PRIVAT -> HelpCenterFeature.LANDS in features
+                        HelpCenterPage.WARPS -> "warps" in available
+                        HelpCenterPage.DUNGEONS_GUIDE -> "dungeons" in available
+                        else -> true
+                    }
+                    if (!allowed) null else button("guide_page_${action.page.name.lowercase()}", text(action.labelKey)) {
+                        when (action.page) {
+                            HelpCenterPage.PRIVAT -> if (HelpCenterFeature.LANDS in gateway.features()) open(player, action.page)
+                            HelpCenterPage.DUNGEONS_GUIDE -> if (availableCatalog(player).any { it.id == "dungeons" }) open(player, action.page)
+                            else -> open(player, action.page)
+                        }
+                    }
+                }
+                HelpCenterGuideAction.SlimefunMenu -> if (!gateway.canOpenSlimefunMenu()) null else {
+                    button("guide_slimefun_menu", text("guide-slimefun-menu-label")) {
+                        markNavigation(player)
+                        if (!gateway.openSlimefunMenu(player)) player.sendMessage(text("action-unavailable"))
+                    }
+                }
+            }
+        }
+        present(player, PaperDialogScreen(
+            id = "help.guide.$id",
+            title = text("guide-topic-title", "title" to guide.title),
+            body = listOf(presentation.panel(text("guide-topic-body", "description" to guide.description, "body" to guide.body), 468)),
+            buttons = buttons.map { it.copy(width = 230) },
+            exitButton = backButton("back", player, action = { returnTo() }),
+            columns = 2,
+        ))
     }
 
     private fun openPlayers(player: Player, rawQuery: String = "", page: Int = 0, localOnly: Boolean = false) {
@@ -1183,7 +1256,8 @@ internal class HelpCenterController(
         val result = button(
             "command_${command.id}",
             label,
-            text("command-tooltip", "description" to command.description, "command" to command.command),
+            if (command.id == "slimefun") text("search-result-tooltip", "description" to command.description)
+            else text("command-tooltip", "description" to command.description, "command" to command.command),
         ) {
             if (command.id == "privat") open(player, HelpCenterPage.PRIVAT) else executeCatalog(player, command.id)
         }
@@ -1195,14 +1269,15 @@ internal class HelpCenterController(
     private fun searchResultButton(player: Player, entry: HelpCenterSearchEntry, returnTo: () -> Unit): PaperDialogButton {
         val result = button(
             "result_${entry.id.replace('-', '_')}",
-            text("command-label", "label" to entry.label),
-            entry.command?.let { command ->
+            text(if (entry.action is HelpCenterSearchAction.OpenGuide) "search-guide-label" else "command-label", "label" to entry.label),
+            entry.command?.takeIf { entry.action is HelpCenterSearchAction.Execute }?.let { command ->
                 text("command-tooltip", "description" to entry.description, "command" to command)
             } ?: text("search-result-tooltip", "description" to entry.description),
         ) {
             when (val action = entry.action) {
                 is HelpCenterSearchAction.Execute -> catalogById[entry.id]?.let { hub.openCatalogAction(player, it, returnTo) }
                 is HelpCenterSearchAction.OpenPage -> open(player, action.page)
+                is HelpCenterSearchAction.OpenGuide -> openFeatureGuide(player, action.guideId, returnTo)
                 HelpCenterSearchAction.CreateHome -> openCreateHome(player)
             }
         }
@@ -1245,6 +1320,9 @@ internal class HelpCenterController(
         } else if (id == "enchants") {
             val returnTo = navigation.returnTarget(player) ?: { openRoot(player) }
             enchantments.open(player, returnTo)
+        } else if (id == "slimefun") {
+            val returnTo = navigation.returnTarget(player) ?: { openRoot(player) }
+            openFeatureGuide(player, "slimefun", returnTo)
         } else executeCommand(player, command)
     }
 
@@ -1334,7 +1412,9 @@ internal class HelpCenterController(
 
     companion object {
         // These commands join Core's shared history while this callback is active.
-        private val NATIVE_DIALOG_COMMANDS = setOf("rules", "events", "farms", "civs", "giveaways", "jobs", "rank", "teams", "quests", "builder", "warps", "enchants")
+        private val NATIVE_DIALOG_COMMANDS = setOf("rules", "events", "farms", "civs", "giveaways", "jobs", "rank", "teams", "quests", "builder", "warps", "enchants", "slimefun", "resource-contracts")
+        private const val GUIDE_PAGE_SIZE = 10
+        internal val catalogCommandIds: Set<String> get() = DEFINITIONS.mapTo(linkedSetOf()) { it.id }
         private const val PUBLIC_HOMES_PAGE_SIZE = 10
         private val SEARCH_INPUT = PaperDialogInputId.of("search")
         private val HOME_INPUT = PaperDialogInputId.of("home_name")
@@ -1390,6 +1470,7 @@ internal class HelpCenterController(
             CommandDefinition("loot", HelpCenterCategory.TRADE, "loot", opensInventory = true),
             CommandDefinition("sell", HelpCenterCategory.TRADE, "sell", opensInventory = true),
             CommandDefinition("auction", HelpCenterCategory.TRADE, "ah", opensInventory = true),
+            CommandDefinition("resource-contracts", HelpCenterCategory.TRADE, "arc contracts", HelpCenterFeature.CONTRACTS),
             CommandDefinition(
                 "bank",
                 HelpCenterCategory.TRADE,

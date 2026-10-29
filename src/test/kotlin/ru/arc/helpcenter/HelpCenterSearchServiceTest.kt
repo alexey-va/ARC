@@ -90,6 +90,25 @@ class HelpCenterSearchServiceTest : StringSpec({
         }
     }
 
+    "expanded optional catalogs preserve every ID while dropping descriptions to keep the same budget" {
+        val catalog = List(80) { index -> home.copy(id = "topic-$index", label = "д".repeat(64), description = "я".repeat(96)) }
+        var calls = 0
+        HelpCenterSearchService(options = HelpCenterSearchOptions(enabled = true), complete = { _, tokens, prompt, request ->
+            calls++
+            tokens shouldBe 128
+            (prompt.toByteArray(Charsets.UTF_8).size + request.toByteArray(Charsets.UTF_8).size <= 16000) shouldBe true
+            val rows = JsonParser.parseString(request).asJsonObject["catalog"].asJsonArray
+            rows.map { it.asJsonArray[0].asString } shouldContainExactly catalog.map { it.id }
+            rows.all { it.asJsonArray[2].asString.isEmpty() } shouldBe true
+            CompletableFuture.completedFuture("[\"topic-0\"]")
+        }).use { service ->
+            val result = service.search(catalog, "заработок", 8).join()
+            result.mode shouldBe HelpCenterSearchMode.SEMANTIC
+            result.entries shouldContainExactly listOf(catalog.first())
+            calls shouldBe 1
+        }
+    }
+
     "repeated exact requests reuse only validated IDs against the current entry objects" {
         var calls = 0
         HelpCenterSearchService(options = HelpCenterSearchOptions(enabled = true), complete = { _, _, _, _ ->
