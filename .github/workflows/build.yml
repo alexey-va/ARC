@@ -46,6 +46,7 @@ jobs:
         run: |
           python3 -m venv .tmp/resourcepack-python
           .tmp/resourcepack-python/bin/python -m pip install -r src/main/resources/scripts/resourcepack-requirements.txt
+          export PATH="$PWD/.tmp/resourcepack-python/bin:$PATH"
           echo "$PWD/.tmp/resourcepack-python/bin" >> "$GITHUB_PATH"
           .tmp/resourcepack-python/bin/python -m unittest discover -s src/test/python -v
       - run: ./gradlew --no-parallel --build-cache :test :arc-dungeons:test :shadowJar :arc-dungeons:shadowJar :prepareExtractedPluginArtifacts
