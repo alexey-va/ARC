@@ -1,6 +1,6 @@
 plugins { kotlin("jvm"); id("com.gradleup.shadow"); `maven-publish` }
 group = "ru.ruscrafting.arc"
-version = "0.1.1"
+version = "0.1.2"
 base.archivesName.set("ArcAurora")
 java { toolchain { languageVersion.set(JavaLanguageVersion.of(25)) }; withSourcesJar() }
 kotlin { jvmToolchain(25) }

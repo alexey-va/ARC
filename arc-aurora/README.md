@@ -13,8 +13,9 @@ The bundled configuration contains **25 ordinary profiles** and a three-figure
 `treasure-hunt` sky scene. Ordinary ambience uses small, separated forms.
 Native fireflies blink, petals and snowflakes use their native motion, and
 coloured dust supplies short threads, clusters and sparse halos. The hunt uses
-a broad luminous wave, a wireframe cube and a falling halo, held above the player for several
-seconds so their complete silhouettes can accumulate within a bounded budget.
+a luminous wave, a wireframe cube and a falling halo that grow at varied medium
+and far distances. Their advancing tips leave native fading wakes, then new
+figures start independently elsewhere in the sky.
 These are original presets; Aurora code, configuration files and assets were
 not imported.
 
@@ -32,15 +33,25 @@ not imported.
 | Mushroom fields | Small violet-to-teal halos | Any time |
 | Lush / dripstone / deep-dark caves | Spores / warm specks / quiet blue wavelets | Low skylight, actual 3D cave biome |
 | Nether / End | Embers, red threads, teal wisps, soul lights / violet clusters | Dimension-specific biome keys |
-| Treasure hunt | A 12-block sine ribbon, 5-block wire cube and 8-block falling halo in the sky | Explicit temporary event lease; three native full-bright particle types |
+| Treasure hunt | A travelling sine ribbon, gradually traced wire cube and falling halo at varied sky anchors | Explicit temporary event lease; three native full-bright particle types |
 
-Ordinary shapes pick fresh anchors each pass. Sky profiles retain a world
-anchor, initial facing and sampling cursor for their configured scene duration.
-The worker generates a complete deterministic frame; successive passes draw
-different parts of it, keeping all points eligible under the same packet cap.
-Slow wave motion, gradual cube rotation and shallow halo tilt let the outlines
-accumulate while previous particles follow their native motion and fade.
-There are no persistent Minecraft entities.
+Ordinary shapes pick fresh anchors each pass. Each sky figure instead keeps a
+world anchor and a finite trajectory prepared asynchronously. Main releases
+one point per advancing tip per eligible visit. It does not fill the packet
+budget with a burst, redraw a completed pose or replay missed ticks. The wave
+and halo have one tip; the cube uses three separated tips along contiguous
+parts of a connected twelve-edge walk, so its outline can form within the
+shorter FIREWORK lifetime.
+
+Anchors are sampled through a 140-degree front fan at different distances and
+heights; bounded candidate selection takes the first random position with an angular
+gap from other figures and the previous same-profile anchor. Only if all
+candidates overlap does it fall back to the widest gap.
+There are no fixed left/centre/right slots. Independent start delays, scale,
+roll, initial motion phase and traversal direction vary each new scene. The
+anchor and initial facing remain in world space when the viewer turns. A
+stroke grows once, moves gradually as it is traced, and is left to fade;
+replacement scenes receive new anchors. There are no persistent entities.
 
 Night visibility is a property of the chosen native particle. In the **1.21.11
 client**, END_ROD, FIREWORK and TOTEM particles inherit
@@ -145,14 +156,16 @@ biome-aliases:
 | `min-y`, `max-y` | Absolute Y bounds, each `-2048..2048`; actual world build height is also enforced |
 | `min-sky-light`, `max-sky-light` | Raw block skylight, `0..15`; this is exposure, not a second clock |
 | `underwater` | `false` by default; `true` also permits water, not other liquids |
-| `radius`, `min-distance` | Horizontal anchor distances in blocks, `2..32`; minimum must not exceed radius |
-| `vertical-min`, `vertical-max` | Anchor heights relative to the viewer's feet, each `-32..32` |
+| `radius`, `min-distance` | Horizontal anchor distances in blocks; ordinary `2..32`, sky `2..96`; minimum must not exceed radius |
+| `vertical-min`, `vertical-max` | Anchor heights relative to feet; ordinary `-32..32`, sky `-32..64` |
 | `shape-size` | Unposed radius/half-extent, ordinary `0.1..8`, sky `0.1..32` blocks |
-| `points`, `sky-points` | Positions in the complete shape, ordinary `1..24`, sky `1..192`; sky passes resume a cyclic cursor |
+| `points`, `sky-points` | Ordinary positions `1..24`; sky positions `1..192` across one finite stroke, acknowledged after Main attempts them |
 | `sky-scene` | `false` by default; retain a sky anchor and use posed, slowly moving geometry |
-| `scene-duration-ticks` | Sky anchor lifetime, `40..1200`; default `240` |
+| `scene-duration-ticks` | Sky anchor lifetime after its delayed birth, `40..1200`; default `240`; unfinished strokes expire too |
+| `spawn-delay-ticks` | Random delay before each sky scene starts, `0..400`; default `60`; selection prefers different birth times |
+| `sky-tracers` | Advancing heads per sky figure, `1..4`; default `1`; each visits a contiguous path section |
 | `motion-period-ticks` | Sky geometric motion period, `40..2400`; default `400` |
-| `update-ticks` | Sky planning cadence, `1..200`; default `4`; ordinary profiles retain the global interval |
+| `update-ticks` | Minimum ticks between sky head emissions, `1..200`; default `4`; no catch-up; ordinary cadence is unchanged |
 | `particle` | Namespaced native particle key supported by the running API |
 | `count` | Native particles per emission, `0..16`; zero still requests one particle with type-specific semantics |
 | `offset-x`, `offset-y`, `offset-z` | Native particle spread/direction inputs, each `0..2`; defaults zero |
@@ -171,7 +184,7 @@ along its **twelve wireframe edges**; `RING` samples an XZ perimeter;
 `SPHERE` samples a surface; `WAVE` spans X with a vertical sinusoid. Geometry
 uses world axes. Sky geometry has local X width, Y height and Z depth; the
 engine retains its initial facing toward the viewer. Its ring/disk sits in a
-slightly tilted frontal plane, the cube rotates as a wireframe, and the wave
+slightly tilted frontal plane, the cube uses a continuous edge walk with three repeated connecting edges, and the wave
 has a shallow depth component. A rotated cube can extend up to `sqrt(3) ×
 shape-size` from its anchor. Shape points are independently
 checked against loaded chunks, passable blocks and the selected ordinary
@@ -198,7 +211,7 @@ ping and does not change networking settings.
 | `viewers-per-tick` | `8` | `1..128`; bounded round-robin audience scan |
 | `attempts-per-viewer` | `8` | `1..64`; nearby anchors attempted per pass |
 | `packets-per-viewer` | `12` | `1..128`; particle emission requests per viewer pass |
-| `sky-packets-per-viewer` | `36` | `1..128`; separate request cap for retained sky figures |
+| `sky-packets-per-viewer` | `36` | `1..128`; per-visit request ceiling for retained sky figures, not a target batch size |
 | `native-budget-micros` | `1500` | `1..10000`; cooperative Main-thread deadline per tick |
 | `ping.max-current-ms` | `250` | `1..10000`; current-ping ceiling |
 | `ping.max-average-ms` | `180` | `1..10000`; rolling-average ceiling |
@@ -206,20 +219,34 @@ ping and does not change networking settings.
 | `ping.sample-interval-ticks` | `20` | `1..1200`; minimum sample spacing |
 
 At 20 TPS, the default ordinary cadence allows at most 24 emission requests
-per second per viewer before other caps. The hunt's four-tick sky cadence and
-36-request cap allow at most 180 requests per second. Both use `count=1`, so
-these presets request one native particle per position. Increasing `count`
-increases client particle work without increasing the request count. This is
-not a TCP-packet count, throughput guarantee or FPS benchmark.
-Actual output may be lower because of permissions, ping, terrain, audience
-rotation, deadlines or ArcCore's shared byte budget.
+per second per viewer before other caps. The bundled sky scene requests at most
+five per visited viewer per tick: one wave tip, three cube tips and one halo
+tip. With a visit every tick, that is a peak of 100 requests/particles per
+second; completed or delayed strokes request none. This is below the former
+180-request burst pattern. All bundled sky positions use `count=1` and zero
+spread/speed. Increasing count multiplies native particle work independently
+of request count; it does not make the trajectory smoother.
 
-The Main thread owns bounded player/world capture and final validation.
-Detached geometry and emission preparation run on a lifecycle-owned async
-worker. ArcCore encodes/transmits through its Netty packet path. The engine
-keeps one replaceable completed batch, discards batches older than four ticks,
-and does not replay a cosmetic backlog. Its deadline is checked between work
-items; it is not a preemptive hard limit on an individual native call.
+These are ceilings, not throughput or FPS measurements. `viewers-per-tick`
+round-robin visitation can reduce each viewer's cadence when the audience is
+larger. Native deadlines, ping, loaded terrain and ArcCore's shared byte budget
+can reduce it further. Viewer and profile start order rotate independently so
+a small cap cannot permanently prefer the same figure. Mixed sky/ordinary
+profiles share the configured per-viewer allocation; ordinary output retains
+its own cap.
+
+Main owns bounded player/world capture, per-tip dispatch and final validation.
+The lifecycle-owned worker prepares immutable paths of at most 192 positions
+per scene and refreshes captured viewer inputs at the ordinary interval.
+ArcCore encodes/transmits through its shared Netty path. One replaceable async
+batch is discarded after four ticks; retained sky strokes continue independently
+of later worker delays. A late visit emits only its current tip points. Only
+points actually attempted by Main advance the cursor; an unattempted tail is
+kept, without replaying old timed frames. An attempt can still be rejected by
+terrain, ping or the transport budget and is not a delivery acknowledgement.
+The shared cooperative deadline covers dispatch, validation and capture;
+it cannot preempt one native call. Lifecycle, world, revision and exact event
+lease checks still fence every retained emission.
 
 No chunk is deliberately loaded for ambience. No entities are spawned, and no
 world lighting, blocks or biome data are changed. Closing the runtime removes
@@ -263,29 +290,24 @@ on startup. A real loader prepare/unload/load cycle has not been tested here.
 The treasure-hunt preset supplies ambience above viewers. Its sky figures
 are not treasure markers and do not change discovery, rewards or gameplay.
 
-The three figures have **144 exact positions in total**, one native particle
-per position, and no random spread. Sky passes run every four ticks with a
-separate 36-request cap; ordinary cadence/cap and the 1500 µs cooperative Main
-budget remain unchanged. At 20 TPS that allows up to **180 requests/particles
-per second per viewer**: drawing all positions once takes nominally
-**1.2 seconds** before terrain, ping and runtime gates. This replaces the former
-near-eye dust clusters (96 particles in 24 requests per second) with larger
-coherent silhouettes and distinct native sprites.
-
-| Sky figure | Anchor footprint relative to feet | Geometry and movement |
+| Sky figure | Anchor footprint relative to feet | Finite trajectory |
 | --- | --- | --- |
-| Wave | Horizontal 24..30 blocks; Y +12..15; held for 240 ticks | 48 END_ROD points; width 12 blocks, roughly 3-block vertical span; one sine cycle travelling over 800 ticks |
-| Cube | Horizontal 24..30 blocks; Y +11..14; held for 320 ticks | 72 FIREWORK points across twelve 5-block edges; a slow 2400-tick rotation preserves the outline despite native downward drift |
-| Falling halo | Horizontal 24..30 blocks; Y +14..17; held for 400 ticks | 24 green/yellow TOTEM points on an 8-block tilted ring; shallow 600-tick tilt and native gravity create a falling cascade |
+| Wave | Horizontal 36..72 blocks; Y +13..34; 0..50-tick birth delay, 110-tick lifetime | 56 END_ROD points; one head, 2.8 s nominal formation; 16..20-block width before roll, 800-tick wave period |
+| Cube | Horizontal 34..64 blocks; Y +18..40; 0..70-tick birth delay, 128-tick lifetime | 96 FIREWORK points; three separated heads, 1.6 s nominal formation; twelve 5.44..6.8-block edges, 2400-tick rotation period |
+| Falling halo | Horizontal 40..72 blocks; Y +16..42; 0..90-tick birth delay, 104-tick lifetime | 32 TOTEM points; one head, 1.6 s nominal formation; 8.8..11-block tilted source ring and native falling wake |
 
-Vertical ranges and the 24..30-block horizontal range describe anchors, not
-every emitted point. Sky points have a separate two-block eye clearance so
-nearer edges of a large shape are not clipped by its anchor distance. Ordinary
-points retain their configured minimum eye distance. Player movement can change the
-viewing angle; loaded terrain and build-height checks can remove parts of a
-figure. Native particles finish their own lifetime after an anchor expires.
-Source geometry, a mathematical projection and client light-code inspection
-do not establish native-client visual acceptance or a performance benchmark.
+Formation times assume one visit each tick at 20 TPS and no skipped attempts.
+All heads advance at most once per visit; time lost to admission or deadlines
+is not recovered through a burst. Random scale is 80..100% of shape-size;
+roll is ±0.45 radians. A small progressive translation and the configured
+motion phase make the growing path travel without re-emitting a static pose.
+
+Ranges describe anchors, not every point. A sky point retains a separate
+two-block eye clearance, so a large figure's near edge is not cut by the anchor
+minimum. No chunks are loaded for distant figures. Terrain and build-height
+checks can omit points. Native sprite drift means the FIREWORK cube is a
+traced moving outline and TOTEM is a falling cascade, not a rigid held object.
+After completion or expiry, already sent particles finish their native lifetime.
 
 ## Build and publication
 
@@ -296,7 +318,7 @@ Run from the repository root with JDK 25:
 ```
 
 The expected local runtime artifact is
-`arc-aurora/build/libs/ArcAurora-0.1.1.jar`. The public Maven API artifact
+`arc-aurora/build/libs/ArcAurora-0.1.2.jar`. The public Maven API artifact
 `ru.ruscrafting.arc:arc-aurora-api:0.1.0` was verified on 2026-10-29 in the
 [RusCrafting repository](https://repo.rus-crafting.ru/grocermc/ru/ruscrafting/arc/arc-aurora-api/0.1.0/arc-aurora-api-0.1.0.pom).
 That API publication does not establish a runtime-plugin build, delivery,
@@ -336,4 +358,6 @@ end and the user's particle settings. No native-client visual acceptance or
 measured performance result is claimed by this README. Publication, artifact
 delivery and runtime activation require separate operational evidence.
 
-`sky-points` overrides `points` only for sky scenes. Bundled sky profiles retain a legacy-safe `points: 24` so the configuration can be delivered before the 0.1.1 JAR without breaking the running 0.1.0 parser.
+`sky-points` overrides `points` only for sky scenes. The expanded anchor ranges
+require ArcAurora 0.1.2; do not reload this configuration into an older runtime.
+The 25 ordinary biome profiles and their sampling behavior are unchanged.

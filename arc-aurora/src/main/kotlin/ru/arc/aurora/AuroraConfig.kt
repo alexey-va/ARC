@@ -96,6 +96,8 @@ data class AuroraProfile(
     val sceneDurationTicks: Int = 240,
     val motionPeriodTicks: Int = 400,
     val updateTicks: Int = 4,
+    val spawnDelayTicks: Int = 60,
+    val skyTracers: Int = 1,
 ) {
     private val biomePatterns = biomes.map(::compileGlob)
     private val worldPatterns = worlds.map(::compileGlob)
@@ -207,11 +209,11 @@ object AuroraConfig {
         val minSky = source.int("min-sky-light", 0, 0..15)
         val maxSky = source.int("max-sky-light", 15, 0..15)
         source.check("max-sky-light", maxSky >= minSky, "must be at least min-sky-light")
-        val radius = source.double("radius", 12.0, 2.0..32.0)
-        val minDistance = source.double("min-distance", 2.0, 2.0..32.0)
+        val radius = source.double("radius", 12.0, if (skyScene) 2.0..96.0 else 2.0..32.0)
+        val minDistance = source.double("min-distance", 2.0, if (skyScene) 2.0..96.0 else 2.0..32.0)
         source.check("min-distance", minDistance <= radius, "must not exceed radius")
-        val verticalMin = source.double("vertical-min", -2.0, -32.0..32.0)
-        val verticalMax = source.double("vertical-max", 6.0, -32.0..32.0)
+        val verticalMin = source.double("vertical-min", -2.0, if (skyScene) -32.0..64.0 else -32.0..32.0)
+        val verticalMax = source.double("vertical-max", 6.0, if (skyScene) -32.0..64.0 else -32.0..32.0)
         source.check("vertical-max", verticalMax >= verticalMin, "must be at least vertical-min")
         val particleKey = normalizeBiomeKey(source.string("particle", "minecraft:end_rod"))
         val particle = particlesByKey[particleKey] ?: source.fail("particle", "unknown particle '$particleKey'")
@@ -262,6 +264,8 @@ object AuroraConfig {
             sceneDurationTicks = source.int("scene-duration-ticks", 240, 40..1200),
             motionPeriodTicks = source.int("motion-period-ticks", 400, 40..2400),
             updateTicks = source.int("update-ticks", 4, 1..200),
+            spawnDelayTicks = source.int("spawn-delay-ticks", 60, 0..400),
+            skyTracers = source.int("sky-tracers", 1, 1..4),
         )
     }
 

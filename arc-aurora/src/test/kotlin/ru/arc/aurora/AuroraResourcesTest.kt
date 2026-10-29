@@ -27,7 +27,11 @@ class AuroraResourcesTest : FreeSpec({
         }
         val settings = AuroraConfig.parse(resource("config.yml"))
         settings.permission shouldBe "arcaurora.view"
-        (settings.profiles.isNotEmpty()) shouldBe true
+        settings.profiles.size shouldBe 25
+        val sky = settings.eventPresets.getValue("treasure-hunt")
+        sky.map { it.skyTracers } shouldBe listOf(1, 3, 1)
+        sky.map { it.points } shouldBe listOf(56, 96, 32)
+        sky.all { it.updateTicks == 1 && it.minDistance >= 34 && it.radius <= 72 } shouldBe true
         settings.eventPresets["treasure-hunt"].orEmpty().any { it.skyScene && it.points > 24 } shouldBe true
         settings.ping shouldBe AuroraPingSettings(250, 180, 10, 20)
         (settings.profiles + settings.eventPresets.values.flatten()).forEach { profile ->

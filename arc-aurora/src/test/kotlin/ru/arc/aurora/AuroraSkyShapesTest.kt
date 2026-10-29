@@ -41,23 +41,31 @@ class AuroraSkyShapesTest : FreeSpec({
             ring.all { abs(magnitude(it) - 5.0) < 1e-10 } shouldBe true
             (ring.maxOf { it.x } - ring.minOf { it.x } > 9.5) shouldBe true
             (ring.maxOf { it.y } - ring.minOf { it.y } > 8.5) shouldBe true
-            (ring + ring.first()).zipWithNext().all { (a, b) -> distance(a, b) < 0.66 } shouldBe true
+            (ring + ring.first()).zipWithNext().all { (a, b) -> distance(a, b) < 0.67 } shouldBe true
         }
     }
 
-    "cube poses retain twelve distinct straight edges while rotating" {
-        val first = AuroraSkyShapes.offsets(AuroraShape.CUBE, 3.0, 48, 0)
-        val later = AuroraSkyShapes.offsets(AuroraShape.CUBE, 3.0, 48, 100)
-        first.distinct().size shouldBe 48
+    "cube head follows one continuous walk covering all twelve edges" {
+        val first = AuroraSkyShapes.offsets(AuroraShape.CUBE, 3.0, 46, 0)
+        val later = AuroraSkyShapes.offsets(AuroraShape.CUBE, 3.0, 46, 100)
         (first != later) shouldBe true
         for (frame in listOf(first, later)) {
-            frame.chunked(4).size shouldBe 12
-            frame.chunked(4).forEach { edge ->
-                edge.zipWithNext().all { (a, b) -> abs(distance(a, b) - 1.5) < 1e-10 } shouldBe true
-                (abs(distance(edge.first(), edge.last()) - 4.5) < 1e-10) shouldBe true
-            }
+            frame.zipWithNext().all { (a, b) -> abs(distance(a, b) - 2.0) < 1e-10 } shouldBe true
+            fun key(point: AuroraOffset) = listOf(point.x, point.y, point.z).map { kotlin.math.round(it * 1e6).toLong() }
+            val edges = (0 until 15).map { edge -> setOf(key(frame[edge * 3]), key(frame[(edge + 1) * 3])) }
+            edges.toSet().size shouldBe 12
         }
         first.zip(later).all { (a, b) -> abs(magnitude(a) - magnitude(b)) < 1e-10 } shouldBe true
+    }
+
+    "prepared wave grows through adjacent points and never repeats a static full pose" {
+        val wave = AuroraSkyShapes.stroke(AuroraShape.WAVE, 10.0, 56, 1, 800, 180, 0.22, false)
+        wave.size shouldBe 56
+        wave.distinct().size shouldBe 56
+        wave.zipWithNext().all { (a, b) -> distance(a, b) in 0.2..0.65 } shouldBe true
+        val reversed = AuroraSkyShapes.stroke(AuroraShape.WAVE, 10.0, 56, 1, 800, 180, 0.22, true)
+        (reversed.first().x > reversed.last().x) shouldBe true
+        (wave.first().x < wave.last().x) shouldBe true
     }
 
     "sky motion is deterministic and invalid requests fail before sampling" {

@@ -204,207 +204,275 @@ class AuroraEngineTest : FreeSpec({
         }
     }
 
-    "a sky anchor stays in world space across movement and turning and uses its faster cadence" {
-        val settings = skySettings().copy(intervalTicks = 10)
+    "a prepared stroke releases one point per Main tick even while the next worker is held" {
+        val settings = skySettings(points = 24, shape = AuroraShape.WAVE, packets = 36)
         withEngine(settings) { fixture ->
             fixture.event = settings.profiles
-            fixture.pass()
-            val anchor = fixture.locations.single().clone()
-            (anchor.z > 0.5) shouldBe true // Minecraft yaw zero faces +Z; creation stays within its front fan.
-            (abs(anchor.x - 0.5) <= (anchor.z - 0.5) * kotlin.math.sqrt(3.0) + 1e-9) shouldBe true
+            fixture.capture()
+            fixture.completePlanning()
+            val sent = List(35) {
+                val before = fixture.locations.size
+                fixture.engine.tick()
+                fixture.locations.size - before
+            }
+            sent.take(24) shouldBe List(24) { 1 }
+            sent.drop(24).all { it == 0 } shouldBe true // Finite stroke; no cyclic overpainting.
+            fixture.queued.size shouldBe 1 // The delayed refresh never stalled or burst the retained path.
+            fixture.locations.toSet().size shouldBe 24
+        }
+    }
+
+    "each retained profile honors its own cadence without filling the available packet cap" {
+        val settings = skySettings(points = 24, packets = 36).let { original -> original.copy(profiles = listOf(
+            original.profiles.single(), original.profiles.single().copy(id = "slower", updateTicks = 3, particle = Particle.ELECTRIC_SPARK),
+        )) }
+        withEngine(settings) { fixture ->
+            fixture.event = settings.profiles
+            fixture.capture()
+            fixture.completePlanning()
+            repeat(12) {
+                val before = fixture.emissions.size
+                fixture.engine.tick()
+                (fixture.emissions.size - before <= 2) shouldBe true
+            }
+            fixture.emissions.count { it.particle == Particle.END_ROD } shouldBe 12
+            fixture.emissions.count { it.particle == Particle.ELECTRIC_SPARK } shouldBe 4
+        }
+    }
+
+    "three cube tracers remain bounded and release all prepared samples without affecting the one-point wave" {
+        val settings = skySettings(points = 56, shape = AuroraShape.WAVE, packets = 4).let { original -> original.copy(profiles = listOf(
+            original.profiles.single(), original.profiles.single().copy(id = "cube", shape = AuroraShape.CUBE,
+                points = 96, skyTracers = 3, particle = Particle.FIREWORK),
+        )) }
+        withEngine(settings) { fixture ->
+            fixture.event = settings.profiles
+            fixture.capture()
+            fixture.completePlanning()
+            repeat(32) {
+                val before = fixture.emissions.size
+                fixture.engine.tick()
+                val sent = fixture.emissions.drop(before)
+                sent.size shouldBe 4
+                sent.count { it.particle == Particle.END_ROD } shouldBe 1
+                sent.count { it.particle == Particle.FIREWORK } shouldBe 3
+            }
+            fixture.emissions.count { it.particle == Particle.FIREWORK } shouldBe 96
+            fixture.engine.tick()
+            fixture.emissions.last().particle shouldBe Particle.END_ROD
+        }
+    }
+
+    "a retained sky path keeps its creation anchor and facing when the viewer turns or moves" {
+        val settings = skySettings(points = 8)
+        withEngine(settings) { fixture ->
+            fixture.event = settings.profiles
+            fixture.capture()
+            fixture.completePlanning()
+            fixture.engine.tick()
+            val first = fixture.locations.single()
+            (first.z > 0.5) shouldBe true
             fixture.player.teleport(fixture.player.location.add(1.0, 0.0, 0.0).apply { yaw = 180f }) shouldBe true
-            fixture.pass()
-            fixture.locations.size shouldBe 2
-            fixture.locations[1] shouldBe anchor
+            repeat(7) { fixture.engine.tick() }
+            fixture.locations.size shouldBe 8
+            fixture.locations.all { it.distance(first) < 0.3 } shouldBe true
             fixture.emissions.forEach { emission ->
                 emission.force shouldBe true
-                emission.particle shouldBe Particle.END_ROD
                 emission.count shouldBe 1
                 emission.offsets shouldBe listOf(0.0, 0.0, 0.0, 0.0)
             }
         }
     }
 
-    "sky cyclic cursors cover two 48 point scenes within eight passes without chasing the viewer" {
-        val settings = skySettings(points = 48, shape = AuroraShape.LINE, packets = 12).let { original ->
-            original.copy(profiles = listOf(original.profiles.single().copy(id = "lower", verticalMin = 10.0, verticalMax = 10.0),
-                original.profiles.single().copy(id = "upper", verticalMin = 20.0, verticalMax = 20.0, radius = 16.0, minDistance = 16.0)))
-        }
+    "planning a finite sky stroke never consumes an unattempted tail or rewinds a newer acknowledgement" {
+        val cursor = AuroraSkyCursor(8)
+        val planned = cursor.plan().let { pass -> List(8) { checkNotNull(pass.next()) } }
+        checkNotNull(cursor.plan().next()).index shouldBe 0
+        planned.take(3).forEach { it.attempted() }
+        checkNotNull(cursor.plan().next()).index shouldBe 3
+        planned.first().attempted() // A stale acknowledgement cannot rewind the path.
+        checkNotNull(cursor.plan().next()).index shouldBe 3
+        planned.drop(3).forEach { it.attempted() }
+        cursor.plan().next() shouldBe null
+    }
+
+    "sky deadlines and a one request cap preserve profile fairness without batching" {
+        val settings = skySettings(points = 20, packets = 1).let { original -> original.copy(profiles =
+            listOf(Particle.END_ROD, Particle.ELECTRIC_SPARK, Particle.SMALL_FLAME).mapIndexed { index, particle ->
+                original.profiles.single().copy(id = "sky_$index", particle = particle)
+            }) }
         withEngine(settings) { fixture ->
             fixture.event = settings.profiles
-            repeat(8) { fixture.pass() }
-            fixture.locations.size shouldBe 96
-            val lower = fixture.locations.filter { it.y < 95.0 }
-            val upper = fixture.locations.filter { it.y > 95.0 }
-            lower.size shouldBe 48
-            upper.size shouldBe 48
-            lower.map { Triple(it.x, it.y, it.z) }.toSet().size shouldBe 48
-            upper.map { Triple(it.x, it.y, it.z) }.toSet().size shouldBe 48
-            fixture.pass()
-            fixture.locations.drop(96).filter { it.y < 95.0 } shouldBe lower.take(6)
-            fixture.locations.drop(96).filter { it.y > 95.0 } shouldBe upper.take(6)
-        }
-    }
-
-    "planning a sky batch never consumes its unattempted tail" {
-        val cursor = AuroraSkyCursor(48)
-        val planned = cursor.plan().let { pass -> List(12) { pass.next() } }
-        cursor.plan().next().index shouldBe 0 // A stale or entirely dropped batch changes nothing.
-        planned.take(4).forEach { it.attempted() }
-        val next = cursor.plan()
-        next.next().index shouldBe 4
-        next.next().index shouldBe 5
-        cursor.plan().next().index shouldBe 4 // Preparing another pass is still read-only.
-    }
-
-    "three sky cursors eventually cover every point when Main attempts only four of 36 planned points" {
-        val cursors = List(3) { AuroraSkyCursor(48) }
-        val seen = List(3) { mutableSetOf<Int>() }
-        repeat(36) { pass ->
-            val plans = cursors.map { it.plan() }
-            val batch = List(36) { index ->
-                val profile = (pass + index) % plans.size
-                profile to plans[profile].next()
+            fixture.capture()
+            fixture.completePlanning()
+            repeat(12) {
+                val before = fixture.emissions.size
+                fixture.engine.tick()
+                (fixture.emissions.size - before) shouldBe 1
             }
-            batch.take(4).forEach { (profile, point) ->
-                seen[profile] += point.index
-                point.attempted()
+            settings.profiles.forEach { profile -> fixture.emissions.count { it.particle == profile.particle } shouldBe 4 }
+        }
+    }
+
+    "viewer rotation cannot alias profile fairness at a one request cap" {
+        val settings = skySettings(points = 192, packets = 1).let { original -> original.copy(viewersPerTick = 1, profiles =
+            listOf(Particle.END_ROD, Particle.ELECTRIC_SPARK, Particle.SMALL_FLAME).mapIndexed { index, particle ->
+                original.profiles.single().copy(id = "sky_$index", particle = particle)
+            }) }
+        withEngine(settings) { fixture ->
+            fixture.event = settings.profiles
+            val ids = listOf(fixture.player.uniqueId, fixture.joinAdditional("Second"), fixture.joinAdditional("Third"))
+            repeat(75) {
+                if (fixture.queued.isNotEmpty()) fixture.completePlanning()
+                fixture.engine.tick()
+            }
+            ids.forEach { id ->
+                val seen = fixture.emissions.filter { it.viewer == id }.map { it.particle }.toSet()
+                seen shouldBe settings.profiles.map { it.particle }.toSet()
             }
         }
-        seen.forEach { it shouldBe (0 until 48).toSet() }
-        cursors.forEach { it.plan().next().index shouldBe 0 }
     }
 
-    "sky local width faces the creation viewer and a revision recreates its anchor for the new yaw" {
-        val settings = skySettings(points = 2, shape = AuroraShape.LINE, packets = 2)
+    "a delayed scene remains empty until its own birth and expired strokes are not replayed" {
+        val settings = skySettings(points = 60).let { original -> original.copy(profiles =
+            original.profiles.map { it.copy(sceneDurationTicks = 40, spawnDelayTicks = 20) }) }
         withEngine(settings) { fixture ->
             fixture.event = settings.profiles
-            fixture.player.teleport(fixture.player.location.apply { yaw = 90f }) shouldBe true
-            fixture.pass()
-            val first = fixture.locations.take(2)
-            val centerX = first.map { it.x }.average()
-            val centerZ = first.map { it.z }.average()
-            (centerX < 0.5) shouldBe true // yaw 90 faces -X.
-            val widthX = first[1].x - first[0].x
-            val widthZ = first[1].z - first[0].z
-            (abs(widthX * (0.5 - centerX) + widthZ * (0.5 - centerZ)) < 1e-8) shouldBe true
-            fixture.player.teleport(fixture.player.location.apply { yaw = -90f }) shouldBe true
-            fixture.engine.invalidate(fixture.player.uniqueId)
-            fixture.pass()
-            (fixture.locations.takeLast(2).map { it.x }.average() > 0.5) shouldBe true
+            fixture.capture()
+            fixture.completePlanning()
+            val sent = List(70) {
+                val before = fixture.locations.size
+                fixture.engine.tick()
+                fixture.locations.size - before
+            }
+            sent.all { it in 0..1 } shouldBe true
+            (sent.sum() in 38..40) shouldBe true
+            sent.takeLast(10).all { it == 0 } shouldBe true
         }
     }
 
-    "sky expiry and leaving the anchor range create a new scene while live profile replacement resets the cursor" {
-        val settings = skySettings(points = 4, shape = AuroraShape.LINE, packets = 2).let { original ->
-            original.copy(profiles = original.profiles.map { it.copy(sceneDurationTicks = 40) })
-        }
+    "invalidating a retained path retires it immediately and a fresh scene uses the new facing" {
+        val settings = skySettings(points = 24)
         withEngine(settings) { fixture ->
             fixture.event = settings.profiles
             fixture.pass()
+            (fixture.locations.single().z > 0.5) shouldBe true
             fixture.player.teleport(fixture.player.location.apply { yaw = 180f }) shouldBe true
-            repeat(9) { fixture.pass() } // Ages 5..37 retain the first anchor, despite the changed yaw.
-            (fixture.locations.takeLast(2).map { it.z }.average() > 0.5) shouldBe true
-            fixture.pass() // Age 41 expires the scene and creates it in the new front fan.
-            (fixture.locations.takeLast(2).map { it.z }.average() < 0.5) shouldBe true
-
-            fixture.player.teleport(Location(fixture.player.world, 16.5, 80.0, 16.5, 0f, 0f)) shouldBe true
-            fixture.pass()
-            val movedCenter = fixture.locations.takeLast(2)
-            (movedCenter.map { it.z }.average() > 16.5) shouldBe true
-            fixture.event = settings.profiles.map { it.copy(verticalMin = 18.0, verticalMax = 18.0, radius = 16.0, minDistance = 16.0) }
-            fixture.pass()
-            (fixture.locations.takeLast(2).all { it.y > 97.0 && it.y < 98.0 }) shouldBe true
+            fixture.engine.invalidate(fixture.player.uniqueId)
+            val before = fixture.locations.size
+            repeat(3) { fixture.engine.tick() }
+            fixture.locations.size shouldBe before
+            fixture.waitForPlanning()
+            fixture.completePlanning()
+            fixture.engine.tick()
+            (fixture.locations.last().z < 0.5) shouldBe true
         }
     }
 
-    "three sky profiles keep their configured particle data and occupy distinct creation sectors" {
-        val settings = skySettings(packets = 3).let { original ->
-            original.copy(profiles = listOf(Particle.END_ROD, Particle.ELECTRIC_SPARK, Particle.SMALL_FLAME).mapIndexed { index, particle ->
-                original.profiles.single().copy(id = "sky_$index", particle = particle, count = index + 1,
-                    offsetX = 0.25, offsetY = 0.5, offsetZ = 0.75, speed = 0.125)
-            })
-        }
-        withEngine(settings) { fixture ->
-            fixture.event = settings.profiles
-            fixture.pass()
-            fixture.emissions.map { it.particle } shouldBe settings.profiles.map { it.particle }
-            fixture.emissions.map { it.count } shouldBe listOf(1, 2, 3)
-            fixture.emissions.forEach { it.offsets shouldBe listOf(0.25, 0.5, 0.75, 0.125); it.force shouldBe true }
-            fixture.locations.forEachIndexed { index, at ->
-                val bearing = Math.toDegrees(kotlin.math.atan2(0.5 - at.x, at.z - 0.5))
-                (abs(bearing - (index - 1) * 35.0) <= 8.0 + 1e-9) shouldBe true
-            }
-        }
-    }
-
-    "mixed sky and ordinary profiles share the same cap and a one packet cap alternates groups" {
+    "mixed sky and ordinary emissions remain under the combined cap and both groups progress" {
         listOf(1, 4).forEach { cap ->
-            val settings = skySettings(packets = cap).let { original ->
+            val settings = skySettings(points = 48, packets = cap).let { original ->
                 original.copy(attemptsPerViewer = 8, profiles = original.profiles + original.profiles.single().copy(
                     id = "ordinary", skyScene = false, particle = Particle.SMALL_FLAME, shape = AuroraShape.POINT, points = 1))
             }
             withEngine(settings) { fixture ->
                 fixture.event = settings.profiles
-                repeat(2) { fixture.pass() }
-                fixture.locations.size shouldBe cap * 2
-                fixture.emissions.count { it.force } shouldBe cap
-                fixture.emissions.count { !it.force && it.particle == Particle.SMALL_FLAME } shouldBe cap
+                repeat(25) {
+                    if (fixture.queued.isNotEmpty()) fixture.completePlanning()
+                    val before = fixture.emissions.size
+                    fixture.engine.tick()
+                    val sent = fixture.emissions.drop(before)
+                    (sent.size <= cap) shouldBe true
+                    (sent.count { it.force } <= 1) shouldBe true
+                }
+                fixture.emissions.any { it.force } shouldBe true
+                fixture.emissions.any { !it.force } shouldBe true
             }
         }
     }
 
-    "sky uses its separate cap and mixed scenes preserve the ordinary maximum" {
-        val sky = skySettings(points = 8, shape = AuroraShape.LINE, packets = 6).copy(packetsPerViewer = 2)
-        withEngine(sky) { fixture ->
-            fixture.event = sky.profiles
-            // Main may discard a batch tail when its wall-clock slice expires. Check every
-            // observed cap and require the full allocation within a bounded set of fresh passes.
-            val sentPerPass = List(8) {
+    "bundled distant figures keep per-head pacing across delayed worker refreshes and rebirth" {
+        val bundled = AuroraConfig.parse(YamlConfiguration().apply {
+            loadFromString(checkNotNull(javaClass.classLoader.getResourceAsStream("config.yml")).bufferedReader().use { it.readText() })
+        }).copy(nativeBudgetMicros = 10000)
+        withEngine(bundled) { fixture ->
+            fixture.loadChunks(6)
+            fixture.event = bundled.eventPresets.getValue("treasure-hunt")
+            val timeline = StringBuilder("tick,particle,x,y,z\n")
+            repeat(600) { tick ->
+                if (fixture.queued.isNotEmpty() && tick % 2 == 0) fixture.completePlanning()
                 val before = fixture.emissions.size
-                fixture.pass()
-                (fixture.emissions.size - before).also { sent -> (sent <= 6) shouldBe true }
-            }
-            sentPerPass.maxOrNull() shouldBe 6
-            fixture.locations.map { Triple(it.x, it.y, it.z) }.toSet().size shouldBe 8
-        }
-        val mixed = sky.copy(attemptsPerViewer = 8, profiles = sky.profiles + (1..2).map { index ->
-            sky.profiles.single().copy(id = "ordinary_$index", skyScene = false, particle = Particle.SMALL_FLAME,
-                shape = AuroraShape.POINT, points = 1)
-        })
-        withEngine(mixed) { fixture ->
-            fixture.event = mixed.profiles
-            val sentPerPass = List(8) {
-                val before = fixture.emissions.size
-                fixture.pass()
-                fixture.emissions.drop(before).also { sent ->
-                    (sent.size <= 6) shouldBe true
-                    (sent.count { it.force } <= 4) shouldBe true
-                    (sent.count { !it.force } <= 2) shouldBe true
+                fixture.engine.tick()
+                val sent = fixture.emissions.drop(before)
+                (sent.size <= 5) shouldBe true
+                (sent.count { it.particle == Particle.END_ROD } <= 1) shouldBe true
+                (sent.count { it.particle == Particle.FIREWORK } <= 3) shouldBe true
+                (sent.count { it.particle == Particle.TOTEM_OF_UNDYING } <= 1) shouldBe true
+                for (index in before until fixture.emissions.size) {
+                    val at = fixture.locations[index]
+                    timeline.append("$tick,${fixture.emissions[index].particle.name},${at.x - 0.5},${at.y - 80.0},${at.z - 0.5}\n")
                 }
             }
-            sentPerPass.any { sent -> sent.size == 6 && sent.count { it.force } == 4 && sent.count { !it.force } == 2 } shouldBe true
+            fixture.emissions.map { it.particle }.toSet() shouldBe setOf(Particle.END_ROD, Particle.FIREWORK, Particle.TOTEM_OF_UNDYING)
+            // Optional source-driven preview export: exact native submissions from this same engine fixture.
+            System.getenv("ARCAURORA_PREVIEW_CSV")?.let { path -> java.nio.file.Files.writeString(java.nio.file.Path.of(path), timeline) }
         }
     }
 
-    "sky scenes retain the same ping and quit fences as ordinary effects" {
-        val settings = skySettings()
+    "stationary high sky anchors are not mistaken for viewer movement and restarted each refresh" {
+        val settings = skySettings(points = 1).let { original -> original.copy(profiles = original.profiles.map {
+            it.copy(radius = 4.0, minDistance = 4.0, verticalMin = 64.0, verticalMax = 64.0, spawnDelayTicks = 0)
+        }) }
         withEngine(settings) { fixture ->
             fixture.event = settings.profiles
-            fixture.capture()
-            fixture.completePlanning()
+            val originY = fixture.player.world.maxHeight - 66.0
+            fixture.player.teleport(fixture.player.location.apply { y = originY }) shouldBe true
+            repeat(24) {
+                if (fixture.queued.isNotEmpty()) fixture.completePlanning()
+                fixture.engine.tick()
+            }
+            fixture.locations.size shouldBe 1
+            fixture.locations.single().y shouldBe originY + 64.0
+        }
+    }
+
+    "ordinary retained sky stops when the current viewer biome no longer selects its profile" {
+        val settings = skySettings(points = 24).let { original -> original.copy(profiles =
+            original.profiles.map { it.copy(biomes = listOf("minecraft:plains")) }) }
+        withEngine(settings) { fixture ->
+            fixture.permission(true)
+            fixture.player.location.block.biome = org.bukkit.block.Biome.PLAINS
+            fixture.pass()
+            fixture.locations.size shouldBe 1
+            fixture.player.location.block.biome = org.bukkit.block.Biome.DESERT
+            repeat(4) { fixture.engine.tick() }
+            fixture.locations.size shouldBe 1
+        }
+    }
+
+    "retained sky paths recheck ping lease generation and quit before each native attempt" {
+        val settings = skySettings(points = 24)
+        withEngine(settings) { fixture ->
+            fixture.event = settings.profiles
+            fixture.pass()
+            fixture.locations.size shouldBe 1
             fixture.currentPing = 251
             fixture.engine.tick()
-            fixture.locations.size shouldBe 0
+            fixture.locations.size shouldBe 1
             fixture.currentPing = 50
-            fixture.waitForPlanning()
-            fixture.engine.quit(fixture.player.uniqueId)
-            fixture.completePlanning()
+            fixture.event = null
+            repeat(3) { fixture.engine.tick() }
+            fixture.locations.size shouldBe 1
+            fixture.event = settings.profiles.map { it.copy() } // Equal values are not the same event generation.
             fixture.engine.tick()
-            fixture.locations.size shouldBe 0
+            fixture.locations.size shouldBe 1
+            fixture.engine.quit(fixture.player.uniqueId)
+            fixture.engine.tick()
+            fixture.locations.size shouldBe 1
             verify(exactly = 1) { fixture.emitter.close() }
         }
     }
+
 })
 
 private fun withEngine(settings: AuroraSettings = engineSettings(), block: (EngineFixture) -> Unit) {
@@ -445,7 +513,7 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
             requireMain()
             locations += arg<Location>(1).clone()
             emissions += ObservedEmission(arg<Particle>(2), arg<Int>(3),
-                listOf(arg<Double>(4), arg<Double>(5), arg<Double>(6), arg<Double>(7)), arg<Boolean>(9))
+                listOf(arg<Double>(4), arg<Double>(5), arg<Double>(6), arg<Double>(7)), arg<Boolean>(9), arg<Player>(0).uniqueId)
         }
         paper.server.addPlayer(player)
         player.teleport(Location(world, 0.5, 80.0, 0.5)) shouldBe true
@@ -460,6 +528,16 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
         player.hasPermission(settings.permission) shouldBe false
         engine.join(player)
     }
+
+    fun joinAdditional(name: String): java.util.UUID {
+        val extra = EnginePlayer(paper.server, name)
+        paper.server.addPlayer(extra)
+        extra.teleport(Location(world, 0.5, 80.0, 0.5)) shouldBe true
+        engine.join(extra)
+        return extra.uniqueId
+    }
+
+    fun loadChunks(radius: Int) { for (x in -radius..radius) for (z in -radius..radius) world.loadChunk(x, z) }
 
     fun permission(granted: Boolean) = attachment.setPermission(settings.permission, granted)
 
@@ -500,10 +578,10 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
     }
 }
 
-private data class ObservedEmission(val particle: Particle, val count: Int, val offsets: List<Double>, val force: Boolean)
+private data class ObservedEmission(val particle: Particle, val count: Int, val offsets: List<Double>, val force: Boolean, val viewer: java.util.UUID)
 
 /** Override the one controlled observation without spying on MockBukkit's inherited entity methods. */
-private class EnginePlayer(server: ServerMock) : PlayerMock(server, "AuroraViewer") {
+private class EnginePlayer(server: ServerMock, name: String = "AuroraViewer") : PlayerMock(server, name) {
     private val mainThread = Thread.currentThread()
     var observedPing = 50
 
@@ -540,7 +618,7 @@ private fun engineSettings(points: Int = 1): AuroraSettings = AuroraConfig.parse
 private fun skySettings(points: Int = 1, shape: AuroraShape = AuroraShape.POINT, packets: Int = 1): AuroraSettings =
     engineSettings().let { original ->
         original.copy(intervalTicks = 10, packetsPerViewer = packets, skyPacketsPerViewer = packets, profiles = original.profiles.map { it.copy(
-            skyScene = true, sceneDurationTicks = 240, motionPeriodTicks = 400, updateTicks = 4,
+            skyScene = true, sceneDurationTicks = 240, motionPeriodTicks = 400, updateTicks = 1, spawnDelayTicks = 0,
             radius = 8.0, minDistance = 8.0, verticalMin = 10.0, verticalMax = 10.0,
             shape = shape, shapeSize = 2.0, points = points, count = 1, offsetX = 0.0, offsetY = 0.0, offsetZ = 0.0, speed = 0.0,
         ) })

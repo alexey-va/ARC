@@ -78,6 +78,25 @@ class AuroraConfigTest : FreeSpec({
         }
     }
 
+    "distant sky anchors and bounded tracers do not widen ordinary biome profile bounds" {
+        val sky = AuroraConfig.parse(profileConfig("sky-scene" to true, "radius" to 96, "min-distance" to 72,
+            "vertical-min" to 32, "vertical-max" to 64, "spawn-delay-ticks" to 400, "sky-tracers" to 4)).profiles.single()
+        sky.radius shouldBe 96.0
+        sky.minDistance shouldBe 72.0
+        sky.verticalMax shouldBe 64.0
+        sky.spawnDelayTicks shouldBe 400
+        sky.skyTracers shouldBe 4
+        listOf("radius" to 32.01, "vertical-max" to 32.01).forEach { (field, value) ->
+            shouldThrow<AuroraConfigException> { AuroraConfig.parse(profileConfig(field to value)) }
+                .path shouldBe "profiles.ambient.$field"
+        }
+        listOf("radius" to 96.01, "vertical-max" to 64.01, "spawn-delay-ticks" to -1,
+            "spawn-delay-ticks" to 401, "sky-tracers" to 0, "sky-tracers" to 5).forEach { (field, value) ->
+            shouldThrow<AuroraConfigException> { AuroraConfig.parse(profileConfig("sky-scene" to true, field to value)) }
+                .path shouldBe "profiles.ambient.$field"
+        }
+    }
+
     "invalid sky geometry and timing reject the complete candidate at their own field paths" {
         listOf(
             "shape-size" to 0.099, "shape-size" to 32.01, "shape-size" to Double.NaN,

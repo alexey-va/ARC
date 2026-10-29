@@ -14,6 +14,7 @@ import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -38,14 +39,19 @@ internal class AuroraEngine(
         var due = 0L
         var revision = 0L
         var pass = 0L
-        // Only the serial worker accesses this map and scene anchors; Main acknowledges attempted points.
+        // Worker owns scene creation; Main retains immutable strokes and acknowledges attempted points.
+        var sky: SkyInput? = null
+        var skyTurn = 0L
         val skyScenes = mutableMapOf<String, SkyScene>()
     }
     private class SkyScene(
         val profile: AuroraProfile, val world: UUID, val revision: Long, val born: Long,
+        val originX: Double, val originY: Double, val originZ: Double,
         val x: Double, val y: Double, val z: Double, val normalX: Double, val normalZ: Double,
+        val path: List<AuroraOffset>,
     ) {
         val cursor = AuroraSkyCursor(profile.points)
+        var nextAt = born // Main alone owns emission cadence; a late tick never catches up in a burst.
     }
     private data class Input(
         val viewer: Viewer, val world: UUID, val x: Double, val y: Double, val z: Double,
@@ -54,9 +60,10 @@ internal class AuroraEngine(
     )
     private data class Emission(
         val input: Input, val profile: AuroraProfile, val x: Double, val y: Double, val z: Double,
-        val skyPoint: AuroraSkyCursor.Point? = null,
     )
-    private data class Batch(val age: Long, val emissions: List<Emission>)
+    private data class SkyInput(val input: Input, val scenes: List<SkyScene>, val budget: Int)
+    private data class Planned(val emissions: List<Emission>, val sky: SkyInput? = null)
+    private data class Batch(val age: Long, val emissions: List<Emission>, val skies: List<SkyInput>)
     private val viewers = mutableMapOf<UUID, Viewer>()
     private val rotation = ArrayDeque<Viewer>()
     private val closed = AtomicBoolean()
@@ -64,6 +71,7 @@ internal class AuroraEngine(
     private val completed = AtomicReference<Batch?>()
     private var age = 0L
     private var firstViewer = 0
+    private var firstSkyViewer = 0
     @Volatile var viewerCount = 0; private set
     @Volatile var pingSkipped = 0L; private set
     @Volatile var submittedPackets = 0L; private set
@@ -83,9 +91,9 @@ internal class AuroraEngine(
         viewerCount = viewers.size
     }
 
-    fun invalidate(id: UUID) { viewers[id]?.let { it.revision++; it.particles.invalidatePending() } }
+    fun invalidate(id: UUID) { viewers[id]?.let { it.revision++; it.sky = null; it.particles.invalidatePending() } }
     fun invalidateWorld(worldId: UUID) {
-        viewers.values.filter { it.world == worldId }.forEach { it.revision++; it.particles.invalidatePending() }
+        viewers.values.filter { it.world == worldId }.forEach { it.revision++; it.sky = null; it.particles.invalidatePending() }
     }
 
     fun personallyEnabled(player: Player) = player.persistentDataContainer.get(disabledKey, PersistentDataType.BYTE) != 1.toByte()
@@ -101,29 +109,34 @@ internal class AuroraEngine(
         age++
         val deadline = System.nanoTime() + settings.nativeBudgetMicros * 1000L
         completed.getAndSet(null)?.takeIf { age - it.age <= 4L }?.let { batch ->
+            batch.skies.forEach { sky ->
+                val viewer = sky.input.viewer
+                if (viewers[viewer.id] === viewer && viewer.revision == sky.input.revision) viewer.sky = sky
+            }
             for (emission in batch.emissions) {
                 if (System.nanoTime() >= deadline) break
-                emission.skyPoint?.attempted()
                 deliver(emission)
             }
         }
+        val audience = ArrayList<Viewer>()
+        repeat(minOf(rotation.size, settings.viewersPerTick)) {
+            val viewer = rotation.removeFirst()
+            if (viewers[viewer.id] === viewer) { rotation.addLast(viewer); audience += viewer }
+        }
+        emitSky(audience, deadline)
         if (planning.get() || System.nanoTime() >= deadline) return
         val inputs = ArrayList<Input>()
-        repeat(minOf(rotation.size, settings.viewersPerTick)) {
-            if (System.nanoTime() >= deadline) return@repeat
-            val viewer = rotation.removeFirst()
-            if (viewers[viewer.id] !== viewer) return@repeat
-            rotation.addLast(viewer)
-            if (age < viewer.due) return@repeat
+        audience.forEach { viewer ->
+            if (System.nanoTime() >= deadline) return@forEach
+            if (age < viewer.due) return@forEach
             viewer.due = age + settings.intervalTicks
-            val player = Bukkit.getPlayer(viewer.id) ?: return@repeat
+            val player = Bukkit.getPlayer(viewer.id) ?: return@forEach
             val event = previewProfiles(viewer.id) ?: eventProfiles(player.world.uid)
-            if (!eligible(player, viewer, event != null)) return@repeat
+            if (!eligible(player, viewer, event != null)) return@forEach
             val at = player.location
-            if (!player.world.isChunkLoaded(at.blockX shr 4, at.blockZ shr 4)) return@repeat
+            if (!player.world.isChunkLoaded(at.blockX shr 4, at.blockZ shr 4)) return@forEach
             val profiles = event ?: matching(player, at, settings.profiles)
             if (profiles.isNotEmpty()) {
-                viewer.due = age + minOf(settings.intervalTicks, profiles.filter { it.skyScene }.minOfOrNull { it.updateTicks } ?: settings.intervalTicks)
                 inputs += Input(viewer, player.world.uid, at.x, at.y, at.z, at.yaw, profiles, event != null, age, viewer.revision, viewer.pass++)
             }
         }
@@ -134,10 +147,10 @@ internal class AuroraEngine(
                 val rows = (inputs.drop(order) + inputs.take(order)).map(::plan)
                 val emissions = ArrayList<Emission>()
                 // Interleave viewers so one dense preset cannot consume the whole native slice.
-                repeat(rows.maxOfOrNull { it.size } ?: 0) { index ->
-                    rows.forEach { row -> row.getOrNull(index)?.let(emissions::add) }
+                repeat(rows.maxOfOrNull { it.emissions.size } ?: 0) { index ->
+                    rows.forEach { row -> row.emissions.getOrNull(index)?.let(emissions::add) }
                 }
-                val plan = Batch(inputs.first().age, emissions)
+                val plan = Batch(inputs.first().age, emissions, rows.mapNotNull { it.sky })
                 if (!closed.get()) completed.set(plan)
             } finally { planning.set(false) }
         }
@@ -173,27 +186,63 @@ internal class AuroraEngine(
         return matches.filter { it.priority == priority }
     }
 
-    /** Pure asynchronous geometry, bounded by attempts and output packet caps. */
-    private fun plan(input: Input): List<Emission> {
+    /** Pure asynchronous geometry. A sky path is prepared once, not regenerated per emitted point. */
+    private fun plan(input: Input): Planned {
         val sky = input.profiles.filter { it.skyScene }
         val ordinary = input.profiles.filterNot { it.skyScene }
         input.viewer.skyScenes.entries.removeIf { (_, scene) ->
             scene.world != input.world || scene.revision != input.revision || sky.none { it === scene.profile }
         }
-        if (sky.isEmpty()) return planOrdinary(input, ordinary, settings.packetsPerViewer)
+        if (sky.isEmpty()) return Planned(planOrdinary(input, ordinary, settings.packetsPerViewer), SkyInput(input, emptyList(), 0))
         val budget = if (ordinary.isEmpty()) settings.skyPacketsPerViewer else maxOf(settings.packetsPerViewer, settings.skyPacketsPerViewer)
         val ordinaryBudget = when {
             ordinary.isEmpty() -> 0
             budget == 1 -> if (input.pass % 2L == 0L) 0 else 1
             else -> (budget * ordinary.size / input.profiles.size).coerceIn(1, minOf(settings.packetsPerViewer, budget - 1))
         }
-        val skyEmissions = planSky(input, sky, budget - ordinaryBudget)
-        if (ordinary.isEmpty()) return skyEmissions
-        val ordinaryEmissions = planOrdinary(input, ordinary, ordinaryBudget)
-        val rows = if (input.pass % 2L == 0L) listOf(skyEmissions, ordinaryEmissions) else listOf(ordinaryEmissions, skyEmissions)
-        return buildList {
-            repeat(maxOf(skyEmissions.size, ordinaryEmissions.size)) { index ->
-                rows.forEach { it.getOrNull(index)?.let(::add) }
+        return Planned(planOrdinary(input, ordinary, ordinaryBudget),
+            SkyInput(input, planSky(input, sky), budget - ordinaryBudget))
+    }
+
+    /** Bounded Main drip: one new point per ready tracer, even if its worker refresh is late. */
+    private fun emitSky(audience: List<Viewer>, deadline: Long) {
+        if (audience.isEmpty()) return
+        val first = Math.floorMod(firstSkyViewer++, audience.size)
+        for (viewerIndex in audience.indices) {
+            val viewer = audience[(first + viewerIndex) % audience.size]
+            if (viewers[viewer.id] !== viewer) continue
+            val sky = viewer.sky ?: continue
+            if (System.nanoTime() >= deadline) return
+            if (!sky.input.event) {
+                val player = Bukkit.getPlayer(viewer.id) ?: continue
+                val at = player.location
+                if (!player.world.isChunkLoaded(at.blockX shr 4, at.blockZ shr 4) ||
+                    matching(player, at, settings.profiles) != sky.input.profiles) {
+                    viewer.sky = null
+                    continue
+                }
+            }
+            var remaining = sky.budget
+            if (sky.scenes.isEmpty() || remaining == 0) continue
+            val start = Math.floorMod(viewer.skyTurn++, sky.scenes.size.toLong()).toInt()
+            repeat(sky.scenes.size) { index ->
+                if (System.nanoTime() >= deadline) return
+                if (remaining == 0) return@repeat
+                val scene = sky.scenes[(start + index) % sky.scenes.size]
+                if (age < scene.nextAt || age - scene.born >= scene.profile.sceneDurationTicks) return@repeat
+                val plan = scene.cursor.plan()
+                repeat(minOf(scene.profile.skyTracers, remaining)) point@{
+                    if (System.nanoTime() >= deadline) return
+                    val point = plan.next() ?: return@point
+                    val offset = scene.path[point.index]
+                    point.attempted()
+                    scene.nextAt = age + scene.profile.updateTicks
+                    remaining--
+                    deliver(Emission(sky.input, scene.profile,
+                        scene.x + offset.x * scene.normalZ + offset.z * scene.normalX,
+                        scene.y + offset.y,
+                        scene.z - offset.x * scene.normalX + offset.z * scene.normalZ))
+                }
             }
         }
     }
@@ -219,43 +268,52 @@ internal class AuroraEngine(
         return output
     }
 
-    private fun planSky(input: Input, profiles: List<AuroraProfile>, budget: Int): List<Emission> {
-        if (budget == 0) return emptyList()
-        val frames = profiles.mapIndexed { slot, profile ->
-            val previous = input.viewer.skyScenes[profile.id]
-            val range = profile.radius + profile.shapeSize + 8.0
-            val scene = if (previous == null || previous.profile !== profile ||
-                input.age - previous.born >= profile.sceneDurationTicks ||
-                (previous.x - input.x).let { it * it } + (previous.y - input.y).let { it * it } +
-                (previous.z - input.z).let { it * it } > range * range
-            ) createSkyScene(input, profile, slot, profiles.size).also { input.viewer.skyScenes[profile.id] = it } else previous
-            Triple(scene, AuroraSkyShapes.offsets(profile.shape, profile.shapeSize, profile.points,
-                input.age - scene.born, profile.motionPeriodTicks), scene.cursor.plan())
-        }
-        val start = Math.floorMod(input.pass, frames.size.toLong()).toInt()
-        return List(budget) { index ->
-            val (scene, offsets, cursor) = frames[(start + index) % frames.size]
-            val point = cursor.next()
-            val offset = offsets[point.index]
-            Emission(input, scene.profile,
-                scene.x + offset.x * scene.normalZ + offset.z * scene.normalX,
-                scene.y + offset.y,
-                scene.z - offset.x * scene.normalX + offset.z * scene.normalZ, point)
-        }
+    private fun planSky(input: Input, profiles: List<AuroraProfile>): List<SkyScene> = profiles.map { profile ->
+        val previous = input.viewer.skyScenes[profile.id]
+        val range = profile.radius + profile.shapeSize + 8.0
+        if (previous == null || previous.profile !== profile ||
+            input.age - previous.born >= profile.sceneDurationTicks ||
+            (previous.originX - input.x).let { it * it } + (previous.originY - input.y).let { it * it } +
+            (previous.originZ - input.z).let { it * it } > range * range
+        ) createSkyScene(input, profile).also { input.viewer.skyScenes[profile.id] = it } else previous
     }
 
-    private fun createSkyScene(input: Input, profile: AuroraProfile, slot: Int, slots: Int): SkyScene {
+    private fun createSkyScene(input: Input, profile: AuroraProfile): SkyScene {
         val random = ThreadLocalRandom.current()
-        val spacing = minOf(35.0, 100.0 / maxOf(1, slots - 1))
-        val sector = (slot - (slots - 1) / 2.0) * spacing
-        val angle = Math.toRadians(input.yaw.toDouble() + sector + random.nextDouble(-8.0, 8.0))
-        val distance = sqrt(random.nextDouble(profile.minDistance * profile.minDistance, profile.radius * profile.radius + 1e-9))
-        val x = input.x - sin(angle) * distance
-        val z = input.z + cos(angle) * distance
-        val y = input.y + if (profile.verticalMin == profile.verticalMax) profile.verticalMin
-            else random.nextDouble(profile.verticalMin, profile.verticalMax)
-        // Local +Z faces the viewer captured at creation; turning never retargets a live scene.
-        return SkyScene(profile, input.world, input.revision, input.age, x, y, z, sin(angle), -cos(angle))
+        // Include the previous same-profile anchor: its native tail can still be fading.
+        val neighbours = input.viewer.skyScenes.values
+        // Take the first random safe candidate. Always maximizing clearance would pin roles to side lanes.
+        val candidates = List(12) {
+            val angle = Math.toRadians(input.yaw.toDouble() + random.nextDouble(-70.0, 70.0))
+            val distance = sqrt(random.nextDouble(profile.minDistance * profile.minDistance, profile.radius * profile.radius + 1e-9))
+            val height = if (profile.verticalMin == profile.verticalMax) profile.verticalMin
+                else random.nextDouble(profile.verticalMin, profile.verticalMax)
+            Triple(angle, distance, height)
+        }
+        fun clearance(candidate: Triple<Double, Double, Double>): Double {
+            val (angle, distance, height) = candidate
+            return neighbours.minOfOrNull { other ->
+                val dx = other.x - input.x
+                val dz = other.z - input.z
+                val bearing = atan2(-dx, dz)
+                val separation = atan2(sin(angle - bearing), cos(angle - bearing))
+                val elevation = atan2(height, distance) - atan2(other.y - input.y, sqrt(dx * dx + dz * dz))
+                sqrt(separation * separation + elevation * elevation) -
+                    atan2(profile.shapeSize, distance) - atan2(other.profile.shapeSize, sqrt(dx * dx + dz * dz))
+            } ?: Double.POSITIVE_INFINITY
+        }
+        val anchor = candidates.firstOrNull { clearance(it) >= Math.toRadians(8.0) }
+            ?: candidates.maxBy(::clearance)
+        val (angle, distance, height) = anchor
+        val delay = if (profile.spawnDelayTicks == 0) 0 else List(8) { random.nextInt(profile.spawnDelayTicks + 1) }
+            .maxBy { candidate -> neighbours.minOfOrNull { kotlin.math.abs(input.age + candidate - it.born) } ?: 0L }
+        val path = AuroraSkyShapes.stroke(profile.shape, (profile.shapeSize * random.nextDouble(0.8, 1.0)).coerceAtLeast(0.1),
+            profile.points, profile.updateTicks, profile.motionPeriodTicks,
+            random.nextInt(profile.motionPeriodTicks), random.nextDouble(-0.45, 0.45), random.nextBoolean(), profile.skyTracers)
+        // Local +Z faces the creation viewer; turning never retargets a live scene.
+        return SkyScene(profile, input.world, input.revision, input.age + delay,
+            input.x, input.y, input.z, input.x - sin(angle) * distance, input.y + height, input.z + cos(angle) * distance,
+            sin(angle), -cos(angle), path)
     }
 
     private fun deliver(emission: Emission) {
@@ -301,14 +359,14 @@ internal class AuroraSkyCursor(private val points: Int) {
     fun plan() = Plan(acknowledged.get())
 
     inner class Plan internal constructor(private var cursor: Int) {
-        fun next(): Point {
-            val index = cursor
-            cursor = (cursor + 1) % points
+        fun next(): Point? {
+            if (cursor >= points) return null
+            val index = cursor++
             return Point(index, cursor)
         }
     }
 
     inner class Point internal constructor(val index: Int, private val next: Int) {
-        fun attempted() { acknowledged.set(next) }
+        fun attempted() { acknowledged.compareAndSet(index, next) }
     }
 }
