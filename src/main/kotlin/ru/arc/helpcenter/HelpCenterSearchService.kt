@@ -147,7 +147,10 @@ internal class HelpCenterSearchService(
         limit: Int,
     ): List<HelpCenterSearchEntry> {
         require(raw.length <= MAX_RESPONSE_LENGTH) { "Help search response is too long" }
-        val decoded = gson.fromJson(raw, JsonElement::class.java)
+        val candidate = raw.trim()
+        // Strip only a complete formatting wrapper; never extract JSON from surrounding prose.
+        val json = JSON_FENCE.matchEntire(candidate)?.groupValues?.get(1) ?: candidate
+        val decoded = gson.fromJson(json, JsonElement::class.java)
         require(decoded != null && decoded.isJsonArray) { "Help search response must be an ID array" }
         val ids = decoded.asJsonArray.map { item ->
             require(item.isJsonPrimitive && item.asJsonPrimitive.isString) { "Help search ID must be a string" }
@@ -161,6 +164,7 @@ internal class HelpCenterSearchService(
         const val MAX_QUERY_LENGTH = 512
         const val MAX_REQUEST_BYTES = 16_000
         const val MAX_RESPONSE_LENGTH = 2_048
+        val JSON_FENCE = Regex("```(?:json)?[ \\t]*\\r?\\n([\\s\\S]*?)\\r?\\n```")
         val gson = GsonBuilder().setStrictness(Strictness.STRICT).create()
         val SYSTEM_PROMPT = """
             Смысловой поиск меню RusCrafting. JSON: query — запрос; catalog — строки [id, название, описание].

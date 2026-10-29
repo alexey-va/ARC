@@ -97,6 +97,50 @@ class HelpCenterSearchServiceTest : StringSpec({
         }
     }
 
+    "accepts only a whole JSON or unlabelled code fence while retaining ID order" {
+        listOf(
+            "```json\n[\"privat\",\"home-create\"]\n```",
+            "```\n[\"privat\",\"home-create\"]\n```",
+            " \r\n```json\r\n[\"privat\",\"home-create\"]\r\n```\r\n ",
+        ).forEach { response ->
+            HelpCenterSearchService(options = HelpCenterSearchOptions(enabled = true), complete = { _, _, _, _ -> CompletableFuture.completedFuture(response) }).use { service ->
+                val result = service.search(entries, "дом", 2).join()
+                result.mode shouldBe HelpCenterSearchMode.SEMANTIC
+                result.entries shouldContainExactly listOf(protection, home)
+            }
+        }
+        val ids = listOf("spawn", "rtp", "back", "stuck", "recovery", "loot")
+        val catalog = ids.map { protection.copy(id = it) }
+        val observedResponse = "```json\n[\"spawn\",\"rtp\",\"back\",\"stuck\",\"recovery\",\"loot\"]\n```"
+        HelpCenterSearchService(options = HelpCenterSearchOptions(enabled = true), complete = { _, _, _, _ -> CompletableFuture.completedFuture(observedResponse) }).use { service ->
+            val result = service.search(catalog, "помоги вернуться", 8).join()
+            result.mode shouldBe HelpCenterSearchMode.SEMANTIC
+            result.entries.map { it.id } shouldContainExactly ids
+        }
+    }
+
+    "fences do not relax JSON ID prose or original response length validation" {
+        listOf(
+            "```json\n[\"operator-only\"]\n```",
+            "```json\n[\"privat\",\"privat\"]\n```",
+            "```json\n['privat']\n```",
+            "```json\nВот ответ: [\"privat\"]\n```",
+            "Вот ответ:\n```json\n[\"privat\"]\n```",
+            "```json\n[\"privat\"]\n```\nПояснение",
+            "```javascript\n[\"privat\"]\n```",
+            "```json\n[\"privat\"]\n```\n```json\n[]\n```",
+            "```json\n[\"privat\"]\n[]\n```",
+            "```json\n[\"privat\"]",
+            " ".repeat(2048) + "```json\n[\"privat\"]\n```",
+        ).forEach { response ->
+            HelpCenterSearchService(options = HelpCenterSearchOptions(enabled = true), complete = { _, _, _, _ -> CompletableFuture.completedFuture(response) }).use { service ->
+                val result = service.search(entries, "дом", 2).join()
+                result.mode shouldBe HelpCenterSearchMode.LEXICAL
+                result.entries shouldContainExactly listOf(home)
+            }
+        }
+    }
+
     "rejects invented hidden malformed duplicate and excessive IDs as a whole" {
         listOf(
             "[\"privat\",\"operator-only\"]",
