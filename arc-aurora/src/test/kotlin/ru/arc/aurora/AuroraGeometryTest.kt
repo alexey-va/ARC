@@ -53,7 +53,10 @@ class AuroraGeometryTest : FreeSpec({
         val single = AuroraGeometry.offsets(AuroraShape.WAVE, 4.0, 1, 10).single()
         single.x shouldBe 0.0
         (abs(single.y - 1.0) < 1e-10) shouldBe true
-        AuroraShape.entries.filter { it != AuroraShape.WAVE }.forEach {
+        val helix = AuroraGeometry.offsets(AuroraShape.HELIX, 4.0, 9, 0)
+        (helix != AuroraGeometry.offsets(AuroraShape.HELIX, 4.0, 9, 10)) shouldBe true
+        AuroraGeometry.offsets(AuroraShape.HELIX, 4.0, 9, 40) shouldBe helix
+        AuroraShape.entries.filter { it !in setOf(AuroraShape.WAVE, AuroraShape.HELIX) }.forEach {
             AuroraGeometry.offsets(it, 4.0, 9, 0) shouldBe AuroraGeometry.offsets(it, 4.0, 9, 10)
         }
     }

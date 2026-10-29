@@ -19,12 +19,19 @@ ping:
 
 # /arcaurora reload applies these to every sky figure. A profile may override only
 # the fields it needs under sky-options: {wave-amplitude: 0.3, scale-max: 1.2}.
-# The shipped values preserve the current scene. Native lifetime/gravity stay client-owned.
+# World-field defaults are independent of camera movement. Native lifetime/gravity stay client-owned.
+sky-field:
+  cell-size: 40 # One deterministic figure per world cell; no player-position/yaw anchors.
+  jitter: 0.3 # Fraction of a cell; independent deterministic displacement per lifecycle.
+  view-distance: 96 # Horizontal admission radius in blocks; profile.radius may narrow it.
+  cull-hysteresis: 16 # Retain active cells to 112 blocks; no nearest-slot churn.
+  max-scenes: 9
+  max-per-profile: 2 # Varied silhouettes, and at most two costly refreshed cubes.
+  cull-cooldown-ticks: 80 # Let the previous native tail expire before a cell can restart.
 sky-defaults:
-  # Placement: degrees around the initial viewing direction; loaded terrain only.
-  fan-degrees: 140
-  angular-gap-degrees: 8
-  anchor-candidates: 12
+  # Fixed-world orientation, not a sector around the viewer.
+  yaw-min-degrees: 0
+  yaw-max-degrees: 360
   terrain-clearance: 1 # Blocks above the surface, in addition to native fall/sprite clearance; minimum 1.
   scale-min: 0.8
   scale-max: 1.0 # shape-size * scale-max must stay <= 32.
@@ -39,8 +46,11 @@ sky-defaults:
   held-drift: 0.06
   held-lift: 0.025
   exit-ticks: 40 # Held figures only; capped at one quarter of scene duration; 0 disables staged exit.
-  fresh-head-repair: true # Finite waves only; at most one repeat, never a refresh of the old tail.
+  fresh-head-repair: false # One fresh point only; no doubled wave density.
   fresh-head-max-age-ticks: 2
+  helix-turns: 2
+  helix-radius: 0.3
+  arc-sweep-degrees: 240
 
 # Optional exact, single-hop aliases. Read the actual key with /arcaurora biome.
 # Iris namespaces/paths depend on the installed generator pack; none are assumed here.
@@ -436,15 +446,12 @@ profiles:
 # It intentionally bypasses the ordinary permission/toggle and time/biome filters.
 # Ping, loaded-chunk, passable-block and packet-budget gates still apply.
 # These decorative forms do not reveal treasure positions or change rewards.
-# Three different native sprites are verified full-bright in client 1.21.11.
-# White/purple END_ROD draws a wave, FIREWORK traces a cube, green/gold TOTEM falls
-# from a halo. Native colour, gravity and fade are intentional, not RGB overrides.
-# Each wave/halo grows one point per visit; the cube has three advancing heads.
-# Waves travel for 8-10 seconds with a short native fading tail; only the freshest head is repaired once.
-# Cube and halo contours are gradually refreshed under the same cap.
-# Random distant anchors and independent starts replace the fixed three-figure row.
-# The entire moving silhouette and native falling tail must clear loaded terrain.
-# Five independently placed figures share the unchanged 36-request cap.
+# END_ROD waves and FIREWORK cubes are full-bright; blue SOUL_FIRE_FLAME helixes
+# and warm FLAME arcs use their native age-dependent brightness and shorter lives.
+# One fresh head per wave/flame trace; only the cube has three heads and refresh.
+# Nine retained world cells sample these five variants all around the viewer.
+# Y ranges are above the loaded terrain at the cell anchor, not above the player.
+# Existing native tails fade on whole-scene radial cull; the shared cap stays 36.
 event-presets:
   treasure-hunt:
     sky_wave:
@@ -457,7 +464,7 @@ event-presets:
       spawn-delay-ticks: 24
       motion-period-ticks: 800
       update-ticks: 1
-      radius: 50
+      radius: 96
       min-distance: 28
       vertical-min: 26
       vertical-max: 54
@@ -483,7 +490,7 @@ event-presets:
       sky-tracers: 3
       motion-period-ticks: 2400
       update-ticks: 1
-      radius: 56
+      radius: 96
       min-distance: 28
       vertical-min: 28
       vertical-max: 60
@@ -498,50 +505,50 @@ event-presets:
       offset-z: 0
       speed: 0
       sky-refresh-ticks: 24
-    falling_halo:
-      biomes:
-      - '*'
-      time-start: 0
-      time-end: 23999
-      sky-scene: true
-      scene-duration-ticks: 360
-      spawn-delay-ticks: 100
-      motion-period-ticks: 600
-      update-ticks: 1
-      radius: 60
-      min-distance: 30
-      vertical-min: 32
-      vertical-max: 60
-      shape: RING
-      shape-size: 5.5
-      points: 24
-      sky-points: 96
-      particle: minecraft:totem_of_undying
-      count: 1
-      offset-x: 0
-      offset-y: 0
-      offset-z: 0
-      speed: 0
-      sky-refresh-ticks: 20
-    sky_wave_small:
+    soul_helix:
       biomes:
       - '*'
       time-start: 0
       time-end: 23999
       sky-scene: true
       scene-duration-ticks: 180
-      spawn-delay-ticks: 24
+      spawn-delay-ticks: 30
+      motion-period-ticks: 600
+      update-ticks: 1
+      radius: 96
+      min-distance: 30
+      vertical-min: 36
+      vertical-max: 60
+      shape: HELIX
+      shape-size: 7
+      points: 24
+      sky-points: 144
+      particle: minecraft:soul_fire_flame
+      count: 1
+      offset-x: 0
+      offset-y: 0
+      offset-z: 0
+      speed: 0
+      sky-refresh-ticks: 0
+    ember_arc:
+      biomes:
+      - '*'
+      time-start: 0
+      time-end: 23999
+      sky-scene: true
+      scene-duration-ticks: 132
+      spawn-delay-ticks: 25
       motion-period-ticks: 800
       update-ticks: 1
-      radius: 40
+      radius: 96
       min-distance: 28
-      vertical-min: 24
-      vertical-max: 48
-      shape: WAVE
-      shape-size: 6
+      vertical-min: 32
+      vertical-max: 56
+      shape: ARC
+      shape-size: 5
       points: 24
-      sky-points: 160
-      particle: minecraft:end_rod
+      sky-points: 96
+      particle: minecraft:flame
       count: 1
       offset-x: 0
       offset-y: 0
@@ -558,7 +565,7 @@ event-presets:
       spawn-delay-ticks: 30
       motion-period-ticks: 800
       update-ticks: 1
-      radius: 56
+      radius: 96
       min-distance: 36
       vertical-min: 32
       vertical-max: 64

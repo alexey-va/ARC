@@ -29,10 +29,10 @@ class AuroraResourcesTest : FreeSpec({
         settings.permission shouldBe "arcaurora.view"
         settings.profiles.size shouldBe 25
         val sky = settings.eventPresets.getValue("treasure-hunt")
-        sky.all { it.skyOptions == AuroraSkyOptions() } shouldBe true
+        sky.all { it.skyOptions == AuroraSkyOptions(freshHeadRepair = false) } shouldBe true
         sky.map { it.skyTracers } shouldBe listOf(1, 3, 1, 1, 1)
-        sky.map { it.points } shouldBe listOf(192, 192, 96, 160, 192)
-        sky.all { it.updateTicks == 1 && it.minDistance >= 28 && it.radius <= 64 } shouldBe true
+        sky.map { it.points } shouldBe listOf(192, 192, 144, 96, 192)
+        sky.all { it.updateTicks == 1 && it.minDistance >= 28 && it.radius <= 96 } shouldBe true
         settings.eventPresets["treasure-hunt"].orEmpty().any { it.skyScene && it.points > 24 } shouldBe true
         settings.ping shouldBe AuroraPingSettings(250, 180, 10, 20)
         (settings.profiles + settings.eventPresets.values.flatten()).forEach { profile ->

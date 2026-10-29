@@ -20,4 +20,9 @@ data class AuroraSkyOptions(
     val exitTicks: Int = 40,
     val freshHeadRepair: Boolean = true,
     val freshHeadMaxAgeTicks: Int = 2,
+    val yawMinDegrees: Double = 0.0,
+    val yawMaxDegrees: Double = 360.0,
+    val helixTurns: Double = 2.0,
+    val helixRadius: Double = 0.3,
+    val arcSweepDegrees: Double = 240.0,
 )

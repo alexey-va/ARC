@@ -9,14 +9,12 @@ the PacketEvents compile version comes from the repository's dependency catalog.
 
 ## Visual direction
 
-The bundled configuration contains **25 ordinary profiles** and a five-figure
-`treasure-hunt` sky scene. Ordinary ambience uses small, separated forms.
-Native fireflies blink, petals and snowflakes use their native motion, and
-coloured dust supplies short threads, clusters and sparse halos. The hunt uses
-three travelling waves of different sizes, a wireframe cube and a falling halo
-at varied medium and far distances. Waves remain active for 8–10 seconds with
-a short naturally fading tail. The cube and halo grow gradually, remain visible
-through bounded refresh, then retire as new figures start independently elsewhere.
+The bundled configuration contains **25 ordinary profiles** and five sky
+variants sampled into up to **nine retained world cells** for `treasure-hunt`.
+Ordinary ambience keeps its small, separated forms. The sky uses two sizes of
+travelling white wave, a wireframe spark cube, a blue soul-flame helix and a
+warm flame arc. Waves have a short native tail and one fresh point per visit;
+only cubes use a sustained refresh. The old green/gold TOTEM ring is absent.
 These are original presets; Aurora code, configuration files and assets were
 not imported.
 
@@ -34,47 +32,44 @@ not imported.
 | Mushroom fields | Small violet-to-teal halos | Any time |
 | Lush / dripstone / deep-dark caves | Spores / warm specks / quiet blue wavelets | Low skylight, actual 3D cave biome |
 | Nether / End | Embers, red threads, teal wisps, soul lights / violet clusters | Dimension-specific biome keys |
-| Treasure hunt | Three travelling wavelets, gradually traced wire cube and falling halo at varied sky anchors | Explicit temporary event lease; three native full-bright particle types |
+| Treasure hunt | White moving wavelets, spark cubes, blue curls and warm arcs in a world field | Explicit temporary event lease; native particles |
 
-Ordinary shapes pick fresh anchors each pass. Each sky figure instead keeps a
-world anchor and a finite trajectory prepared asynchronously. Main releases
-one new point per advancing tip per eligible visit, without replaying missed
-ticks. Each wave has one tip; its previous fresh point is repeated once on the
-next visit only if at most two ticks old. This repairs a single lost attempt
-without replenishing the old tail or holding the whole wave. Native transport
-admission remains best effort. The cube uses three separated tips along a
-connected twelve-edge walk; the halo uses one. Those two profiles also refresh
-already revealed positions gradually, with gentle coherent drift. Their last
-two seconds stop replenishing successive portions before native particles expire.
+Ordinary shapes pick fresh nearby anchors each pass. Sky positions instead come
+from a deterministic jittered world lattice. World UUID, cell coordinates,
+profile and lifecycle epoch choose the geometry, orientation and variation.
+The observer's position selects nearby cells; yaw and player altitude never
+choose or rebase their anchors. Main resolves each anchor's loaded terrain
+height once, then checks the full swept silhouette before starting it. Nearby
+viewers using the same cell key receive the same world geometry; their admission
+and emission phases may differ. There is no shared global scene registry.
 
-Anchors are sampled through a 140-degree front fan at different distances and
-heights; bounded candidate selection takes the first random position with an angular
-gap from other figures and the previous same-profile anchor. Only if all
-candidates overlap does it fall back to the widest gap.
-There are no fixed left/centre/right slots. Independent start delays, scale,
-roll, initial motion phase and traversal direction vary each new scene. The
-anchor and initial facing remain in world space when the viewer turns. A
-wave grows once and travels while its older tail expires; replacement scenes
-receive new anchors. Cube and halo drift coherently during their visible hold. There are no persistent entities.
+Active cells remain selected while they are eligible, including across a new
+field epoch. Admission delay does not shorten their own lifetime. Moving through
+a cell boundary does not replace the nearest slots. Crossing the outer cull
+radius stops the whole figure before consuming its next point; already emitted
+particles expire naturally. A culled cell waits for both its lifecycle expiry
+and a configurable cooldown before reuse. It never resumes a frozen partial
+head or replays a backlog. A bounded retirement-map overflow conservatively
+pauses new admission while existing eligible scenes continue.
 
-Night visibility is a property of the chosen native particle. In the **1.21.11
-client**, END_ROD, FIREWORK and TOTEM particles inherit
-`SimpleAnimatedParticle.getLightColor`, which returns full-bright `15728880`.
-Their native sprites and motion remain different: END_ROD starts white and
-fades toward muted purple; FIREWORK supplies a spark sprite; TOTEM has native
-green/yellow colour variation. `DUST` and `DUST_COLOR_TRANSITION` instead sample
-world light. The sky preset uses zero spread/speed and does not promise
-arbitrary RGB recolouring. Full brightness does not create light on blocks,
-reflections or shader bloom, and ordinary dust profiles retain their existing
-lighting behaviour.
+Main releases one new point per advancing tip per eligible visit. The bundled
+waves have no duplicate repair, halving their previous repeated-particle density
+without deleting any path samples. Their unique paths and travel remain intact.
+A configurable one-time fresh-head repair remains available for custom profiles.
+The cube uses three separated tips along a connected twelve-edge walk and
+bounded refresh behind its frontier. The helix and arc are finite flame traces,
+not held complete outlines. No persistent entities are used.
 
-Zero packet speed does not cancel native gravity. Inspected client lifetimes
-are 60..71 ticks for END_ROD/TOTEM and 48..59 ticks for FIREWORK. From rest,
-their respective falls after 32 ticks are approximately 0.124, 3.81 and 1.0
-blocks. The wave therefore uses END_ROD, the cube retains a slowly posed outline, and the
-TOTEM halo is intentionally a falling green/gold cascade rather than a
-stationary ring. These are source-derived client behaviours, not an in-game
-measurement of this scene.
+The exact 1.21.11 client gives END_ROD and FIREWORK full-bright light value
+`15728880`, lifetimes of 60..71 and 48..59 ticks, and native gravity even at zero
+packet speed. END_ROD starts white and changes toward purple; FIREWORK uses its
+spark sprite. FLAME and SOUL_FIRE_FLAME share the same native provider with
+12..44 tick lifetimes, no gravity, friction 0.96, small randomized spawn/motion,
+and size shrinking to half its initial value. Their light increases with age
+and is not unconditional full brightness. Blue and warm sprites provide colour
+variation without arbitrary recolouring. Dust retains ordinary world lighting.
+Full brightness does not illuminate blocks, create reflections or promise bloom.
+These are client-source facts, not a native recording of the scene.
 
 The original author's published documentation describes a separate
 `particle.enableLighting` option and warns
@@ -160,8 +155,8 @@ biome-aliases:
 | `min-y`, `max-y` | Absolute Y bounds, each `-2048..2048`; actual world build height is also enforced |
 | `min-sky-light`, `max-sky-light` | Raw block skylight, `0..15`; this is exposure, not a second clock |
 | `underwater` | `false` by default; `true` also permits water, not other liquids |
-| `radius`, `min-distance` | Horizontal anchor distances in blocks; ordinary `2..32`, sky `2..96`; minimum must not exceed radius |
-| `vertical-min`, `vertical-max` | Anchor heights relative to feet; ordinary `-32..32`, sky `-32..64` |
+| `radius`, `min-distance` | Horizontal admission range; ordinary `2..32`, sky `2..96`. New sky cells must lie in this band and inside `sky-field.view-distance`; active cells use the field's outer cull radius |
+| `vertical-min`, `vertical-max` | Ordinary heights relative to feet (`-32..32`); sky heights above the cell anchor's loaded terrain surface (`-32..64`), independent of player Y |
 | `shape-size` | Unposed radius/half-extent, ordinary `0.1..8`, sky `0.1..32` blocks |
 | `points`, `sky-points` | Ordinary positions `1..24`; sky positions `1..192` across one finite stroke, acknowledged after Main attempts them |
 | `sky-scene` | `false` by default; retain a sky anchor and use posed, progressively revealed geometry |
@@ -189,9 +184,7 @@ previous engine and settings active. Admin previews stop on reload; run
 
 | Sky option | Default; range | Effect |
 | --- | --- | --- |
-| `fan-degrees` | `140`; `0..360` | Anchor sector around the initial viewing direction; `0` centres it |
-| `angular-gap-degrees` | `8`; `0..90` | Preferred empty angular gap between figures |
-| `anchor-candidates` | `12`; `1..32` | Bounded random placement attempts; fallback chooses the widest gap |
+| `yaw-min-degrees`, `yaw-max-degrees` | `0`, `360`; each `-360..360`, min ≤ max | Fixed-world orientation range; never relative to viewer yaw |
 | `terrain-clearance` | `1`; `1..32` blocks | Extra surface clearance after native fall and sprite bounds; safety floor remains one block |
 | `scale-min`, `scale-max` | `0.8`, `1`; each `0.1..2` | Random size multipliers, min ≤ max; `shape-size × scale-max` must stay ≤ 32 |
 | `roll-radians` | `0.45`; `0..π` | Random tilt in either direction; zero disables roll |
@@ -202,8 +195,26 @@ previous engine and settings active. Admin previews stop on reload; run
 | `stroke-drift`, `stroke-lift` | `0.12`, `0.05`; each `-1..1` | Travel and vertical arc added while a figure is first traced |
 | `held-drift`, `held-lift` | `0.06`, `0.025`; each `-0.25..0.25` | Coherent translation of refreshed contours; zero leaves that axis still |
 | `exit-ticks` | `40`; `0..200` | Staged exit for refreshed contours, capped at one quarter of scene duration; zero stops refresh at expiry |
-| `fresh-head-repair` | `true` | Finite waves repeat only the previous fresh head once |
+| `fresh-head-repair` | Bundled `false`; omitted parser fallback `true` for older custom profiles | Optionally repeat the preceding fresh wave head once |
 | `fresh-head-max-age-ticks` | `2`; `1..4` | Maximum age of that one-time repair; expired repairs are discarded |
+| `helix-turns`, `helix-radius` | `2`, `0.3`; `0.25..8`, `0.05..1` | Coil count and radius fraction for `HELIX` |
+| `arc-sweep-degrees` | `240`; `30..330` | Angular span of the open `ARC` |
+
+| `sky-field` option | Default; range | Meaning |
+| --- | --- | --- |
+| `cell-size` | `40`; `16..128` blocks | Width of each fixed world cell |
+| `jitter` | `0.3`; `0..0.4` | Anchor displacement as a fraction of cell width |
+| `view-distance` | `96`; `16..192` blocks | Horizontal radius admitting new cells |
+| `cull-hysteresis` | `16`; `0..64` blocks | Extra outer radius for retaining active cells |
+| `max-scenes` | `9`; `1..16` | Maximum retained scenes per viewer |
+| `max-per-profile` | `2`; `1..16` | Limit on copies of one variant; promotes variety and bounds expensive contours |
+| `cull-cooldown-ticks` | `80`; `72..1200` | Minimum whole-cell retirement period after culling, also respecting the old lifecycle expiry |
+
+The 0.1.3 placement options `fan-degrees`, `angular-gap-degrees` and
+`anchor-candidates` remain accepted for file compatibility but are obsolete in
+the world field. They no longer affect placement. Remove them from a custom file
+when convenient; merging missing defaults does not delete old keys. Use the
+field controls and fixed-world yaw range instead.
 
 For example, changing the shared wave amplitude and one figure's size variation
 requires no copies of the other fields:
@@ -211,7 +222,7 @@ requires no copies of the other fields:
 ```yaml
 sky-defaults:
   wave-amplitude: 0.28
-  fresh-head-repair: true
+  fresh-head-repair: false
 
 event-presets:
   treasure-hunt:
@@ -223,8 +234,9 @@ event-presets:
         roll-radians: 0.2
 ```
 
-The number and kinds of concurrent figures are the profile entries in the event
-preset: add/remove a uniquely named entry to change them. Width, sampling,
+The profile entries define available variants; add/remove a uniquely named entry
+to change the catalogue. `sky-field.max-scenes` and `max-per-profile` control how
+many can coexist, subject to eligible loaded cells and the packet cap. Width, sampling,
 speed, range, height, birth delay, tracers and refresh already use the profile
 fields above. For a shorter wave tail, reduce `shape-size` or increase `sky-points` at the
 same width. Increasing `update-ticks` also shortens the visible tail but lowers
@@ -243,16 +255,16 @@ along its **twelve wireframe edges**; `RING` samples an XZ perimeter;
 `CIRCLE` samples its filled disk;
 `SPHERE` samples a surface; `WAVE` spans X with a vertical sinusoid. Geometry
 uses world axes. Sky geometry has local X width, Y height and Z depth; the
-engine retains its initial facing toward the viewer. Its ring/disk sits in a
+engine retains a deterministic world orientation. Its ring/disk sits in a
 slightly tilted frontal plane, the cube uses a continuous edge walk with three repeated connecting edges, and the wave
-has a shallow depth component. A rotated cube can extend up to `sqrt(3) ×
+has a shallow depth component. `HELIX` winds along its width, while `ARC` traces
+an open curve. A rotated cube can extend up to `sqrt(3) ×
 shape-size` from its anchor. Before a sky figure starts, Main checks its entire swept footprint against
 loaded world-surface columns, including sprite padding and native falling
 clearance. Validation is sliced across visits under the shared deadline; failed
 candidates are rejected whole and replanned. Final per-point checks remain, and
 a later terrain obstruction retires the whole figure. Ordinary shape points
-retain their individual loaded/passable/profile checks. Native motion and
-transport rejection after submission remain client behaviour.
+retain their individual loaded/passable/profile checks. Native motion is client behaviour; transport rejection after submission belongs to the shared packet path.
 
 ## Ping and workload limits
 
@@ -281,15 +293,15 @@ ping and does not change networking settings.
 | `ping.window-samples` | `10` | `1..120`; fixed-size rolling window |
 | `ping.sample-interval-ticks` | `20` | `1..1200`; minimum sample spacing |
 
-At 20 TPS, the default ordinary cadence allows at most 24 emission requests
-per second per viewer before other caps. The bundled sky scene requests at most
-**23 per visited viewer**: up to six for three wave heads and their fresh repairs,
-eleven for cube growth/refresh and six for halo growth/refresh. Active steady
-output is about 18.8 requests per visit (376/s with a visit every tick), before
-birth/exit gaps or gates; the 36-request ceiling is unchanged. This intentionally
-increases presence over 0.1.2. All bundled sky positions use `count=1` and zero
-spread/speed. Increasing count multiplies native particle work independently
-of request count; it does not fill gaps between different trajectory positions.
+At 20 TPS, the default ordinary cadence allows at most 24 emission requests per
+second per viewer before other caps. The bundled world field has at most nine
+scenes and two of each profile. Its arithmetic peak is **29 requests per visit**:
+two cubes at 11 each, plus seven one-point finite traces. The unchanged shared
+ceiling is 36. A steady pair of fully refreshed cubes plus seven active traces
+uses about 23 requests per visit; startup, expiry, culling and gates reduce this.
+The request count is higher than a single front-facing scene, while each wave's
+duplicate density is halved. All bundled positions use `count=1` and zero
+packet spread/speed. Increasing count does not fill gaps between path positions.
 
 These are ceilings, not throughput or FPS measurements. `viewers-per-tick`
 round-robin visitation can reduce each viewer's cadence when the audience is
@@ -311,11 +323,17 @@ kept, without replaying old timed frames. An attempt can still be rejected by
 terrain, ping or the transport budget and is not a delivery acknowledgement.
 Whole-scene admission checks at most 24 terrain columns per scene visit, with
 a deadline check between each column. It requires the swept lower edge to be
-above `WORLD_SURFACE + terrain-clearance` (default1), including native fall and
-0.22-block sprite padding.
+above `WORLD_SURFACE + terrain-clearance` (default 1), including native fall and
+0.22-block sprite padding for END_ROD/FIREWORK; flame uses 0.5 blocks to include
+its larger quad, native spawn jitter and small random drift. Unloaded initial
+surface/footprint columns leave admission pending and resumable. They do not
+load chunks or permanently reject a cell. Invalid height/terrain rejects it.
 The shared cooperative deadline covers dispatch, validation and capture;
 it cannot preempt one native call. Lifecycle, world, revision and exact event
-lease checks still fence every retained emission.
+lease checks still fence every retained emission. The old four-block captured-
+position guard applies only to ordinary emissions. Sky culling reads the current
+observer position and stops whole figures; ordinary walking/flying and
+same-world teleports never rebase a sky path. Cross-world changes invalidate it.
 
 No chunk is deliberately loaded for ambience. No entities are spawned, and no
 world lighting, blocks or biome data are changed. Closing the runtime removes
@@ -356,34 +374,29 @@ closing its handle on every terminal path. The source uses the shared
 `PaperPluginHotload` prepare/status contract and creates the Main-thread runtime
 on startup. A real loader prepare/unload/load cycle has not been tested here.
 
-The treasure-hunt preset supplies ambience above viewers. Its sky figures
+The treasure-hunt preset supplies ambience above the surrounding terrain. Its sky figures
 are not treasure markers and do not change discovery, rewards or gameplay.
 
-| Sky figure | Horizontal range; anchor height | Growth, activity and exit at one visit per tick |
+| Variant | New-cell distance; height above terrain | Growth and activity at one eligible visit per tick |
 | --- | --- | --- |
-| Small wave | 28..40 blocks; Y +24..48 | 160 END_ROD positions over 8 s; no full-shape hold; 180-tick scene + 0..24-tick delay |
-| Medium wave | 28..50 blocks; Y +26..54 | 192 END_ROD positions over 9.6 s; no full-shape hold; 220-tick scene + 0..24-tick delay |
-| Large wave | 36..56 blocks; Y +32..64 | 192 END_ROD positions over 9.6 s; no full-shape hold; 212-tick scene + 0..30-tick delay |
-| Cube | 28..56 blocks; Y +28..60 | 192 FIREWORK positions / three heads: 3.2 s growth, about 11.8 s full refresh, 2 s staged exit; 0..70-tick delay |
-| Falling halo | 30..60 blocks; Y +32..60 | 96 TOTEM positions: 4.8 s growth, about 11.2 s full refresh, 2 s staged exit; 0..100-tick delay |
+| Medium wave | 28..96 blocks; Y +26..54 | 192 END_ROD positions over 9.6 s; no hold; 220 tick lifecycle, delay 0..24 |
+| Large wave | 36..96 blocks; Y +32..64 | 192 END_ROD positions over 9.6 s; no hold; 212 tick lifecycle, delay 0..30 |
+| Cube | 28..96 blocks; Y +28..60 | 192 FIREWORK positions / three heads: 3.2 s growth, about 11.8 s refresh, 2 s staged exit; delay 0..70 |
+| Soul helix | 30..96 blocks; Y +36..60 | 144 SOUL_FIRE_FLAME positions over 7.2 s; short native curl, no hold; 180 tick lifecycle, delay 0..30 |
+| Warm arc | 28..96 blocks; Y +32..56 | 96 FLAME positions over 4.8 s; short native curved tail, no hold; 132 tick lifecycle, delay 0..25 |
 
-Timings assume 20 TPS and one eligible visit each tick. Admission or deadline
-delays do not cause a catch-up burst. Each wave sample lasts natively for about
-3–3.55 seconds; only roughly the most recent third of its route remains lit.
-Nominal wave half-sizes are 6, 9 and 13 blocks, giving approximately 4, 6 and
-8-block moving tails rather than a fully illuminated long ribbon. Wave scene
-lifetimes put the next birth near the preceding tail's decay. Random scale is
-80..100% of shape-size; roll is ±0.45 radians. Cube nominal half-size is 4;
-halo radius is 5.5. Held refresh adds gentle coherent travel and preflights its
-full movement envelope.
+Timings assume 20 TPS and one eligible visit each tick. All scenes start their
+lifetime after full terrain admission and their birth delay; a field epoch
+change never cuts an already admitted lifecycle short. Old wave points are
+never refreshed. The medium/large wave half-sizes remain 9/13 blocks, with native
+60..71 tick lifetimes leaving short moving wakes. Random scale is 80..100%;
+roll is ±0.45 radians. Cube half-size is 4, helix half-width 7, arc radius 5.
 
-Ranges describe anchors, not every point. Sky points retain a separate two-block
-eye clearance. No chunks are loaded for distant figures. Admission rejects a
-whole candidate that does not clear loaded terrain and build height; a new
-candidate can therefore take longer to appear in a constrained location.
-Native drift makes FIREWORK a softly moving outline and TOTEM a falling cascade.
-After refresh ends, already sent particles finish their native lifetime. Cloud
-occlusion and native texture rendering require a real-client observation.
+Ranges describe anchors, not every particle. A separate two-block eye clearance
+remains: approaching an actual point can retire the entire scene. It never
+carves out just that point. No chunks are loaded. Retired cells cool down rather
+than reviving an old partial tail. Native clouds, texture rendering and transport
+loss still require real-client observation; source playback is not that proof.
 
 ## Build and publication
 
@@ -394,7 +407,7 @@ Run from the repository root with JDK 25:
 ```
 
 The expected local runtime artifact is
-`arc-aurora/build/libs/ArcAurora-0.1.3.jar`. The public Maven API artifact
+`arc-aurora/build/libs/ArcAurora-0.1.4.jar`. The public Maven API artifact
 `ru.ruscrafting.arc:arc-aurora-api:0.1.0` was verified on 2026-10-29 in the
 [RusCrafting repository](https://repo.rus-crafting.ru/grocermc/ru/ruscrafting/arc/arc-aurora-api/0.1.0/arc-aurora-api-0.1.0.pom).
 That API publication does not establish a runtime-plugin build, delivery,
@@ -421,7 +434,7 @@ promotional GIFs: [ice](https://imgur.com/xqjEWXI),
 were inspected at four phases across their 6.3-second loops: separated luminous
 wire cubes and short curved travelling streaks occupy the sky, with substantial
 empty space. They establish the reference composition, not ArcAurora rendering.
-Our travelling sine wavelets and falling halo are original interpretations, not exact
+Our travelling sine wavelets, helixes and arcs are original interpretations, not exact
 copies of the GIF motion. The linked [showcase video](https://www.youtube.com/watch?v=neFruXTTRNc)
 was located but its playback was not reviewed. The public Zenya wiki is
 historical; it is not proof of the current commercial release's behaviour.
@@ -434,6 +447,6 @@ end and the user's particle settings. No native-client visual acceptance or
 measured performance result is claimed by this README. Publication, artifact
 delivery and runtime activation require separate operational evidence.
 
-`sky-points` overrides `points` only for sky scenes. The bundled refresh and admission behaviour
-requires ArcAurora 0.1.3; do not reload this configuration into an older runtime.
+`sky-points` overrides `points` only for sky scenes. The world-field placement and new shapes
+require ArcAurora 0.1.4; do not reload this configuration into an older runtime.
 The 25 ordinary biome profiles and their sampling behavior are unchanged.

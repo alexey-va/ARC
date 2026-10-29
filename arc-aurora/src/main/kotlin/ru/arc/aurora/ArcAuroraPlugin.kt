@@ -152,7 +152,9 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
     @EventHandler fun onJoin(event: PlayerJoinEvent) { engine?.join(event.player) }
     @EventHandler fun onQuit(event: PlayerQuitEvent) { stopPreview(event.player.uniqueId); engine?.quit(event.player.uniqueId) }
     @EventHandler fun onWorld(event: PlayerChangedWorldEvent) { engine?.invalidate(event.player.uniqueId) }
-    @EventHandler(ignoreCancelled = true) fun onTeleport(event: PlayerTeleportEvent) { engine?.invalidate(event.player.uniqueId) }
+    @EventHandler(ignoreCancelled = true) fun onTeleport(event: PlayerTeleportEvent) {
+        if (event.from.world?.uid != event.to.world?.uid) engine?.invalidate(event.player.uniqueId)
+    }
 
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
         val action = args.firstOrNull()?.lowercase() ?: "toggle"

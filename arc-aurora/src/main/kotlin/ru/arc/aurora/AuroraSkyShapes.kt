@@ -83,6 +83,14 @@ object AuroraSkyShapes {
                 (sin(along * PI * options.waveCycles + phase) * options.waveAmplitude + along * options.waveSlope) * size,
                 sin(along * PI * options.waveCycles / 2.0 + phase) * size * options.waveDepth,
             )
+            AuroraShape.HELIX -> {
+                val turn = progress * 2.0 * PI * options.helixTurns + phase
+                AuroraOffset(along * size, sin(turn) * size * options.helixRadius, cos(turn) * size * options.helixRadius)
+            }
+            AuroraShape.ARC -> {
+                val turn = radians(options.arcSweepDegrees) * (progress - 0.5)
+                AuroraOffset(cos(turn) * size, sin(turn) * size, sin(progress * PI) * size * 0.12)
+            }
             AuroraShape.RING, AuroraShape.CIRCLE -> {
                 val angle = progress * 2.0 * PI * if (shape == AuroraShape.RING) 1.0 else 2.0
                 val radius = if (shape == AuroraShape.RING) size else sqrt(progress) * size

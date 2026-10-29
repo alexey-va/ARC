@@ -31,6 +31,7 @@ class AuroraEngineTest : FreeSpec({
             fixture.engine.tick()
             fixture.locations.size shouldBe 1
             fixture.player.hasPermission(fixture.settings.permission) shouldBe false
+            if (fixture.queued.isEmpty()) fixture.waitForPlanning()
             fixture.completePlanning()
             fixture.currentPing = 251
             fixture.engine.tick()
@@ -224,7 +225,7 @@ class AuroraEngineTest : FreeSpec({
     }
 
     "each retained profile honors its own cadence without filling the available packet cap" {
-        val settings = skySettings(points = 24, packets = 36).let { original -> original.copy(profiles = listOf(
+        val settings = skySettings(points = 24, packets = 36).let { original -> original.copy(skyField = original.skyField.copy(maxScenes = 2), profiles = listOf(
             original.profiles.single(), original.profiles.single().copy(id = "slower", updateTicks = 3, particle = Particle.ELECTRIC_SPARK),
         )) }
         withEngine(settings) { fixture ->
@@ -247,7 +248,7 @@ class AuroraEngineTest : FreeSpec({
     }
 
     "three cube tracers and a repaired wave share the cap and finish without old-tail replay" {
-        val settings = skySettings(points = 56, shape = AuroraShape.WAVE, packets = 5).let { original -> original.copy(profiles = listOf(
+        val settings = skySettings(points = 56, shape = AuroraShape.WAVE, packets = 5).let { original -> original.copy(skyField = original.skyField.copy(maxScenes = 2), profiles = listOf(
             original.profiles.single(), original.profiles.single().copy(id = "cube", shape = AuroraShape.CUBE,
                 points = 96, skyTracers = 3, particle = Particle.FIREWORK),
         )) }
@@ -270,7 +271,7 @@ class AuroraEngineTest : FreeSpec({
     }
 
     "sky options control actual anchor geometry fresh repair and terrain clearance" {
-        val options = AuroraSkyOptions(fanDegrees = 0.0, scaleMin = 1.0, scaleMax = 1.0,
+        val options = AuroraSkyOptions(yawMinDegrees = 0.0, yawMaxDegrees = 0.0, scaleMin = 1.0, scaleMax = 1.0,
             rollRadians = 0.0, waveAmplitude = 0.0, waveSlope = 0.0, waveDepth = 0.0,
             strokeDrift = 0.0, strokeLift = 0.0)
         for (repair in listOf(false, true)) {
@@ -283,13 +284,14 @@ class AuroraEngineTest : FreeSpec({
                 fixture.completePlanning()
                 repeat(32) { fixture.engine.tick() }
                 fixture.locations.size shouldBe if (repair) 16 else 8
-                fixture.locations.all { it.y == 90.0 && kotlin.math.abs(it.z - 8.5) < 1e-8 } shouldBe true
-                fixture.locations.minOf { it.x } shouldBe -1.5
-                fixture.locations.maxOf { it.x } shouldBe 2.5
+                val ground = fixture.player.world.getHighestBlockYAt(8, 8, org.bukkit.HeightMap.WORLD_SURFACE)
+                fixture.locations.all { it.y == ground + 10.0 && it.z == 8.0 } shouldBe true
+                fixture.locations.minOf { it.x } shouldBe 6.0
+                fixture.locations.maxOf { it.x } shouldBe 10.0
             }
         }
         val cautious = skySettings(points = 8, shape = AuroraShape.WAVE, packets = 8).let { original ->
-            original.copy(profiles = original.profiles.map { it.copy(skyOptions = options.copy(terrainClearance = 8.0)) })
+            original.copy(profiles = original.profiles.map { it.copy(skyOptions = options.copy(terrainClearance = 12.0)) })
         }
         withEngine(cautious) { fixture ->
             fixture.roof(85)
@@ -322,6 +324,122 @@ class AuroraEngineTest : FreeSpec({
         }
     }
 
+    "walking flying and turning beyond the old capture fence never cuts a retained world path" {
+        val settings = skySettings(points = 24, shape = AuroraShape.LINE, packets = 2)
+        withEngine(settings) { fixture ->
+            fixture.event = settings.profiles
+            fixture.capture(); fixture.completePlanning()
+            repeat(8) { if (fixture.locations.isEmpty()) fixture.engine.tick() }
+            val first = fixture.locations.first().clone()
+            fixture.player.teleport(fixture.player.location.add(6.0, 8.0, 0.0).apply { yaw = 180f }) shouldBe true
+            repeat(40) { fixture.engine.tick() } // Later worker stays blocked while the observer moves.
+            fixture.locations.size shouldBe 24
+            fixture.locations.toSet().size shouldBe 24
+            fixture.locations.all { it.distance(first) < 6.0 } shouldBe true
+        }
+    }
+
+    "ordinary captured points still reject a viewer who moved beyond four blocks" {
+        withEngine { fixture ->
+            fixture.permission(true)
+            fixture.capture(); fixture.completePlanning()
+            fixture.player.teleport(fixture.player.location.add(6.0, 0.0, 0.0)) shouldBe true
+            fixture.engine.tick()
+            fixture.locations shouldBe emptyList()
+        }
+    }
+
+    "nearby viewers share world cell geometry despite different yaw and altitude" {
+        val settings = skySettings(points = 12, shape = AuroraShape.LINE, packets = 2).copy(viewersPerTick = 2)
+        withEngine(settings) { fixture ->
+            fixture.event = settings.profiles
+            val second = fixture.joinAdditional("ObserverTwo")
+            val player = checkNotNull(fixture.paper.server.getPlayer(second))
+            player.teleport(player.location.add(1.0, 9.0, 0.0).apply { yaw = 180f }) shouldBe true
+            fixture.capture(); fixture.completePlanning()
+            repeat(30) { fixture.engine.tick() }
+            fun positions(id: java.util.UUID) = fixture.locations.filterIndexed { i, _ -> fixture.emissions[i].viewer == id }
+            positions(second) shouldBe positions(fixture.player.uniqueId)
+            positions(second).size shouldBe 12
+        }
+    }
+
+    "whole scene culling cannot revive an old partial head on rapid reentry" {
+        val settings = skySettings(points = 96, shape = AuroraShape.LINE, packets = 2)
+        withEngine(settings) { fixture ->
+            fixture.event = settings.profiles
+            fixture.capture(); fixture.completePlanning()
+            repeat(8) { fixture.engine.tick() }
+            val previous = fixture.locations.first().clone()
+            fixture.player.teleport(fixture.player.location.add(80.0, 0.0, 0.0)) shouldBe true
+            val before = fixture.locations.size
+            fixture.engine.tick()
+            fixture.locations.size shouldBe before
+            fixture.player.teleport(Location(fixture.player.world, 0.5, 80.0, 0.5)) shouldBe true
+            repeat(45) {
+                if (fixture.queued.isNotEmpty()) fixture.completePlanning()
+                val count = fixture.locations.size
+                fixture.engine.tick()
+                (fixture.locations.size - count <= 1) shouldBe true
+            }
+            fixture.locations.drop(before).none { it.distance(previous) < 6.0 } shouldBe true
+        }
+    }
+
+    "unloaded initial admission resumes after loading without rejecting its world cell" {
+        withEngine(skySettings(points = 1)) { fixture ->
+            fixture.event = fixture.settings.profiles
+            fixture.capture(); fixture.completePlanning()
+            fixture.player.world.unloadChunk(0, 0) shouldBe true
+            repeat(12) { fixture.engine.tick() }
+            fixture.locations shouldBe emptyList()
+            fixture.player.world.isChunkLoaded(0, 0) shouldBe false
+            fixture.player.world.loadChunk(0, 0)
+            repeat(8) { fixture.engine.tick() }
+            fixture.locations.size shouldBe 1
+        }
+    }
+
+    "admission delayed across a field epoch retains its own full lifecycle" {
+        val settings = skySettings(points = 40).let { original -> original.copy(profiles =
+            original.profiles.map { it.copy(sceneDurationTicks = 40) }) }
+        withEngine(settings) { fixture ->
+            fixture.event = settings.profiles
+            fixture.capture(); fixture.completePlanning()
+            fixture.player.world.unloadChunk(0, 0) shouldBe true
+            repeat(45) { fixture.engine.tick() }
+            fixture.player.world.loadChunk(0, 0)
+            repeat(8) { if (fixture.locations.isEmpty()) fixture.engine.tick() }
+            val admittedId = fixture.sceneRows(0).single().split(',')[1]
+            if (fixture.queued.isEmpty()) fixture.waitForPlanning()
+            fixture.completePlanning()
+            repeat(10) { fixture.engine.tick() }
+            fixture.sceneRows(0).single().split(',')[1] shouldBe admittedId
+            (fixture.locations.size >= 10) shouldBe true
+        }
+    }
+
+    "a rejected cell in one world cannot suppress the corresponding clear cell after world change" {
+        withEngine(skySettings(points = 24, shape = AuroraShape.WAVE)) { fixture ->
+            for (x in 4..12) for (z in 4..12) {
+                if (x != 8 || z != 8) fixture.player.world.getBlockAt(x, 94, z).type = Material.STONE
+            }
+            fixture.event = fixture.settings.profiles
+            fixture.capture(); fixture.completePlanning()
+            repeat(8) { fixture.engine.tick() }
+            fixture.locations shouldBe emptyList()
+            val other = fixture.paper.addSimpleWorld("clear-world")
+            for (x in -4..4) for (z in -4..4) other.loadChunk(x, z)
+            fixture.player.teleport(Location(other, 0.5, 80.0, 0.5)) shouldBe true
+            fixture.engine.invalidate(fixture.player.uniqueId)
+            repeat(30) {
+                if (fixture.queued.isNotEmpty()) fixture.completePlanning()
+                fixture.engine.tick()
+            }
+            fixture.locations.any { it.world == other } shouldBe true
+        }
+    }
+
     "planning a finite sky stroke never consumes an unattempted tail or rewinds a newer acknowledgement" {
         val cursor = AuroraSkyCursor(8)
         val planned = cursor.plan().let { pass -> List(8) { checkNotNull(pass.next()) } }
@@ -335,7 +453,7 @@ class AuroraEngineTest : FreeSpec({
     }
 
     "sky deadlines and a one request cap preserve profile fairness without batching" {
-        val settings = skySettings(points = 20, packets = 1).let { original -> original.copy(profiles =
+        val settings = skySettings(points = 20, packets = 1).let { original -> original.copy(skyField = original.skyField.copy(maxScenes = 3), profiles =
             listOf(Particle.END_ROD, Particle.ELECTRIC_SPARK, Particle.SMALL_FLAME).mapIndexed { index, particle ->
                 original.profiles.single().copy(id = "sky_$index", particle = particle)
             }) }
@@ -353,7 +471,7 @@ class AuroraEngineTest : FreeSpec({
     }
 
     "viewer rotation cannot alias profile fairness at a one request cap" {
-        val settings = skySettings(points = 192, packets = 1).let { original -> original.copy(viewersPerTick = 1, profiles =
+        val settings = skySettings(points = 192, packets = 1).let { original -> original.copy(viewersPerTick = 1, skyField = original.skyField.copy(maxScenes = 3), profiles =
             listOf(Particle.END_ROD, Particle.ELECTRIC_SPARK, Particle.SMALL_FLAME).mapIndexed { index, particle ->
                 original.profiles.single().copy(id = "sky_$index", particle = particle)
             }) }
@@ -389,21 +507,24 @@ class AuroraEngineTest : FreeSpec({
         }
     }
 
-    "invalidating a retained path retires it immediately and a fresh scene uses the new facing" {
+    "invalidating a retained path fences pending output but never uses the new viewing direction" {
         val settings = skySettings(points = 24)
         withEngine(settings) { fixture ->
             fixture.event = settings.profiles
             fixture.pass()
+            repeat(24) { if (fixture.locations.isEmpty()) fixture.engine.tick() }
             (fixture.locations.single().z > 0.5) shouldBe true
             fixture.player.teleport(fixture.player.location.apply { yaw = 180f }) shouldBe true
             fixture.engine.invalidate(fixture.player.uniqueId)
             val before = fixture.locations.size
+            if (fixture.queued.isNotEmpty()) fixture.completePlanning() // Complete any pre-invalidation worker.
             repeat(3) { fixture.engine.tick() }
             fixture.locations.size shouldBe before
-            fixture.waitForPlanning()
+            if (fixture.queued.isEmpty()) fixture.waitForPlanning()
             fixture.completePlanning()
-            fixture.engine.tick()
-            (fixture.locations.last().z < 0.5) shouldBe true
+            repeat(24) { if (fixture.locations.size == before) fixture.engine.tick() }
+            (fixture.locations.size > before) shouldBe true
+            (fixture.locations.last().z > 0.5) shouldBe true
         }
     }
 
@@ -429,31 +550,47 @@ class AuroraEngineTest : FreeSpec({
         }
     }
 
-    "bundled distant figures keep per-head pacing across delayed worker refreshes and rebirth" {
+    "bundled world figures preserve budgets through actual observer movement turns and cell crossings" {
         val bundled = AuroraConfig.parse(YamlConfiguration().apply {
             loadFromString(checkNotNull(javaClass.classLoader.getResourceAsStream("config.yml")).bufferedReader().use { it.readText() })
         }).copy(nativeBudgetMicros = 10000)
         withEngine(bundled, highSky = true) { fixture ->
-            fixture.loadChunks(6)
+            for (x in -8..24) for (z in -8..8) fixture.player.world.loadChunk(x, z)
             fixture.event = bundled.eventPresets.getValue("treasure-hunt")
             val timeline = StringBuilder("tick,particle,x,y,z\n")
+            val observer = StringBuilder("tick,x,y,z,yaw\n")
+            val scenes = StringBuilder("tick,id,profile,particle,cell_x,cell_z,epoch,x,y,z,starts_at,culled,rejected\n")
             repeat(1000) { tick ->
+                val origin = when {
+                    tick < 160 -> doubleArrayOf(0.5, 80.0, 0.5, 0.0)
+                    tick < 320 -> { val t = (tick - 160).toDouble(); doubleArrayOf(0.5 + t * 0.1, 80.0 + 3.0 * kotlin.math.sin(t / 160.0 * Math.PI),
+                        0.5 + t * 0.05, t / 160.0 * 180.0) }
+                    tick < 480 -> { val t = (tick - 320).toDouble(); doubleArrayOf(16.5 + t * 0.5, 80.0 + t * 0.05, 8.5, 180.0 + t / 160.0 * 180.0) }
+                    tick < 560 -> { val t = (tick - 480).toDouble(); doubleArrayOf(96.5 + t, 88.0, 8.5, 360.0 + t / 80.0 * 180.0) }
+                    tick < 640 -> { val t = (tick - 560).toDouble(); doubleArrayOf(176.5 - t * 2.2, 88.0 - t * 0.1, 8.5 - t * 0.1, 540.0 + t / 80.0 * 180.0) }
+                    else -> doubleArrayOf(0.5, 80.0, 0.5, (tick - 640).toDouble())
+                }
+                fixture.player.teleport(Location(fixture.player.world, origin[0], origin[1], origin[2], origin[3].toFloat(), 0f)) shouldBe true
+                observer.append("$tick,${origin.joinToString(",")}\n")
                 if (fixture.queued.isNotEmpty() && tick % 2 == 0) fixture.completePlanning()
                 val before = fixture.emissions.size
                 fixture.engine.tick()
                 val sent = fixture.emissions.drop(before)
                 (sent.size <= bundled.skyPacketsPerViewer) shouldBe true
-                (sent.count { it.particle == Particle.END_ROD } <= 6) shouldBe true
-                (sent.count { it.particle == Particle.FIREWORK } <= 11) shouldBe true
-                (sent.count { it.particle == Particle.TOTEM_OF_UNDYING } <= 6) shouldBe true
+                (sent.count { it.particle == Particle.FIREWORK } <= 22) shouldBe true
                 for (index in before until fixture.emissions.size) {
                     val at = fixture.locations[index]
-                    timeline.append("$tick,${fixture.emissions[index].particle.name},${at.x - 0.5},${at.y - 80.0},${at.z - 0.5}\n")
+                    timeline.append("$tick,${fixture.emissions[index].particle.name},${at.x},${at.y},${at.z}\n")
                 }
+                fixture.sceneRows(tick).forEach { scenes.append(it).append('\n') }
             }
-            fixture.emissions.map { it.particle }.toSet() shouldBe setOf(Particle.END_ROD, Particle.FIREWORK, Particle.TOTEM_OF_UNDYING)
-            // Optional source-driven preview export: exact native submissions from this same engine fixture.
-            System.getenv("ARCAURORA_PREVIEW_CSV")?.let { path -> java.nio.file.Files.writeString(java.nio.file.Path.of(path), timeline) }
+            fixture.emissions.map { it.particle }.toSet() shouldBe setOf(Particle.END_ROD, Particle.FIREWORK, Particle.SOUL_FIRE_FLAME, Particle.FLAME)
+            System.getenv("ARCAURORA_PREVIEW_CSV")?.let { path ->
+                val target = java.nio.file.Path.of(path)
+                java.nio.file.Files.writeString(target, timeline)
+                java.nio.file.Files.writeString(target.resolveSibling("observer-timeline.csv"), observer)
+                java.nio.file.Files.writeString(target.resolveSibling("scene-timeline.csv"), scenes)
+            }
         }
     }
 
@@ -521,17 +658,17 @@ class AuroraEngineTest : FreeSpec({
 
     "a roof above otherwise free spawn centres rejects the whole sky candidate before its first point" {
         withEngine(skySettings(points = 48, shape = AuroraShape.WAVE)) { fixture ->
-            fixture.roof(94)
-            fixture.event = fixture.settings.profiles
-            repeat(40) {
-                if (fixture.queued.isNotEmpty()) fixture.completePlanning()
-                fixture.engine.tick()
+            for (x in 4..12) for (z in 4..12) {
+                if (x != 8 || z != 8) fixture.player.world.getBlockAt(x, 94, z).type = Material.STONE
             }
+            fixture.event = fixture.settings.profiles
+            fixture.capture(); fixture.completePlanning()
+            repeat(40) { fixture.engine.tick() }
             fixture.locations shouldBe emptyList()
         }
     }
 
-    "new terrain retires an admitted held figure and blocked replacements never start" {
+    "new terrain retires an admitted figure and any replacement clears a different footprint" {
         val settings = skySettings(points = 24, packets = 8).let { original -> original.copy(profiles =
             original.profiles.map { it.copy(skyRefreshTicks = 12, sceneDurationTicks = 240) }) }
         withEngine(settings) { fixture ->
@@ -539,20 +676,21 @@ class AuroraEngineTest : FreeSpec({
             fixture.pass()
             val before = fixture.locations.size
             (before > 0) shouldBe true
-            fixture.roof(90)
+            val original = fixture.locations.last().clone()
+            fixture.roof(original.blockY)
             repeat(30) {
                 if (fixture.queued.isNotEmpty()) fixture.completePlanning()
                 fixture.engine.tick()
             }
-            fixture.locations.size shouldBe before
+            fixture.locations.drop(before).none { it.distance(original) < 4.0 } shouldBe true
         }
     }
 
     "stationary high sky anchors are not mistaken for viewer movement and restarted each refresh" {
         val settings = skySettings(points = 1).let { original -> original.copy(profiles = original.profiles.map {
-            it.copy(radius = 4.0, minDistance = 4.0, verticalMin = 64.0, verticalMax = 64.0, spawnDelayTicks = 0)
+            it.copy(verticalMin = 64.0, verticalMax = 64.0, spawnDelayTicks = 0)
         }) }
-        withEngine(settings) { fixture ->
+        withEngine(settings, highSky = true) { fixture ->
             fixture.event = settings.profiles
             val originY = fixture.player.world.maxHeight - 66.0
             fixture.player.teleport(fixture.player.location.apply { y = originY }) shouldBe true
@@ -561,7 +699,7 @@ class AuroraEngineTest : FreeSpec({
                 fixture.engine.tick()
             }
             fixture.locations.size shouldBe 1
-            fixture.locations.single().y shouldBe originY + 64.0
+            fixture.locations.single().y shouldBe fixture.player.world.getHighestBlockYAt(8, 8, org.bukkit.HeightMap.WORLD_SURFACE) + 64.0
         }
     }
 
@@ -616,8 +754,7 @@ private fun withEngine(settings: AuroraSettings = engineSettings(), highSky: Boo
 private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: AuroraSettings, highSky: Boolean) : AutoCloseable {
     private val mainThread = Thread.currentThread()
     private val plugin = paper.createSimplePlugin("ArcAuroraEngineTest")
-    private val world = if (highSky) org.mockbukkit.mockbukkit.world.WorldMock(Material.DIRT, 0, 192, 64)
-        .also { paper.server.addWorld(it) } else paper.addSimpleWorld("ambient")
+    private val world = EngineWorld(highSky).also { it.name = "ambient"; paper.server.addWorld(it) }
     val player = EnginePlayer(paper.server)
     var currentPing: Int
         get() = player.observedPing
@@ -633,7 +770,7 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
     private val scheduler = mockk<TaskScheduler>()
     private val scope = LifecycleTaskScope(scheduler)
     private val attachment = player.addAttachment(plugin, settings.permission, false)
-    val engine = AuroraEngine(plugin, scope, settings, { if (it == world.uid) event else null }, { emitter },
+    val engine = AuroraEngine(plugin, scope, settings, { if (it == player.world.uid) event else null }, { emitter },
         { if (it == player.uniqueId) preview else null })
 
     init {
@@ -655,7 +792,7 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
         }
         paper.server.addPlayer(player)
         player.teleport(Location(world, 0.5, 80.0, 0.5)) shouldBe true
-        for (x in -2..2) for (z in -2..2) world.loadChunk(x, z)
+        for (x in -4..4) for (z in -4..4) world.loadChunk(x, z)
         world.isChunkLoaded(0, 0) shouldBe true
         world.getBlockAt(0, 80, 0).type shouldBe Material.AIR
         world.getBlockAt(0, 82, 0).isPassable shouldBe true
@@ -673,6 +810,26 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
         extra.teleport(Location(world, 0.5, 80.0, 0.5)) shouldBe true
         engine.join(extra)
         return extra.uniqueId
+    }
+
+    /** Export the actual retained Main scene state; reflection is confined to this diagnostic fixture. */
+    fun sceneRows(tick: Int): List<String> {
+        fun field(target: Any, name: String): Any? = target.javaClass.getDeclaredField(name).also { it.isAccessible = true }.get(target)
+        val viewers = field(engine, "viewers") as Map<*, *>
+        val viewer = viewers[player.uniqueId] ?: return emptyList()
+        val sky = field(viewer, "sky") ?: return emptyList()
+        return (field(sky, "scenes") as List<*>).filterNotNull().map { scene ->
+            val profile = field(scene, "profile") as AuroraProfile
+            val cell = field(scene, "cell") as AuroraSkyCell
+            val epoch = field(scene, "epoch") as Long
+            val surface = field(scene, "surfaceY") as Int?
+            val start = field(scene, "startsAt") as Long
+            val culled = (field(scene, "culled") as java.util.concurrent.atomic.AtomicBoolean).get()
+            val rejected = (field(scene, "rejected") as java.util.concurrent.atomic.AtomicBoolean).get()
+            listOf(tick, "${cell.x}:${cell.z}:$epoch:${profile.id}", profile.id, profile.particle.name,
+                cell.x, cell.z, epoch, field(scene, "x"), (field(scene, "y") as Double) + (surface ?: 0), field(scene, "z"),
+                if (start == Long.MAX_VALUE) -1 else start, culled, rejected).joinToString(",")
+        }
     }
 
     fun roof(y: Int) { for (x in -12..12) for (z in -12..12) world.getBlockAt(x, y, z).type = Material.STONE }
@@ -718,6 +875,12 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
     }
 }
 
+private class EngineWorld(highSky: Boolean) : org.mockbukkit.mockbukkit.world.WorldMock(
+    Material.DIRT, 0, if (highSky) 192 else 128, if (highSky) 64 else 5,
+) {
+    override fun getUID(): java.util.UUID = java.util.UUID.fromString("00000000-0000-0000-0000-000000000001")
+}
+
 private data class ObservedEmission(val particle: Particle, val count: Int, val offsets: List<Double>, val force: Boolean, val viewer: java.util.UUID)
 
 /** Override the one controlled observation without spying on MockBukkit's inherited entity methods. */
@@ -757,9 +920,10 @@ private fun engineSettings(points: Int = 1): AuroraSettings = AuroraConfig.parse
 
 private fun skySettings(points: Int = 1, shape: AuroraShape = AuroraShape.POINT, packets: Int = 1): AuroraSettings =
     engineSettings().let { original ->
-        original.copy(intervalTicks = 10, packetsPerViewer = packets, skyPacketsPerViewer = packets, profiles = original.profiles.map { it.copy(
+        original.copy(intervalTicks = 10, packetsPerViewer = packets, skyPacketsPerViewer = packets,
+            skyField = AuroraSkyFieldSettings(cellSize = 16.0, jitter = 0.0, viewDistance = 48.0, maxScenes = 1, maxPerProfile = 1), profiles = original.profiles.map { it.copy(
             skyScene = true, sceneDurationTicks = 240, motionPeriodTicks = 400, updateTicks = 1, spawnDelayTicks = 0,
-            radius = 8.0, minDistance = 8.0, verticalMin = 10.0, verticalMax = 10.0,
+            radius = 64.0, minDistance = 2.0, verticalMin = 10.0, verticalMax = 10.0,
             shape = shape, shapeSize = 2.0, points = points, count = 1, offsetX = 0.0, offsetY = 0.0, offsetZ = 0.0, speed = 0.0,
         ) })
     }

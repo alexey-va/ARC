@@ -17,6 +17,7 @@ data class AuroraSettings(
     val eventPresets: Map<String, List<AuroraProfile>>,
     val ping: AuroraPingSettings = AuroraPingSettings(),
     val skyPacketsPerViewer: Int = 36,
+    val skyField: AuroraSkyFieldSettings = AuroraSkyFieldSettings(),
 ) {
     /** Exact, single-hop aliases; unknown biome keys remain usable without a registry lookup. */
     fun canonicalBiomeKey(raw: String): String = normalizeBiomeKey(raw).let { biomeAliases[it] ?: it }
@@ -63,7 +64,7 @@ class AuroraPingWindow(val capacity: Int) {
 
 enum class AuroraWeather { ANY, CLEAR, RAIN, THUNDER }
 
-enum class AuroraShape { POINT, LINE, CUBE, RING, CIRCLE, SPHERE, WAVE }
+enum class AuroraShape { POINT, LINE, CUBE, RING, CIRCLE, SPHERE, WAVE, HELIX, ARC }
 
 data class AuroraProfile(
     val id: String,
@@ -177,6 +178,7 @@ object AuroraConfig {
             }
         }.orEmpty().immutable()
         val ping = source.section("ping")
+        val field = source.section("sky-field")
         return AuroraSettings(
             permission = permission,
             intervalTicks = source.int("interval-ticks", 10, 1..1200),
@@ -194,6 +196,15 @@ object AuroraConfig {
                 sampleIntervalTicks = ping?.int("sample-interval-ticks", 20, 1..1200) ?: 20,
             ),
             skyPacketsPerViewer = source.int("sky-packets-per-viewer", 36, 1..128),
+            skyField = AuroraSkyFieldSettings(
+                cellSize = field?.double("cell-size", 40.0, 16.0..128.0) ?: 40.0,
+                jitter = field?.double("jitter", 0.3, 0.0..0.4) ?: 0.3,
+                viewDistance = field?.double("view-distance", 96.0, 16.0..192.0) ?: 96.0,
+                cullHysteresis = field?.double("cull-hysteresis", 16.0, 0.0..64.0) ?: 16.0,
+                maxScenes = field?.int("max-scenes", 9, 1..16) ?: 9,
+                cullCooldownTicks = field?.int("cull-cooldown-ticks", 80, 72..1200) ?: 80,
+                maxPerProfile = field?.int("max-per-profile", 2, 1..16) ?: 2,
+            ),
         )
     }
 
@@ -299,8 +310,14 @@ object AuroraConfig {
             exitTicks = source.int("exit-ticks", defaults.exitTicks, 0..200),
             freshHeadRepair = source.boolean("fresh-head-repair", defaults.freshHeadRepair),
             freshHeadMaxAgeTicks = source.int("fresh-head-max-age-ticks", defaults.freshHeadMaxAgeTicks, 1..4),
+            yawMinDegrees = source.double("yaw-min-degrees", defaults.yawMinDegrees, -360.0..360.0),
+            yawMaxDegrees = source.double("yaw-max-degrees", defaults.yawMaxDegrees, -360.0..360.0),
+            helixTurns = source.double("helix-turns", defaults.helixTurns, 0.25..8.0),
+            helixRadius = source.double("helix-radius", defaults.helixRadius, 0.05..1.0),
+            arcSweepDegrees = source.double("arc-sweep-degrees", defaults.arcSweepDegrees, 30.0..330.0),
         )
         source.check("scale-max", options.scaleMax >= options.scaleMin, "must be at least scale-min")
+        source.check("yaw-max-degrees", options.yawMaxDegrees >= options.yawMinDegrees, "must be at least yaw-min-degrees")
         return options
     }
 

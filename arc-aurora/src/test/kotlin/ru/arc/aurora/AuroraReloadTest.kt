@@ -31,6 +31,11 @@ class AuroraReloadTest : FreeSpec({
                 candidate.set("profiles.$profileId.radius", 14.0)
                 candidate.set("profiles.$profileId.sky-options.wave-amplitude", null)
                 candidate.set("sky-defaults.wave-amplitude", 0.31)
+                candidate.set("sky-field.cell-size", 52.0)
+                candidate.set("sky-field.jitter", 0.25)
+                candidate.set("sky-field.view-distance", 112.0)
+                candidate.set("sky-field.cull-hysteresis", 24.0)
+                candidate.set("sky-field.max-scenes", 8)
                 candidate.save(file)
 
                 paper.server.dispatchCommand(paper.server.consoleSender, "arcaurora reload") shouldBe true
@@ -40,6 +45,10 @@ class AuroraReloadTest : FreeSpec({
                 val reloaded = replacement.settings.profiles.single { it.id == profileId }
                 reloaded.radius shouldBe 14.0
                 reloaded.skyOptions.waveAmplitude shouldBe 0.31
+                val reloadedField = AuroraSkyFieldSettings(
+                    cellSize = 52.0, jitter = 0.25, viewDistance = 112.0, cullHysteresis = 24.0, maxScenes = 8,
+                )
+                replacement.settings.skyField shouldBe reloadedField
 
                 candidate.set("profiles.$profileId.radius", 20.0)
                 candidate.set("sky-defaults.wave-amplitude", 2.0)
@@ -53,6 +62,17 @@ class AuroraReloadTest : FreeSpec({
                     retained.radius shouldBe 14.0
                     retained.skyOptions.waveAmplitude shouldBe 0.31
                 }
+
+                candidate.set("sky-defaults.wave-amplitude", 0.31)
+                candidate.set("sky-field.cell-size", 0.0)
+                candidate.save(file)
+
+                paper.server.dispatchCommand(paper.server.consoleSender, "arcaurora reload") shouldBe true
+
+                plugin.isEnabled shouldBe true
+                (plugin.engine === replacement) shouldBe true
+                plugin.engine!!.settings.skyField shouldBe reloadedField
+                plugin.engine!!.settings.profiles.single { it.id == profileId }.radius shouldBe 14.0
             }
         }
     }

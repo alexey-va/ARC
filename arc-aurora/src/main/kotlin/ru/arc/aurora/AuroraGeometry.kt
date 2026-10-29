@@ -54,6 +54,10 @@ object AuroraGeometry {
                     AuroraOffset(cos(angle) * radius * size, height * size, sin(angle) * radius * size)
                 }
                 AuroraShape.WAVE -> AuroraOffset(along * size, sin(along * PI + phase) * size / 4.0, 0.0)
+                AuroraShape.HELIX -> AuroraOffset(along * size, sin(along * 2.0 * PI + phase) * size * 0.3,
+                    cos(along * 2.0 * PI + phase) * size * 0.3)
+                AuroraShape.ARC -> AuroraOffset(cos(along * PI * 2.0 / 3.0) * size,
+                    sin(along * PI * 2.0 / 3.0) * size, 0.0)
             }
         }
     }
