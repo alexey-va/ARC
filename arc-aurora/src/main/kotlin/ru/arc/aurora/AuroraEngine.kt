@@ -72,7 +72,8 @@ internal class AuroraEngine(
         val rejected = AtomicBoolean()
         val culled = AtomicBoolean()
         var surfaceY: Int? = null // Resolved once on Main; x/y-offset/z never follow a viewer.
-        val columns = skyColumns(x, y, z, normalX, normalZ, path, motion, profile.particle)
+        val columns = skyColumns(x, y, z, normalX, normalZ, path, motion,
+            profile.skyHeadParticles.ifEmpty { listOf(profile.particle) })
         @Volatile var startsAt = Long.MAX_VALUE // Main publishes birth after the full envelope passes.
         var checkedColumns = 0
         var nextAt = born
@@ -91,6 +92,7 @@ internal class AuroraEngine(
     }
     private data class Emission(
         val input: Input, val profile: AuroraProfile, val x: Double, val y: Double, val z: Double,
+        val particle: Particle = profile.particle, val particleData: Any? = profile.particleData,
     )
     private data class SkyInput(val input: Input, val scenes: List<SkyScene>, val budget: Int)
     private data class Planned(val emissions: List<Emission>, val sky: SkyInput? = null)
@@ -303,11 +305,14 @@ internal class AuroraEngine(
                 fun emit(index: Int) {
                     val point = scene.path[index]
                     val offset = AuroraOffset(point.x + motion.x, point.y + motion.y, point.z + motion.z)
+                    val palette = scene.profile.skyHeadParticles
                     remaining--
                     if (deliver(Emission(sky.input, scene.profile,
                         scene.x + offset.x * scene.normalZ + offset.z * scene.normalX,
                         scene.y + checkNotNull(scene.surfaceY) + offset.y,
-                        scene.z - offset.x * scene.normalX + offset.z * scene.normalZ)) == Delivery.OBSTRUCTED) {
+                        scene.z - offset.x * scene.normalX + offset.z * scene.normalZ,
+                        particle = if (palette.isEmpty()) scene.profile.particle else palette[index % 2],
+                        particleData = if (palette.isEmpty()) scene.profile.particleData else null)) == Delivery.OBSTRUCTED) {
                         scene.rejected.set(true) // Relocate a damaged figure instead of carving a permanent hole.
                     }
                 }
@@ -485,7 +490,7 @@ internal class AuroraEngine(
             return Delivery.OBSTRUCTED
         // Final permission/ping gate above is shared by ambient and temporary events.
         val p = emission.profile
-        viewer.particles.emit(player, location, p.particle, p.count, p.offsetX, p.offsetY, p.offsetZ, p.speed, p.particleData, p.skyScene)
+        viewer.particles.emit(player, location, emission.particle, p.count, p.offsetX, p.offsetY, p.offsetZ, p.speed, emission.particleData, p.skyScene)
         submittedPackets++
         return Delivery.SUBMITTED
     }
@@ -525,17 +530,17 @@ private data class SkyColumn(val x: Int, val z: Int, val low: Double, val high: 
 /** Detached conservative envelope, including full native fall and sprite half-size for bundled types. */
 private fun skyColumns(
     x: Double, y: Double, z: Double, normalX: Double, normalZ: Double,
-    path: List<AuroraOffset>, motion: List<AuroraOffset>, particle: Particle,
+    path: List<AuroraOffset>, motion: List<AuroraOffset>, particles: List<Particle>,
 ): List<SkyColumn> {
-    val flame = particle == Particle.FLAME || particle == Particle.SOUL_FIRE_FLAME
+    val flame = particles.any { it == Particle.FLAME || it == Particle.SOUL_FIRE_FLAME }
     val padding = if (flame) 0.5 else 0.22 // Flame also has native spawn jitter and a small random drift.
-    val fall = when (particle) {
+    val fall = particles.maxOf { particle -> when (particle) {
         Particle.FLAME, Particle.SOUL_FIRE_FLAME -> 0.0
         Particle.END_ROD -> 0.35
         Particle.FIREWORK -> 2.2
         Particle.TOTEM_OF_UNDYING -> 8.7
         else -> 1.0
-    }
+    } }
     val minX = motion.minOf { it.x }; val maxX = motion.maxOf { it.x }
     val minY = motion.minOf { it.y }; val maxY = motion.maxOf { it.y }
     val columns = linkedMapOf<Pair<Int, Int>, SkyColumn>()

@@ -62,7 +62,9 @@ object AuroraGeometry {
                 AuroraShape.CRYSTAL, AuroraShape.STAR -> AuroraSkyShapes.outlinePoint(shape, size, (along + 1.0) / 2.0)
                 // Ordinary previews keep their configured extent; the complete timed meteor is a sky stroke.
                 AuroraShape.METEOR -> AuroraSkyShapes.meteorPoint(size * 0.75, points, index, 0.0, 4)
-                AuroraShape.TRACK_SPIRAL, AuroraShape.TRACK_PAIR, AuroraShape.TRACK_SCATTER ->
+                AuroraShape.TRACK_SPIRAL, AuroraShape.TRACK_PAIR, AuroraShape.TRACK_SCATTER,
+                AuroraShape.TRACK_LENS, AuroraShape.TRACK_KNOT, AuroraShape.TRACK_FLYBY,
+                AuroraShape.TRACK_FLOCK, AuroraShape.TRACK_KINK, AuroraShape.TRACK_RIPPLE ->
                     error("Tracks are sampled as complete ordered paths above")
             }
         }

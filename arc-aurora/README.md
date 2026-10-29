@@ -9,13 +9,15 @@ the PacketEvents compile version comes from the repository's dependency catalog.
 
 ## Visual direction
 
-The bundled configuration contains **25 ordinary profiles** and **13 sky variants**
+The bundled configuration contains **25 ordinary profiles** and **19 sky variants**
 sampled into up to **nine retained world cells** for `treasure-hunt`. The sky
 preserves the accepted soft-lines palette: one familiar white wave, blue and
 orange waves/curls, a green spark wave, three frequent meteor variants and one
 rare held crystal. Three bubble-chamber-inspired tracks add an inward spiral,
 a two-branch V and an incoming track that scatters into three different curves.
-These are artistic interpretations, not a particle-physics simulation. No cube,
+Six further finite effects add a converging magnetic lens, a travelling knot,
+a two-colour opposing flyby, a weaving flock, a distinct kink and successive
+light ripples. These are artistic interpretations, not a particle-physics simulation. No cube,
 star or TOTEM ring is selected by the bundled night catalogue; those supported
 shapes remain available to custom profiles.
 
@@ -183,7 +185,8 @@ biome-aliases:
 | `sky-scene` | `false` by default; retain a sky anchor and use posed, progressively revealed geometry |
 | `scene-duration-ticks` | Sky anchor lifetime after its delayed birth, `40..1200`; default `240`; unfinished strokes expire too |
 | `spawn-delay-ticks` | Random delay before each sky scene starts, `0..400`; default `60`; selection prefers different birth times |
-| `sky-tracers` | Samples per eligible visit, `1..4`; default `1`. Ordinary sky outlines divide the path into contiguous heads. `METEOR` uses flight samples then that many fragments; `TRACK_*` preserves its fixed one/two/three-head ordering and uses this field only for pacing |
+| `sky-tracers` | Samples per eligible visit, `1..4`; default `1`. Ordinary sky outlines divide the path into contiguous heads. `METEOR` uses flight samples then that many fragments; `TRACK_*` preserves its authored head/phase ordering and uses this field only for pacing |
+| `sky-head-particles` | Optional ordered pair of no-data native particle keys, only for a sky `TRACK_FLYBY`; empty/omitted retains `particle` and its data. Present palettes use no data payload. Each head keeps its colour through partial budgets and spatial reversal |
 | `sky-refresh-ticks` | `0` (default) leaves a finite native tail; `1..200` spreads a refresh of revealed positions across this many eligible visits, within the cap |
 | `sky-options` | Optional mapping overriding individual fields inherited from top-level `sky-defaults`; see below |
 | `motion-period-ticks` | Sky geometric motion period, `40..2400`; default `400` |
@@ -226,7 +229,13 @@ previous engine and settings active. Admin previews stop on reload; run
 | `track-tightening` | `0.18`; `0.05..0.8` | Final spiral radius divided by initial radius |
 | `track-branch-angle-degrees` | `25`; `10..75` | Initial opening angle of branching tracks |
 | `track-bend-degrees` | `70`; `15..180` | Turn of the broad arc; scatter's straighter branch uses one quarter of this curvature |
-| `track-split` | `0.25`; `0.1..0.6` | Fraction of scatter samples spent on its incoming track before branch birth |
+| `track-split` | `0.25`; `0.1..0.6` | Fraction of scatter/kink samples before the branch or heading change |
+| `lens-spread` | `0.5`; `0.15..0.9` | Outer lane offset relative to shape-size before/after the shared waist |
+| `knot-radius` | `0.32`; `0.15..0.45` | Knot loop height and depth; the crossing stays connected |
+| `flyby-gap` | `0.28`; `0.1..0.7` | Each opposing head's offset from the centre at closest approach |
+| `flock-spread` | `0.3`; `0.1..0.4` | Width/depth of the three exchanging lanes |
+| `kink-angle-degrees` | `60`; `35..120` | Change in heading at the kink vertex |
+| `ripple-spacing` | `0.36`; `0.2..0.45` | Position offset between successive short curved strokes |
 
 | `sky-field` option | Default; range | Meaning |
 | --- | --- | --- |
@@ -291,12 +300,19 @@ an open curve. `CRYSTAL` follows the twelve edges of an elongated octahedron;
 The star is a fixed world plane and becomes foreshortened when viewed edge-on.
 `METEOR` uses its dedicated flight-then-fragments sequence and ignores the generic
 stroke drift/lift; shape-size, sky-points, update-ticks, sky-tracers and the two
-meteor options control its path and speed. The three `TRACK_*` shapes also ignore
+meteor options control its path and speed. The `TRACK_*` shapes also ignore
 generic stroke drift/lift: their head motion is the ordered path itself. Pair
 tracks begin at a common vertex, with no visible incoming neutral-particle line;
 scatter has one incoming line followed by two unequal arcs and a tightening curl.
-Their five `track-*` options are resolved through the same atomic reload as other
-sky controls. All three bundled profiles use `sky-refresh-ticks: 0`.
+Their geometry options are resolved through the same atomic reload as other
+sky controls. All nine bundled track profiles use `sky-refresh-ticks: 0`.
+`TRACK_LENS` interleaves three converging/crossing paths; `TRACK_KNOT` has one
+continuous 3D loop that crosses its earlier path before escaping. `TRACK_FLYBY`
+keeps two mirrored paths apart at closest approach; `TRACK_FLOCK` swaps three
+lanes before one head lags and two rise. `TRACK_KINK` retains the turning vertex
+between two differently curved sections. `TRACK_RIPPLE` starts four separate
+short strokes in sequence; a new stroke is an intentional new head, not a
+connector or a jump along a continuous line.
 A rotated cube can extend up to `sqrt(3) ×
 shape-size` from its anchor. Before a sky figure starts, Main checks its entire swept footprint against
 loaded world-surface columns, including sprite padding and native falling
@@ -367,7 +383,9 @@ Whole-scene admission checks at most 24 terrain columns per scene visit, with
 a deadline check between each column. It requires the swept lower edge to be
 above `WORLD_SURFACE + terrain-clearance` (default 1), including native fall and
 0.22-block sprite padding for END_ROD/FIREWORK; flame uses 0.5 blocks to include
-its larger quad, native spawn jitter and small random drift. Unloaded initial
+its larger quad, native spawn jitter and small random drift. A flyby palette
+uses the largest padding and falling allowance among its two emitted types.
+Unloaded initial
 surface/footprint columns leave admission pending and resumable. They do not
 load chunks or permanently reject a cell. Invalid height/terrain rejects it.
 The shared cooperative deadline covers dispatch, validation and capture;
@@ -430,17 +448,26 @@ are not treasure markers and do not change discovery, rewards or gameplay.
 | Chamber spiral | SOUL_FIRE_FLAME; initial radius 6 | 96 points, four adjacent samples per visit, 1.2 s emission; lifecycle 88 ticks, delay 0..28 |
 | Chamber pair | FLAME; branch path length 7 | 96 points, two heads / two samples each per visit, 1.2 s emission; lifecycle 88 ticks, delay 0..32 |
 | Chamber scatter | SOUL_FIRE_FLAME; half-extent 7 | 36 incoming points over 0.6 s, then 108 branch points over 1.8 s; lifecycle 112 ticks, delay 0..36 |
+| Magnetic lens | SOUL_FIRE_FLAME; half-width 7 | Three converging/crossing heads, 144 points over 2.4 s; lifecycle 112 ticks, delay 0..30 |
+| Travelling knot | FLAME; half-width 6 | One head, 72 adjacent samples over 0.9 s; self-crossing occurs while its earlier native trail is alive at normal cadence; lifecycle 80 ticks, delay 0..28 |
+| Opposing flyby | SOUL_FIRE_FLAME + FLAME; half-width 7 | Two differently coloured heads, 128 points over 1.6 s; lifecycle 96 ticks, delay 0..28 |
+| Flock | SOUL_FIRE_FLAME; half-width 7 | Three heads exchange lanes for 28 visits, then one lags while two rise for 20 visits; lifecycle 112 ticks, delay 0..30 |
+| Kink | FLAME; size 7 | One head, 96 points over 1.6 s, with one distinct change of heading; lifecycle 96 ticks, delay 0..30 |
+| Light ripple | SOUL_FIRE_FLAME; size 7 | Four short strokes in succession, each 12 visits / 0.6 s; lifecycle 112 ticks, delay 0..24 |
 
 Timings assume 20 TPS and one eligible visit each tick. Admission starts a scene's
 own lifetime after its birth delay; a field epoch never cuts that lifetime short.
 Native flame particles live 12..44 ticks, so chamber tracks show moving segments,
 not a permanently illuminated photograph. Old tracks are never refreshed.
 The short emission window makes several curved segments visible together; the
-client finishes their tails after emission ends. Defaults preserve the ten
-soft-lines profiles unchanged and add three chamber profiles. New tracks admit
+client finishes their tails after emission ends. The six new profiles preserve
+all thirteen 0.1.6 profiles unchanged, including the familiar white wave. The
+three original chamber profiles remain available. New tracks admit
 at 30..96 blocks (scatter 32..96), at Y +32..60 above loaded terrain.
-Random scale remains 80..100%; chamber roll is ±0.3..0.35 radians. World orientation
+Random scale remains 80..100%; chamber roll is ±0.25..0.35 radians. World orientation
 can foreshorten a track when viewed edge-on, as with the existing planar figures.
+The knot has modest depth to retain its loop in more views; it is still a thin
+finite trail rather than a solid object.
 
 Ranges describe anchors, not every particle. A separate two-block eye clearance
 remains: approaching an actual point can retire the entire scene. It never
@@ -457,7 +484,7 @@ Run from the repository root with JDK 25:
 ```
 
 The expected local runtime artifact is
-`arc-aurora/build/libs/ArcAurora-0.1.6.jar`. The public Maven API artifact
+`arc-aurora/build/libs/ArcAurora-0.1.7.jar`. The public Maven API artifact
 `ru.ruscrafting.arc:arc-aurora-api:0.1.0` was verified on 2026-10-29 in the
 [RusCrafting repository](https://repo.rus-crafting.ru/grocermc/ru/ruscrafting/arc/arc-aurora-api/0.1.0/arc-aurora-api-0.1.0.pom).
 That API publication does not establish a runtime-plugin build, delivery,
@@ -498,5 +525,5 @@ measured performance result is claimed by this README. Publication, artifact
 delivery and runtime activation require separate operational evidence.
 
 `sky-points` overrides `points` only for sky scenes. The nightly mode and current shape catalog
-require ArcAurora 0.1.6; do not reload this configuration into an older runtime.
+require ArcAurora 0.1.7; do not reload this configuration into an older runtime.
 The 25 ordinary biome profiles and their sampling behavior are unchanged.

@@ -119,7 +119,9 @@ object AuroraSkyShapes {
             }
             AuroraShape.CRYSTAL, AuroraShape.STAR -> outlinePoint(shape, size, progress)
             AuroraShape.METEOR -> meteorPoint(size, points, index, phase, 4, options)
-            AuroraShape.TRACK_SPIRAL, AuroraShape.TRACK_PAIR, AuroraShape.TRACK_SCATTER ->
+            AuroraShape.TRACK_SPIRAL, AuroraShape.TRACK_PAIR, AuroraShape.TRACK_SCATTER,
+            AuroraShape.TRACK_LENS, AuroraShape.TRACK_KNOT, AuroraShape.TRACK_FLYBY,
+            AuroraShape.TRACK_FLOCK, AuroraShape.TRACK_KINK, AuroraShape.TRACK_RIPPLE ->
                 error("Tracks are sampled as complete ordered paths above")
             AuroraShape.RING, AuroraShape.CIRCLE -> {
                 val angle = progress * 2.0 * PI * if (shape == AuroraShape.RING) 1.0 else 2.0
@@ -211,6 +213,67 @@ object AuroraSkyShapes {
         val heading = radians(options.trackBranchAngleDegrees)
         val bend = radians(options.trackBendDegrees)
         val path = when (shape) {
+            AuroraShape.TRACK_LENS -> interleave((0 until 3).map { head ->
+                val lane = head - 1.0
+                sampleCurve((points + 2 - head) / 3) { t ->
+                    val x = t * 2.0 - 1.0
+                    AuroraOffset(x, -lane * options.lensSpread * sin(x * PI / 2.0), 0.0)
+                }
+            })
+            AuroraShape.TRACK_KNOT -> sampleCurve(points) { t ->
+                val angle = t * 2.0 * PI
+                val x = t * 2.0 - 1.0 + (0.55 + options.knotRadius * 0.8) * sin(angle)
+                val y = options.knotRadius * (1.0 - cos(angle))
+                AuroraOffset(x, y, x * y * 1.5) // The loop has depth, but both crossing visits meet at x=z=0.
+            }
+            AuroraShape.TRACK_FLYBY -> interleave((0 until 2).map { head ->
+                val sign = if (head == 0) 1.0 else -1.0
+                sampleCurve((points + 1 - head) / 2) { t ->
+                    val bow = sin(t * PI)
+                    AuroraOffset((t * 2.0 - 1.0) * sign, options.flybyGap * bow * bow * sign, 0.0)
+                }
+            })
+            AuroraShape.TRACK_FLOCK -> interleave((0 until 3).map { head ->
+                val count = (points + 2 - head) / 3
+                val turn = head * 2.0 * PI / 3.0
+                fun weave(t: Double): AuroraOffset {
+                    val phase = turn + t * t * (3.0 - 2.0 * t) * PI
+                    return AuroraOffset(-1.0 + t * 1.15, sin(phase) * options.flockSpread,
+                        cos(phase) * options.flockSpread * 0.6)
+                }
+                val first = minOf(count, maxOf(1, (count * 0.6).toInt()))
+                val start = sampleCurve(first, ::weave)
+                val vertex = weave(1.0)
+                val finish = sampleCurve(count - first + 1) { t ->
+                    val lift = t * t * (3.0 - 2.0 * t)
+                    if (head == 0) AuroraOffset(vertex.x + t * 0.35,
+                        vertex.y - lift * 0.15, vertex.z)
+                    else AuroraOffset(vertex.x + t * 0.85, vertex.y + lift * 0.55,
+                        vertex.z + (head - 1.5) * lift * 0.16)
+                }.drop(1)
+                start + finish
+            })
+            AuroraShape.TRACK_KINK -> {
+                val first = (points * options.trackSplit).toInt().coerceIn(1, points)
+                val startHeading = radians(15.0)
+                val startBend = radians(25.0)
+                fun incoming(t: Double): AuroraOffset {
+                    val p = arc(t, startHeading, startBend, 0.85)
+                    return p.copy(x = p.x - 0.8, y = p.y - 0.3)
+                }
+                val vertex = incoming(1.0)
+                val stem = if (first == 1) listOf(vertex) else sampleCurve(first, ::incoming)
+                stem + sampleCurve(points - first + 1) { t ->
+                    val p = arc(t, startHeading + startBend + radians(options.kinkAngleDegrees), radians(-45.0), 0.85)
+                    AuroraOffset(vertex.x + p.x, vertex.y + p.y, 0.0)
+                }.drop(1)
+            }
+            AuroraShape.TRACK_RIPPLE -> (0 until 4).flatMap { ripple ->
+                sampleCurve((points + 3 - ripple) / 4) { t ->
+                    AuroraOffset((ripple - 1.5) * options.rippleSpacing + (t - 0.5) * 0.5,
+                        (ripple - 1.5) * 0.12 + sin(t * PI) * 0.2, (ripple - 1.5) * 0.08)
+                }
+            }
             AuroraShape.TRACK_SPIRAL -> sampleCurve(points, ::spiral)
             AuroraShape.TRACK_PAIR -> interleave((0 until 2).map { branch ->
                 val sign = if (branch == 0) 1.0 else -1.0

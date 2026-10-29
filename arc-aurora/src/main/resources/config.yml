@@ -69,7 +69,13 @@ sky-defaults:
   track-tightening: 0.18 # Final / initial spiral radius; 0.05..0.8.
   track-branch-angle-degrees: 25 # Initial branch opening; 10..75.
   track-bend-degrees: 70 # Curvature of the broad branch; 15..180.
-  track-split: 0.25 # Scatter samples spent on the incoming track; 0.1..0.6.
+  track-split: 0.25 # Scatter/kink samples spent before the branch or change of heading; 0.1..0.6.
+  lens-spread: 0.5 # Outer lane offset as a fraction of shape-size; 0.15..0.9.
+  knot-radius: 0.32 # Loop height/depth fraction; 0.15..0.45.
+  flyby-gap: 0.28 # Closest head offset from the centre; 0.1..0.7.
+  flock-spread: 0.3 # Width of the three weaving lanes; 0.1..0.4.
+  kink-angle-degrees: 60 # Distinct change in heading at the kink; 35..120.
+  ripple-spacing: 0.36 # Offset between successive short arcs; 0.2..0.45.
 
 # Optional exact, single-hop aliases. Read the actual key with /arcaurora biome.
 # Iris namespaces/paths depend on the installed generator pack; none are assumed here.
@@ -465,7 +471,7 @@ profiles:
 # It intentionally bypasses the ordinary permission/toggle and time/biome filters.
 # Ping, loaded-chunk, passable-block and packet-budget gates still apply.
 # These decorative forms do not reveal treasure positions or change rewards.
-# Thirteen variants share nine world cells: soft blue/warm traces and bubble-chamber tracks.
+# Nineteen variants share nine world cells: soft blue/warm traces and bubble-chamber tracks.
 # One familiar white wave and one rare crystal remain; no cube/star in this night catalogue.
 # Three short meteor variants repeat more often. FLAME is orange, not a red recolour.
 # Only the crystal holds a complete outline; coloured traces keep their native short tails.
@@ -775,6 +781,122 @@ event-presets:
       shape: TRACK_SCATTER
       shape-size: 7
       sky-points: 144 # 12 incoming visits, then 36 branch visits / 2.4 s total.
+      particle: minecraft:soul_fire_flame
+      count: 1
+      sky-refresh-ticks: 0
+      sky-options:
+        roll-radians: 0.3
+    chamber_lens:
+      biomes: ['*']
+      sky-scene: true
+      scene-duration-ticks: 112
+      spawn-delay-ticks: 30
+      sky-tracers: 3 # Three paths converge, cross the waist, then exchange lanes.
+      update-ticks: 1
+      radius: 96
+      min-distance: 30
+      vertical-min: 32
+      vertical-max: 58
+      shape: TRACK_LENS
+      shape-size: 7
+      sky-points: 144 # 48 visits / 2.4 s, with short native tails.
+      particle: minecraft:soul_fire_flame
+      count: 1
+      sky-refresh-ticks: 0
+      sky-options:
+        roll-radians: 0.3
+    chamber_knot:
+      biomes: ['*']
+      sky-scene: true
+      scene-duration-ticks: 80
+      spawn-delay-ticks: 28
+      sky-tracers: 4 # One head: four adjacent samples per visit keep the earlier crossing alive.
+      update-ticks: 1
+      radius: 96
+      min-distance: 30
+      vertical-min: 32
+      vertical-max: 58
+      shape: TRACK_KNOT
+      shape-size: 6
+      sky-points: 72 # 18 visits / 0.9 s: draw a small loop, cross it, then escape.
+      particle: minecraft:flame
+      count: 1
+      sky-refresh-ticks: 0
+      sky-options:
+        roll-radians: 0.3
+    chamber_flyby:
+      biomes: ['*']
+      sky-scene: true
+      scene-duration-ticks: 96
+      spawn-delay-ticks: 28
+      sky-tracers: 4 # Two heads, two adjacent samples each per visit.
+      update-ticks: 1
+      radius: 96
+      min-distance: 30
+      vertical-min: 32
+      vertical-max: 58
+      shape: TRACK_FLYBY
+      shape-size: 7
+      sky-points: 128 # 32 visits / 1.6 s: approach, bend around each other, leave.
+      particle: minecraft:soul_fire_flame
+      sky-head-particles: [minecraft:soul_fire_flame, minecraft:flame] # Stable head colours; FLYBY only.
+      count: 1
+      sky-refresh-ticks: 0
+      sky-options:
+        roll-radians: 0.25
+    chamber_flock:
+      biomes: ['*']
+      sky-scene: true
+      scene-duration-ticks: 112
+      spawn-delay-ticks: 30
+      sky-tracers: 3
+      update-ticks: 1
+      radius: 96
+      min-distance: 30
+      vertical-min: 32
+      vertical-max: 58
+      shape: TRACK_FLOCK
+      shape-size: 7
+      sky-points: 144 # Three weaving heads; one lags after 28 visits, two rise for another 20.
+      particle: minecraft:soul_fire_flame
+      count: 1
+      sky-refresh-ticks: 0
+      sky-options:
+        roll-radians: 0.25
+    chamber_kink:
+      biomes: ['*']
+      sky-scene: true
+      scene-duration-ticks: 96
+      spawn-delay-ticks: 30
+      sky-tracers: 3 # One head, three consecutive samples per visit.
+      update-ticks: 1
+      radius: 96
+      min-distance: 30
+      vertical-min: 32
+      vertical-max: 58
+      shape: TRACK_KINK
+      shape-size: 7
+      sky-points: 96 # Calm arc, a distinct turn, then a differently curved exit.
+      particle: minecraft:flame
+      count: 1
+      sky-refresh-ticks: 0
+      sky-options:
+        track-split: 0.45
+        roll-radians: 0.3
+    chamber_ripple:
+      biomes: ['*']
+      sky-scene: true
+      scene-duration-ticks: 112
+      spawn-delay-ticks: 24
+      sky-tracers: 2 # Two adjacent samples of the current short stroke.
+      update-ticks: 1
+      radius: 96
+      min-distance: 30
+      vertical-min: 32
+      vertical-max: 58
+      shape: TRACK_RIPPLE
+      shape-size: 7
+      sky-points: 96 # Four separate 12-visit strokes appear in succession, with overlapping native tails.
       particle: minecraft:soul_fire_flame
       count: 1
       sky-refresh-ticks: 0

@@ -32,4 +32,10 @@ data class AuroraSkyOptions(
     val trackBranchAngleDegrees: Double = 25.0,
     val trackBendDegrees: Double = 70.0,
     val trackSplit: Double = 0.25,
+    val lensSpread: Double = 0.5,
+    val knotRadius: Double = 0.32,
+    val flybyGap: Double = 0.28,
+    val flockSpread: Double = 0.3,
+    val kinkAngleDegrees: Double = 60.0,
+    val rippleSpacing: Double = 0.36,
 )

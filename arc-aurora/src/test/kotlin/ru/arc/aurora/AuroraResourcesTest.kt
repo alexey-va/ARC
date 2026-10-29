@@ -29,7 +29,7 @@ class AuroraResourcesTest : FreeSpec({
         settings.permission shouldBe "arcaurora.view"
         settings.profiles.size shouldBe 25
         val sky = settings.eventPresets.getValue("treasure-hunt")
-        sky.size shouldBe 13
+        sky.size shouldBe 19
         val wave = sky.single { it.id == "sky_wave" }
         wave.skyOptions shouldBe AuroraSkyOptions(freshHeadRepair = false)
         wave.skyTracers shouldBe 1
@@ -40,9 +40,11 @@ class AuroraResourcesTest : FreeSpec({
             it.skyRefreshTicks == 40 && it.skyOptions.strokeDrift == 0.0 && it.skyOptions.strokeLift == 0.0
         } shouldBe true
         val tracks = sky.filter { it.shape.isTrack }
-        tracks.map { it.shape }.toSet() shouldBe setOf(AuroraShape.TRACK_SPIRAL, AuroraShape.TRACK_PAIR, AuroraShape.TRACK_SCATTER)
+        tracks.map { it.shape }.toSet() shouldBe AuroraShape.entries.filter { it.isTrack }.toSet()
         tracks.all { it.skyRefreshTicks == 0 && it.points / it.skyTracers <= 48 &&
             it.particle in setOf(org.bukkit.Particle.SOUL_FIRE_FLAME, org.bukkit.Particle.FLAME) } shouldBe true
+        sky.single { it.id == "chamber_flyby" }.skyHeadParticles shouldBe
+            listOf(org.bukkit.Particle.SOUL_FIRE_FLAME, org.bukkit.Particle.FLAME)
         settings.skyPacketsPerViewer shouldBe 36
         settings.skyField.maxScenes shouldBe 9
         sky.all { it.updateTicks == 1 && it.minDistance >= 28 && it.radius <= 96 } shouldBe true

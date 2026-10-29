@@ -145,6 +145,12 @@ class AuroraConfigTest : FreeSpec({
               track-branch-angle-degrees: 35
               track-bend-degrees: 95
               track-split: 0.4
+              lens-spread: 0.7
+              knot-radius: 0.4
+              flyby-gap: 0.4
+              flock-spread: 0.2
+              kink-angle-degrees: 85
+              ripple-spacing: 0.4
             profiles:
               ambient:
                 sky-scene: true
@@ -156,15 +162,17 @@ class AuroraConfigTest : FreeSpec({
                     wave-amplitude: 0.3
                     fresh-head-repair: true
                     track-turns: 1.5
+                    flyby-gap: 0.2
         """)
         val settings = AuroraConfig.parse(source)
         val defaults = AuroraSkyOptions(180.0, 12.0, 16, 3.0, 0.6, 1.2, 0.3, 0.4, 2.0, -0.1,
             0.2, -0.2, 0.1, -0.08, 0.04, 20, false, 3, meteorSplit = 0.5, meteorSpread = 0.6,
             trackTurns = 2.0, trackTightening = 0.25, trackBranchAngleDegrees = 35.0,
-            trackBendDegrees = 95.0, trackSplit = 0.4)
+            trackBendDegrees = 95.0, trackSplit = 0.4, lensSpread = 0.7, knotRadius = 0.4,
+            flybyGap = 0.4, flockSpread = 0.2, kinkAngleDegrees = 85.0, rippleSpacing = 0.4)
         settings.profiles.single().skyOptions shouldBe defaults
         settings.eventPresets.getValue("hunt").single().skyOptions shouldBe
-            defaults.copy(waveAmplitude = 0.3, freshHeadRepair = true, trackTurns = 1.5)
+            defaults.copy(waveAmplitude = 0.3, freshHeadRepair = true, trackTurns = 1.5, flybyGap = 0.2)
         source.set("sky-defaults.wave-amplitude", 0.7)
         settings.profiles.single().skyOptions shouldBe defaults // Detached snapshot until a successful reload.
         AuroraConfig.parse(source).profiles.single().skyOptions.waveAmplitude shouldBe 0.7
@@ -191,6 +199,12 @@ class AuroraConfigTest : FreeSpec({
             "track-branch-angle-degrees" to 9.9, "track-branch-angle-degrees" to 75.1,
             "track-bend-degrees" to 14.9, "track-bend-degrees" to 180.1,
             "track-split" to 0.09, "track-split" to Double.NaN,
+            "lens-spread" to 0.14, "lens-spread" to 0.91,
+            "knot-radius" to 0.14, "knot-radius" to 0.46,
+            "flyby-gap" to 0.09, "flyby-gap" to 0.71,
+            "flock-spread" to 0.09, "flock-spread" to 0.41,
+            "kink-angle-degrees" to 34.9, "kink-angle-degrees" to 120.1,
+            "ripple-spacing" to Double.NaN, "ripple-spacing" to 0.46,
         ).forEach { (field, value) ->
             source.set("sky-defaults", null)
             source.set("sky-defaults.$field", value)
@@ -211,6 +225,30 @@ class AuroraConfigTest : FreeSpec({
             "sky-options.roll-radians" to 0, "sky-options.exit-ticks" to 0)).profiles.single()
         fixed.shapeSize * fixed.skyOptions.scaleMax shouldBe 32.0
         fixed.skyOptions.exitTicks shouldBe 0
+    }
+
+    "only a sky flyby accepts exactly two no-data head particles and keeps their order" {
+        val config = profileConfig("sky-scene" to true, "shape" to "TRACK_FLYBY",
+            "sky-head-particles" to listOf("soul_fire_flame", "flame"))
+        val accepted = AuroraConfig.parse(config).profiles.single()
+        accepted.skyHeadParticles shouldBe listOf(Particle.SOUL_FIRE_FLAME, Particle.FLAME)
+        for (bad in listOf(listOf("flame"), listOf("flame", "flame", "flame"),
+            listOf("dust", "flame"), listOf("not_a_particle", "flame"))) {
+            config.set("profiles.ambient.sky-head-particles", bad)
+            shouldThrow<AuroraConfigException> { AuroraConfig.parse(config) }.path shouldBe "profiles.ambient.sky-head-particles"
+            accepted.skyHeadParticles shouldBe listOf(Particle.SOUL_FIRE_FLAME, Particle.FLAME)
+        }
+        config.set("profiles.ambient.sky-head-particles", listOf("flame", "flame"))
+        AuroraConfig.parse(config).profiles.single().skyHeadParticles shouldBe listOf(Particle.FLAME, Particle.FLAME)
+        config.set("profiles.ambient.sky-scene", false)
+        shouldThrow<AuroraConfigException> { AuroraConfig.parse(config) }.path shouldBe "profiles.ambient.sky-head-particles"
+        config.set("profiles.ambient.sky-scene", true)
+        config.set("profiles.ambient.shape", "TRACK_PAIR")
+        shouldThrow<AuroraConfigException> { AuroraConfig.parse(config) }.path shouldBe "profiles.ambient.sky-head-particles"
+        config.set("profiles.ambient.sky-head-particles", emptyList<String>())
+        AuroraConfig.parse(config).profiles.single().skyHeadParticles shouldBe emptyList()
+        config.set("profiles.ambient.sky-head-particles", null)
+        AuroraConfig.parse(config).profiles.single().skyHeadParticles shouldBe emptyList()
     }
 
     "custom Iris and unknown biome keys use full namespaced globs without a registry" {

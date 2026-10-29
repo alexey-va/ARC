@@ -667,7 +667,8 @@ class AuroraEngineTest : FreeSpec({
             loadFromString(checkNotNull(javaClass.classLoader.getResourceAsStream("config.yml")).bufferedReader().use { it.readText() })
         })
         for (profile in bundled.eventPresets.getValue("treasure-hunt").filter { it.shape.isTrack }) {
-            val settings = bundled.copy(nativeBudgetMicros = 10000,
+            // This tests cursor pacing, not wall-clock speed on the host running the test.
+            val settings = bundled.copy(nativeBudgetMicros = Int.MAX_VALUE,
                 skyField = bundled.skyField.copy(maxScenes = 1, maxPerProfile = 1))
             withEngine(settings, highSky = true) { fixture ->
                 fixture.loadChunks(8)
@@ -690,6 +691,9 @@ class AuroraEngineTest : FreeSpec({
                     for (index in before until fixture.locations.size) {
                         val at = fixture.locations[index]
                         (at.distanceSquared(expected[index]) < 1e-18) shouldBe true
+                        fixture.emissions[index].particle shouldBe
+                            (profile.skyHeadParticles.getOrNull(index % 2) ?: profile.particle)
+                        fixture.emissions[index].data shouldBe null
                         timeline.append("$tick,${fixture.emissions[index].particle.name},${at.x},${at.y},${at.z}\n")
                     }
                     fixture.sceneRows(tick).forEach { scenes.append(it).append('\n') }
@@ -706,6 +710,46 @@ class AuroraEngineTest : FreeSpec({
                     java.nio.file.Files.writeString(target.resolve("observer-timeline.csv"), observer)
                     java.nio.file.Files.writeString(target.resolve("scene-timeline.csv"), scenes)
                 }
+            }
+        }
+    }
+
+    "flyby keeps head colours under a one-point cap and leaves default payloads intact" {
+        val dust = Particle.DustOptions(org.bukkit.Color.fromRGB(0xFF8040), 0.5f)
+        for (palette in listOf(emptyList(), listOf(Particle.SOUL_FIRE_FLAME, Particle.FLAME))) {
+            val original = skySettings(points = 24, shape = AuroraShape.TRACK_FLYBY, packets = 1)
+            val profile = original.profiles.single().copy(particle = Particle.DUST, particleData = dust,
+                skyTracers = 4, skyHeadParticles = palette)
+            val settings = original.copy(nativeBudgetMicros = Int.MAX_VALUE, profiles = listOf(profile))
+            withEngine(settings) { fixture ->
+                fixture.event = settings.profiles
+                repeat(50) { tick ->
+                    if (tick == 1) fixture.completePlanning()
+                    val before = fixture.emissions.size
+                    fixture.engine.tick()
+                    (fixture.emissions.size - before <= 1) shouldBe true
+                }
+                fixture.emissions.size shouldBe 24
+                fixture.emissions.forEachIndexed { index, sent ->
+                    sent.particle shouldBe (palette.getOrNull(index % 2) ?: Particle.DUST)
+                    sent.data shouldBe if (palette.isEmpty()) dust else null
+                }
+            }
+        }
+    }
+
+    "flyby terrain admission covers the highest fall and largest padding in its palette" {
+        for (palette in listOf(emptyList(), listOf(Particle.FLAME, Particle.FIREWORK))) {
+            val original = skySettings(points = 24, shape = AuroraShape.TRACK_FLYBY, packets = 4)
+            val profile = original.profiles.single().copy(particle = Particle.FLAME, shapeSize = 0.1,
+                verticalMin = 3.4, verticalMax = 3.4, skyTracers = 4, skyHeadParticles = palette)
+            withEngine(original.copy(nativeBudgetMicros = Int.MAX_VALUE, profiles = listOf(profile)), highSky = true) { fixture ->
+                fixture.event = listOf(profile)
+                repeat(50) { tick ->
+                    if (tick == 1) fixture.completePlanning()
+                    fixture.engine.tick()
+                }
+                fixture.emissions.size shouldBe if (palette.isEmpty()) 24 else 0
             }
         }
     }
@@ -904,7 +948,8 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
             }
             locations += arg<Location>(1).clone()
             emissions += ObservedEmission(arg<Particle>(2), arg<Int>(3),
-                listOf(arg<Double>(4), arg<Double>(5), arg<Double>(6), arg<Double>(7)), arg<Boolean>(9), arg<Player>(0).uniqueId)
+                listOf(arg<Double>(4), arg<Double>(5), arg<Double>(6), arg<Double>(7)), arg<Boolean>(9), arg<Player>(0).uniqueId,
+                arg<Any?>(8))
         }
         paper.server.addPlayer(player)
         player.teleport(Location(world, 0.5, 80.0, 0.5)) shouldBe true
@@ -1018,7 +1063,8 @@ private class EngineWorld(highSky: Boolean) : org.mockbukkit.mockbukkit.world.Wo
     override fun getUID(): java.util.UUID = java.util.UUID.fromString("00000000-0000-0000-0000-000000000001")
 }
 
-private data class ObservedEmission(val particle: Particle, val count: Int, val offsets: List<Double>, val force: Boolean, val viewer: java.util.UUID)
+private data class ObservedEmission(val particle: Particle, val count: Int, val offsets: List<Double>, val force: Boolean,
+    val viewer: java.util.UUID, val data: Any?)
 
 /** Override the one controlled observation without spying on MockBukkit's inherited entity methods. */
 private class EnginePlayer(server: ServerMock, name: String = "AuroraViewer") : PlayerMock(server, name) {

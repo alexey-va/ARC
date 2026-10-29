@@ -31,6 +31,13 @@ class AuroraReloadTest : FreeSpec({
                 candidate.set("profiles.$profileId.radius", 14.0)
                 candidate.set("profiles.$profileId.sky-options.wave-amplitude", null)
                 candidate.set("sky-defaults.wave-amplitude", 0.31)
+                candidate.set("sky-defaults.lens-spread", 0.7)
+                candidate.set("sky-defaults.knot-radius", 0.4)
+                candidate.set("sky-defaults.flyby-gap", 0.45)
+                candidate.set("sky-defaults.flock-spread", 0.2)
+                candidate.set("sky-defaults.kink-angle-degrees", 85.0)
+                candidate.set("sky-defaults.ripple-spacing", 0.4)
+                candidate.set("event-presets.treasure-hunt.chamber_flyby.sky-head-particles", listOf("flame", "soul_fire_flame"))
                 candidate.set("sky-field.cell-size", 52.0)
                 candidate.set("sky-field.jitter", 0.25)
                 candidate.set("sky-field.view-distance", 112.0)
@@ -51,6 +58,14 @@ class AuroraReloadTest : FreeSpec({
                 val reloaded = replacement.settings.profiles.single { it.id == profileId }
                 reloaded.radius shouldBe 14.0
                 reloaded.skyOptions.waveAmplitude shouldBe 0.31
+                reloaded.skyOptions.lensSpread shouldBe 0.7
+                reloaded.skyOptions.knotRadius shouldBe 0.4
+                reloaded.skyOptions.flybyGap shouldBe 0.45
+                reloaded.skyOptions.flockSpread shouldBe 0.2
+                reloaded.skyOptions.kinkAngleDegrees shouldBe 85.0
+                reloaded.skyOptions.rippleSpacing shouldBe 0.4
+                replacement.settings.eventPresets.getValue("treasure-hunt").single { it.id == "chamber_flyby" }
+                    .skyHeadParticles shouldBe listOf(org.bukkit.Particle.FLAME, org.bukkit.Particle.SOUL_FIRE_FLAME)
                 val reloadedField = AuroraSkyFieldSettings(
                     cellSize = 52.0, jitter = 0.25, viewDistance = 112.0, cullHysteresis = 24.0, maxScenes = 8,
                 )
@@ -91,6 +106,19 @@ class AuroraReloadTest : FreeSpec({
 
                 (plugin.engine === replacement) shouldBe true
                 plugin.engine!!.settings.nightSky shouldBe reloadedNight
+
+                candidate.set("night-sky.preset", "treasure-hunt")
+                candidate.set("sky-defaults.flyby-gap", 0.8)
+                candidate.save(file)
+                paper.server.dispatchCommand(paper.server.consoleSender, "arcaurora reload") shouldBe true
+                (plugin.engine === replacement) shouldBe true
+                candidate.set("sky-defaults.flyby-gap", 0.45)
+                candidate.set("event-presets.treasure-hunt.chamber_flyby.sky-head-particles", listOf("flame"))
+                candidate.save(file)
+                paper.server.dispatchCommand(paper.server.consoleSender, "arcaurora reload") shouldBe true
+                (plugin.engine === replacement) shouldBe true
+                plugin.engine!!.settings.eventPresets.getValue("treasure-hunt").single { it.id == "chamber_flyby" }
+                    .skyHeadParticles shouldBe listOf(org.bukkit.Particle.FLAME, org.bukkit.Particle.SOUL_FIRE_FLAME)
 
                 val viewer = paper.addPlayer("NightToggleViewer")
                 viewer.hasPermission(replacement.settings.permission) shouldBe false

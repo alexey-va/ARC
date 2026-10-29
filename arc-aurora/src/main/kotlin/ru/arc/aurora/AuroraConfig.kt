@@ -69,9 +69,14 @@ enum class AuroraWeather { ANY, CLEAR, RAIN, THUNDER }
 
 enum class AuroraShape {
     POINT, LINE, CUBE, RING, CIRCLE, SPHERE, WAVE, HELIX, ARC, CRYSTAL, STAR, METEOR,
-    TRACK_SPIRAL, TRACK_PAIR, TRACK_SCATTER;
+    TRACK_SPIRAL, TRACK_PAIR, TRACK_SCATTER, TRACK_LENS, TRACK_KNOT,
+    TRACK_FLYBY, TRACK_FLOCK, TRACK_KINK, TRACK_RIPPLE;
 
-    internal val isTrack: Boolean get() = this == TRACK_SPIRAL || this == TRACK_PAIR || this == TRACK_SCATTER
+    internal val isTrack: Boolean get() = when (this) {
+        TRACK_SPIRAL, TRACK_PAIR, TRACK_SCATTER, TRACK_LENS, TRACK_KNOT,
+        TRACK_FLYBY, TRACK_FLOCK, TRACK_KINK, TRACK_RIPPLE -> true
+        else -> false
+    }
 }
 
 data class AuroraProfile(
@@ -109,6 +114,7 @@ data class AuroraProfile(
     val skyTracers: Int = 1,
     val skyRefreshTicks: Int = 0,
     val skyOptions: AuroraSkyOptions = AuroraSkyOptions(),
+    val skyHeadParticles: List<Particle> = emptyList(),
 ) {
     private val biomePatterns = biomes.map(::compileGlob)
     private val worldPatterns = worlds.map(::compileGlob)
@@ -243,6 +249,17 @@ object AuroraConfig {
         }.immutable()
         val worlds = source.strings("worlds", listOf("*")).immutable()
         val skyScene = source.boolean("sky-scene", false)
+        val shape = source.enum("shape", AuroraShape.POINT)
+        val headParticles = source.strings("sky-head-particles", emptyList(), allowEmpty = true, unique = false).map { raw ->
+            val particle = particlesByKey[normalizeBiomeKey(raw)]
+                ?: source.fail("sky-head-particles", "unknown particle '$raw'")
+            source.check("sky-head-particles", particle.dataType == Void::class.java,
+                "head particles must have no data payload")
+            particle
+        }.immutable()
+        source.check("sky-head-particles", headParticles.isEmpty() ||
+            skyScene && shape == AuroraShape.TRACK_FLYBY && headParticles.size == 2,
+            "only a sky TRACK_FLYBY accepts a palette of exactly two no-data particles")
         val skyOptions = skyOptions(source.section("sky-options"), skyDefaults)
         val shapeSize = source.double("shape-size", 1.0, if (skyScene) 0.1..32.0 else 0.1..8.0)
         source.check("shape-size", !skyScene || shapeSize * skyOptions.scaleMax <= 32.0,
@@ -293,7 +310,7 @@ object AuroraConfig {
             minDistance = minDistance,
             verticalMin = verticalMin,
             verticalMax = verticalMax,
-            shape = source.enum("shape", AuroraShape.POINT),
+            shape = shape,
             shapeSize = shapeSize,
             points = if (skyScene) source.int("sky-points", source.int("points", 1, 1..192), 1..192)
                 else source.int("points", 1, 1..24),
@@ -312,6 +329,7 @@ object AuroraConfig {
             skyTracers = source.int("sky-tracers", 1, 1..4),
             skyRefreshTicks = source.int("sky-refresh-ticks", 0, 0..200),
             skyOptions = skyOptions,
+            skyHeadParticles = headParticles,
         )
     }
 
@@ -348,6 +366,12 @@ object AuroraConfig {
             trackBranchAngleDegrees = source.double("track-branch-angle-degrees", defaults.trackBranchAngleDegrees, 10.0..75.0),
             trackBendDegrees = source.double("track-bend-degrees", defaults.trackBendDegrees, 15.0..180.0),
             trackSplit = source.double("track-split", defaults.trackSplit, 0.1..0.6),
+            lensSpread = source.double("lens-spread", defaults.lensSpread, 0.15..0.9),
+            knotRadius = source.double("knot-radius", defaults.knotRadius, 0.15..0.45),
+            flybyGap = source.double("flyby-gap", defaults.flybyGap, 0.1..0.7),
+            flockSpread = source.double("flock-spread", defaults.flockSpread, 0.1..0.4),
+            kinkAngleDegrees = source.double("kink-angle-degrees", defaults.kinkAngleDegrees, 35.0..120.0),
+            rippleSpacing = source.double("ripple-spacing", defaults.rippleSpacing, 0.2..0.45),
         )
         source.check("scale-max", options.scaleMax >= options.scaleMin, "must be at least scale-min")
         source.check("yaw-max-degrees", options.yawMaxDegrees >= options.yawMinDegrees, "must be at least yaw-min-degrees")
@@ -392,15 +416,15 @@ object AuroraConfig {
             check(name, number.isFinite() && number in range, "expected a finite number in $range")
             return number
         }
-        fun strings(name: String, default: List<String>): List<String> {
+        fun strings(name: String, default: List<String>, allowEmpty: Boolean = false, unique: Boolean = true): List<String> {
             val raw = section.get(name) ?: return default
             val list = raw as? List<*> ?: fail(name, "expected a list of strings")
-            check(name, list.isNotEmpty(), "expected at least one selector")
+            check(name, allowEmpty || list.isNotEmpty(), "expected at least one selector")
             return list.mapIndexed { index, value ->
                 val text = value as? String ?: fail("$name[$index]", "expected a string")
                 check("$name[$index]", text.isNotBlank(), "selector must not be blank")
                 text
-            }.distinct()
+            }.let { if (unique) it.distinct() else it }
         }
         inline fun <reified T : Enum<T>> enum(name: String, default: T): T {
             val value = string(name, default.name)
