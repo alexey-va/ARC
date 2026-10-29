@@ -651,7 +651,7 @@ internal class HelpCenterController(
             exitButton = backButton("back", player, ::openCommands),
             columns = 2,
         ))
-        searchService.search(availableSearchCatalog(player), query, settings.maxSearchResults)
+        searchService.search(availableSearchCatalog(player), query, settings.maxSearchResults, playerId = player.uniqueId)
             .whenCompleteSync(tasks) { result, failure ->
                 if (!active || !player.isOnline || !navigation.isCurrent(player, token)) return@whenCompleteSync
                 val available = availableSearchCatalog(player)

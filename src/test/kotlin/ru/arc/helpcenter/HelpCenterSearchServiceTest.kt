@@ -4,6 +4,7 @@ import com.google.gson.JsonParser
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 
@@ -24,6 +25,48 @@ class HelpCenterSearchServiceTest : StringSpec({
             val result = service.search(entries, "пириват", 2).join()
             result.mode shouldBe HelpCenterSearchMode.LOCAL
             result.entries shouldContainExactly listOf(protection)
+            service.search(entries, "пириват", 2, UUID.randomUUID()).join().mode shouldBe HelpCenterSearchMode.LOCAL
+        }
+    }
+
+    "explicit player exceptions enable AI without allowing other players to reuse a cached result" {
+        val selected = UUID.fromString("00000000-0000-0000-0000-000000000001")
+        val anotherSelected = UUID.fromString("00000000-0000-0000-0000-000000000002")
+        val other = UUID.fromString("00000000-0000-0000-0000-000000000003")
+        var calls = 0
+        val options = HelpCenterSearchOptions(enabledPlayerUuids = setOf(selected, anotherSelected))
+        options.enabled shouldBe false
+        HelpCenterSearchService(options = options, complete = { _, _, prompt, request ->
+            calls++
+            listOf(selected, anotherSelected, other).forEach { id ->
+                prompt.contains(id.toString()) shouldBe false
+                request.contains(id.toString()) shouldBe false
+            }
+            CompletableFuture.completedFuture("[\"privat\"]")
+        }).use { service ->
+            service.search(entries, "дом", 2, selected).join().mode shouldBe HelpCenterSearchMode.SEMANTIC
+            listOf(other, null).forEach { id ->
+                val denied = service.search(entries, "дом", 2, id).join()
+                denied.mode shouldBe HelpCenterSearchMode.LOCAL
+                denied.entries shouldContainExactly listOf(home)
+            }
+            val cached = service.search(entries, "дом", 2, anotherSelected).join()
+            cached.mode shouldBe HelpCenterSearchMode.SEMANTIC
+            cached.entries shouldContainExactly listOf(protection)
+            calls shouldBe 1
+        }
+    }
+
+    "global AI enablement retains access for every player including callers without an ID" {
+        var calls = 0
+        HelpCenterSearchService(options = HelpCenterSearchOptions(enabled = true), complete = { _, _, _, _ ->
+            calls++
+            CompletableFuture.completedFuture("[\"privat\"]")
+        }).use { service ->
+            listOf(null, UUID.randomUUID()).forEach { id ->
+                service.search(entries, "дом", 2, id).join().mode shouldBe HelpCenterSearchMode.SEMANTIC
+            }
+            calls shouldBe 1
         }
     }
 

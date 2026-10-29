@@ -14,6 +14,7 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import ru.arc.config.ConfigManager
 import java.nio.file.Files
+import java.util.UUID
 
 class HelpCenterConfigTest : StringSpec({
     "bundled help center is enabled and keeps player-facing text in yaml" {
@@ -29,6 +30,7 @@ class HelpCenterConfigTest : StringSpec({
             settings.searchAi.enabled shouldBe false
             settings.searchAi.model shouldBe "google/gemini-2.5-flash-lite"
             settings.searchAi.maxOutputTokens shouldBe 128
+            settings.searchAi.enabledPlayerUuids shouldBe emptySet()
             settings.text("root-title").contains("Главное меню") shouldBe true
             settings.text("now-title").contains("Мой профиль") shouldBe true
             val aliases = settings::text
@@ -179,6 +181,46 @@ class HelpCenterConfigTest : StringSpec({
         } finally {
             ConfigManager.clear()
             root.toFile().deleteRecursively()
+        }
+    }
+
+    "parses typed player AI exceptions while keeping global AI disabled" {
+        val root = Files.createTempDirectory("arc-help-center-ai-players")
+        try {
+            val modules = Files.createDirectories(root.resolve("modules"))
+            Files.writeString(modules.resolve("help-center.yml"), """
+                search:
+                  ai:
+                    enabled: false
+                    enabled-player-uuids:
+                      - ' 12345678-1234-1234-1234-123456789ABC '
+                      - '00000000-0000-0000-0000-000000000002'
+            """.trimIndent())
+            ConfigManager.clear()
+            val settings = HelpCenterConfig.load(root).snapshot()
+            settings.searchAi.enabled shouldBe false
+            settings.searchAi.enabledPlayerUuids shouldBe setOf(
+                UUID.fromString("12345678-1234-1234-1234-123456789abc"),
+                UUID.fromString("00000000-0000-0000-0000-000000000002"),
+            )
+        } finally {
+            ConfigManager.clear()
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    "rejects malformed or abbreviated player AI UUIDs" {
+        listOf("not-a-uuid", "1-1-1-1-1", "").forEach { invalid ->
+            val root = Files.createTempDirectory("arc-help-center-invalid-ai-player")
+            try {
+                val modules = Files.createDirectories(root.resolve("modules"))
+                Files.writeString(modules.resolve("help-center.yml"), "search:\n  ai:\n    enabled-player-uuids: ['$invalid']\n")
+                ConfigManager.clear()
+                runCatching { HelpCenterConfig.load(root).snapshot() }.isFailure shouldBe true
+            } finally {
+                ConfigManager.clear()
+                root.toFile().deleteRecursively()
+            }
         }
     }
 

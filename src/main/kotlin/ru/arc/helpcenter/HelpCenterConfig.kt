@@ -4,6 +4,7 @@ import net.kyori.adventure.key.Key
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import java.nio.file.Path
+import java.util.UUID
 
 data class HelpCenterCommandText(
     val label: String,
@@ -58,6 +59,16 @@ class HelpCenterConfig(private val config: Config) {
                 enabled = config.bool("search.ai.enabled", false),
                 model = config.string("search.ai.model", "google/gemini-2.5-flash-lite").trim(),
                 maxOutputTokens = config.integer("search.ai.max-output-tokens", 128),
+                enabledPlayerUuids = config.stringList("search.ai.enabled-player-uuids", emptyList()).map { value ->
+                    val raw = value.trim()
+                    val uuid = runCatching { UUID.fromString(raw) }.getOrElse { failure ->
+                        throw IllegalArgumentException("Help center search.ai.enabled-player-uuids must contain canonical UUIDs", failure)
+                    }
+                    require(uuid.toString().equals(raw, ignoreCase = true)) {
+                        "Help center search.ai.enabled-player-uuids must contain canonical UUIDs"
+                    }
+                    uuid
+                }.toSet(),
             ),
             text = DEFAULT_TEXT.mapValues { (key, fallback) -> required("text.$key", fallback) },
             actions = DEFAULT_ACTIONS.mapValues { (id, fallback) -> required("actions.$id", fallback) },

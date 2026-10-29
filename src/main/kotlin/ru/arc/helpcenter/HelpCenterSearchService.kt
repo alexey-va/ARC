@@ -9,6 +9,7 @@ import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import java.security.MessageDigest
 import java.util.HexFormat
+import java.util.UUID
 import java.util.concurrent.CancellationException
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
@@ -20,6 +21,7 @@ data class HelpCenterSearchOptions(
     val enabled: Boolean = false,
     val model: String = "google/gemini-2.5-flash-lite",
     val maxOutputTokens: Int = 128,
+    val enabledPlayerUuids: Set<UUID> = emptySet(),
 ) {
     init {
         require(model.matches(Regex("[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}"))) { "Help search AI model must be a model ID" }
@@ -36,6 +38,7 @@ internal data class HelpCenterSearchResult(
 
 /**
  * Ranks a detached, already-authorized catalog; never receives a Player or executes an action.
+ * The optional player UUID gates AI access only; it is never sent to the model or used as a cache key.
  * The LLM runs on GPTManager's bounded worker. Close cancels observers, and callers must still
  * fence delivery by their navigation token and recheck entry availability on the owning thread.
  */
@@ -58,6 +61,7 @@ internal class HelpCenterSearchService(
         entries: List<HelpCenterSearchEntry>,
         rawQuery: String,
         limit: Int,
+        playerId: UUID? = null,
     ): CompletableFuture<HelpCenterSearchResult> {
         require(limit in 1..32) { "Help center search limit must be in 1..32" }
         val query = rawQuery.trim()
@@ -68,7 +72,9 @@ internal class HelpCenterSearchService(
             return CompletableFuture.completedFuture(HelpCenterSearchResult(catalog.take(limit), HelpCenterSearchMode.CATALOG))
         }
         fun local(mode: HelpCenterSearchMode) = HelpCenterSearchResult(HelpCenterPlanner.search(catalog, query, limit), mode)
-        if (!options.enabled) return CompletableFuture.completedFuture(local(HelpCenterSearchMode.LOCAL))
+        if (!options.enabled && (playerId == null || playerId !in options.enabledPlayerUuids)) {
+            return CompletableFuture.completedFuture(local(HelpCenterSearchMode.LOCAL))
+        }
         val byId = catalog.associateBy { it.id }
         require(byId.size == catalog.size) { "Help search catalog IDs must be unique" }
         val aiLimit = minOf(limit, 6, options.maxOutputTokens / 16)

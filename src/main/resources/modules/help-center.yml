@@ -11,6 +11,8 @@ limits:
 search:
   ai:
     enabled: false
+    # Explicit per-player enablement while global AI is disabled. Empty enables nobody.
+    enabled-player-uuids: []
     model: 'google/gemini-2.5-flash-lite'
     max-output-tokens: 128
 
