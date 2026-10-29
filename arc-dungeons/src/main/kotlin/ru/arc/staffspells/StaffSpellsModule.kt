@@ -457,7 +457,6 @@ internal class StaffSpellController(
             StaffSpell.FAULT -> fault(player, cast, tuning, secondary = false)
             StaffSpell.LANCE -> lance(player, cast, tuning, secondary = false)
             StaffSpell.EMBER -> {
-                // Optional launch assistance is captured once; the comet never homes during flight.
                 if (embers.count { it.cast.casterId == player.uniqueId } >= 8) {
                     val removed = embers.removeAt(embers.indexOfFirst { it.cast.casterId == player.uniqueId })
                     effects.remove(removed.visualId)
@@ -495,7 +494,8 @@ internal class StaffSpellController(
                     muzzle.clone().add(direction), radius = 0.85,
                     durationTicks = duration, controllerDriven = true, charge = cast.visualCharge)
                 val ember = PendingStaffEmber(muzzle, direction, cast, tuning,
-                    settings.range - eye.distance(muzzle), visualId, muzzle)
+                    settings.range - eye.distance(muzzle), visualId, muzzle,
+                    target = targeting.homingTarget(player, spell, cast, from = muzzle))
                 embers += ember
                 visuals.withOwner(cast.casterId) { visuals.emberTrail(muzzle, muzzle) }
                 // Seed the first forward keyframe on release instead of waiting for the two-tick frame cadence.
@@ -739,7 +739,11 @@ internal class StaffSpellController(
             org.joml.Vector3f(direction.x.toFloat(), direction.y.toFloat(), direction.z.toFloat()))
         // Depart away from the camera in the same frame as the visible charged crown.
         val visited = mutableSetOf<UUID>()
-        val volley = PendingIcicleVolley()
+        val volley = PendingIcicleVolley().apply {
+            // Capture a moving player at release, before the crown's staggered launch delay.
+            target = targeting.homingTarget(player, StaffSpell.ICICLE, cast)
+            focused = target != null
+        }
 
         repeat(count) { index ->
             val heldId = chargedScenes.getOrNull(index)
@@ -837,9 +841,9 @@ internal class StaffSpellController(
 
     private fun chain(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning) {
         val direction = targeting.assistedDirection(player, StaffSpell.CHAIN, cast)
-        // The first shot commits to its launch direction; homing begins only after a real hit.
         launchBolt(player, player.eyeLocation, direction,
-            null, cast, tuning, 1.0, settings.chainTargets, mutableSetOf(), settings.range)
+            targeting.homingTarget(player, StaffSpell.CHAIN, cast), cast, tuning,
+            1.0, settings.chainTargets, mutableSetOf(), settings.range)
     }
 
     private fun reserveBolt(casterId: UUID) {
@@ -882,13 +886,19 @@ internal class StaffSpellController(
                 val assisted = targeting.assistedDirection(player, StaffSpell.ICICLE, bolt.cast, from = from)
                 bolt.fixedAimPoint = rayEnd(eye, assisted, settings.range)
             }
-            val targetAt = if (volley != null) icicleVolleyTarget(player, bolt, volley) else
-                bolt.target?.takeIf { damage.eligible(player, it, bolt.cast) }
+            val targetAt = if (volley != null) icicleVolleyTarget(player, bolt, volley) else {
+                val target = bolt.target
+                if (target is Player && targeting.homingEnabled(bolt.spell)) {
+                    targeting.homingPoint(player, target, bolt.cast, from, bolt.direction,
+                        bolt.launchDirection, bolt.remainingDistance).also { if (it == null) bolt.target = null }
+                } else target?.takeIf { damage.eligible(player, it, bolt.cast) }
                     ?.let { staffVisibleTargetPoint(from, it, player.eyeLocation) } ?: bolt.fixedAimPoint
+            }
             bolt.age++
             if (targetAt != null && bolt.age > bolt.holdForwardTicks) {
                 val desired = targetAt.toVector().subtract(from.toVector())
-                steerStaffBolt(bolt.direction, desired, bolt.age)
+                val playerLock = (volley?.target ?: bolt.target) is Player && targeting.homingEnabled(bolt.spell)
+                steerStaffBolt(bolt.direction, desired, bolt.age, if (playerLock) settings.aimAssist.strength else 0.0)
             }
             val step = min(if (bolt.spell == StaffSpell.ICICLE) staffIcicleStep(bolt.age)
                 else staffLightningStep(bolt.age), bolt.remainingDistance)
@@ -980,18 +990,20 @@ internal class StaffSpellController(
         val eye = player.eyeLocation
         val focus = volley.target
         if (focus != null && (focus.world != player.world || !damage.eligible(player, focus, bolt.cast) ||
-                !icicleWithinAim(player, focus, retaining = true) || !visible(eye, focus))) {
+                (!(focus is Player && targeting.homingEnabled(StaffSpell.ICICLE)) &&
+                    !icicleWithinAim(player, focus, retaining = true)) || !visible(eye, focus))) {
             volley.target = null
             volley.searchCooldown = 0
         }
         if (volley.target == null && (bolt.age == 0 || volley.focused && volley.searchCooldown == 0)) {
-            // A fresh volley still requires a direct reticle hit. Soft acquisition is only a
-            // replacement for a lost focus, and respects the configured aim-assist limits.
             val direct = lineTargets(player, eye, aimPoint(player), .25, bolt.cast).firstOrNull {
                 (!volley.focused || it.uniqueId !in bolt.visited) && icicleFlightPoint(player, bolt, it) != null
             }
             val assist = settings.aimAssist
-            val replacement = direct ?: if (volley.focused && assist.enabled && assist.strength > 0.0 &&
+            val playerTarget = if (direct == null) targeting.homingTarget(player, StaffSpell.ICICLE,
+                bolt.cast, bolt.position, excluded = if (volley.focused) bolt.visited else emptySet())
+                ?.takeIf { icicleFlightPoint(player, bolt, it) != null } else null
+            val replacement = direct ?: playerTarget ?: if (volley.focused && assist.enabled && assist.strength > 0.0 &&
                 StaffSpell.ICICLE.id !in assist.excludedSpells) {
                 aimed(player, settings.range, minOf(12.0, assist.halfAngleDegrees), bolt.cast).firstOrNull {
                     it.uniqueId !in bolt.visited && icicleWithinAim(player, it, retaining = false) &&
@@ -1023,6 +1035,9 @@ internal class StaffSpellController(
     }
 
     private fun icicleFlightPoint(player: Player, bolt: PendingStaffBolt, target: LivingEntity): Location? {
+        if (target is Player && targeting.homingEnabled(StaffSpell.ICICLE))
+            return targeting.homingPoint(player, target, bolt.cast, bolt.position, bolt.direction,
+                bolt.launchDirection, bolt.remainingDistance)
         val point = staffVisibleTargetPoint(bolt.position, target, player.eyeLocation) ?: return null
         val offset = point.toVector().subtract(bolt.position.toVector())
         // Retarget only through visible air that this shard can still reach; never turn back
@@ -1360,6 +1375,13 @@ internal class StaffSpellController(
             }
             val from = ember.position
             ember.age++
+            ember.target?.let { target ->
+                val point = targeting.homingPoint(player, target, ember.cast, from, ember.direction,
+                    ember.launchDirection, ember.remainingDistance)
+                if (point == null) ember.target = null
+                else steerStaffBolt(ember.direction, point.toVector().subtract(from.toVector()),
+                    ember.age, settings.aimAssist.strength)
+            }
             val distance = min(ember.remainingDistance,
                 staffEmberStep(ember.age, ember.speed ?: settings.emberSpeed, meteor = ember.radius != null))
             val blockEnd = rayEnd(from, ember.direction, distance)
@@ -1538,14 +1560,16 @@ private data class PendingStaffMark(val target: LivingEntity?, val point: Locati
 private data class PendingStaffEmber(var position: Location, val direction: Vector,
     val cast: StaffSpellCast, val tuning: StaffSpellTuning, var remainingDistance: Double, val visualId: UUID?,
     var visualPosition: Location, val speed: Double? = null, val radius: Double? = null,
-    val hitTargets: MutableSet<UUID>? = null, var age: Int = 0)
+    val hitTargets: MutableSet<UUID>? = null, var age: Int = 0, var target: Player? = null,
+    val launchDirection: Vector = direction.clone())
 
 private data class PendingStaffBolt(var position: Location, val direction: Vector, var target: LivingEntity?,
     val cast: StaffSpellCast, val tuning: StaffSpellTuning, val scale: Double, val jumps: Int,
     val visited: MutableSet<UUID>, var remainingDistance: Double, val visualId: UUID?, var age: Int = 0,
     val trail: MutableList<Location> = mutableListOf(position.clone()), val spell: StaffSpell = StaffSpell.CHAIN,
     var fixedAimPoint: Location? = null, var launchDelayTicks: Int = 0, val holdForwardTicks: Int = 0,
-    val burstRadius: Double = 0.0, val volley: PendingIcicleVolley? = null)
+    val burstRadius: Double = 0.0, val volley: PendingIcicleVolley? = null,
+    val launchDirection: Vector = direction.clone())
 
 private class PendingIcicleVolley {
     var target: LivingEntity? = null
@@ -1605,9 +1629,10 @@ internal fun staffEmberStep(age: Int, speed: Double, meteor: Boolean = false): D
 }
 
 /** Shared by live pursuit and the offline flight fixture; changes only the supplied heading. */
-internal fun steerStaffBolt(direction: Vector, offset: Vector, age: Int) {
+internal fun steerStaffBolt(direction: Vector, offset: Vector, age: Int, minimumTurn: Double = 0.0) {
     if (offset.lengthSquared() <= 0.000001) return
-    val turn = if (offset.lengthSquared() < 36.0) 0.72 else if (age < 4) 0.10 else 0.42
+    val turn = maxOf(minimumTurn.coerceIn(0.0, .8),
+        if (offset.lengthSquared() < 36.0) 0.72 else if (age < 4) 0.10 else 0.42)
     direction.multiply(1.0 - turn).add(offset.clone().normalize().multiply(turn)).normalize()
 }
 

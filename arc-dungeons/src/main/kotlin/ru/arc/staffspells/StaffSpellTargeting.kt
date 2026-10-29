@@ -135,11 +135,54 @@ internal class StaffSpellTargeting(private val settings: StaffSpellSettings, pri
         val look = direction.clone()
         if (!look.lengthSquared().isFinite() || look.lengthSquared() < 1e-9) return look
         look.normalize()
+        if (!homingEnabled(spell)) return look
+        val eye = player.eyeLocation
+        // Do not pull an already accurate ray off a nearer, directly aimed target.
+        if (lineTargets(player, eye, rayEnd(eye, look, range), .05, cast).isNotEmpty()) return look
+        val target = assistTarget(player, cast, look, from, range) ?: return look
+        val targetPoint = staffVisibleTargetPoint(from, target, eye) ?: return look
+        val offset = targetPoint.toVector().subtract(eye.toVector())
+        if (abs(look.y) < 1e-9) offset.y = 0.0
+        return staffNudgeDirection(look, offset, settings.aimAssist.strength)
+    }
+
+    fun homingEnabled(spell: StaffSpell) = settings.aimAssist.let {
+        it.enabled && it.strength > 0.0 && spell.id !in it.excludedSpells
+    }
+
+    /** Acquire once at launch. Mobs retain their existing launch correction and flight behavior. */
+    fun homingTarget(player: Player, spell: StaffSpell, cast: StaffSpellCast?,
+        from: Location = player.eyeLocation, range: Double = settings.range,
+        excluded: Set<java.util.UUID> = emptySet()): Player? {
+        if (!homingEnabled(spell)) return null
+        val eye = player.eyeLocation
+        val look = eye.direction
+        val direct = lineCandidates(player, eye, rayEnd(eye, look, range), .05, cast)
+            .firstOrNull { it.uniqueId !in excluded && damage.eligible(player, it, cast) }
+        // An aimed mob takes priority over a neighboring player too.
+        if (direct != null) return (direct as? Player)?.takeIf {
+            staffVisibleTargetPoint(from, it, eye) != null
+        }
+        return assistTarget(player, cast, look, from, range) { it.uniqueId !in excluded } as? Player
+    }
+
+    /** A lock never grants a hit or a route around cover, and cannot turn back or extend travel. */
+    fun homingPoint(player: Player, target: Player, cast: StaffSpellCast, from: Location,
+        direction: Vector, launchDirection: Vector, remainingDistance: Double): Location? {
+        if (target.world != from.world || !damage.eligible(player, target, cast)) return null
+        val point = staffVisibleTargetPoint(from, target, player.eyeLocation) ?: return null
+        val offset = point.toVector().subtract(from.toVector())
+        if (offset.lengthSquared() > remainingDistance * remainingDistance ||
+            offset.dot(direction) <= 0.0 || offset.dot(launchDirection) <= 0.0) return null
+        return point
+    }
+
+    private fun assistTarget(player: Player, cast: StaffSpellCast?, look: Vector, from: Location,
+        range: Double, include: (LivingEntity) -> Boolean = { true }): LivingEntity? {
         val assist = settings.aimAssist
-        if (!assist.enabled || assist.strength <= 0.0 || spell.id in assist.excludedSpells) return look
         val horizontal = abs(look.y) < 1e-9
         val eye = player.eyeLocation
-        val candidates = nearby(player, eye, range, cast).asSequence().mapNotNull { entity ->
+        val candidates = nearby(player, eye, range, cast).asSequence().filter(include).mapNotNull { entity ->
             val at = center(entity)
             val offset = at.toVector().subtract(eye.toVector())
             if (horizontal) offset.y = 0.0
@@ -148,15 +191,9 @@ internal class StaffSpellTargeting(private val settings: StaffSpellSettings, pri
             val miss = offset.clone().subtract(look.clone().multiply(along)).length()
             if (miss > assist.maxMiss || miss > along * kotlin.math.tan(Math.toRadians(assist.halfAngleDegrees)))
                 return@mapNotNull null
-            Triple(entity, miss / along, at)
+            entity to miss / along
         }.sortedBy { it.second }.take(32).toList()
-        // Do not pull an already accurate ray off a nearer, directly aimed target.
-        val endpoint = rayEnd(eye, look, range)
-        if (lineTargets(player, eye, endpoint, .05, cast).isNotEmpty()) return look
-        val targetPoint = candidates.firstNotNullOfOrNull { staffVisibleTargetPoint(from, it.first, eye) } ?: return look
-        val offset = targetPoint.toVector().subtract(eye.toVector())
-        if (horizontal) offset.y = 0.0
-        return staffNudgeDirection(look, offset, assist.strength)
+        return candidates.firstOrNull { staffVisibleTargetPoint(from, it.first, eye) != null }?.first
     }
 
     /** Exact swept collision along the cast line, never soft acquisition. */

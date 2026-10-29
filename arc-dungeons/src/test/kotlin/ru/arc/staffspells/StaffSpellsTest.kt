@@ -1532,6 +1532,7 @@ internal fun withStaffHarness(
     hudFactory: (() -> StaffSpellHud)? = null,
     targetEligible: (Player, LivingEntity) -> Boolean = { _, target -> target !is Player },
     deniedTarget: (Player, LivingEntity, StaffSpellCast) -> Boolean = { _, _, _ -> false },
+    damageBridge: StaffSpellDamage? = null,
     block: (StaffHarness) -> Unit,
 ) {
     failOnUnsupportedMockBukkitOperation {
@@ -1570,7 +1571,10 @@ internal fun withStaffHarness(
                         val cooldowns = StaffTestCooldowns(scheduler)
                         val damage = mockk<StaffSpellDamage>()
                         every { damage.summonCast = any() } returns Unit
-                        every { damage.reportDeniedTarget(any(), any(), any()) } answers { deniedTarget(firstArg(), secondArg(), thirdArg()) }
+                        every { damage.reportDeniedTarget(any(), any(), any()) } answers {
+                            damageBridge?.reportDeniedTarget(firstArg(), secondArg(), thirdArg()) ?:
+                                deniedTarget(firstArg(), secondArg(), thirdArg())
+                        }
                         every { damage.inputAllowed(any()) } returns true
                         val captures = mutableListOf<Player>()
                         val hits = mutableListOf<LivingEntity>()
@@ -1578,27 +1582,33 @@ internal fun withStaffHarness(
                         val damageScales = mutableListOf<Pair<Double, Double>>()
                         every { damage.eligible(any(), any(), any()) } answers {
                             val target = secondArg<LivingEntity>()
-                            targetEligible(firstArg(), target) && target.isValid && !target.isDead &&
+                            (damageBridge?.eligible(firstArg(), target, thirdArg()) ?: targetEligible(firstArg(), target)) &&
+                                target.isValid && !target.isDead &&
                                 !target.isInvulnerable && target.health > 0.0
                         }
                         every { damage.capture(any(), any()) } answers {
                             val player = firstArg<Player>()
                             captures += player
-                            StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false)
+                            if (damageBridge != null) damageBridge.capture(player, secondArg())
+                            else StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false)
                         }
-                        every { damage.isCurrent(any(), any()) } answers { currentCast(firstArg(), secondArg()) }
-                        fun recordHit(player: Player, target: LivingEntity, power: Double, vanillaDamage: Double): Boolean {
+                        every { damage.isCurrent(any(), any()) } answers {
+                            currentCast(firstArg(), secondArg()) &&
+                                (damageBridge?.isCurrent(firstArg(), secondArg()) ?: true)
+                        }
+                        fun recordHit(player: Player, target: LivingEntity, cast: StaffSpellCast,
+                            power: Double, vanillaDamage: Double): Boolean {
                             hits += target
                             hitLocations += target.location.clone()
                             damageScales += power to vanillaDamage
-                            return hit(player, target)
+                            return damageBridge?.hit(player, target, cast, power, vanillaDamage) ?: hit(player, target)
                         }
                         every { damage.hit(any(), any(), any(), any(), any()) } answers {
-                            recordHit(firstArg(), secondArg(), arg(3), arg(4))
+                            recordHit(firstArg(), secondArg(), thirdArg(), arg(3), arg(4))
                         }
                         // Summoned actors explicitly omit a primary weapon strike; reject any non-null tag.
                         every { damage.hit(any(), any(), any(), any(), any(), null) } answers {
-                            recordHit(firstArg(), secondArg(), arg(3), arg(4))
+                            recordHit(firstArg(), secondArg(), thirdArg(), arg(3), arg(4))
                         }
                         val effects = mockk<StaffSpellDisplayEffects>(relaxed = true)
                         val visualPlays = mutableListOf<StaffVisualPlay>()

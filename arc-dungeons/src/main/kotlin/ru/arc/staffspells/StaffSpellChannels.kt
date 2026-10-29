@@ -57,6 +57,8 @@ internal class StaffSpellChannels(
         var elapsedTicks: Int = 0,
         var impacted: Boolean = false,
         var cancelled: Boolean = false,
+        var target: Player? = null,
+        val launchDirection: Vector = direction.clone(),
     )
 
     private data class PulseTarget(
@@ -197,7 +199,8 @@ internal class StaffSpellChannels(
         effects.moveProjectile(scene, from, direction)
         effects.synchronize(scene, channel.ageTicks)
         flights += Flight(player.uniqueId, channel.cast, channel.tuning, channel.worldId, scene,
-            from.clone(), direction, remaining, INITIAL_THROW_SPEED, channel.ageTicks)
+            from.clone(), direction, remaining, INITIAL_THROW_SPEED, channel.ageTicks,
+            target = targeting.homingTarget(player, StaffSpell.GRAVITY, channel.cast, from, GRAVITY_TARGET_RANGE))
         visuals.withOwner(player.uniqueId) {
             visuals.cue(from, Sound.BLOCK_STONE_HIT, volume = 0.42f, pitch = 0.68f)
             visuals.cue(from, Sound.ENTITY_BREEZE_SHOOT, volume = 0.32f, pitch = 0.72f)
@@ -419,6 +422,13 @@ internal class StaffSpellChannels(
                 return@forEach
             }
             val from = flight.position.clone()
+            flight.target?.let { target ->
+                val point = targeting.homingPoint(player, target, flight.cast, from, flight.direction,
+                    flight.launchDirection, flight.remaining)
+                if (point == null) flight.target = null
+                else steerStaffBolt(flight.direction, point.toVector().subtract(from.toVector()),
+                    flight.elapsedTicks, settings.aimAssist.strength)
+            }
             val blockEnd = targeting.rayEnd(from, flight.direction, step)
             val victim = targeting.lineTargets(player, from, blockEnd, GRAVITY_SWEEP_WIDTH, flight.cast).firstOrNull()
             val actualEnd = victim?.let { target ->

@@ -62,6 +62,7 @@ internal class StaffSpellArsenal(
         var tideImpactPoint: Location? = null,
         var tideBurstApplied: Boolean = false,
         var travelPoint: Location? = null,
+        var homingTarget: Player? = null,
         var galeImpactAge: Int? = null,
         var galeImpactPoint: Location? = null,
         var novaPaths: List<StaffRootBranch> = emptyList(),
@@ -248,7 +249,10 @@ internal class StaffSpellArsenal(
         val endpoint = eye.clone().add(direction.clone().multiply(range))
         val a = Attack(player.uniqueId, spell, input, cast.copy(visualCharge = q), tuning,
             origin, endpoint, endpoint, endpoint, direction, emptyList(), 2.2 + q,
-            staffArsenalLifetime(spell, input.secondary)).apply { travelPoint = origin.clone() }
+            staffArsenalLifetime(spell, input.secondary)).apply {
+                travelPoint = origin.clone()
+                homingTarget = targeting.homingTarget(player, spell, cast, origin, range)
+            }
         admit(a)
         scene(a, origin, a.duration, endpoint, controllerDriven = true)
         frame(a, player)
@@ -389,14 +393,9 @@ internal class StaffSpellArsenal(
             return
         }
 
-        val from = tideFlightPoint(a, a.age - 2)
-        val intendedAt = tideFlightPoint(a, a.age)
-        val path = intendedAt.toVector().subtract(from.toVector())
-        val pathLength = path.length()
-        val at = if (pathLength.isFinite() && pathLength > .001)
-            targeting.rayEnd(from, path.multiply(1.0 / pathLength), pathLength)
-        else from.clone()
-        val blocked = at.distanceSquared(intendedAt) > .0001
+        val step = airStep(a, player, tideFlightProgress(a.age - 2), tideFlightProgress(a.age))
+        val from = step.from
+        val at = step.to
 
         if (a.age >= STAFF_TIDE_PRIMARY_LAUNCH_TICK) {
             val firstContact = targeting.lineTargets(player, from, at, TIDE_ORB_HIT_WIDTH, a.cast).firstOrNull()
@@ -409,7 +408,7 @@ internal class StaffSpellArsenal(
             }
         }
 
-        if (blocked || a.age >= STAFF_TIDE_PRIMARY_ARRIVAL_TICK) {
+        if (step.blocked || a.age >= STAFF_TIDE_PRIMARY_ARRIVAL_TICK) {
             beginTideImpact(a, player, at)
             return
         }
@@ -432,11 +431,26 @@ internal class StaffSpellArsenal(
         return contact?.toLocation(from.world) ?: to.clone()
     }
 
-    private fun tideFlightPoint(a: Attack, ageTicks: Int): Location {
-        val progress = ((ageTicks - STAFF_TIDE_PRIMARY_LAUNCH_TICK).toDouble() /
-            STAFF_TIDE_PRIMARY_TRAVEL_TICKS).coerceIn(0.0, 1.0)
-        val delta = a.travelEnd.toVector().subtract(a.origin.toVector())
-        return a.origin.clone().add(delta.multiply(progress))
+    private fun tideFlightProgress(ageTicks: Int) = ((ageTicks - STAFF_TIDE_PRIMARY_LAUNCH_TICK).toDouble() /
+        STAFF_TIDE_PRIMARY_TRAVEL_TICKS).coerceIn(0.0, 1.0)
+
+    /** Preserve the authored travel clock and distance while a visible player changes heading. */
+    private fun airStep(a: Attack, player: Player, previousProgress: Double, progress: Double): GroundPathStep {
+        val from = a.travelPoint?.clone() ?: a.origin.clone()
+        val launch = a.travelEnd.toVector().subtract(a.origin.toVector())
+        val distance = launch.length()
+        val step = distance * (progress - previousProgress).coerceAtLeast(0.0)
+        if (step <= .001) return GroundPathStep(from, from.clone(), false)
+        a.homingTarget?.let { target ->
+            val point = targeting.homingPoint(player, target, a.cast, from, a.forward, launch,
+                distance * (1.0 - previousProgress))
+            if (point == null) a.homingTarget = null
+            else steerStaffBolt(a.forward, point.toVector().subtract(from.toVector()), a.age,
+                settings.aimAssist.strength)
+        }
+        val at = targeting.rayEnd(from, a.forward, step)
+        a.travelPoint = at.clone()
+        return GroundPathStep(from, at, from.distanceSquared(at) < step * step - .0001)
     }
 
     private fun beginTideImpact(a: Attack, player: Player, at: Location) {
@@ -734,13 +748,9 @@ internal class StaffSpellArsenal(
         }
 
         val progress = ((a.age - 4) / GALE_RAM_TRAVEL_TICKS).coerceIn(0.0, 1.0)
-        val from = a.travelPoint?.clone() ?: a.origin.clone()
-        val requested = along(a, progress)
-        val delta = requested.toVector().subtract(from.toVector())
-        val clipped = if (delta.lengthSquared() > .0001) targeting.rayEnd(from, delta, delta.length()) else from
-        val step = GroundPathStep(from, clipped, clipped.distanceSquared(requested) > .0001)
+        val previousProgress = ((a.age - 6) / GALE_RAM_TRAVEL_TICKS).coerceIn(0.0, 1.0)
+        val step = airStep(a, player, previousProgress, progress)
         val at = step.to
-        a.travelPoint = at.clone()
         val burstRadius = galeRamBurstRadius(a)
         particles(a, at, a.age, a.duration, radius = burstRadius)
         a.scenes.firstOrNull()?.let { id ->

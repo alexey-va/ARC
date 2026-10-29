@@ -98,6 +98,8 @@ private class AimFixture {
     val victim = mockk<LivingEntity>()
     private val damage = mockk<StaffSpellDamage>()
     init {
+        every { player.uniqueId } returns java.util.UUID.randomUUID()
+        every { victim.uniqueId } returns java.util.UUID.randomUUID()
         every { world.isChunkLoaded(any<Int>(), any<Int>()) } returns true
         every { world.rayTraceBlocks(any<io.papermc.paper.math.Position>(), any<Vector>(), any<Double>(),
             any<FluidCollisionMode>(), any<Boolean>(), any<java.util.function.Predicate<org.bukkit.block.Block>>()) } returns null

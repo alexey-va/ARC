@@ -204,14 +204,23 @@ and a positive `custom-model-data`; the bundled defaults leave both unset.
 
 ## Targeting and lifecycle
 
-Launch aim assist is controlled by `targeting.aim-assist`: enabled, half-angle
+Aim assist is controlled by `targeting.aim-assist`: enabled, half-angle
 (default 8 degrees), maximum miss (2 blocks), strength (0.70) and excluded spell
 IDs. It nudges eligible forward projectiles toward a nearby visible target;
 it preserves exact reticle hits, never grants a hit, and retains swept collision
 and cover checks. Ground-travelling effects preserve their horizontal direction.
-Primary ranged casts reach up to 56 blocks. Lightning uses this same launch
-correction for its first projectile, with no persistent target lock; only a real
-impact starts the existing homing chain jumps. Radial pulses, selected ground
+Primary ranged casts reach up to 56 blocks. Against eligible players, primary
+lightning, ember, icicles and the tide orb, secondary Gale's airborne ram, and
+the released Gravity boulder also retain a target acquired near the launch aim.
+They steer toward its currently exposed body while it moves, without requiring
+the caster to keep the reticle on it. A directly aimed entity takes priority over
+soft acquisition. Each flight step rechecks eligibility, shared eye/projectile
+visibility, forward travel and the original remaining distance; loss ends that
+projectile's lock. A miss does not start searching during flight. The existing
+icicle volley replacement cadence remains bounded. Player pursuit uses the
+configured assist strength and obeys its enabled and excluded-spell controls.
+PvE keeps its existing launch correction and targeting. Only a real lightning
+impact starts chain jumps. Fixed lance beams, radial pulses, selected ground
 zones and summons keep their own targeting; soft target selection uses an
 eight-degree cone. Close attacks retain their seven-block reach.
 
@@ -221,13 +230,17 @@ satisfy visibility; these sampled body points stay inside the existing hitbox
 and do not enlarge damage collision.
 
 Icicles share one live focus across airborne and delayed shards. A direct
-reticle acquisition or real collision establishes it; an initial near miss
-still receives only fractional launch assistance. Death, invalidation, cover
-or moving the reticle away releases focus and discards the obsolete aim point.
+reticle acquisition, assisted player acquisition or real collision establishes
+it. A near-missed mob still receives only fractional launch assistance. Death,
+invalidation or cover releases focus and discards the obsolete aim point.
+Moving the reticle away releases the existing mob focus; an assisted player
+focus instead lasts while the player remains visible and ahead of the shard.
 A replacement must be near the current reticle, visible from the eye and shard,
 ahead of the shard and reachable within its original remaining travel budget.
-Soft replacement obeys the configured assist switches, cone (at most 12 degrees)
-and maximum miss; retention allows 1.5 times those bounds, capped at 18 degrees.
+Soft replacement obeys the configured assist switches, cone and maximum miss;
+mob replacement keeps its 12-degree cap and mob retention allows 1.5 times those
+bounds, capped at 18 degrees. With assist disabled or excluded, direct icicle
+focus retains its original reticle-based behavior.
 With no replacement, airborne shards continue their current heading. Empty-space
 launches retain their individual sampled aim. A blocked launch step may turn up
 to 45 degrees onto an already clear straight line to the aim point; it cannot
