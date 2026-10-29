@@ -246,9 +246,9 @@ object AuroraSkyShapes {
                 val vertex = weave(1.0)
                 val finish = sampleCurve(count - first + 1) { t ->
                     val lift = t * t * (3.0 - 2.0 * t)
-                    if (head == 0) AuroraOffset(vertex.x + t * 0.35,
+                    if (head == 0) AuroraOffset(vertex.x + t * 0.1,
                         vertex.y - lift * 0.15, vertex.z)
-                    else AuroraOffset(vertex.x + t * 0.85, vertex.y + lift * 0.55,
+                    else AuroraOffset(vertex.x + t * 0.55, vertex.y + lift * 0.65,
                         vertex.z + (head - 1.5) * lift * 0.16)
                 }.drop(1)
                 start + finish

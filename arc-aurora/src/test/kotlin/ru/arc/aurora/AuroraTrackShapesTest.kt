@@ -140,7 +140,14 @@ class AuroraTrackShapesTest : FreeSpec({
         (heads[1][27].y < heads[2][27].y) shouldBe true
         (heads[0].last().x + 3.0 < heads[1].last().x) shouldBe true
         (heads[0].last().y < heads[0][27].y) shouldBe true
-        for (leader in heads.drop(1)) (leader.last().y > leader[27].y + 3.0) shouldBe true
+        (heads[0].last().x - heads[0][27].x in 0.65..0.75) shouldBe true
+        for (leader in heads.drop(1)) {
+            val rise = leader.last().y - leader[27].y
+            val forward = leader.last().x - leader[27].x
+            (rise > 4.5) shouldBe true
+            // The exit is primarily upward; forward travel must not hide the two-leader gesture.
+            (rise > forward * 1.1) shouldBe true
+        }
     }
 
     "kink keeps its vertex and changes heading without a gap" {
