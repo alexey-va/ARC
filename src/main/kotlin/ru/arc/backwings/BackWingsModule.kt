@@ -259,7 +259,9 @@ internal class BackWingsRuntime(
                 state.display = it
                 it.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.NONE
                 it.pauseWhenNotObserved = false
-                it.interpolationDuration = 0
+                // Interpolate each 20 Hz body pose at render-frame rate; passenger XYZ stays native.
+                it.interpolationDelay = 0
+                it.interpolationDuration = 1
                 it.teleportDuration = 0
                 // Zero bounds disables client frustum culling of the wide transformed mesh.
                 it.displayWidth = 0f

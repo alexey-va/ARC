@@ -99,6 +99,12 @@ class BackWingsRuntimeTest : FreeSpec({
             f.player.location.pitch shouldBe 10f
             val display = f.spawned.single()
             val radians = (Math.PI / 180.0).toFloat()
+            // A correct quaternion still visibly snaps at 20 Hz when native interpolation is zero.
+            verify(exactly = 1) {
+                display.interpolationDelay = 0
+                display.interpolationDuration = 1
+                display.teleportDuration = 0
+            }
 
             // Exact 26.3 DisplayRenderer FIXED order: entity rotationYXZ(-yaw, +pitch, 0),
             // then the display transformation. Passenger positionRider changes XYZ only.

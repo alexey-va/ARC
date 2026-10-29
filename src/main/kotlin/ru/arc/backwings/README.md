@@ -37,8 +37,11 @@ anchor is relative to feet in body axes: +X left, +Y up, +Z forward at yaw zero.
 crouch torso lean, then subtracts the full native passenger origin `player.height`.
 Display entity yaw and pitch are zero: the FIXED renderer applies those angles before
 the transformation. Camera pitch is not used. `pauseWhenNotObserved = false` keeps the owner's third-person
-view active. Transform and teleport interpolation durations are zero; translational
-motion belongs to the native passenger relation rather than repeated world teleports.
+view active. Transform interpolation lasts one tick with zero delay, so native quaternion
+SLERP draws intermediate render frames between the 20 Hz poses. Core restarts interpolation
+when a transform changes. Teleport interpolation stays zero; world motion belongs to the
+native passenger relation rather than repeated world teleports. Quaternion SLERP chooses
+the short arc across yaw wrapping; a longer duration would add unnecessary turn lag.
 
 Paper's `bodyYaw` is only an initial baseline. Native 26.3 recording showed the server
 remaining at 50° while the walking client's torso reached 1.4°, and at -40° while the
