@@ -111,7 +111,7 @@ The initial home guide has priority over the optional bossbar and sidebar rows.
 
 `optional-quests` in `modules/onboarding.yml` configures the enable switch, guide
 NPCs, arrival areas, and text. It defaults to disabled outside the configured
-Spawn runtime. NPC 426 (Garret), 452 (casino guide), and 393 (farm guide) use the
+Spawn runtime. NPC 426 (Garret), 452 (casino guide), and 464 (farm guide) use the
 existing personal quest marker and open the corresponding journal on click.
 Their Citizens command traits must be removed when enabling these guides.
 The same journals are available at `/arc onboarding adventure`, `casino`, and
