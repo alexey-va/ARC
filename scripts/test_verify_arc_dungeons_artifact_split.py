@@ -41,6 +41,10 @@ ARC_CORE_ENTRIES = {
     "ru/arc/paper/api/ArcBlockProtectionService$DefaultImpls.class",
     "ru/arc/paper/api/ArcVisualPacketBudget.class",
     "ru/arc/paper/api/ArcAfkProvider.class",
+    "ru/arc/paper/api/ArcDisplayPassengerService.class",
+    "ru/arc/paper/api/ArcDisplayPassengerOwner.class",
+    "ru/arc/paper/api/ArcSceneObservationService.class",
+    "ru/arc/paper/api/ArcNameplateClaim.class",
     PAPER_API_VISUAL_CLASS,
     *(f"{provider}.class" for provider in PROVIDER_CLASSES),
     *(f"{prefix}.class" for prefix in ARC_CORE_RUNTIME_CLASS_PREFIXES),
@@ -236,6 +240,18 @@ class ArtifactSplitTest(unittest.TestCase):
             DUNGEONS_DESCRIPTOR,
         )
         self.assertTrue(any("missing shared Paper API family VisualPacketAdmission" in value for value in visual_missing_from_core))
+
+    def test_passenger_apis_and_provider_have_one_host_owner(self) -> None:
+        for entry in (
+            "ru/arc/paper/api/ArcDisplayPassengerService.class",
+            "ru/arc/paper/api/ArcDisplayPassengerOwner.class",
+            "ru/arc/paper/display/PaperDisplayPassengerServiceProvider.class",
+        ):
+            with self.subTest(entry=entry):
+                self.assertIn(entry, ARC_CORE_ENTRIES)
+                errors = verify(ARC_ENTRIES | {entry}, ARC_CORE_ENTRIES, DUNGEONS_ENTRIES,
+                                ARC_DESCRIPTOR, ARC_CORE_DESCRIPTOR, DUNGEONS_DESCRIPTOR)
+                self.assertTrue(any("ARC JAR embeds ArcCore" in error for error in errors))
 
     def test_visual_apis_are_single_shared_host_contracts(self) -> None:
         budget = "ru/arc/paper/api/ArcVisualPacketBudget.class"

@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 PAPER_API_PACKAGE = "ru/arc/paper/api/"
-ARC_CORE_API_PREFIXES = ("ArcSql", "ArcRedis", "ArcMetric", "ArcSchematic", "ArcBlockProtectionService", "ArcNativeCleanupService", "ArcVisualPacketBudget", "VisualPacketAdmission", "ArcAfkProvider")
+ARC_CORE_API_PREFIXES = ("ArcSql", "ArcRedis", "ArcMetric", "ArcSchematic", "ArcBlockProtectionService", "ArcNativeCleanupService", "ArcVisualPacketBudget", "VisualPacketAdmission", "ArcAfkProvider", "ArcDisplayPassenger", "ArcScene", "ArcNameplateClaim")
 PAPER_API_VISUAL_CLASS = "ru/arc/paper/api/VisualPacketAdmission.class"
 DOMAIN_API_PACKAGES = (
     "ru/arc/dungeons/api/",
@@ -23,6 +23,9 @@ DOMAIN_API_CLASSES = (
     "ru/arc/staffspells/api/ArcStaffSpellService.class",
 )
 PROVIDER_CLASSES = (
+    "ru/arc/paper/scene/PaperSceneObservationServiceProvider",
+    "ru/arc/paper/scene/PaperSceneEntityInfoServiceProvider",
+    "ru/arc/paper/display/PaperDisplayPassengerServiceProvider",
     "ru/arc/paper/redis/PaperRedisServiceProvider",
     "ru/arc/paper/redis/SharedPaperRedisService",
     "ru/arc/paper/sql/PaperSqlServiceProvider",
