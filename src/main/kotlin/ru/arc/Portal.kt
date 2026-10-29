@@ -130,7 +130,6 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
                 createOriginGate(player, centerBlock!!)
                 task = createTask()
                 portals[player.uniqueId] = this
-                player.sendMessage(config.component("portal.message", "<green>Портал создан!"))
             }
         }
     }

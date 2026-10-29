@@ -17,6 +17,7 @@ class CommandHideConfigTest :
                 enabled: true
                 strip-command-namespace: false
                 hide-namespaced-roots: false
+                visible-namespaced-roots: [huskhomes:back]
                 default-group: player
                 bypass-permission: arc.command.hide.staff
                 policy-cache: 2s
@@ -35,6 +36,7 @@ class CommandHideConfigTest :
             config.enabled shouldBe true
             config.stripCommandNamespace shouldBe false
             config.hideNamespacedRoots shouldBe false
+            config.visibleNamespacedRoots shouldContainExactly listOf("huskhomes:back")
             config.defaultGroup shouldBe "player"
             config.bypassPermission shouldBe "arc.command.hide.staff"
             config.policyCacheMillis shouldBe 2_000L

@@ -23,6 +23,9 @@ open class CommandHideModuleConfig(
     open val hideNamespacedRoots: Boolean
         get() = config.bool("hide-namespaced-roots", true)
 
+    open val visibleNamespacedRoots: List<String>
+        get() = config.stringList("visible-namespaced-roots", listOf("huskhomes:back"))
+
     open val defaultGroup: String
         get() = config.string("default-group", "")
 
@@ -60,4 +63,5 @@ class TestCommandHideModuleConfig(
     override val policyCacheMillis: Long = 5_000L,
     override val blockedMessage: String = "blocked",
     override val groups: List<CommandHideGroupConfig> = emptyList(),
+    override val visibleNamespacedRoots: List<String> = listOf("huskhomes:back"),
 ) : CommandHideModuleConfig(EmptyConfig)

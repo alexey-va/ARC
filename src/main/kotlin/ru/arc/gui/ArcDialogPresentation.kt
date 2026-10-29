@@ -31,6 +31,7 @@ internal class ArcDialogPresentation(font: String) {
         val action = when (button.id.value) {
             "search", "find_player", "search_again", "empty_search" -> 27
             "settings" -> 30
+            "graves" -> 33
             "save" -> 26
             "confirm", "relocate_confirm", "tpa_accept", "duel_accept" -> 21
             "delete", "delete_confirm" -> 38
@@ -43,7 +44,7 @@ internal class ArcDialogPresentation(font: String) {
         val decoration = decoration ?: return button
         if (button.width !in 64..1024) return button
         val base = if (back) 0xF9050 else 0xF9000 + (action - 21) * 4
-        val icon = glyph(0xF9060 + action - 21, if (action == 38) 10 else 11)
+        val icon = glyph(0xF9060 + action - 21, if (action == 33 || action == 38) 10 else 11)
         // Replace known ornamental prefixes only on these explicit static controls.
         val prefix = when {
             back -> "‹ "
@@ -55,7 +56,7 @@ internal class ArcDialogPresentation(font: String) {
             it.match("^" + Regex.escape(prefix)).replacement(Component.empty()).once()
         }
         label = label.replaceText {
-            it.match(" ›$").replacement(Component.empty()).once()
+            it.match(" ?›$").replacement(Component.empty()).once()
         }
         val frame = DialogDecoration.ButtonFrame(glyph(base, 16), glyph(base + 1, 17), glyph(base + 3, 15))
         return button.copy(label = decoration.buttonLabel(label, button.width, frame, icon))

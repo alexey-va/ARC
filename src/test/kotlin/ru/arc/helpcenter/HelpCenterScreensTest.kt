@@ -201,6 +201,12 @@ class HelpCenterScreensTest {
             withClue("Main summary field icon U+${icon.toString(16)}") { (icon in rootPoints) shouldBe true }
         }
         rootPoints.intersect(setOf(0x1F4B0, 0xE516)) shouldBe emptySet()
+        gravesCount = 0
+        open(HelpCenterPage.ROOT)
+        screens["root-empty"] = screen
+        screen.buttons.any { it.id.value == "graves" } shouldBe false
+        screen.buttons.map { it.id } shouldBe screens.getValue("root").buttons.drop(1).map { it.id }
+        gravesCount = 2
         every { gateway.loadProfile(player, any()) } returns CompletableFuture.completedFuture(ordinaryProfile.copy(
             playerName = "Long_Player_1234", balance = "123 456 789.99", rank = "Исследователь",
         ))
@@ -431,7 +437,7 @@ class HelpCenterScreensTest {
         ) }
         Files.writeString(output.parent.resolve("components.json"), GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create().toJson(components))
         val checkedScreens = screens.filterKeys { !it.endsWith("-plain") }
-        val highlightedActions = setOf("search", "settings")
+        val highlightedActions = setOf("graves", "search", "settings")
         for ((name, view) in checkedScreens) {
             for (button in view.buttons + listOfNotNull(view.exitButton)) {
                 withClue("$name/${button.id.value}: ${plain(button.label)}") {
@@ -593,20 +599,43 @@ class HelpCenterScreensTest {
     }
 
     @Test
-    fun `active graves are the first root action and keep their count when clicked`() {
-        gravesCount = 2
-        open(HelpCenterPage.ROOT)
+    fun `active graves are highlighted first and open own graves in both font modes`() {
+        val plugin = paper.createSimplePlugin("GravesRoot")
+        for ((index, font) in listOf("", "arc:dialog_ui").withIndex()) {
+            controller.close()
+            controller = newController(plugin, font)
+            gravesCount = 2
+            open(HelpCenterPage.ROOT)
 
-        val graves = screen.buttons.first()
-        assertEquals("graves", graves.id.value)
-        assertEquals("Могилы: 2 ›", plain(graves.label))
-        assertFalse(graves.closeDialogBeforeAction)
-        val root = screen
+            val graves = screen.buttons.first()
+            assertEquals("graves", graves.id.value)
+            val points = plain(graves.label).codePoints().toArray()
+            val caption = points.filter { it < 0xF0000 }.map { it.toChar() }.joinToString("").trimEnd()
+            assertEquals(if (font.isEmpty()) "Мои могилы: 2 ›" else "Мои могилы: 2", caption)
+            assertEquals(font.isNotEmpty(), 0xF9030 in points)
+            assertEquals(font.isNotEmpty(), 0xF906C in points)
+            assertTrue(GsonComponentSerializer.gson().serialize(graves.label).contains("\"bold\":true"))
+            assertEquals(166, graves.width)
+            assertFalse(graves.closeDialogBeforeAction)
+            val root = screen
 
-        click("graves")
+            click("graves")
 
-        assertEquals(1, gravesOpenCalls)
-        assertSame(root, screen)
+            assertEquals(index + 1, gravesOpenCalls)
+            assertEquals(0, dialogCloses)
+            assertTrue(executed.isEmpty())
+            assertSame(root, screen)
+
+            gravesCount = 0
+            open(HelpCenterPage.ROOT)
+            assertFalse(screen.buttons.any { it.id.value == "graves" })
+            assertEquals(root.buttons.drop(1).map { it.id to it.width }, screen.buttons.map { it.id to it.width })
+
+            gravesCount = 1
+            open(HelpCenterPage.ROOT)
+            assertEquals("graves", screen.buttons.first().id.value)
+            assertTrue(plain(screen.buttons.first().label).contains("Мои могилы: 1"))
+        }
     }
 
     @Test

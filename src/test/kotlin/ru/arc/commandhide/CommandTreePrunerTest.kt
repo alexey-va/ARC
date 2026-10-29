@@ -5,6 +5,7 @@ import com.mojang.brigadier.tree.RootCommandNode
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
+import io.kotest.matchers.shouldBe
 
 class CommandTreePrunerTest :
     FreeSpec({
@@ -57,6 +58,35 @@ class CommandTreePrunerTest :
             root.getChild("pwarp").shouldNotBeNull()
             root.getChild("playerwarps:pwarp").shouldBeNull()
             root.getChild("rediseconomy:pay").shouldBeNull()
+        }
+
+        "keeps the exact death return root for client clicks and still hides other namespaces" {
+            val root = RootCommandNode<Any>()
+            listOf("huskhomes:back", "cmi:back", "bukkit:plugins").forEach {
+                root.addChild(LiteralArgumentBuilder.literal<Any>(it).build())
+            }
+            val policy = CommandHideSnapshot.compile(TestCommandHideModuleConfig(
+                defaultGroup = "player", groups = listOf(CommandHideGroupConfig("player")),
+            )).policy { false }
+
+            CommandTreePruner.prune(root, policy)
+
+            root.getChild("huskhomes:back").shouldNotBeNull()
+            root.getChild("cmi:back").shouldBeNull()
+            root.getChild("bukkit:plugins").shouldBeNull()
+            policy.filterCompletions("/", listOf("huskhomes:back", "cmi:back")) shouldBe listOf("huskhomes:back")
+            policy.blocks("/huskhomes:back") shouldBe false
+        }
+
+        "a visible namespaced root cannot bypass command blocking" {
+            val policy = CommandHideSnapshot.compile(TestCommandHideModuleConfig(
+                defaultGroup = "player",
+                groups = listOf(CommandHideGroupConfig("player", commands = listOf("back **"))),
+            )).policy { false }
+
+            policy.hidesRoot("huskhomes:back") shouldBe true
+            policy.blocks("/huskhomes:back") shouldBe true
+            policy.filterCompletions("/", listOf("huskhomes:back")) shouldBe emptyList()
         }
 
     })

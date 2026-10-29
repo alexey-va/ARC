@@ -186,6 +186,7 @@ internal class CommandHidePolicy(
     val stripCommandNamespace: Boolean,
     private val hideNamespacedRoots: Boolean,
     val blockedMessage: Component?,
+    private val visibleNamespacedRoots: Set<String> = emptySet(),
 ) {
     private val index = CommandPatternIndex.compile(patterns)
 
@@ -204,7 +205,7 @@ internal class CommandHidePolicy(
     fun matchTreePath(path: List<CommandTreeToken>): CommandTreeMatch = index.matchTreePath(path)
 
     fun hidesRoot(commandLabel: String): Boolean =
-        (hideNamespacedRoots && ':' in commandLabel) ||
+        hidesNamespace(commandLabel) ||
             index.blocksRootSubtree(normalizeLiteral(commandLabel, stripCommandNamespace)) ||
             blocks(commandLabel)
 
@@ -214,14 +215,15 @@ internal class CommandHidePolicy(
     ): List<String> {
         return completions.filterNot { completion ->
             val namespacedRoot =
-                hideNamespacedRoots &&
-                    completionCandidate(buffer, completion, stripCommandNamespace = false)
-                        ?.firstOrNull()
-                        ?.contains(':') == true
+                completionCandidate(buffer, completion, stripCommandNamespace = false)
+                    ?.firstOrNull()?.let(::hidesNamespace) == true
             namespacedRoot ||
                 completionCandidate(buffer, completion, stripCommandNamespace)?.let(::blocksTokens) == true
         }
     }
+
+    private fun hidesNamespace(root: String): Boolean =
+        hideNamespacedRoots && ':' in root && root.lowercase(java.util.Locale.ROOT) !in visibleNamespacedRoots
 
     companion object {
         fun empty(stripCommandNamespace: Boolean = true): CommandHidePolicy =

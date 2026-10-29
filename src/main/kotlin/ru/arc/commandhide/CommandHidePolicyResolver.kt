@@ -17,6 +17,7 @@ internal class CommandHideSnapshot private constructor(
     val enabled: Boolean,
     val stripCommandNamespace: Boolean,
     val hideNamespacedRoots: Boolean,
+    private val visibleNamespacedRoots: Set<String>,
     val bypassPermission: String,
     val policyCacheNanos: Long,
     val blockedMessage: Component?,
@@ -47,6 +48,7 @@ internal class CommandHideSnapshot private constructor(
                 stripCommandNamespace = stripCommandNamespace,
                 hideNamespacedRoots = hideNamespacedRoots,
                 blockedMessage = blockedMessage,
+                visibleNamespacedRoots = visibleNamespacedRoots,
             )
         }
     }
@@ -116,6 +118,13 @@ internal class CommandHideSnapshot private constructor(
                 enabled = config.enabled,
                 stripCommandNamespace = config.stripCommandNamespace,
                 hideNamespacedRoots = config.hideNamespacedRoots,
+                visibleNamespacedRoots = config.visibleNamespacedRoots.map { root ->
+                    root.trim().lowercase(Locale.ROOT).also {
+                        require(it.matches(Regex("[a-z0-9._-]+:[a-z0-9._-]+"))) {
+                            "Invalid visible namespaced command root '$root'"
+                        }
+                    }
+                }.toSet(),
                 bypassPermission = config.bypassPermission.trim().lowercase(Locale.ROOT),
                 policyCacheNanos = TimeUnit.MILLISECONDS.toNanos(config.policyCacheMillis),
                 blockedMessage = config.blockedMessage.takeIf(String::isNotBlank)?.let(TextUtil::mm),

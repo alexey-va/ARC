@@ -84,7 +84,6 @@ portal:
   # Выполнять commands-only CMI portal, если игрок подключился уже внутри cuboid
   cmi-command-only-on-join: false
   # Сообщение при появлении портала (MiniMessage)
-  message: <white></white> <dark_green>Недалеко появляется портал...
   # Дистанция отображения частиц
   particle-distance: 50.0
   # Новые настройки animation и origin-gate добавляются сюда при запуске

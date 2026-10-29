@@ -54,7 +54,7 @@ text:
   search-catalog-title: "<italic:false><#86dcf1>Разделы справочника"
   search-catalog-tooltip: "<italic:false><#e8dfd2>Просмотреть игровые возможности и руководства по темам."
   search-catalog-label: "<italic:false><#ffffff>Все разделы ›"
-  main-graves-label: '<#c4a7e7>Могилы: <#ffffff><count> <#c4a7e7>›'
+  main-graves-label: '<#c4a7e7><bold>Мои могилы: <#ffffff><count> <#c4a7e7>›</bold>'
   graves-tooltip: '<#e8dfd2>Открыть список активных могил и вернуть вещи.'
   main-now-label: '<#86dcf1>Мой профиль'
   main-teams-label: '<#f3a2c9>Кланы'

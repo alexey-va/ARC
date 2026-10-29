@@ -16,6 +16,11 @@ strip-command-namespace: true
 # ограниченным игрокам, но сами команды не блокируются только из-за namespace.
 hide-namespaced-roots: true
 
+# Команда кликабельного возврата должна оставаться в дереве клиента.
+# Исключение меняет только видимость: права и блокирующие шаблоны сохраняются.
+visible-namespaced-roots:
+- huskhomes:back
+
 # До загрузки permissions применяется fail-closed политика обычного игрока.
 # После join дерево пересобирается и bypass/другие группы учитываются точно.
 default-group: "player"
