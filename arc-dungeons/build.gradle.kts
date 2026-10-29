@@ -106,6 +106,9 @@ tasks.shadowJar {
     // These contracts and host implementations have a single runtime owner: ARC.
     exclude("ru/arc/paper/api/**", "ru/arc/dungeons/api/**", "ru/arc/staffspells/api/**", "ru/ruscrafting/onboarding/api/**")
     exclude("ru/arc/paper/packet/PaperVisualPacketRuntime*.class")
+    exclude("ru/arc/paper/display/PaperDisplayPassengerServiceProvider*.class")
+    exclude("ru/arc/paper/scene/PaperSceneObservationServiceProvider*.class")
+    exclude("ru/arc/paper/scene/PaperSceneEntityInfoServiceProvider*.class")
     exclude("ru/arc/paper/redis/PaperRedisServiceProvider*", "ru/arc/paper/sql/PaperSqlServiceProvider*",
         "ru/arc/paper/metrics/PaperArcMetricsProvider*")
     exclude("ru/arc/paper/redis/SharedPaperRedisService*", "ru/arc/paper/sql/SharedPaperSqlService*")
