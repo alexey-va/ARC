@@ -3,11 +3,22 @@
 # No resource pack, world lighting, entities, terrain edits or forced chunk loads.
 permission: arcaurora.view
 interval-ticks: 10
-viewers-per-tick: 8
+viewers-per-tick: 32 # Keep nightly contours refreshed for a shared audience; the Main deadline still applies.
 attempts-per-viewer: 8
 packets-per-viewer: 12
 sky-packets-per-viewer: 36
 native-budget-micros: 1500
+
+# Automatic sky figures for every player at night, using each world's own clock.
+# Personal /arcaurora off still applies. Preview and temporary events take priority.
+# /arcaurora reload applies this section together with the selected preset.
+night-sky:
+  enabled: true
+  preset: treasure-hunt
+  time-start: 13000
+  time-end: 23000
+  worlds: ['*']
+  environments: [NORMAL]
 
 # Both observed limits must pass before new ambient/event submissions.
 # The rolling window uses available samples; 10 samples at 20 ticks is nominally 10 s.
@@ -51,6 +62,8 @@ sky-defaults:
   helix-turns: 2
   helix-radius: 0.3
   arc-sweep-degrees: 240
+  meteor-split: 0.6 # Fraction of samples used by the fast flight before fragments separate.
+  meteor-spread: 0.35 # Fragment travel as a fraction of shape-size.
 
 # Optional exact, single-hop aliases. Read the actual key with /arcaurora biome.
 # Iris namespaces/paths depend on the installed generator pack; none are assumed here.
@@ -530,6 +543,9 @@ event-presets:
       offset-z: 0
       speed: 0
       sky-refresh-ticks: 0
+      sky-options:
+        helix-turns: 3.5 # A short native tail shows a visible curl, rather than a nearly straight stroke.
+        helix-radius: 0.38
     ember_arc:
       biomes:
       - '*'
@@ -580,3 +596,74 @@ event-presets:
       offset-z: 0
       speed: 0
       sky-refresh-ticks: 0
+    sky_crystal:
+      biomes: ['*']
+      sky-scene: true
+      scene-duration-ticks: 360
+      spawn-delay-ticks: 55
+      sky-tracers: 2 # Two separated lines gradually trace the twelve edges.
+      motion-period-ticks: 900
+      update-ticks: 1
+      radius: 96
+      min-distance: 30
+      vertical-min: 30
+      vertical-max: 58
+      shape: CRYSTAL
+      shape-size: 5
+      points: 24
+      sky-points: 160
+      particle: minecraft:end_rod
+      count: 1
+      sky-refresh-ticks: 40 # Complete revisit before the shortest 60-tick native lifetime.
+      sky-options:
+        stroke-drift: 0 # Keep the contour closed while its two heads advance.
+        stroke-lift: 0
+        held-drift: 0.035
+        held-lift: 0.015
+        roll-radians: 0.2
+    sky_star:
+      biomes: ['*']
+      sky-scene: true
+      scene-duration-ticks: 340
+      spawn-delay-ticks: 75
+      sky-tracers: 2
+      motion-period-ticks: 1000
+      update-ticks: 1
+      radius: 96
+      min-distance: 30
+      vertical-min: 32
+      vertical-max: 60
+      shape: STAR
+      shape-size: 5.5
+      points: 24
+      sky-points: 120
+      particle: minecraft:end_rod
+      count: 1
+      sky-refresh-ticks: 40
+      sky-options:
+        stroke-drift: 0
+        stroke-lift: 0
+        held-drift: 0.035
+        held-lift: 0.015
+        roll-radians: 0.2
+    sky_meteor:
+      biomes: ['*']
+      sky-scene: true
+      scene-duration-ticks: 600 # Rare accent: wait before reusing the cell after the short flight.
+      spawn-delay-ticks: 160
+      sky-tracers: 4 # Flight samples per visit, then four separate fragment heads.
+      motion-period-ticks: 800
+      update-ticks: 1 # Increase for slower flight; sky-points also sets total travel duration.
+      radius: 96
+      min-distance: 40
+      vertical-min: 36
+      vertical-max: 62
+      shape: METEOR
+      shape-size: 8 # About 16 blocks of flight, then short diverging sparks.
+      points: 24
+      sky-points: 80 # 20 eligible visits: 12 flight frames, 8 fragment frames.
+      particle: minecraft:firework
+      count: 1
+      sky-refresh-ticks: 0
+      sky-options:
+        roll-radians: 0.25

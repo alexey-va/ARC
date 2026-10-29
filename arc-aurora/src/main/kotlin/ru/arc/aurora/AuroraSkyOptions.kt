@@ -25,4 +25,6 @@ data class AuroraSkyOptions(
     val helixTurns: Double = 2.0,
     val helixRadius: Double = 0.3,
     val arcSweepDegrees: Double = 240.0,
+    val meteorSplit: Double = 0.6,
+    val meteorSpread: Double = 0.35,
 )

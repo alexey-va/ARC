@@ -577,7 +577,7 @@ class AuroraEngineTest : FreeSpec({
                 fixture.engine.tick()
                 val sent = fixture.emissions.drop(before)
                 (sent.size <= bundled.skyPacketsPerViewer) shouldBe true
-                (sent.count { it.particle == Particle.FIREWORK } <= 22) shouldBe true
+                (sent.count { it.particle == Particle.FIREWORK } <= 30) shouldBe true // Two cubes plus two brief meteors.
                 for (index in before until fixture.emissions.size) {
                     val at = fixture.locations[index]
                     timeline.append("$tick,${fixture.emissions[index].particle.name},${at.x},${at.y},${at.z}\n")
@@ -590,6 +590,65 @@ class AuroraEngineTest : FreeSpec({
                 java.nio.file.Files.writeString(target, timeline)
                 java.nio.file.Files.writeString(target.resolveSibling("observer-timeline.csv"), observer)
                 java.nio.file.Files.writeString(target.resolveSibling("scene-timeline.csv"), scenes)
+            }
+        }
+    }
+
+    "custom outlines grow through two heads revisit every held point and expire without a backlog" {
+        val bundled = AuroraConfig.parse(YamlConfiguration().apply {
+            loadFromString(checkNotNull(javaClass.classLoader.getResourceAsStream("config.yml")).bufferedReader().use { it.readText() })
+        })
+        for (id in listOf("sky_crystal", "sky_star", "sky_meteor")) {
+            val profile = bundled.eventPresets.getValue("treasure-hunt").single { it.id == id }
+            val settings = bundled.copy(nativeBudgetMicros = 10000,
+                skyField = bundled.skyField.copy(maxScenes = 1, maxPerProfile = 1))
+            withEngine(settings, highSky = true) { fixture ->
+                fixture.loadChunks(8)
+                fixture.event = listOf(profile)
+                val timeline = StringBuilder("tick,particle,x,y,z\n")
+                val observer = StringBuilder("tick,x,y,z,yaw\n")
+                val scenes = StringBuilder("tick,id,profile,particle,cell_x,cell_z,epoch,x,y,z,starts_at,culled,rejected\n")
+                val heldIndices = mutableSetOf<Int>()
+                var firstEmissionCount = 0
+                val emissionTicks = mutableSetOf<Int>()
+                repeat(500) { tick ->
+                    if (tick == 1) fixture.completePlanning()
+                    val before = fixture.locations.size
+                    fixture.engine.tick() // Only the first worker completes: the retained outline must pace itself.
+                    val sent = fixture.locations.drop(before)
+                    if (sent.isNotEmpty()) emissionTicks += tick
+                    (sent.size <= 6) shouldBe true
+                    if (sent.isNotEmpty() && firstEmissionCount == 0) firstEmissionCount = sent.size
+                    val expected = fixture.currentScenePoints()
+                    if (profile.skyRefreshTicks > 0 && tick in 180..227) for (at in sent) {
+                        val index = expected.indices.minBy { expected[it].distanceSquared(at) }
+                        (expected[index].distanceSquared(at) < 1e-18) shouldBe true
+                        // The final closed-path sample shares the first point's position.
+                        heldIndices += if (index == expected.lastIndex) 0 else index
+                    }
+                    if (tick >= 470) sent.size shouldBe 0
+                    for (index in before until fixture.locations.size) {
+                        val at = fixture.locations[index]
+                        timeline.append("$tick,${fixture.emissions[index].particle.name},${at.x},${at.y},${at.z}\n")
+                    }
+                    fixture.sceneRows(tick).forEach { scenes.append(it).append('\n') }
+                    val at = fixture.player.location
+                    observer.append("$tick,${at.x},${at.y},${at.z},${at.yaw}\n")
+                }
+                firstEmissionCount shouldBe profile.skyTracers
+                if (profile.skyRefreshTicks > 0) heldIndices.size shouldBe profile.points - 1
+                else {
+                    fixture.locations.size shouldBe 80
+                    emissionTicks.size shouldBe 20
+                    emissionTicks.max() - emissionTicks.min() shouldBe 19
+                }
+                System.getenv("ARCAURORA_CUSTOM_PREVIEW_DIR")?.let { directory ->
+                    val target = java.nio.file.Path.of(directory, id)
+                    java.nio.file.Files.createDirectories(target)
+                    java.nio.file.Files.writeString(target.resolve("engine-timeline.csv"), timeline)
+                    java.nio.file.Files.writeString(target.resolve("observer-timeline.csv"), observer)
+                    java.nio.file.Files.writeString(target.resolve("scene-timeline.csv"), scenes)
+                }
             }
         }
     }
@@ -829,6 +888,27 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
             listOf(tick, "${cell.x}:${cell.z}:$epoch:${profile.id}", profile.id, profile.particle.name,
                 cell.x, cell.z, epoch, field(scene, "x"), (field(scene, "y") as Double) + (surface ?: 0), field(scene, "z"),
                 if (start == Long.MAX_VALUE) -1 else start, culled, rejected).joinToString(",")
+        }
+    }
+
+    /** Current world-space path for the single-scene native-submission oracle; test-only reflection. */
+    fun currentScenePoints(): List<Location> {
+        fun field(target: Any, name: String): Any? = target.javaClass.getDeclaredField(name).also { it.isAccessible = true }.get(target)
+        val viewer = (field(engine, "viewers") as Map<*, *>)[player.uniqueId] ?: return emptyList()
+        val sky = field(viewer, "sky") ?: return emptyList()
+        val scene = (field(sky, "scenes") as List<*>).firstOrNull() ?: return emptyList()
+        val surface = field(scene, "surfaceY") as Int? ?: return emptyList()
+        val age = (field(engine, "age") as Long) - (field(scene, "startsAt") as Long)
+        if (age < 0) return emptyList()
+        val motion = field(scene, "motion") as List<*>
+        val shift = motion[minOf(age.toInt(), motion.lastIndex)] as AuroraOffset
+        val nx = field(scene, "normalX") as Double
+        val nz = field(scene, "normalZ") as Double
+        return (field(scene, "path") as List<*>).map { raw ->
+            val p = raw as AuroraOffset
+            Location(player.world, (field(scene, "x") as Double) + (p.x + shift.x) * nz + (p.z + shift.z) * nx,
+                (field(scene, "y") as Double) + surface + p.y + shift.y,
+                (field(scene, "z") as Double) - (p.x + shift.x) * nx + (p.z + shift.z) * nz)
         }
     }
 

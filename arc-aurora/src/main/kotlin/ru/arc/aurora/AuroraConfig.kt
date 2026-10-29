@@ -2,8 +2,10 @@ package ru.arc.aurora
 
 import org.bukkit.Color
 import org.bukkit.Particle
+import org.bukkit.World
 import org.bukkit.configuration.ConfigurationSection
 import java.util.Collections
+import java.util.Locale
 
 data class AuroraSettings(
     val permission: String,
@@ -18,6 +20,7 @@ data class AuroraSettings(
     val ping: AuroraPingSettings = AuroraPingSettings(),
     val skyPacketsPerViewer: Int = 36,
     val skyField: AuroraSkyFieldSettings = AuroraSkyFieldSettings(),
+    val nightSky: AuroraNightSkySettings = AuroraNightSkySettings(),
 ) {
     /** Exact, single-hop aliases; unknown biome keys remain usable without a registry lookup. */
     fun canonicalBiomeKey(raw: String): String = normalizeBiomeKey(raw).let { biomeAliases[it] ?: it }
@@ -64,7 +67,7 @@ class AuroraPingWindow(val capacity: Int) {
 
 enum class AuroraWeather { ANY, CLEAR, RAIN, THUNDER }
 
-enum class AuroraShape { POINT, LINE, CUBE, RING, CIRCLE, SPHERE, WAVE, HELIX, ARC }
+enum class AuroraShape { POINT, LINE, CUBE, RING, CIRCLE, SPHERE, WAVE, HELIX, ARC, CRYSTAL, STAR, METEOR }
 
 data class AuroraProfile(
     val id: String,
@@ -166,6 +169,23 @@ object AuroraConfig {
         val events = source.section("event-presets")?.let { presets ->
             presets.keys.associateWith { profiles(presets.requiredSection(it)) }
         }.orEmpty().immutable()
+        val nightSky = source.section("night-sky")?.let { night ->
+            val preset = night.string("preset", "treasure-hunt")
+            night.check("preset", preset.isNotBlank(), "expected a nonblank preset name")
+            AuroraNightSkySettings(
+                enabled = night.boolean("enabled", false),
+                preset = preset,
+                timeStart = night.int("time-start", 13000, 0..23999),
+                timeEnd = night.int("time-end", 23000, 0..23999),
+                worlds = night.strings("worlds", listOf("*")).immutable(),
+                environments = night.strings("environments", listOf("NORMAL")).map { raw ->
+                    runCatching { World.Environment.valueOf(raw.uppercase(Locale.ROOT)) }
+                        .getOrElse { night.fail("environments", "unknown environment '$raw'") }
+                }.distinct().immutable(),
+            )
+        } ?: AuroraNightSkySettings()
+        source.check("night-sky.preset", !nightSky.enabled || !events[nightSky.preset].isNullOrEmpty(),
+            "enabled nightly sky requires an existing nonempty event preset")
         val aliases = source.section("biome-aliases")?.let { aliasFields ->
             buildMap {
                 for (raw in aliasFields.leafKeys) {
@@ -189,6 +209,7 @@ object AuroraConfig {
             biomeAliases = aliases,
             profiles = ordinaryProfiles,
             eventPresets = events,
+            nightSky = nightSky,
             ping = AuroraPingSettings(
                 maxCurrentMs = ping?.int("max-current-ms", 250, 1..10000) ?: 250,
                 maxAverageMs = ping?.int("max-average-ms", 180, 1..10000) ?: 180,
@@ -315,6 +336,8 @@ object AuroraConfig {
             helixTurns = source.double("helix-turns", defaults.helixTurns, 0.25..8.0),
             helixRadius = source.double("helix-radius", defaults.helixRadius, 0.05..1.0),
             arcSweepDegrees = source.double("arc-sweep-degrees", defaults.arcSweepDegrees, 30.0..330.0),
+            meteorSplit = source.double("meteor-split", defaults.meteorSplit, 0.25..0.85),
+            meteorSpread = source.double("meteor-spread", defaults.meteorSpread, 0.1..1.0),
         )
         source.check("scale-max", options.scaleMax >= options.scaleMin, "must be at least scale-min")
         source.check("yaw-max-degrees", options.yawMaxDegrees >= options.yawMinDegrees, "must be at least yaw-min-degrees")
@@ -385,7 +408,7 @@ object AuroraConfig {
 
 private fun normalizeBiomeKey(raw: String): String = if (raw == "*" || ':' in raw) raw else "minecraft:$raw"
 
-private fun compileGlob(glob: String): Regex = Regex(glob.split('*').joinToString(".*", transform = Regex::escape))
+internal fun compileGlob(glob: String): Regex = Regex(glob.split('*').joinToString(".*", transform = Regex::escape))
 
 private fun <T> List<T>.immutable(): List<T> = Collections.unmodifiableList(toList())
 

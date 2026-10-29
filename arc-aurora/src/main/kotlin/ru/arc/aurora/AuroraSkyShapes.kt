@@ -5,11 +5,24 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-/** Detached local-space geometry. X is visible width, Y is up, and +Z faces the creation viewer. */
+/** Detached local-space geometry. X is width, Y is up, and Z is depth before the fixed world pose. */
 object AuroraSkyShapes {
     // An open walk over all twelve cube edges. Three repeated edges connect the eight odd vertices;
     // consecutive samples never teleport to a disconnected edge.
     private val cubeWalk = intArrayOf(6, 7, 5, 4, 6, 2, 3, 2, 0, 1, 5, 4, 0, 1, 3, 7)
+
+    // Euler circuit of the elongated octahedron: every one of its twelve edges is drawn once.
+    private val crystalVertices = listOf(
+        AuroraOffset(0.0, 1.0, 0.0), AuroraOffset(0.0, -1.0, 0.0),
+        AuroraOffset(0.55, 0.0, 0.0), AuroraOffset(0.0, 0.0, 0.55),
+        AuroraOffset(-0.55, 0.0, 0.0), AuroraOffset(0.0, 0.0, -0.55),
+    )
+    private val crystalPath = intArrayOf(0, 2, 3, 0, 4, 3, 1, 2, 5, 4, 1, 5, 0).map(crystalVertices::get)
+    private val starPath = (0..10).map { index ->
+        val angle = PI / 2.0 + index * PI / 5.0
+        val radius = if (index % 2 == 0) 1.0 else 0.43
+        AuroraOffset(cos(angle) * radius, sin(angle) * radius, 0.0)
+    }
 
     /** A complete pose for diagnostics; ordinary biome geometry lives in AuroraGeometry. */
     fun offsets(shape: AuroraShape, size: Double, points: Int, ageTicks: Long, periodTicks: Int = 400): List<AuroraOffset> =
@@ -38,6 +51,14 @@ object AuroraSkyShapes {
     ): List<AuroraOffset> {
         validate(size, points, periodTicks)
         require(updateTicks in 1..200 && roll.isFinite() && tracers in 1..4)
+        if (shape == AuroraShape.METEOR) {
+            val phase = phaseTicks * 2.0 * PI / periodTicks
+            return List(points) { index ->
+                val point = meteorPoint(size, points, index, phase, tracers, options)
+                // Reverse spatial travel only: flight always precedes breakup, never reassembly.
+                rotate(if (reverse) point.copy(x = -point.x) else point, 0.0, 0.0, roll)
+            }
+        }
         val steps = (points + tracers - 1) / tracers
         // Each tracer advances through one contiguous section; interleaving keeps partial budgets fair.
         val order = (0 until steps).flatMap { step -> (0 until tracers).map { it * steps + step }.filter { it < points } }
@@ -91,6 +112,8 @@ object AuroraSkyShapes {
                 val turn = radians(options.arcSweepDegrees) * (progress - 0.5)
                 AuroraOffset(cos(turn) * size, sin(turn) * size, sin(progress * PI) * size * 0.12)
             }
+            AuroraShape.CRYSTAL, AuroraShape.STAR -> outlinePoint(shape, size, progress)
+            AuroraShape.METEOR -> meteorPoint(size, points, index, phase, 4, options)
             AuroraShape.RING, AuroraShape.CIRCLE -> {
                 val angle = progress * 2.0 * PI * if (shape == AuroraShape.RING) 1.0 else 2.0
                 val radius = if (shape == AuroraShape.RING) size else sqrt(progress) * size
@@ -117,6 +140,50 @@ object AuroraSkyShapes {
                 AuroraOffset(cos(angle) * radius, height * size, sin(angle) * radius)
             }
         }
+    }
+
+    /** Arc-length sampling keeps adjacent contour dots evenly spaced, including across corners. */
+    internal fun outlinePoint(shape: AuroraShape, size: Double, progress: Double): AuroraOffset {
+        val path = when (shape) {
+            AuroraShape.CRYSTAL -> crystalPath
+            AuroraShape.STAR -> starPath
+            else -> error("Not a custom outline: $shape")
+        }
+        val lengths = path.zipWithNext { a, b ->
+            sqrt((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y) + (b.z - a.z) * (b.z - a.z))
+        }
+        var remaining = progress.coerceIn(0.0, 1.0) * lengths.sum()
+        for (edge in lengths.indices) {
+            if (remaining <= lengths[edge] || edge == lengths.lastIndex) {
+                val fraction = (remaining / lengths[edge]).coerceIn(0.0, 1.0)
+                val a = path[edge]
+                val b = path[edge + 1]
+                return AuroraOffset((a.x + (b.x - a.x) * fraction) * size,
+                    (a.y + (b.y - a.y) * fraction) * size,
+                    (a.z + (b.z - a.z) * fraction) * size)
+            }
+            remaining -= lengths[edge]
+        }
+        error("Empty custom outline")
+    }
+
+    /** Ordered flight, followed by simultaneous short fragment heads; no old trajectory is refreshed. */
+    internal fun meteorPoint(size: Double, points: Int, index: Int, phase: Double, fragments: Int,
+        options: AuroraSkyOptions = AuroraSkyOptions()): AuroraOffset {
+        val flightPoints = minOf(points, maxOf(fragments, (points * options.meteorSplit).toInt() / fragments * fragments))
+        if (index < flightPoints) {
+            val progress = if (flightPoints == 1) 0.0 else index.toDouble() / (flightPoints - 1)
+            return AuroraOffset((progress * 2.0 - 1.0) * size,
+                (0.25 - progress * 0.45) * size, sin(progress * PI) * size * 0.04)
+        }
+        val indexAfterSplit = index - flightPoints
+        val branch = indexAfterSplit % fragments
+        val steps = (points - flightPoints + fragments - 1) / fragments
+        val progress = (indexAfterSplit / fragments + 1).toDouble() / steps
+        val angle = branch * 2.0 * PI / fragments + phase
+        val reach = progress * options.meteorSpread * size
+        return AuroraOffset(size + reach * 0.45, -size * 0.2 + reach * (sin(angle) * 0.8 - 0.2),
+            cos(angle) * reach * 0.8)
     }
 
     private fun radians(degrees: Double) = degrees * PI / 180.0

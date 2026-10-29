@@ -58,6 +58,9 @@ object AuroraGeometry {
                     cos(along * 2.0 * PI + phase) * size * 0.3)
                 AuroraShape.ARC -> AuroraOffset(cos(along * PI * 2.0 / 3.0) * size,
                     sin(along * PI * 2.0 / 3.0) * size, 0.0)
+                AuroraShape.CRYSTAL, AuroraShape.STAR -> AuroraSkyShapes.outlinePoint(shape, size, (along + 1.0) / 2.0)
+                // Ordinary previews keep their configured extent; the complete timed meteor is a sky stroke.
+                AuroraShape.METEOR -> AuroraSkyShapes.meteorPoint(size * 0.75, points, index, 0.0, 4)
             }
         }
     }

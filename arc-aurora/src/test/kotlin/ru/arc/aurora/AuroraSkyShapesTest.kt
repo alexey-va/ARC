@@ -68,6 +68,55 @@ class AuroraSkyShapesTest : FreeSpec({
         (wave.first().x < wave.last().x) shouldBe true
     }
 
+    "custom crystal has a closed continuous three dimensional contour and two advancing heads" {
+        val frame = AuroraSkyShapes.offsets(AuroraShape.CRYSTAL, 5.0, 160, 0)
+        (distance(frame.first(), frame.last()) < 1e-12) shouldBe true
+        (frame.maxOf { it.y } - frame.minOf { it.y } > 9.5) shouldBe true
+        (frame.maxOf { it.x } - frame.minOf { it.x } > 5.0) shouldBe true
+        (frame.maxOf { it.z } - frame.minOf { it.z } > 5.0) shouldBe true
+        frame.zipWithNext().all { (a, b) -> distance(a, b) <= 0.39 } shouldBe true
+        val options = AuroraSkyOptions(strokeDrift = 0.0, strokeLift = 0.0)
+        val stroke = AuroraSkyShapes.stroke(AuroraShape.CRYSTAL, 5.0, 160, 1, 900, 217, 0.0, false, 2, options)
+        stroke.filterIndexed { i, _ -> i % 2 == 0 } shouldBe frame.take(80)
+        stroke.filterIndexed { i, _ -> i % 2 == 1 } shouldBe frame.drop(80)
+    }
+
+    "custom star closes five sharp points without a seam or a filled disk" {
+        val star = AuroraSkyShapes.offsets(AuroraShape.STAR, 5.5, 101, 0)
+        (distance(star.first(), star.last()) < 1e-12) shouldBe true
+        val corners = (0 until 10).map { star[it * 10] }
+        corners.filterIndexed { i, _ -> i % 2 == 0 }.all { abs(magnitude(it) - 5.5) < 1e-12 } shouldBe true
+        corners.filterIndexed { i, _ -> i % 2 == 1 }.all { abs(magnitude(it) - 5.5 * 0.43) < 1e-12 } shouldBe true
+        star.all { it.z == 0.0 && magnitude(it) >= 5.5 * 0.42 } shouldBe true
+        val options = AuroraSkyOptions(strokeDrift = 0.0, strokeLift = 0.0)
+        val stroke = AuroraSkyShapes.stroke(AuroraShape.STAR, 5.5, 120, 1, 1000, 103, 0.2, false, 2, options)
+        // Tracers traverse contiguous halves. Interleaving does not tear the closed contour.
+        (distance(stroke.first(), stroke.last()) < 1e-12) shouldBe true
+        stroke.filterIndexed { i, _ -> i % 2 == 0 }.zipWithNext().all { (a, b) -> distance(a, b) < 0.33 } shouldBe true
+    }
+
+    "meteor flies first and then splits into four outward moving sparks even when reversed" {
+        fun stroke(reverse: Boolean, options: AuroraSkyOptions = AuroraSkyOptions()) =
+            AuroraSkyShapes.stroke(AuroraShape.METEOR, 8.0, 80, 1, 800, 0, 0.0, reverse, 4, options)
+        val normal = stroke(false)
+        val reversed = stroke(true)
+        normal.first().x shouldBe -8.0
+        normal[47].x shouldBe 8.0
+        normal.take(48).zipWithNext().all { (a, b) -> b.x > a.x } shouldBe true
+        normal.zip(reversed).all { (a, b) -> a.x == -b.x && a.y == b.y && a.z == b.z } shouldBe true
+        val impact = normal[47]
+        for (branch in 0 until 4) {
+            val fragment = (0 until 8).map { normal[48 + it * 4 + branch] }
+            (distance(fragment.first(), impact) < 0.5) shouldBe true
+            fragment.zipWithNext().all { (a, b) -> distance(b, impact) > distance(a, impact) } shouldBe true
+            (distance(fragment.last(), impact) in 2.0..3.5) shouldBe true
+        }
+        normal.takeLast(4).map { Pair(it.y, it.z) }.distinct().size shouldBe 4
+        val wider = stroke(false, AuroraSkyOptions(meteorSplit = 0.4, meteorSpread = 0.7))
+        wider[31].x shouldBe 8.0
+        (distance(wider.last(), impact) > distance(normal.last(), impact) * 1.9) shouldBe true
+    }
+
     "default options preserve coordinates captured from the accepted pre-options implementation" {
         // Captured from the previous compiled implementation, before exposing these constants in YAML.
         val expected = mapOf(

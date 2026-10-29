@@ -37,12 +37,20 @@ internal class AuroraEngine(
     private val emitterFactory: () -> PaperViewerParticles = { PaperViewerParticles(plugin, "ambient") },
     private val previewProfiles: (UUID) -> List<AuroraProfile>? = { null },
 ) : AutoCloseable {
+    private enum class Source { ORDINARY, NIGHTLY, EVENT }
+    private data class Selection(val source: Source, val profiles: List<AuroraProfile>) {
+        fun sameAs(other: Selection): Boolean = source == other.source &&
+            if (source == Source.ORDINARY) profiles.size == other.profiles.size &&
+                profiles.indices.all { profiles[it] === other.profiles[it] }
+            else profiles === other.profiles
+    }
     private class Viewer(val id: UUID, var world: UUID, val particles: PaperViewerParticles, window: Int) {
         val ping = AuroraPingWindow(window)
         var sampleAt = 0L
         var due = 0L
         var revision = 0L
         var pass = 0L
+        var selection: Selection? = null
         // Worker owns scene creation; Main retains immutable strokes and acknowledges attempted points.
         var sky: SkyInput? = null
         var skyTurn = 0L
@@ -76,9 +84,11 @@ internal class AuroraEngine(
     private enum class Delivery { SUBMITTED, SKIPPED, OBSTRUCTED }
     private data class Input(
         val viewer: Viewer, val world: UUID, val x: Double, val y: Double, val z: Double,
-        val yaw: Float, val profiles: List<AuroraProfile>, val event: Boolean, val age: Long,
+        val yaw: Float, val selection: Selection, val age: Long,
         val revision: Long, val pass: Long,
-    )
+    ) {
+        val profiles get() = selection.profiles
+    }
     private data class Emission(
         val input: Input, val profile: AuroraProfile, val x: Double, val y: Double, val z: Double,
     )
@@ -152,13 +162,12 @@ internal class AuroraEngine(
             if (age < viewer.due) return@forEach
             viewer.due = age + settings.intervalTicks
             val player = Bukkit.getPlayer(viewer.id) ?: return@forEach
-            val event = previewProfiles(viewer.id) ?: eventProfiles(player.world.uid)
-            if (!eligible(player, viewer, event != null)) return@forEach
+            val selection = select(player, viewer)
+            if (!eligible(player, viewer, selection.source)) return@forEach
             val at = player.location
             if (!player.world.isChunkLoaded(at.blockX shr 4, at.blockZ shr 4)) return@forEach
-            val profiles = event ?: matching(player, at, settings.profiles)
-            if (profiles.isNotEmpty()) {
-                inputs += Input(viewer, player.world.uid, at.x, at.y, at.z, at.yaw, profiles, event != null, age, viewer.revision, viewer.pass++)
+            if (selection.profiles.isNotEmpty()) {
+                inputs += Input(viewer, player.world.uid, at.x, at.y, at.z, at.yaw, selection, age, viewer.revision, viewer.pass++)
             }
         }
         if (inputs.isEmpty() || !planning.compareAndSet(false, true)) return
@@ -177,7 +186,31 @@ internal class AuroraEngine(
         }
     }
 
-    private fun eligible(player: Player, viewer: Viewer, event: Boolean): Boolean {
+    /** Reconcile Main-owned source changes before consuming a point or dispatching captured work. */
+    private fun select(player: Player, viewer: Viewer): Selection {
+        val world = player.world
+        val event = previewProfiles(viewer.id) ?: eventProfiles(world.uid)
+        val selected = when {
+            event != null -> Selection(Source.EVENT, event)
+            settings.nightSky.enabled && settings.nightSky.matches(world.name, world.environment, world.time) ->
+                Selection(Source.NIGHTLY, settings.eventPresets.getValue(settings.nightSky.preset))
+            else -> {
+                val at = player.location
+                val profiles = if (player.hasPermission(settings.permission) && personallyEnabled(player) &&
+                    world.isChunkLoaded(at.blockX shr 4, at.blockZ shr 4)) matching(player, at, settings.profiles)
+                    else emptyList()
+                Selection(Source.ORDINARY, profiles)
+            }
+        }
+        if (viewer.selection?.sameAs(selected) == false) {
+            invalidate(viewer.id)
+            viewer.due = age
+        }
+        viewer.selection = selected
+        return selected
+    }
+
+    private fun eligible(player: Player, viewer: Viewer, source: Source): Boolean {
         if (!player.isOnline || player.isDead) return false
         viewer.world = player.world.uid
         val current = player.ping
@@ -190,7 +223,8 @@ internal class AuroraEngine(
             pingSkipped++
             return false
         }
-        if (!event && (!player.hasPermission(settings.permission) || !personallyEnabled(player))) {
+        if (source != Source.EVENT && (!personallyEnabled(player) ||
+            source == Source.ORDINARY && !player.hasPermission(settings.permission))) {
             viewer.particles.invalidatePending()
             return false
         }
@@ -241,21 +275,12 @@ internal class AuroraEngine(
         for (viewerIndex in audience.indices) {
             val viewer = audience[(first + viewerIndex) % audience.size]
             if (viewers[viewer.id] !== viewer) continue
-            val sky = viewer.sky ?: continue
             if (System.nanoTime() >= deadline) return
             val player = Bukkit.getPlayer(viewer.id) ?: continue
+            val selection = select(player, viewer)
+            val sky = viewer.sky ?: continue
             if (player.world.uid != sky.input.world || viewer.revision != sky.input.revision) continue
-            val event = previewProfiles(viewer.id) ?: eventProfiles(player.world.uid)
-            if (sky.input.event && event !== sky.input.profiles || !sky.input.event && event != null) continue
-            if (!eligible(player, viewer, sky.input.event)) continue
-            if (!sky.input.event) {
-                val at = player.location
-                if (!player.world.isChunkLoaded(at.blockX shr 4, at.blockZ shr 4) ||
-                    matching(player, at, settings.profiles) != sky.input.profiles) {
-                    viewer.sky = null
-                    continue
-                }
-            }
+            if (!selection.sameAs(sky.input.selection) || !eligible(player, viewer, selection.source)) continue
             var remaining = sky.budget
             if (sky.scenes.isEmpty() || remaining == 0) continue
             val start = Math.floorMod(viewer.skyTurn++, sky.scenes.size.toLong()).toInt()
@@ -441,10 +466,9 @@ internal class AuroraEngine(
         if (viewers[viewer.id] !== viewer || viewer.revision != input.revision) return Delivery.SKIPPED
         val player = Bukkit.getPlayer(viewer.id) ?: return Delivery.SKIPPED
         if (player.world.uid != input.world) { viewer.particles.invalidatePending(); return Delivery.SKIPPED }
-        val event = previewProfiles(viewer.id) ?: eventProfiles(input.world)
-        if (input.event && event !== input.profiles) return Delivery.SKIPPED // lease/config generation changed
-        if (!input.event && event != null) return Delivery.SKIPPED
-        if (!eligible(player, viewer, event != null)) return Delivery.SKIPPED
+        val selection = select(player, viewer)
+        if (!selection.sameAs(input.selection) || viewer.revision != input.revision) return Delivery.SKIPPED
+        if (!eligible(player, viewer, selection.source)) return Delivery.SKIPPED
         val at = player.location
         if (!emission.profile.skyScene && at.distanceSquared(Location(player.world, input.x, input.y, input.z)) > 16.0)
             return Delivery.SKIPPED
@@ -457,7 +481,8 @@ internal class AuroraEngine(
         if (!world.isChunkLoaded(location.blockX shr 4, location.blockZ shr 4)) return Delivery.OBSTRUCTED
         val block = location.block
         if (!block.isPassable || block.isLiquid && !(emission.profile.underwater && block.type == Material.WATER)) return Delivery.OBSTRUCTED
-        if (!input.event && emission.profile !in matching(player, location, settings.profiles)) return Delivery.OBSTRUCTED
+        if (input.selection.source == Source.ORDINARY && emission.profile !in matching(player, location, settings.profiles))
+            return Delivery.OBSTRUCTED
         // Final permission/ping gate above is shared by ambient and temporary events.
         val p = emission.profile
         viewer.particles.emit(player, location, p.particle, p.count, p.offsetX, p.offsetY, p.offsetZ, p.speed, p.particleData, p.skyScene)

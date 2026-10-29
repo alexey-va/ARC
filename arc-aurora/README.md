@@ -9,12 +9,13 @@ the PacketEvents compile version comes from the repository's dependency catalog.
 
 ## Visual direction
 
-The bundled configuration contains **25 ordinary profiles** and five sky
+The bundled configuration contains **25 ordinary profiles** and eight sky
 variants sampled into up to **nine retained world cells** for `treasure-hunt`.
 Ordinary ambience keeps its small, separated forms. The sky uses two sizes of
-travelling white wave, a wireframe spark cube, a blue soul-flame helix and a
-warm flame arc. Waves have a short native tail and one fresh point per visit;
-only cubes use a sustained refresh. The old green/gold TOTEM ring is absent.
+travelling white wave, a wireframe spark cube, a blue soul-flame helix, a
+warm flame arc, a faceted three-dimensional crystal, a five-point star and an
+occasional meteor. Waves have a short native tail and one fresh point per visit;
+cubes, crystals and stars use a sustained refresh. The old green/gold TOTEM ring is absent.
 These are original presets; Aurora code, configuration files and assets were
 not imported.
 
@@ -32,7 +33,7 @@ not imported.
 | Mushroom fields | Small violet-to-teal halos | Any time |
 | Lush / dripstone / deep-dark caves | Spores / warm specks / quiet blue wavelets | Low skylight, actual 3D cave biome |
 | Nether / End | Embers, red threads, teal wisps, soul lights / violet clusters | Dimension-specific biome keys |
-| Treasure hunt | White moving wavelets, spark cubes, blue curls and warm arcs in a world field | Explicit temporary event lease; native particles |
+| Night sky / treasure hunt | White wavelets, spark cubes, blue curls, warm arcs, crystals, stars and occasional meteors | Automatic configured night window or explicit temporary event lease |
 
 Ordinary shapes pick fresh nearby anchors each pass. Sky positions instead come
 from a deterministic jittered world lattice. World UUID, cell coordinates,
@@ -57,8 +58,14 @@ waves have no duplicate repair, halving their previous repeated-particle density
 without deleting any path samples. Their unique paths and travel remain intact.
 A configurable one-time fresh-head repair remains available for custom profiles.
 The cube uses three separated tips along a connected twelve-edge walk and
-bounded refresh behind its frontier. The helix and arc are finite flame traces,
-not held complete outlines. No persistent entities are used.
+bounded refresh behind its frontier. Two separated tips gradually draw each
+crystal and star; the crystal follows all twelve edges of an elongated octahedron,
+while the star has five sharp outer points. Their contours remain closed and
+translate gently as a whole. The helix and arc are finite flame traces; the
+bundled helix now shows a tighter curl within its short native tail. A meteor
+flies rapidly through a short path, then splits into four diverging spark trails.
+Reversing its spatial direction never reverses that sequence. No persistent
+entities are used.
 
 The exact 1.21.11 client gives END_ROD and FIREWORK full-bright light value
 `15728880`, lifetimes of 60..71 and 48..59 ticks, and native gravity even at zero
@@ -88,11 +95,19 @@ Ordinary ambience requires `arcaurora.view`, whose bundled permission default
 is **false**. Grant it to the intended audience through the server's permission
 owner. `arcaurora.admin` defaults to operators and controls reload/status.
 
+The bundled `night-sky` mode displays the selected sky preset to everyone in
+normal worlds at world time **13000 through 23000**, without a view-permission
+grant. Each world's clock is independent; the plugin never changes it. Personal
+`/arcaurora off` still disables automatic night figures. Admin preview takes
+priority over explicit temporary events, then automatic night mode, then
+ordinary ambience. Explicit preview/events retain their existing preference
+bypass. At dawn, new submissions stop and native tails finish fading.
+
 | Command | Access | Result |
 | --- | --- | --- |
-| `/arcaurora`, `/arcaurora toggle` | Player with the configured view permission | Toggle ordinary ambience |
+| `/arcaurora`, `/arcaurora toggle` | Player with the view permission, or any player while night mode is enabled | Toggle personal ordinary/night ambience |
 | `/arcaurora on`, `/arcaurora off` | Same | Save the explicit preference in the player's PDC |
-| `/arcaurora biome` | Same | Show the exact biome key at the player's block |
+| `/arcaurora biome` | Player with the configured view permission | Show the exact biome key at the player's block |
 | `/arcaurora status` | `arcaurora.admin` | Configured ordinary profile count, active event leases and tracked players |
 | `/arcaurora reload` | `arcaurora.admin` | Validate a candidate configuration, then replace the active engine |
 | `/arcaurora preview [player]` | `arcaurora.admin` | Toggle a private, automatically expiring 60-second sky preview; console names an online player |
@@ -100,7 +115,13 @@ owner. `arcaurora.admin` defaults to operators and controls reload/status.
 `/aaurora` is an alias. A failed configuration parse retains the previous active
 settings. An event preset that is in use cannot be removed during reload.
 Existing client particles may finish their lifetime after switching effects off;
-the preference stops new ordinary emissions.
+the preference stops new ordinary and automatic night emissions.
+
+`night-sky.enabled`, `preset`, `time-start`, `time-end`, `worlds` and
+`environments` are reloadable. World names accept `*` globs; environments use
+Paper names such as `NORMAL`. A time window crossing midnight is supported.
+An enabled night preset must exist and contain profiles; an invalid reload
+retains the running engine and settings.
 
 The admin preview displays the hunt's sky preset only to its target. It does
 not start a treasure hunt, change rewards, grant permissions or create a
@@ -162,7 +183,7 @@ biome-aliases:
 | `sky-scene` | `false` by default; retain a sky anchor and use posed, progressively revealed geometry |
 | `scene-duration-ticks` | Sky anchor lifetime after its delayed birth, `40..1200`; default `240`; unfinished strokes expire too |
 | `spawn-delay-ticks` | Random delay before each sky scene starts, `0..400`; default `60`; selection prefers different birth times |
-| `sky-tracers` | Advancing heads per sky figure, `1..4`; default `1`; each visits a contiguous path section |
+| `sky-tracers` | Advancing heads per sky figure, `1..4`; default `1`; each visits a contiguous path section. For `METEOR`, this is flight samples per visit followed by the number of fragment heads |
 | `sky-refresh-ticks` | `0` (default) leaves a finite native tail; `1..200` spreads a refresh of revealed positions across this many eligible visits, within the cap |
 | `sky-options` | Optional mapping overriding individual fields inherited from top-level `sky-defaults`; see below |
 | `motion-period-ticks` | Sky geometric motion period, `40..2400`; default `400` |
@@ -199,6 +220,8 @@ previous engine and settings active. Admin previews stop on reload; run
 | `fresh-head-max-age-ticks` | `2`; `1..4` | Maximum age of that one-time repair; expired repairs are discarded |
 | `helix-turns`, `helix-radius` | `2`, `0.3`; `0.25..8`, `0.05..1` | Coil count and radius fraction for `HELIX` |
 | `arc-sweep-degrees` | `240`; `30..330` | Angular span of the open `ARC` |
+| `meteor-split` | `0.6`; `0.25..0.85` | Fraction of meteor samples devoted to flight, rounded to a whole tracer group; remaining samples draw the fragments |
+| `meteor-spread` | `0.35`; `0.1..1` | Fragment reach relative to meteor shape-size |
 
 | `sky-field` option | Default; range | Meaning |
 | --- | --- | --- |
@@ -258,7 +281,12 @@ uses world axes. Sky geometry has local X width, Y height and Z depth; the
 engine retains a deterministic world orientation. Its ring/disk sits in a
 slightly tilted frontal plane, the cube uses a continuous edge walk with three repeated connecting edges, and the wave
 has a shallow depth component. `HELIX` winds along its width, while `ARC` traces
-an open curve. A rotated cube can extend up to `sqrt(3) ×
+an open curve. `CRYSTAL` follows the twelve edges of an elongated octahedron;
+`STAR` follows a five-point outline with inner radius 43% of its outer radius.
+The star is a fixed world plane and becomes foreshortened when viewed edge-on.
+`METEOR` uses its dedicated flight-then-fragments sequence and ignores the generic
+stroke drift/lift; shape-size, sky-points, update-ticks, sky-tracers and the two
+meteor options control its path and speed. A rotated cube can extend up to `sqrt(3) ×
 shape-size` from its anchor. Before a sky figure starts, Main checks its entire swept footprint against
 loaded world-surface columns, including sprite padding and native falling
 clearance. Validation is sliced across visits under the shared deadline; failed
@@ -283,7 +311,7 @@ ping and does not change networking settings.
 | Global field | Default | Accepted range / purpose |
 | --- | --- | --- |
 | `interval-ticks` | `10` | `1..1200`; minimum time between ordinary viewer planning passes |
-| `viewers-per-tick` | `8` | `1..128`; bounded round-robin audience scan |
+| `viewers-per-tick` | `32` bundled | `1..128`; bounded round-robin audience scan; the Main deadline still applies |
 | `attempts-per-viewer` | `8` | `1..64`; nearby anchors attempted per pass |
 | `packets-per-viewer` | `12` | `1..128`; particle emission requests per viewer pass |
 | `sky-packets-per-viewer` | `36` | `1..128`; per-visit request ceiling for retained sky figures, not a target batch size |
@@ -295,18 +323,21 @@ ping and does not change networking settings.
 
 At 20 TPS, the default ordinary cadence allows at most 24 emission requests per
 second per viewer before other caps. The bundled world field has at most nine
-scenes and two of each profile. Its arithmetic peak is **29 requests per visit**:
-two cubes at 11 each, plus seven one-point finite traces. The unchanged shared
-ceiling is 36. A steady pair of fully refreshed cubes plus seven active traces
-uses about 23 requests per visit; startup, expiry, culling and gates reduce this.
-The request count is higher than a single front-facing scene, while each wave's
-duplicate density is halved. All bundled positions use `count=1` and zero
+scenes and two of each profile. The shared ceiling stays **36 requests per visit**.
+Two fully held cubes, two crystals, two stars and three one-point traces use
+33 requests per visit. Simultaneous growth or a brief meteor can reach the cap;
+per-viewer scene rotation retains fairness and unattempted heads stay pending.
+Startup delays, finite tails, expiry, culling and gates reduce the usual load.
+Each wave keeps the accepted single-head density. All bundled positions use `count=1` and zero
 packet spread/speed. Increasing count does not fill gaps between path positions.
 
 These are ceilings, not throughput or FPS measurements. `viewers-per-tick`
 round-robin visitation can reduce each viewer's cadence when the audience is
 larger. Native deadlines, ping, loaded terrain and ArcCore's shared byte budget
-can reduce it further. Viewer and profile start order rotate independently so
+can reduce it further. A refresh period counts eligible visits: if 40 visits take
+longer than END_ROD's 60-tick minimum lifetime, held contours can develop gaps.
+A large audience therefore needs native cadence/visibility observation; this
+configuration does not promise every viewer 20 Hz. Viewer and profile start order rotate independently so
 a small cap cannot permanently prefer the same figure. Mixed sky/ordinary
 profiles share the configured per-viewer allocation; ordinary output retains
 its own cap.
@@ -382,8 +413,11 @@ are not treasure markers and do not change discovery, rewards or gameplay.
 | Medium wave | 28..96 blocks; Y +26..54 | 192 END_ROD positions over 9.6 s; no hold; 220 tick lifecycle, delay 0..24 |
 | Large wave | 36..96 blocks; Y +32..64 | 192 END_ROD positions over 9.6 s; no hold; 212 tick lifecycle, delay 0..30 |
 | Cube | 28..96 blocks; Y +28..60 | 192 FIREWORK positions / three heads: 3.2 s growth, about 11.8 s refresh, 2 s staged exit; delay 0..70 |
-| Soul helix | 30..96 blocks; Y +36..60 | 144 SOUL_FIRE_FLAME positions over 7.2 s; short native curl, no hold; 180 tick lifecycle, delay 0..30 |
+| Soul helix | 30..96 blocks; Y +36..60 | 144 SOUL_FIRE_FLAME positions over 7.2 s; 3.5 spatial turns, short native curl, no hold; 180 tick lifecycle, delay 0..30 |
 | Warm arc | 28..96 blocks; Y +32..56 | 96 FLAME positions over 4.8 s; short native curved tail, no hold; 132 tick lifecycle, delay 0..25 |
+| Crystal | 30..96 blocks; Y +30..58 | 160 END_ROD positions / two heads: 4 s growth, about 12 s held contour, 2 s staged exit; delay 0..55 |
+| Five-point star | 30..96 blocks; Y +32..60 | 120 END_ROD positions / two heads: 3 s growth, about 12 s held contour, 2 s staged exit; delay 0..75 |
+| Meteor | 40..96 blocks; Y +36..62 | 80 FIREWORK positions over 1 s: 0.6 s flight then 0.4 s four-fragment spread; no refresh, 600 tick lifecycle and delay 0..160 make it occasional |
 
 Timings assume 20 TPS and one eligible visit each tick. All scenes start their
 lifetime after full terrain admission and their birth delay; a field epoch
@@ -391,6 +425,13 @@ change never cuts an already admitted lifecycle short. Old wave points are
 never refreshed. The medium/large wave half-sizes remain 9/13 blocks, with native
 60..71 tick lifetimes leaving short moving wakes. Random scale is 80..100%;
 roll is ±0.45 radians. Cube half-size is 4, helix half-width 7, arc radius 5.
+Crystal half-height is 5; star outer radius is 5.5. Their roll is ±0.2 radians,
+with zero stroke drift/lift to keep the contour closed. They refresh every
+40 eligible visits, leaving a margin before END_ROD expiration at normal cadence.
+Meteor half-length is 8, roll is ±0.25 radians; existing particles finish their
+48..59 tick native lifetimes after its one-second emission sequence. Increase
+its scene-duration or spawn-delay for a less frequent accent, update-ticks or
+sky-points for slower travel, and meteor-spread for longer fragments.
 
 Ranges describe anchors, not every particle. A separate two-block eye clearance
 remains: approaching an actual point can retire the entire scene. It never
@@ -407,7 +448,7 @@ Run from the repository root with JDK 25:
 ```
 
 The expected local runtime artifact is
-`arc-aurora/build/libs/ArcAurora-0.1.4.jar`. The public Maven API artifact
+`arc-aurora/build/libs/ArcAurora-0.1.5.jar`. The public Maven API artifact
 `ru.ruscrafting.arc:arc-aurora-api:0.1.0` was verified on 2026-10-29 in the
 [RusCrafting repository](https://repo.rus-crafting.ru/grocermc/ru/ruscrafting/arc/arc-aurora-api/0.1.0/arc-aurora-api-0.1.0.pom).
 That API publication does not establish a runtime-plugin build, delivery,
@@ -447,6 +488,6 @@ end and the user's particle settings. No native-client visual acceptance or
 measured performance result is claimed by this README. Publication, artifact
 delivery and runtime activation require separate operational evidence.
 
-`sky-points` overrides `points` only for sky scenes. The world-field placement and new shapes
-require ArcAurora 0.1.4; do not reload this configuration into an older runtime.
+`sky-points` overrides `points` only for sky scenes. The nightly mode and current shape catalog
+require ArcAurora 0.1.5; do not reload this configuration into an older runtime.
 The 25 ordinary biome profiles and their sampling behavior are unchanged.

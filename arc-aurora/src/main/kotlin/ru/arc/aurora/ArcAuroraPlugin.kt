@@ -71,7 +71,8 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
             server.servicesManager.register(ArcAuroraService::class.java, object : ArcAuroraService {
                 override fun startWorldEvent(worldId: UUID, preset: String): AutoCloseable = beginEvent(worldId, preset)
             }, this, ServicePriority.Normal)
-            owner.ready("profiles" to settings.profiles.size, "permission" to settings.permission)
+            owner.ready("profiles" to settings.profiles.size, "permission" to settings.permission,
+                "night_sky" to settings.nightSky.enabled, "night_preset" to settings.nightSky.preset)
         } catch (failure: Exception) {
             logger.log(Level.SEVERE, "ArcAurora startup failed; no ambient particles will be sent", failure)
             server.pluginManager.disablePlugin(this)
@@ -197,7 +198,8 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
                 runtime!!.reload()
                 installEngine(replacement)
                 messages = candidateMessages
-                runtime!!.ready("profiles" to candidate.profiles.size)
+                runtime!!.ready("profiles" to candidate.profiles.size,
+                    "night_sky" to candidate.nightSky.enabled, "night_preset" to candidate.nightSky.preset)
                 return reply(sender, "reloaded")
             } catch (failure: Exception) {
                 logger.log(Level.WARNING, "ArcAurora reload rejected; existing settings remain active", failure)
@@ -206,9 +208,11 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
         }
         val current = engine ?: return reply(sender, "stopped")
         if (sender !is Player) return reply(sender, "players-only")
-        if (!sender.hasPermission(current.settings.permission)) return reply(sender, "no-permission")
+        val personalAction = action in setOf("on", "off", "toggle")
+        if (!sender.hasPermission(current.settings.permission) && !(personalAction && current.settings.nightSky.enabled))
+            return reply(sender, "no-permission")
         if (action == "biome") return reply(sender, "biome", mapOf("biome" to sender.location.block.biome.key.toString()))
-        if (action !in setOf("on", "off", "toggle")) return reply(sender, "usage")
+        if (!personalAction) return reply(sender, "usage")
         val enabled = when (action) { "on" -> true; "off" -> false; else -> !current.personallyEnabled(sender) }
         current.setPersonallyEnabled(sender, enabled)
         return reply(sender, if (enabled) "enabled" else "disabled")

@@ -138,6 +138,8 @@ class AuroraConfigTest : FreeSpec({
               exit-ticks: 20
               fresh-head-repair: false
               fresh-head-max-age-ticks: 3
+              meteor-split: 0.5
+              meteor-spread: 0.6
             profiles:
               ambient:
                 sky-scene: true
@@ -151,7 +153,7 @@ class AuroraConfigTest : FreeSpec({
         """)
         val settings = AuroraConfig.parse(source)
         val defaults = AuroraSkyOptions(180.0, 12.0, 16, 3.0, 0.6, 1.2, 0.3, 0.4, 2.0, -0.1,
-            0.2, -0.2, 0.1, -0.08, 0.04, 20, false, 3)
+            0.2, -0.2, 0.1, -0.08, 0.04, 20, false, 3, meteorSplit = 0.5, meteorSpread = 0.6)
         settings.profiles.single().skyOptions shouldBe defaults
         settings.eventPresets.getValue("hunt").single().skyOptions shouldBe
             defaults.copy(waveAmplitude = 0.3, freshHeadRepair = true)
@@ -171,6 +173,8 @@ class AuroraConfigTest : FreeSpec({
             "stroke-drift" to 1.01, "stroke-lift" to "0.05", "held-drift" to 0.251,
             "held-lift" to -0.251, "exit-ticks" to 1.5, "fresh-head-repair" to "true",
             "fresh-head-max-age-ticks" to 5,
+            "meteor-split" to 0.24, "meteor-split" to 0.86,
+            "meteor-spread" to Double.NaN, "meteor-spread" to 1.01,
         ).forEach { (field, value) ->
             source.set("sky-defaults", null)
             source.set("sky-defaults.$field", value)
