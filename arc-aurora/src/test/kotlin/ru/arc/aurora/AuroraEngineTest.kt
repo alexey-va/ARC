@@ -577,14 +577,13 @@ class AuroraEngineTest : FreeSpec({
                 fixture.engine.tick()
                 val sent = fixture.emissions.drop(before)
                 (sent.size <= bundled.skyPacketsPerViewer) shouldBe true
-                (sent.count { it.particle == Particle.FIREWORK } <= 30) shouldBe true // Two cubes plus two brief meteors.
                 for (index in before until fixture.emissions.size) {
                     val at = fixture.locations[index]
                     timeline.append("$tick,${fixture.emissions[index].particle.name},${at.x},${at.y},${at.z}\n")
                 }
                 fixture.sceneRows(tick).forEach { scenes.append(it).append('\n') }
             }
-            fixture.emissions.map { it.particle }.toSet() shouldBe setOf(Particle.END_ROD, Particle.FIREWORK, Particle.SOUL_FIRE_FLAME, Particle.FLAME)
+            fixture.emissions.map { it.particle }.toSet() shouldBe bundled.eventPresets.getValue("treasure-hunt").map { it.particle }.toSet()
             System.getenv("ARCAURORA_PREVIEW_CSV")?.let { path ->
                 val target = java.nio.file.Path.of(path)
                 java.nio.file.Files.writeString(target, timeline)
@@ -598,8 +597,16 @@ class AuroraEngineTest : FreeSpec({
         val bundled = AuroraConfig.parse(YamlConfiguration().apply {
             loadFromString(checkNotNull(javaClass.classLoader.getResourceAsStream("config.yml")).bufferedReader().use { it.readText() })
         })
-        for (id in listOf("sky_crystal", "sky_star", "sky_meteor")) {
-            val profile = bundled.eventPresets.getValue("treasure-hunt").single { it.id == id }
+        // Keep these historical shape contracts independently of the currently selected night palette.
+        val crystal = bundled.eventPresets.getValue("treasure-hunt").single { it.id == "sky_crystal" }
+            .copy(sceneDurationTicks = 360, spawnDelayTicks = 55)
+        val profiles = listOf(crystal,
+            crystal.copy(id = "sky_star", shape = AuroraShape.STAR, shapeSize = 5.5, points = 120,
+                sceneDurationTicks = 340, spawnDelayTicks = 75),
+            bundled.eventPresets.getValue("treasure-hunt").single { it.id == "sky_meteor" }
+                .copy(particle = Particle.FIREWORK, sceneDurationTicks = 600, spawnDelayTicks = 160))
+        for (profile in profiles) {
+            val id = profile.id
             val settings = bundled.copy(nativeBudgetMicros = 10000,
                 skyField = bundled.skyField.copy(maxScenes = 1, maxPerProfile = 1))
             withEngine(settings, highSky = true) { fixture ->
@@ -644,6 +651,54 @@ class AuroraEngineTest : FreeSpec({
                 }
                 System.getenv("ARCAURORA_CUSTOM_PREVIEW_DIR")?.let { directory ->
                     val target = java.nio.file.Path.of(directory, id)
+                    java.nio.file.Files.createDirectories(target)
+                    java.nio.file.Files.writeString(target.resolve("engine-timeline.csv"), timeline)
+                    java.nio.file.Files.writeString(target.resolve("observer-timeline.csv"), observer)
+                    java.nio.file.Files.writeString(target.resolve("scene-timeline.csv"), scenes)
+                }
+            }
+        }
+    }
+
+    "chamber tracks submit their ordered heads once and expire after one finite cycle" {
+        val bundled = AuroraConfig.parse(YamlConfiguration().apply {
+            loadFromString(checkNotNull(javaClass.classLoader.getResourceAsStream("config.yml")).bufferedReader().use { it.readText() })
+        })
+        for (profile in bundled.eventPresets.getValue("treasure-hunt").filter { it.shape.isTrack }) {
+            val settings = bundled.copy(nativeBudgetMicros = 10000,
+                skyField = bundled.skyField.copy(maxScenes = 1, maxPerProfile = 1))
+            withEngine(settings, highSky = true) { fixture ->
+                fixture.loadChunks(8)
+                fixture.event = listOf(profile)
+                val timeline = StringBuilder("tick,particle,x,y,z\n")
+                val observer = StringBuilder("tick,x,y,z,yaw\n")
+                val scenes = StringBuilder("tick,id,profile,particle,cell_x,cell_z,epoch,x,y,z,starts_at,culled,rejected\n")
+                val emissionTicks = mutableListOf<Int>()
+                var expected = emptyList<Location>()
+                repeat(260) { tick ->
+                    if (tick == 1) fixture.completePlanning()
+                    val before = fixture.locations.size
+                    fixture.engine.tick() // The same retained scene keeps pacing without another worker completion.
+                    val sent = fixture.locations.drop(before)
+                    (sent.size <= profile.skyTracers) shouldBe true
+                    if (sent.isNotEmpty()) {
+                        emissionTicks += tick
+                        if (expected.isEmpty()) expected = fixture.currentScenePoints()
+                    }
+                    for (index in before until fixture.locations.size) {
+                        val at = fixture.locations[index]
+                        (at.distanceSquared(expected[index]) < 1e-18) shouldBe true
+                        timeline.append("$tick,${fixture.emissions[index].particle.name},${at.x},${at.y},${at.z}\n")
+                    }
+                    fixture.sceneRows(tick).forEach { scenes.append(it).append('\n') }
+                    val at = fixture.player.location
+                    observer.append("$tick,${at.x},${at.y},${at.z},${at.yaw}\n")
+                }
+                fixture.locations.size shouldBe profile.points
+                emissionTicks.size shouldBe (profile.points + profile.skyTracers - 1) / profile.skyTracers
+                emissionTicks.zipWithNext().all { (a, b) -> b - a == profile.updateTicks } shouldBe true
+                System.getenv("ARCAURORA_TRACK_PREVIEW_DIR")?.let { directory ->
+                    val target = java.nio.file.Path.of(directory, profile.id)
                     java.nio.file.Files.createDirectories(target)
                     java.nio.file.Files.writeString(target.resolve("engine-timeline.csv"), timeline)
                     java.nio.file.Files.writeString(target.resolve("observer-timeline.csv"), observer)

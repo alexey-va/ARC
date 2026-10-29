@@ -20,6 +20,7 @@ object AuroraGeometry {
     fun offsets(shape: AuroraShape, size: Double, points: Int, ageTicks: Long): List<AuroraOffset> {
         require(size.isFinite() && size in 0.1..8.0) { "Shape size must be finite and in 0.1..8.0" }
         require(points in 1..24) { "Shape points must be in 1..24" }
+        if (shape.isTrack) return AuroraSkyShapes.trackOffsets(shape, size, points, AuroraSkyOptions())
         val phase = Math.floorMod(ageTicks, 40L) * PI / 20.0
         val goldenAngle = PI * (3.0 - sqrt(5.0))
         return List(points) { index ->
@@ -61,6 +62,8 @@ object AuroraGeometry {
                 AuroraShape.CRYSTAL, AuroraShape.STAR -> AuroraSkyShapes.outlinePoint(shape, size, (along + 1.0) / 2.0)
                 // Ordinary previews keep their configured extent; the complete timed meteor is a sky stroke.
                 AuroraShape.METEOR -> AuroraSkyShapes.meteorPoint(size * 0.75, points, index, 0.0, 4)
+                AuroraShape.TRACK_SPIRAL, AuroraShape.TRACK_PAIR, AuroraShape.TRACK_SCATTER ->
+                    error("Tracks are sampled as complete ordered paths above")
             }
         }
     }

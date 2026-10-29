@@ -67,7 +67,12 @@ class AuroraPingWindow(val capacity: Int) {
 
 enum class AuroraWeather { ANY, CLEAR, RAIN, THUNDER }
 
-enum class AuroraShape { POINT, LINE, CUBE, RING, CIRCLE, SPHERE, WAVE, HELIX, ARC, CRYSTAL, STAR, METEOR }
+enum class AuroraShape {
+    POINT, LINE, CUBE, RING, CIRCLE, SPHERE, WAVE, HELIX, ARC, CRYSTAL, STAR, METEOR,
+    TRACK_SPIRAL, TRACK_PAIR, TRACK_SCATTER;
+
+    internal val isTrack: Boolean get() = this == TRACK_SPIRAL || this == TRACK_PAIR || this == TRACK_SCATTER
+}
 
 data class AuroraProfile(
     val id: String,
@@ -338,6 +343,11 @@ object AuroraConfig {
             arcSweepDegrees = source.double("arc-sweep-degrees", defaults.arcSweepDegrees, 30.0..330.0),
             meteorSplit = source.double("meteor-split", defaults.meteorSplit, 0.25..0.85),
             meteorSpread = source.double("meteor-spread", defaults.meteorSpread, 0.1..1.0),
+            trackTurns = source.double("track-turns", defaults.trackTurns, 0.5..3.0),
+            trackTightening = source.double("track-tightening", defaults.trackTightening, 0.05..0.8),
+            trackBranchAngleDegrees = source.double("track-branch-angle-degrees", defaults.trackBranchAngleDegrees, 10.0..75.0),
+            trackBendDegrees = source.double("track-bend-degrees", defaults.trackBendDegrees, 15.0..180.0),
+            trackSplit = source.double("track-split", defaults.trackSplit, 0.1..0.6),
         )
         source.check("scale-max", options.scaleMax >= options.scaleMin, "must be at least scale-min")
         source.check("yaw-max-degrees", options.yawMaxDegrees >= options.yawMinDegrees, "must be at least yaw-min-degrees")

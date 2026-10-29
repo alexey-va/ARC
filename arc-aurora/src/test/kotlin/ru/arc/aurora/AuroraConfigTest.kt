@@ -140,6 +140,11 @@ class AuroraConfigTest : FreeSpec({
               fresh-head-max-age-ticks: 3
               meteor-split: 0.5
               meteor-spread: 0.6
+              track-turns: 2
+              track-tightening: 0.25
+              track-branch-angle-degrees: 35
+              track-bend-degrees: 95
+              track-split: 0.4
             profiles:
               ambient:
                 sky-scene: true
@@ -150,16 +155,22 @@ class AuroraConfigTest : FreeSpec({
                   sky-options:
                     wave-amplitude: 0.3
                     fresh-head-repair: true
+                    track-turns: 1.5
         """)
         val settings = AuroraConfig.parse(source)
         val defaults = AuroraSkyOptions(180.0, 12.0, 16, 3.0, 0.6, 1.2, 0.3, 0.4, 2.0, -0.1,
-            0.2, -0.2, 0.1, -0.08, 0.04, 20, false, 3, meteorSplit = 0.5, meteorSpread = 0.6)
+            0.2, -0.2, 0.1, -0.08, 0.04, 20, false, 3, meteorSplit = 0.5, meteorSpread = 0.6,
+            trackTurns = 2.0, trackTightening = 0.25, trackBranchAngleDegrees = 35.0,
+            trackBendDegrees = 95.0, trackSplit = 0.4)
         settings.profiles.single().skyOptions shouldBe defaults
         settings.eventPresets.getValue("hunt").single().skyOptions shouldBe
-            defaults.copy(waveAmplitude = 0.3, freshHeadRepair = true)
+            defaults.copy(waveAmplitude = 0.3, freshHeadRepair = true, trackTurns = 1.5)
         source.set("sky-defaults.wave-amplitude", 0.7)
         settings.profiles.single().skyOptions shouldBe defaults // Detached snapshot until a successful reload.
         AuroraConfig.parse(source).profiles.single().skyOptions.waveAmplitude shouldBe 0.7
+        source.set("sky-defaults.track-bend-degrees", 110.0)
+        settings.profiles.single().skyOptions.trackBendDegrees shouldBe 95.0
+        AuroraConfig.parse(source).profiles.single().skyOptions.trackBendDegrees shouldBe 110.0
     }
 
     "invalid sky options reject the candidate without changing the last complete snapshot" {
@@ -175,6 +186,11 @@ class AuroraConfigTest : FreeSpec({
             "fresh-head-max-age-ticks" to 5,
             "meteor-split" to 0.24, "meteor-split" to 0.86,
             "meteor-spread" to Double.NaN, "meteor-spread" to 1.01,
+            "track-turns" to 0.49, "track-turns" to 3.01,
+            "track-tightening" to 0.049, "track-tightening" to 0.81,
+            "track-branch-angle-degrees" to 9.9, "track-branch-angle-degrees" to 75.1,
+            "track-bend-degrees" to 14.9, "track-bend-degrees" to 180.1,
+            "track-split" to 0.09, "track-split" to Double.NaN,
         ).forEach { (field, value) ->
             source.set("sky-defaults", null)
             source.set("sky-defaults.$field", value)

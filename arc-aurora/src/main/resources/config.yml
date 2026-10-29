@@ -37,7 +37,7 @@ sky-field:
   view-distance: 96 # Horizontal admission radius in blocks; profile.radius may narrow it.
   cull-hysteresis: 16 # Retain active cells to 112 blocks; no nearest-slot churn.
   max-scenes: 9
-  max-per-profile: 2 # Varied silhouettes, and at most two costly refreshed cubes.
+  max-per-profile: 2 # Varied motion; at most two copies of one variant.
   cull-cooldown-ticks: 80 # Let the previous native tail expire before a cell can restart.
 sky-defaults:
   # Fixed-world orientation, not a sector around the viewer.
@@ -64,6 +64,12 @@ sky-defaults:
   arc-sweep-degrees: 240
   meteor-split: 0.6 # Fraction of samples used by the fast flight before fragments separate.
   meteor-spread: 0.35 # Fragment travel as a fraction of shape-size.
+  # Artistic chamber tracks; native colour/lifetime are unchanged. These options reload atomically.
+  track-turns: 1.25 # Spiral revolutions; 0.5..3.
+  track-tightening: 0.18 # Final / initial spiral radius; 0.05..0.8.
+  track-branch-angle-degrees: 25 # Initial branch opening; 10..75.
+  track-bend-degrees: 70 # Curvature of the broad branch; 15..180.
+  track-split: 0.25 # Scatter samples spent on the incoming track; 0.1..0.6.
 
 # Optional exact, single-hop aliases. Read the actual key with /arcaurora biome.
 # Iris namespaces/paths depend on the installed generator pack; none are assumed here.
@@ -459,10 +465,10 @@ profiles:
 # It intentionally bypasses the ordinary permission/toggle and time/biome filters.
 # Ping, loaded-chunk, passable-block and packet-budget gates still apply.
 # These decorative forms do not reveal treasure positions or change rewards.
-# END_ROD waves and FIREWORK cubes are full-bright; blue SOUL_FIRE_FLAME helixes
-# and warm FLAME arcs use their native age-dependent brightness and shorter lives.
-# One fresh head per wave/flame trace; only the cube has three heads and refresh.
-# Nine retained world cells sample these five variants all around the viewer.
+# Thirteen variants share nine world cells: soft blue/warm traces and bubble-chamber tracks.
+# One familiar white wave and one rare crystal remain; no cube/star in this night catalogue.
+# Three short meteor variants repeat more often. FLAME is orange, not a red recolour.
+# Only the crystal holds a complete outline; coloured traces keep their native short tails.
 # Y ranges are above the loaded terrain at the cell anchor, not above the player.
 # Existing native tails fade on whole-scene radial cull; the shared cap stays 36.
 event-presets:
@@ -492,32 +498,34 @@ event-presets:
       offset-z: 0
       speed: 0
       sky-refresh-ticks: 0
-    sky_cube:
+    soul_wave:
       biomes:
       - '*'
       time-start: 0
       time-end: 23999
       sky-scene: true
-      scene-duration-ticks: 340
-      spawn-delay-ticks: 70
-      sky-tracers: 3
-      motion-period-ticks: 2400
+      scene-duration-ticks: 176
+      spawn-delay-ticks: 24
+      motion-period-ticks: 800
       update-ticks: 1
       radius: 96
-      min-distance: 28
-      vertical-min: 28
-      vertical-max: 60
-      shape: CUBE
-      shape-size: 4
+      min-distance: 30
+      vertical-min: 30
+      vertical-max: 58
+      shape: WAVE
+      shape-size: 10
       points: 24
-      sky-points: 192
-      particle: minecraft:firework
+      sky-points: 144
+      particle: minecraft:soul_fire_flame
       count: 1
       offset-x: 0
       offset-y: 0
       offset-z: 0
       speed: 0
-      sky-refresh-ticks: 24
+      sky-refresh-ticks: 0
+      sky-options:
+        wave-amplitude: 0.28
+        wave-cycles: 1.25
     soul_helix:
       biomes:
       - '*'
@@ -546,6 +554,34 @@ event-presets:
       sky-options:
         helix-turns: 3.5 # A short native tail shows a visible curl, rather than a nearly straight stroke.
         helix-radius: 0.38
+    ember_wave:
+      biomes:
+      - '*'
+      time-start: 0
+      time-end: 23999
+      sky-scene: true
+      scene-duration-ticks: 160
+      spawn-delay-ticks: 28
+      motion-period-ticks: 800
+      update-ticks: 1
+      radius: 96
+      min-distance: 30
+      vertical-min: 28
+      vertical-max: 56
+      shape: WAVE
+      shape-size: 9
+      points: 24
+      sky-points: 128
+      particle: minecraft:flame
+      count: 1
+      offset-x: 0
+      offset-y: 0
+      offset-z: 0
+      speed: 0
+      sky-refresh-ticks: 0
+      sky-options:
+        wave-amplitude: 0.18
+        wave-cycles: 1.75
     ember_arc:
       biomes:
       - '*'
@@ -589,18 +625,83 @@ event-presets:
       shape-size: 13
       points: 24
       sky-points: 192
-      particle: minecraft:end_rod
+      particle: minecraft:scrape
       count: 1
       offset-x: 0
       offset-y: 0
       offset-z: 0
       speed: 0
       sky-refresh-ticks: 0
+    sky_meteor:
+      biomes: ['*']
+      sky-scene: true
+      scene-duration-ticks: 80 # Short flight; the client finishes the native tail.
+      spawn-delay-ticks: 24 # Nominal cell epoch: 104 ticks, rather than the old 760.
+      sky-tracers: 4 # Flight samples per visit, then four separate fragment heads.
+      motion-period-ticks: 800
+      update-ticks: 1 # Increase for slower flight; sky-points also sets total travel duration.
+      radius: 96
+      min-distance: 40
+      vertical-min: 36
+      vertical-max: 62
+      shape: METEOR
+      shape-size: 8 # About 16 blocks of flight, then short diverging sparks.
+      points: 24
+      sky-points: 80 # 20 eligible visits: 12 flight frames, 8 fragment frames.
+      particle: minecraft:wax_on
+      count: 1
+      sky-refresh-ticks: 0
+      sky-options:
+        roll-radians: 0.25
+    soul_meteor:
+      biomes: ['*']
+      sky-scene: true
+      scene-duration-ticks: 72
+      spawn-delay-ticks: 24
+      sky-tracers: 4 # Flight samples per visit, then four separate fragment heads.
+      motion-period-ticks: 800
+      update-ticks: 1 # Increase for slower flight; sky-points also sets total travel duration.
+      radius: 96
+      min-distance: 36
+      vertical-min: 34
+      vertical-max: 60
+      shape: METEOR
+      shape-size: 7
+      points: 24
+      sky-points: 64 # 16 eligible visits: a faster blue flight and four short fragments.
+      particle: minecraft:soul_fire_flame
+      count: 1
+      sky-refresh-ticks: 0
+      sky-options:
+        roll-radians: 0.25
+    ember_meteor:
+      biomes: ['*']
+      sky-scene: true
+      scene-duration-ticks: 90
+      spawn-delay-ticks: 30
+      sky-tracers: 4 # Flight samples per visit, then four separate fragment heads.
+      motion-period-ticks: 800
+      update-ticks: 1 # Increase for slower flight; sky-points also sets total travel duration.
+      radius: 96
+      min-distance: 36
+      vertical-min: 32
+      vertical-max: 58
+      shape: METEOR
+      shape-size: 9
+      points: 24
+      sky-points: 96 # 24 eligible visits: a broader, slightly slower orange meteor.
+      particle: minecraft:flame
+      count: 1
+      sky-refresh-ticks: 0
+      sky-options:
+        roll-radians: 0.25
+        meteor-split: 0.65
+        meteor-spread: 0.45
     sky_crystal:
       biomes: ['*']
       sky-scene: true
-      scene-duration-ticks: 360
-      spawn-delay-ticks: 55
+      scene-duration-ticks: 160 # 4 s growth, 2 s held outline, 2 s staged exit.
+      spawn-delay-ticks: 360 # Rare geometric accent; long pause between appearances.
       sky-tracers: 2 # Two separated lines gradually trace the twelve edges.
       motion-period-ticks: 900
       update-ticks: 1
@@ -621,49 +722,61 @@ event-presets:
         held-drift: 0.035
         held-lift: 0.015
         roll-radians: 0.2
-    sky_star:
+
+    chamber_spiral:
       biomes: ['*']
       sky-scene: true
-      scene-duration-ticks: 340
-      spawn-delay-ticks: 75
-      sky-tracers: 2
-      motion-period-ticks: 1000
+      scene-duration-ticks: 88
+      spawn-delay-ticks: 28
+      sky-tracers: 4 # Four adjacent samples of ONE head, not four detached spirals.
       update-ticks: 1
       radius: 96
       min-distance: 30
       vertical-min: 32
-      vertical-max: 60
-      shape: STAR
-      shape-size: 5.5
-      points: 24
-      sky-points: 120
-      particle: minecraft:end_rod
-      count: 1
-      sky-refresh-ticks: 40
-      sky-options:
-        stroke-drift: 0
-        stroke-lift: 0
-        held-drift: 0.035
-        held-lift: 0.015
-        roll-radians: 0.2
-    sky_meteor:
-      biomes: ['*']
-      sky-scene: true
-      scene-duration-ticks: 600 # Rare accent: wait before reusing the cell after the short flight.
-      spawn-delay-ticks: 160
-      sky-tracers: 4 # Flight samples per visit, then four separate fragment heads.
-      motion-period-ticks: 800
-      update-ticks: 1 # Increase for slower flight; sky-points also sets total travel duration.
-      radius: 96
-      min-distance: 40
-      vertical-min: 36
-      vertical-max: 62
-      shape: METEOR
-      shape-size: 8 # About 16 blocks of flight, then short diverging sparks.
-      points: 24
-      sky-points: 80 # 20 eligible visits: 12 flight frames, 8 fragment frames.
-      particle: minecraft:firework
+      vertical-max: 58
+      shape: TRACK_SPIRAL
+      shape-size: 6
+      sky-points: 96 # 24 visits / 1.2 s: a short native tail can reveal the tightening curl.
+      particle: minecraft:soul_fire_flame
       count: 1
       sky-refresh-ticks: 0
       sky-options:
-        roll-radians: 0.25
+        roll-radians: 0.35
+    chamber_pair:
+      biomes: ['*']
+      sky-scene: true
+      scene-duration-ticks: 88
+      spawn-delay-ticks: 32
+      sky-tracers: 4 # Two opposite-curvature heads, two consecutive samples of each per visit.
+      update-ticks: 1
+      radius: 96
+      min-distance: 30
+      vertical-min: 34
+      vertical-max: 60
+      shape: TRACK_PAIR
+      shape-size: 7
+      sky-points: 96 # 24 visits / 1.2 s; both branches start at the same vertex.
+      particle: minecraft:flame
+      count: 1
+      sky-refresh-ticks: 0
+      sky-options:
+        roll-radians: 0.35
+    chamber_scatter:
+      biomes: ['*']
+      sky-scene: true
+      scene-duration-ticks: 112
+      spawn-delay-ticks: 36
+      sky-tracers: 3 # Incoming samples first, then one sample from each of three branch heads.
+      update-ticks: 1
+      radius: 96
+      min-distance: 32
+      vertical-min: 34
+      vertical-max: 60
+      shape: TRACK_SCATTER
+      shape-size: 7
+      sky-points: 144 # 12 incoming visits, then 36 branch visits / 2.4 s total.
+      particle: minecraft:soul_fire_flame
+      count: 1
+      sky-refresh-ticks: 0
+      sky-options:
+        roll-radians: 0.3

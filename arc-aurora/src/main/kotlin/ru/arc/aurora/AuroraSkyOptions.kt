@@ -27,4 +27,9 @@ data class AuroraSkyOptions(
     val arcSweepDegrees: Double = 240.0,
     val meteorSplit: Double = 0.6,
     val meteorSpread: Double = 0.35,
+    val trackTurns: Double = 1.25,
+    val trackTightening: Double = 0.18,
+    val trackBranchAngleDegrees: Double = 25.0,
+    val trackBendDegrees: Double = 70.0,
+    val trackSplit: Double = 0.25,
 )

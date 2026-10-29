@@ -31,6 +31,7 @@ object AuroraSkyShapes {
     fun offsets(shape: AuroraShape, size: Double, points: Int, ageTicks: Long, periodTicks: Int,
         options: AuroraSkyOptions): List<AuroraOffset> {
         validate(size, points, periodTicks)
+        if (shape.isTrack) return trackOffsets(shape, size, points, options)
         val phase = Math.floorMod(ageTicks, periodTicks.toLong()).toDouble() * 2.0 * PI / periodTicks
         return List(points) { sample(shape, size, points, it, phase, options) }
     }
@@ -51,6 +52,10 @@ object AuroraSkyShapes {
     ): List<AuroraOffset> {
         validate(size, points, periodTicks)
         require(updateTicks in 1..200 && roll.isFinite() && tracers in 1..4)
+        if (shape.isTrack) return trackOffsets(shape, size, points, options).map { point ->
+            // Keep branch birth and inward winding ordered; reverse only mirrors the world pose.
+            rotate(if (reverse) point.copy(x = -point.x) else point, 0.0, 0.0, roll)
+        }
         if (shape == AuroraShape.METEOR) {
             val phase = phaseTicks * 2.0 * PI / periodTicks
             return List(points) { index ->
@@ -114,6 +119,8 @@ object AuroraSkyShapes {
             }
             AuroraShape.CRYSTAL, AuroraShape.STAR -> outlinePoint(shape, size, progress)
             AuroraShape.METEOR -> meteorPoint(size, points, index, phase, 4, options)
+            AuroraShape.TRACK_SPIRAL, AuroraShape.TRACK_PAIR, AuroraShape.TRACK_SCATTER ->
+                error("Tracks are sampled as complete ordered paths above")
             AuroraShape.RING, AuroraShape.CIRCLE -> {
                 val angle = progress * 2.0 * PI * if (shape == AuroraShape.RING) 1.0 else 2.0
                 val radius = if (shape == AuroraShape.RING) size else sqrt(progress) * size
@@ -187,6 +194,73 @@ object AuroraSkyShapes {
     }
 
     private fun radians(degrees: Double) = degrees * PI / 180.0
+
+    /** Artistic bubble-chamber tracks. Every branch has its own continuous, arc-length paced head. */
+    internal fun trackOffsets(shape: AuroraShape, size: Double, points: Int,
+        options: AuroraSkyOptions): List<AuroraOffset> {
+        fun spiral(t: Double): AuroraOffset {
+            val radius = 1.0 - (1.0 - options.trackTightening) * t
+            val angle = t * 2.0 * PI * options.trackTurns
+            return AuroraOffset(-radius * cos(angle), radius * sin(angle), 0.0)
+        }
+        fun arc(t: Double, heading: Double, bend: Double, length: Double): AuroraOffset =
+            if (t == 0.0) AuroraOffset(0.0, 0.0, 0.0) else AuroraOffset((sin(heading + bend * t) - sin(heading)) * length / bend,
+                (cos(heading) - cos(heading + bend * t)) * length / bend, 0.0)
+        fun interleave(paths: List<List<AuroraOffset>>): List<AuroraOffset> =
+            (0 until paths.maxOf { it.size }).flatMap { step -> paths.mapNotNull { it.getOrNull(step) } }
+        val heading = radians(options.trackBranchAngleDegrees)
+        val bend = radians(options.trackBendDegrees)
+        val path = when (shape) {
+            AuroraShape.TRACK_SPIRAL -> sampleCurve(points, ::spiral)
+            AuroraShape.TRACK_PAIR -> interleave((0 until 2).map { branch ->
+                val sign = if (branch == 0) 1.0 else -1.0
+                sampleCurve((points + 1 - branch) / 2) { arc(it, heading * sign, bend * sign, 1.0) }
+            })
+            AuroraShape.TRACK_SCATTER -> {
+                val incoming = (points * options.trackSplit).toInt().coerceIn(1, points)
+                val stem = if (incoming == 1) listOf(AuroraOffset(0.0, 0.0, 0.0))
+                    else sampleCurve(incoming) { AuroraOffset(it - 1.0, 0.0, 0.0) }
+                val branches = (0 until 3).map { branch ->
+                    val count = (points - incoming + 2 - branch) / 3
+                    // The vertex was just emitted by the stem; start each branch one step beyond it.
+                    sampleCurve(count + 1) { t -> when (branch) {
+                        0 -> arc(t, -heading, -bend * 0.25, 0.95)
+                        1 -> arc(t, heading, bend * 0.9, 0.85)
+                        else -> {
+                            val curl = spiral(t)
+                            rotate(AuroraOffset((curl.x + 1.0) * 0.38, curl.y * 0.38, 0.0),
+                                0.0, 0.0, heading - PI / 2.0)
+                        }
+                    } }.drop(1)
+                }
+                stem + interleave(branches)
+            }
+            else -> error("Not a chamber track: $shape")
+        }
+        return path.map { AuroraOffset(it.x * size, it.y * size, it.z * size) }
+    }
+
+    /** Fixed 512-chord lookup stays bounded on the worker; equal time advances equal path distance. */
+    private fun sampleCurve(points: Int, curve: (Double) -> AuroraOffset): List<AuroraOffset> {
+        if (points == 0) return emptyList()
+        if (points == 1) return listOf(curve(0.0))
+        val lookup = List(513) { curve(it / 512.0) }
+        val lengths = DoubleArray(lookup.size)
+        for (i in 1 until lookup.size) {
+            val a = lookup[i - 1]; val b = lookup[i]
+            lengths[i] = lengths[i - 1] + sqrt((a.x - b.x) * (a.x - b.x) +
+                (a.y - b.y) * (a.y - b.y) + (a.z - b.z) * (a.z - b.z))
+        }
+        var edge = 1
+        return List(points) { index ->
+            val distance = lengths.last() * index / (points - 1)
+            while (edge < lengths.lastIndex && lengths[edge] < distance) edge++
+            val a = lookup[edge - 1]; val b = lookup[edge]
+            val fraction = (distance - lengths[edge - 1]) / (lengths[edge] - lengths[edge - 1])
+            AuroraOffset(a.x + (b.x - a.x) * fraction, a.y + (b.y - a.y) * fraction,
+                a.z + (b.z - a.z) * fraction)
+        }
+    }
 
     /** Rigid X, then Y, then Z rotation. */
     private fun rotate(point: AuroraOffset, x: Double, y: Double, z: Double): AuroraOffset {
