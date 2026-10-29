@@ -539,6 +539,7 @@ for candidate in "${publish_paths[@]}"; do
   printf '%s  %s\n' "$(sha256sum "${candidate}" | awk '{print $1}')" "$(basename "${candidate}")"
 done > "${manifest_path}"
 local_sha="$(sha256sum "${upload_path}" | awk '{print $1}')"
+publication_sha="$(sha256sum "${manifest_path}" | awk '{print $1}')"
 remote_manifest=""
 if remote_manifest="$("${AWS}" s3 cp "s3://${S3_BUCKET}/${S3_MANIFEST_KEY}" - \
   --endpoint-url "${S3_ENDPOINT}" 2>/dev/null)"; then
@@ -599,14 +600,14 @@ if [[ "${RP_NOTIFY_ENABLED:-1}" == "1" ]]; then
     redis_args+=(--user "${REDIS_USERNAME}")
   fi
   request_id="$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
-  notification="${REDIS_SERVER_NAME}${REDIS_WIRE_DELIMITER}v1:${local_sha}:${request_id}"
+  notification="${REDIS_SERVER_NAME}${REDIS_WIRE_DELIMITER}v1:${publication_sha}:${request_id}"
   subscribers="$("${REDIS}" "${redis_args[@]}" PUBLISH "${RP_PUBLISHED_CHANNEL}" "${notification}")" ||
     die "Unable to notify Velocity about the published resource pack"
   [[ "${subscribers}" =~ ^[1-9][0-9]*$ ]] ||
     die "Velocity resource-pack notification had no subscribers"
 
   acknowledged=""
-  expected_ack="v1:${request_id}:${local_sha}"
+  expected_ack="v1:${request_id}:${publication_sha}"
   for ((attempt = 1; attempt <= 30; attempt++)); do
     acknowledged="$("${REDIS}" "${redis_args[@]}" HGET "${RP_PUBLISHED_ACK_KEY}" "${REDIS_SERVER_NAME}" 2>/dev/null || true)"
     [[ "${acknowledged}" == "${expected_ack}" ]] && break

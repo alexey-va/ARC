@@ -1,4 +1,5 @@
 """Local publication contract: version set, retry, and notification ordering."""
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -90,6 +91,7 @@ else: sys.exit(2)
                                    "notify", "upload:RusCraftingResource.zip.sha256"])
         manifest = self.root / "bucket/RusCraftingResource.zip.sha256"
         original_manifest = manifest.read_text()
+        original_notification_sha = (self.root / "ack").read_text().split(":")[-1]
         self.assertEqual(len(original_manifest.splitlines()), 2)
         self.publish()
         self.assertEqual((self.root / "actions").read_text().splitlines(), actions)
@@ -100,6 +102,10 @@ else: sys.exit(2)
         changed_manifest = manifest.read_text()
         self.assertEqual(original_manifest.splitlines()[0], changed_manifest.splitlines()[0])
         self.assertNotEqual(original_manifest.splitlines()[1], changed_manifest.splitlines()[1])
+        changed_notification_sha = (self.root / "ack").read_text().split(":")[-1]
+        self.assertNotEqual(original_notification_sha, changed_notification_sha)
+        self.assertEqual(original_notification_sha, hashlib.sha256(original_manifest.encode()).hexdigest())
+        self.assertEqual(changed_notification_sha, hashlib.sha256(changed_manifest.encode()).hexdigest())
         self.assertEqual((self.root / "actions").read_text().splitlines(), actions * 2)
 
     def test_failed_variant_upload_never_notifies_or_commits_manifest(self):

@@ -147,11 +147,15 @@ The mirror is disabled by default and enabled only in the private spawn
 strictly bounded, the target must remain below the same network root, and a
 directory lock rejects concurrent mirror attempts.
 
-After the current ZIP object upload succeeds, the script publishes a versioned event
-containing only the staged ZIP SHA-256 and a random request ID to
+After the complete ZIP set upload succeeds, the script publishes a versioned event
+containing the SHA-256 of the complete checksum manifest and a random request ID to
 `arc.resourcepack.published` through the existing Redis connection. ProxyARC
 accepts that event only from the Paper server identities and runs the fixed
 VelocityResourcePacks `generatehashes` command.
+The complete-set fingerprint changes for a variant-only publication even when
+the universal archive is unchanged, so ProxyARC's successful-publication
+deduplication cannot suppress its refresh. The existing `v1` wire format and
+opaque SHA-256/ACK contract remain compatible with the running proxy.
 Each request has a random ID; the script waits up to 30 seconds for ProxyARC to
 acknowledge successful command dispatch in the fixed Redis field for the
 originating Paper server. Only the latest acknowledgement is retained for each
@@ -161,6 +165,8 @@ rejected command remains retryable instead of recording a completed publication
 with a stale Velocity hash. Set
 `publish-notification.enabled: false` only for an intentionally standalone
 environment.
+Acknowledgement proves command dispatch; after the asynchronous hash generation,
+read back every configured variant SHA-1 and compare it with its public ZIP.
 
 Before hashing or uploading, the script validates that the archive has exactly
 one root `pack.mcmeta`. It normalizes ItemsAdder 4.0.17 metadata into the exact
