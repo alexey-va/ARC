@@ -27,7 +27,7 @@ biome-aliases: {}
 # Omitted world selectors mean ['*']; omitted time means the entire day.
 # All shipped profiles reject underwater spawning. Shape size is a radius/half-extent.
 # Most presets use at most 6 points; cubes use 12, one sample on each edge.
-# All use count=1 and fit at least one complete small form into the default budget.
+# Ordinary profiles use count=1 and fit a complete small form into the default budget.
 # Native particles dissipate on the client; each pass picks fresh nearby anchors.
 profiles:
   # Safe fallback for unclassified vanilla AND custom biome keys.
@@ -410,35 +410,45 @@ profiles:
 # It intentionally bypasses the ordinary permission/toggle and time/biome filters.
 # Ping, loaded-chunk, passable-block and packet-budget gates still apply.
 # These decorative forms do not reveal treasure positions or change rewards.
+# Four particles per point add visibility without more packet/native submissions.
+# Four points per form allow three small nearby forms per 12-packet pass.
 event-presets:
   treasure-hunt:
     golden_constellations:
       biomes: ['*']
       time-start: 0
       time-end: 23999
-      radius: 15
-      min-distance: 5
-      vertical-min: 2.5
-      vertical-max: 5
+      radius: 9
+      min-distance: 3.5
+      vertical-min: 0.8
+      vertical-max: 3.2
       shape: SPHERE
-      shape-size: 0.8
-      points: 6
+      shape-size: 0.65
+      points: 4
       particle: minecraft:dust_color_transition
+      count: 4
+      offset-x: 0.12
+      offset-y: 0.08
+      offset-z: 0.12
       dust-color: '#E8C66B'
       dust-to-color: '#F0DEA2'
-      dust-size: 0.45
+      dust-size: 1.0
     blue_ribbons:
       biomes: ['*']
       time-start: 0
       time-end: 23999
-      radius: 20
-      min-distance: 7
-      vertical-min: 5
-      vertical-max: 8
+      radius: 11
+      min-distance: 4
+      vertical-min: 1.8
+      vertical-max: 4.2
       shape: WAVE
-      shape-size: 1.6
-      points: 6
+      shape-size: 1.2
+      points: 4
       particle: minecraft:dust_color_transition
+      count: 4
+      offset-x: 0.12
+      offset-y: 0.08
+      offset-z: 0.12
       dust-color: '#65BAB9'
       dust-to-color: '#9FBADB'
-      dust-size: 0.45
+      dust-size: 0.9

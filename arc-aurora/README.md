@@ -30,7 +30,7 @@ not imported.
 | Mushroom fields | Small violet-to-teal halos | Any time |
 | Lush / dripstone / deep-dark caves | Spores / warm specks / quiet blue wavelets | Low skylight, actual 3D cave biome |
 | Nether / End | Embers, red threads, teal wisps, soul lights / violet clusters | Dimension-specific biome keys |
-| Treasure hunt | Gold constellations and higher blue ribbons | Explicit temporary event lease |
+| Treasure hunt | Nearby gold constellations and short blue ribbons near the horizon | Explicit temporary event lease |
 
 Shapes are emissions, not persistent scene objects. Each pass selects fresh
 anchors near the viewer; existing particles then follow the client's native
@@ -158,9 +158,11 @@ ping and does not change networking settings.
 | `ping.sample-interval-ticks` | `20` | `1..1200`; minimum sample spacing |
 
 At 20 TPS, the default cadence allows at most 24 emission requests per second
-per viewer before other caps. All bundled profiles use `count=1`; increasing
-`count` increases client particle work without increasing the emission-request
-count. This is not a TCP-packet count, throughput guarantee or FPS benchmark.
+per viewer before other caps. Ordinary profiles use `count=1`; the hunt uses
+`count=4`, allowing up to 96 native particles per second at the same 24 emission
+requests. Increasing `count` increases client particle work without increasing
+the emission-request count. This is not a TCP-packet count, throughput guarantee
+or FPS benchmark.
 Actual output may be lower because of permissions, ping, terrain, audience
 rotation, deadlines or ArcCore's shared byte budget.
 
@@ -212,6 +214,24 @@ on startup. A real loader prepare/unload/load cycle has not been tested here.
 
 The treasure-hunt preset supplies ambience around viewers. Its random shapes
 are not treasure markers and do not change discovery, rewards or gameplay.
+
+The hunt's visibility tuning keeps the global cadence and packet/Main budgets
+unchanged. Both layers now use four shape points with four particles per point
+and a small Gaussian spread (`0.12, 0.08, 0.12` blocks). The 12-request pass fits
+three complete short forms: nominally six anchors and 96 native particles per
+second, versus four anchors and 24 particles before. Terrain and runtime gates
+can reduce these figures.
+
+| Hunt layer | Previous footprint | Current footprint |
+| --- | --- | --- |
+| Gold | Radius 15, minimum 5; Y +2.5..5; shape radius 0.8; dust 0.45 | Radius 9, minimum 3.5; Y +0.8..3.2; shape radius 0.65; dust 1.0 |
+| Teal | Radius 20, minimum 7; Y +5..8; wave half-width 1.6; dust 0.45 | Radius 11, minimum 4; Y +1.8..4.2; wave half-width 1.2; dust 0.9 |
+
+Vertical values are relative to feet; the engine also enforces the minimum
+distance from the viewer's eyes. This moves the forms into the ordinary forward
+view with larger individual sprites and preserves open space between forms.
+These are source geometry and budget changes, not observed native-client visual
+acceptance or a performance measurement.
 
 ## Build and publication
 
