@@ -45,10 +45,10 @@ class BackWingsRuntimeTest : FreeSpec({
             f.nativeEquipped shouldBe setOf("other_backpack")
             f.inventory.contents.toList() shouldBe switched
             f.commands shouldBe listOf(
-                "cosmetics WingHolder add arc_dreadknight_wings silent",
-                "cosmetics WingHolder remove arc_dreadknight_wings silent",
-                "cosmetics WingHolder add arc_galaxy_wings silent",
-                "cosmetics WingHolder remove arc_galaxy_wings silent",
+                "cosmetics WingHolder add arc_dreadknight_wings",
+                "cosmetics WingHolder remove arc_dreadknight_wings",
+                "cosmetics WingHolder add arc_galaxy_wings",
+                "cosmetics WingHolder remove arc_galaxy_wings",
             )
         }
     }
@@ -90,7 +90,7 @@ class BackWingsRuntimeTest : FreeSpec({
             f.nativeEquipped shouldBe setOf("other_backpack", BackWing.GALAXY.cosmeticId)
             f.inventory.contents.toList() shouldBe before
             f.player.hasPermission("unrelated.backpack") shouldBe true
-            f.commands shouldBe listOf("cosmetics WingHolder remove arc_dreadknight_wings silent")
+            f.commands shouldBe listOf("cosmetics WingHolder remove arc_dreadknight_wings")
             f.inventory.setItem(18, null)
             f.advance(12)
             f.granted() shouldBe emptySet()
@@ -107,7 +107,7 @@ class BackWingsRuntimeTest : FreeSpec({
             f.advance(12)
             f.nativeEquipped shouldBe setOf(BackWing.DECEASE.cosmeticId)
             f.selection() shouldBe null
-            f.commands shouldBe listOf("cosmetics WingHolder add arc_decease_wings silent")
+            f.commands shouldBe listOf("cosmetics WingHolder add arc_decease_wings")
             f.nativeEquipped.clear() // The native wardrobe is authoritative, including manual unequip.
             f.advance(12)
             f.runtime.onWorldChange(PlayerChangedWorldEvent(f.player, f.player.world))
@@ -159,7 +159,7 @@ class BackWingsRuntimeTest : FreeSpec({
             f.runtime.restore(f.player)
             f.swap().isCancelled shouldBe false
             f.nativeEquipped shouldBe setOf(BackWing.DREADKNIGHT.cosmeticId)
-            f.commands shouldBe listOf("cosmetics WingHolder add arc_dreadknight_wings silent")
+            f.commands shouldBe listOf("cosmetics WingHolder add arc_dreadknight_wings")
         }
     }
 
@@ -191,6 +191,31 @@ class BackWingsRuntimeTest : FreeSpec({
             f.vendorAvailable = false
             f.advance(12)
             f.granted() shouldBe emptySet()
+        }
+    }
+
+    "minimal add and remove commands succeed only when strict native readback matches the request" {
+        wingScenario { f ->
+            var readback = "false"
+            val commands = mutableListOf<String>()
+            val bridge = CosmeticsCoreBackWings(
+                { true }, { _, _ -> readback }, { commands.add(it); true },
+            )
+            bridge.setEquipped(f.player, BackWing.DREADKNIGHT, true) shouldBe false
+            readback = "true"
+            bridge.setEquipped(f.player, BackWing.DREADKNIGHT, true) shouldBe true
+            bridge.setEquipped(f.player, BackWing.DREADKNIGHT, false) shouldBe false
+            readback = "false"
+            bridge.setEquipped(f.player, BackWing.DREADKNIGHT, false) shouldBe true
+            readback = "%cosmetics_has_equipped_arc_dreadknight_wings%"
+            bridge.setEquipped(f.player, BackWing.DREADKNIGHT, false) shouldBe false
+            commands shouldBe listOf(
+                "cosmetics WingHolder add arc_dreadknight_wings",
+                "cosmetics WingHolder add arc_dreadknight_wings",
+                "cosmetics WingHolder remove arc_dreadknight_wings",
+                "cosmetics WingHolder remove arc_dreadknight_wings",
+                "cosmetics WingHolder remove arc_dreadknight_wings",
+            )
         }
     }
 
@@ -230,7 +255,7 @@ private class WingFixture(private val paper: MockBukkitTestRuntime) : AutoClosea
             val args = command.split(' ')
             args[0] shouldBe "cosmetics"
             args[1] shouldBe player.name
-            args[4] shouldBe "silent"
+            args.size shouldBe 4
             BackWing.entries.any { it.cosmeticId == args[3] } shouldBe true
             if (applyCommands) when (args[2]) {
                 "add" -> nativeEquipped.add(args[3])

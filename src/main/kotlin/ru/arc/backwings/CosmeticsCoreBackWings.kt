@@ -35,7 +35,7 @@ internal class CosmeticsCoreBackWings(
     fun setEquipped(player: Player, wing: BackWing, equip: Boolean): Boolean {
         if (!isAvailable()) return false
         val action = if (equip) "add" else "remove"
-        if (!command("cosmetics ${player.name} $action ${wing.cosmeticId} silent")) return false
+        if (!command("cosmetics ${player.name} $action ${wing.cosmeticId}")) return false
         // Dispatch success alone does not prove the vendor accepted the requested state.
         return wearing(player, wing) == equip
     }

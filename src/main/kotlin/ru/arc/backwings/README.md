@@ -46,11 +46,12 @@ No new database, Redis contract or cross-server preference policy is introduced.
 
 ## Documented integration boundary
 
-The bridge uses only the vendor's documented console commands:
+The bridge uses only the mandatory arguments of the vendor's documented console commands:
 
-- `cosmetics <player> add <id> silent`
-- `cosmetics <player> remove <id> silent`
+- `cosmetics <player> add <id>`
+- `cosmetics <player> remove <id>`
 
+Live CosmeticsCore 1.3.13 rejected the documented optional `silent` argument; no optional flags are sent.
 It queries `%cosmetics_has_equipped_<id>%` through the existing PlaceholderAPI dependency.
 The three fixed IDs are the entire command/permission surface. Only literal `true` or
 `false` (with surrounding whitespace ignored) is accepted; an unresolved token is unknown,
