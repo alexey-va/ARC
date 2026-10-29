@@ -13,6 +13,7 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.FluidCollisionMode
 import org.bukkit.Location
 import org.bukkit.Material
+import org.bukkit.entity.Display
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
@@ -49,6 +50,7 @@ class StaffSpellHudTest : FreeSpec({
             permission.setPermission(QuestGuidanceHudService.PERMISSION, true)
             h.hud.showGuidance(player, optional, hint) shouldBe true
             val card = h.recorder.records.single()
+            verify { card.handle.brightness = Display.Brightness(15, 15) }
             card.attachedPlayerId shouldBe player.uniqueId
             card.visibleViewers shouldBe setOf(player.uniqueId)
             card.visibleByDefault shouldBe false
@@ -148,6 +150,7 @@ class StaffSpellHudTest : FreeSpec({
             harness.hud.ready(player, StaffSpell.EMBER, secondary = false)
             harness.recorder.records.size shouldBe 1
             val record = harness.recorder.records.single()
+            verify { record.handle.brightness = Display.Brightness(15, 15) }
             record.visibleViewers shouldBe setOf(player.uniqueId)
             record.visibleByDefault shouldBe false
             text(record.text) shouldBe "ПКМ · Комета"

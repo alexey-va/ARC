@@ -212,6 +212,7 @@ internal class StaffSpellHud(
         val display = displays.spawnText(at, text).apply {
             isVisibleByDefault = false
             billboard = Display.Billboard.CENTER
+            brightness = visual.brightness
             lineWidth = visual.lineWidth
             alignment = TextDisplay.TextAlignment.CENTER
             textOpacity = visual.textOpacity
@@ -418,6 +419,7 @@ internal data class StaffSpellHudPose(
 )
 
 internal data class StaffSpellHudVisualSpec(
+    val brightness: Display.Brightness,
     val lineWidth: Int,
     val displayWidth: Float,
     val displayHeight: Float,
@@ -431,6 +433,7 @@ internal data class StaffSpellHudVisualSpec(
 )
 
 internal fun staffSpellHudVisualSpec() = StaffSpellHudVisualSpec(
+    brightness = Display.Brightness(15, 15),
     lineWidth = 220,
     // The visible card is translated away from its passenger anchor. A box at that anchor would
     // incorrectly frustum-cull it when looking up/down; zero disables display frustum culling.
