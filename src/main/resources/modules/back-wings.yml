@@ -1,0 +1,27 @@
+# Plain F with one of these original wing items in the main hand toggles its back cosmetic.
+# No slot is reserved and no item is moved, consumed or created. Shift+F keeps its existing action.
+# Keeping a wing equipped requires its original item in the 36 inventory storage slots.
+# Item IDs are fixed in code; the existing ItemsAdder models and PNGs are used without changes.
+models:
+  dreadknight:
+    scale: 0.70
+    rotation: { x: 0.0, y: 90.0, z: 0.0 }
+    local-anchor: { x: 0.0, y: 1.02, z: -0.31 }
+  galaxy:
+    scale: 0.90
+    rotation: { x: 0.0, y: 90.0, z: 0.0 }
+    local-anchor: { x: 0.0, y: 1.02, z: -0.25 }
+  decease:
+    scale: 0.95
+    rotation: { x: 0.0, y: 0.0, z: 0.0 }
+    local-anchor: { x: 0.0, y: 1.10, z: -0.22 }
+# Model context is NONE. Rotations are degrees, XYZ, after the body/stance rotation.
+# Anchors are in blocks relative to feet at yaw zero: +X left, +Y up, +Z forward.
+# Negative Z puts the origin behind the torso. Core's native passenger-height offset is subtracted by code.
+crouch:
+  offset: { x: 0.0, y: -0.20, z: 0.12 }
+  pitch-degrees: 28.64789
+text:
+  equipped: '<#BCE6A4>Крылья надеты'
+  removed: '<#E8DFD2>Крылья сняты'
+  missing: '<#F4BD6A>Крылья сняты: предмета нет в инвентаре'

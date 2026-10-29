@@ -467,6 +467,7 @@ open class ARC : JavaPlugin() {
             moduleDrains += ru.arc.investigation.InvestigationModule.storageDrained()
             nativeDrains += ru.arc.investigation.InvestigationModule.drained()
             nativeDrains += HooksModule.drained()
+            nativeDrains += ru.arc.backwings.BackWingsModule.drained()
             moduleDrains += ru.arc.scheduled.ScheduledCommandsManager.drained()
             attempt { sharedServiceMetrics?.close() }
             sharedServiceMetrics = null
@@ -660,6 +661,7 @@ open class ARC : JavaPlugin() {
             ru.arc.decorinteraction.DecorInteractionModule,
             ru.arc.survival.SurvivalGameplayModule,
             ru.arc.barrierremover.BarrierRemoverModule,
+            ru.arc.backwings.BackWingsModule,
             HelpCenterModule,
             ru.arc.homemarkers.HomeMarkersModule,
             ru.arc.graves.GravesModule,
@@ -945,6 +947,7 @@ open class ARC : JavaPlugin() {
                 "modules/runtime.yml",
                 "modules/audit.yml",
                 "modules/bank-audit.yml",
+                "modules/back-wings.yml",
                 "modules/decor-interactions.yml",
                 "modules/dialog-demo.yml",
                 "modules/enchanting.yml",
