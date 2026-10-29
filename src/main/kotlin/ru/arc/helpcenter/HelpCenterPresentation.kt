@@ -118,8 +118,12 @@ internal class HelpCenterPresentation(settings: HelpCenterSettings) {
         return PaperDialogBody(inset(rows), width)
     }
 
-    fun callout(text: Component, width: Int): PaperDialogBody =
-        decoration?.openCorners(text, width, corners) ?: PaperDialogBody(text, width)
+    /** Substantive copy needs a complete fill over the world, rather than an outline. */
+    fun panel(text: Component, width: Int, skin: DialogTables.PanelSkin = DialogTables.PanelSkin.NAVY): PaperDialogBody =
+        if (decoration == null) paragraph(text, width)
+        else DialogTables.filledBody(listOf(listOf(text)), null, width, listOf(1), skin)
+
+    fun callout(text: Component, width: Int): PaperDialogBody = panel(text, width)
 
     /** Marks only the diagnostic facts supplied by the planner; no inferred player progress. */
     fun checklist(entries: List<Pair<Boolean, Component>>, width: Int): Component {

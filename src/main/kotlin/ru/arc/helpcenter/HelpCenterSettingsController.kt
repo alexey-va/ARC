@@ -18,6 +18,7 @@ import ru.arc.paper.menu.PaperDialogClickContext
 import ru.arc.paper.menu.PaperDialogInputId
 import ru.arc.paper.menu.PaperDialogNumberRangeInput
 import ru.arc.paper.menu.PaperDialogScreen
+import ru.arc.paper.menu.DialogTables
 import ru.arc.chestpreview.ChestPreviewPreferences
 import ru.arc.chestpreview.ChestPreviewSettings
 import ru.arc.iteminfo.ItemInfoPreferences
@@ -43,8 +44,8 @@ internal class HelpCenterSettingsController(
 ) : AutoCloseable {
     private enum class Section(val key: String, val entries: List<String>) {
         CONTROLS("controls", listOf("shortcut", "escape", "shift-sign-edit", "stairs-sit")),
-        INTERFACE("interface", listOf("scoreboard", "tablist", "item-info", "staff-hud", "container-preview", "particles", "totem", "resource-pack")),
-        SOCIAL("social", listOf("chat", "notifications", "tpa")),
+        INTERFACE("interface", listOf("scoreboard", "tablist", "quest-display", "item-info", "staff-hud", "container-preview", "particles", "totem", "resource-pack")),
+        SOCIAL("social", listOf("chat", "notifications", "tpa", "join-messages")),
         WORLD("world", listOf("trails", "flight", "lands", "portal-style", "portal-by-other", "portal-for-other")),
     }
     private val presentation = HelpCenterPresentation(settings)
@@ -63,25 +64,18 @@ internal class HelpCenterSettingsController(
             button("settings_${section.key}", text("settings-${section.key}-label"), text("settings-${section.key}-tooltip")) {
                 openSection(player, section)
             }
-        } + listOfNotNull(
-            button("settings_join_messages", text("settings-join-messages-label"), text("settings-join-messages-tooltip")) {
-                navigation.visit(player) { open(player) }
-                JoinMessageGuiFactory.show(player, isJoin = true)
-            },
-            if (HelpCenterFeature.RANKS in gateway.features()) {
-                button("settings_quest_display", text("settings-quest-display-label"), text("settings-quest-display-tooltip")) {
-                    if (!gateway.execute(player, settings.action("quest-display"))) player.sendMessage(text("action-failed"))
-                }
-            } else null,
-        ) + if (player.hasPermission("tab.group.admin")) listOf(
+        } + if (player.hasPermission("tab.group.admin")) listOf(
             button("legacy_admin", text("legacy-settings-admin", "state" to state(entries.getValue("admin"))), text("legacy-settings-admin-tooltip")) {
                 legacy.execute(player, "admin")
             },
         ) else emptyList()
         showDialog(player, PaperDialogScreen(
             id = "help.category.settings", title = text("category-settings-title"),
-            body = listOf(presentation.callout(text("settings-hub-body",
-                "shortcut" to state(entries.getValue("shortcut")), "escape" to state(entries.getValue("escape"))), 468)),
+            body = listOf(presentation.compactFacts(listOf(
+                text("settings-shortcut-label") to state(entries.getValue("shortcut")),
+                text("settings-escape-label") to state(entries.getValue("escape")),
+                text("table-chat-label") to text(if (gateway.settings(player).chatMode == HelpCenterChatMode.GLOBAL) "chat-global-state" else "chat-local-state"),
+            ), 380, DialogTables.PanelSkin.NAVY)),
             buttons = buttons, exitButton = button("root", text("root-label")) { openRoot(player) }, columns = 2,
         ))
     }
@@ -90,48 +84,66 @@ internal class HelpCenterSettingsController(
         navigation.visit(player) { openSection(player, section) }
         val entries = legacy.entries(player).associateBy { it.id }
         val snapshot = gateway.settings(player)
-        val buttons = section.entries.map { id ->
+        val features = gateway.features()
+        val buttons = section.entries.mapNotNull { id ->
             when (id) {
-                "chat" -> {
-                    val global = snapshot.chatMode == HelpCenterChatMode.GLOBAL
-                    val action = if (global) "chat-local" else "chat-global"
-                    button("setting_$action", text("setting-chat-current", "state" to text(if (global) "chat-global-state" else "chat-local-state")), text("setting-$action-tooltip")) {
-                        val token = navigation.visit(player) { openSection(player, section) }
-                        gateway.selectChatMode(player, if (global) HelpCenterChatMode.LOCAL else HelpCenterChatMode.GLOBAL)
-                            .whenCompleteSync(tasks) { _, failure ->
-                                if (active && player.isOnline && navigation.isCurrent(player, token)) {
-                                    if (failure != null) player.sendMessage(text("action-failed"))
-                                    openSection(player, section)
-                                }
-                            }
-                    }
+                "chat" -> button("setting_chat", text("setting-chat-current", "state" to text(if (snapshot.chatMode == HelpCenterChatMode.GLOBAL) "chat-global-state" else "chat-local-state")), text("settings-chat-tooltip")) {
+                    openChat(player)
                 }
-                "particles" -> button("setting_particles", text("setting-particles-current", "state" to booleanState(snapshot.particlesEnabled)), text("setting-particles-tooltip")) {
+                "join-messages" -> button("settings_join_messages", text("settings-join-messages-label"), text("settings-join-messages-tooltip")) {
+                    JoinMessageGuiFactory.show(player, isJoin = true)
+                }
+                "quest-display" -> if (HelpCenterFeature.RANKS in features) {
+                    button("settings_quest_display", text("settings-quest-display-label"), text("settings-quest-display-tooltip")) {
+                        if (!gateway.execute(player, settings.action("quest-display"))) player.sendMessage(text("action-failed"))
+                    }
+                } else null
+                "particles" -> if (HelpCenterFeature.PLAYER_PARTICLES in features && snapshot.particlesEnabled != null) button("setting_particles", text("setting-particles-current", "state" to booleanState(snapshot.particlesEnabled)), text("setting-particles-tooltip")) {
                     executeCatalog(player, "particles")
                     openSection(player, section)
-                }
+                } else null
                 "trails" -> {
-                    val available = HelpCenterFeature.TRAILS in gateway.features()
                     val enabled = snapshot.trailsEnabled
+                    if (HelpCenterFeature.TRAILS !in features || enabled == null) return@mapNotNull null
                     val action = if (enabled == true) "trails-off" else "trails-on"
-                    val known = available && enabled != null
-                    button(if (known) "setting_$action" else "setting_trails_unavailable",
-                        text("setting-trails-current", "state" to if (available) booleanState(enabled) else text("settings-unavailable-state")),
-                        text(if (known) "setting-$action-tooltip" else "settings-trails-unavailable-tooltip")) {
-                        if (known) {
-                            executeCatalog(player, action)
-                            openSection(player, section)
-                        }
+                    button("setting_$action", text("setting-trails-current", "state" to booleanState(enabled)), text("setting-$action-tooltip")) {
+                        executeCatalog(player, action)
+                        openSection(player, section)
                     }
                 }
+                "lands" -> if (HelpCenterFeature.LANDS in features) legacyButton(player, entries.getValue(id), section) else null
+                "tpa" -> if (HelpCenterFeature.HUSK_HOMES in features) legacyButton(player, entries.getValue(id), section) else null
                 else -> legacyButton(player, entries.getValue(id), section)
             }
         }
         showDialog(player, PaperDialogScreen(
             id = "help.settings.section.${section.key}", title = text("settings-${section.key}-title"),
-            body = listOfNotNull(presentation.paragraph(text("settings-${section.key}-body"), 468),
-                presentation.separator(468)), buttons = buttons,
+            body = listOf(presentation.panel(text("settings-${section.key}-body"), 468)), buttons = buttons,
             exitButton = button("back", text("settings-back-label")) { open(player) }, columns = 2,
+        ))
+    }
+
+    private fun openChat(player: Player, notice: String? = null) {
+        navigation.visit(player) { openChat(player) }
+        val current = gateway.settings(player).chatMode
+        showDialog(player, PaperDialogScreen(
+            id = "help.settings.chat", title = text("settings-chat-title"),
+            body = listOf(presentation.panel(text("settings-chat-body"), 468)) +
+                listOfNotNull(notice?.let { PaperDialogBody(text(it), 468) }),
+            buttons = listOf(HelpCenterChatMode.LOCAL, HelpCenterChatMode.GLOBAL).map { mode ->
+                val name = if (mode == HelpCenterChatMode.GLOBAL) "global" else "local"
+                val label = text("settings-chat-$name-label")
+                button("setting_chat_$name", if (current == mode) text("settings-selected-option", "label" to label) else label,
+                    text("setting-chat-$name-tooltip")) {
+                    if (current != mode) {
+                        val token = navigation.visit(player) { openChat(player) }
+                        gateway.selectChatMode(player, mode).whenCompleteSync(tasks) { _, failure ->
+                            if (active && player.isOnline && navigation.isCurrent(player, token)) openChat(player, if (failure == null) null else "action-failed")
+                        }
+                    }
+                }
+            },
+            exitButton = button("back", text("settings-back-label")) { openSection(player, Section.SOCIAL) }, columns = 2,
         ))
     }
 
@@ -190,7 +202,7 @@ internal class HelpCenterSettingsController(
     private fun openScoreboard(player: Player, section: Section) {
         navigation.visit(player) { openScoreboard(player, section) }
         fun toggleLabel(key: String, enabled: Boolean): Component = text(
-            if (enabled) "settings-scoreboard-selected" else "settings-scoreboard-unselected",
+            if (enabled) "settings-toggle-on" else "settings-toggle-off",
             "label" to text(key),
         )
         showDialog(player, PaperDialogScreen(
@@ -250,7 +262,7 @@ internal class HelpCenterSettingsController(
             )
         }
         fun toggleLabel(key: String, enabled: Boolean): Component = text(
-            if (enabled) "settings-scoreboard-selected" else "settings-scoreboard-unselected",
+            if (enabled) "settings-toggle-on" else "settings-toggle-off",
             "label" to text(key),
         )
         showDialog(player, PaperDialogScreen(

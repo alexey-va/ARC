@@ -26,6 +26,9 @@ class HelpCenterConfigTest : StringSpec({
             settings.decorationFont shouldBe ""
             settings.maxHomes shouldBe 12
             settings.maxSearchResults shouldBe 8
+            settings.searchAi.enabled shouldBe false
+            settings.searchAi.model shouldBe "google/gemini-2.5-flash-lite"
+            settings.searchAi.maxOutputTokens shouldBe 128
             settings.text("root-title").contains("Главное меню") shouldBe true
             settings.text("now-title").contains("Мой профиль") shouldBe true
             val aliases = settings::text
@@ -87,8 +90,8 @@ class HelpCenterConfigTest : StringSpec({
                 MiniMessage.miniMessage().deserialize(settings.text(key)).containsBold() shouldBe false
             }
             settings.text("travel-body").contains("случайная телепортация", ignoreCase = true) shouldBe true
-            settings.text("commands-label").contains("✧") shouldBe true
-            settings.text("category-settings-label").contains("☷") shouldBe true
+            settings.text("commands-label").contains("✧") shouldBe false
+            settings.text("category-settings-label").contains("☷") shouldBe false
             settings.text("category-trade-body").contains("итоговую сумму") shouldBe true
             settings.action("rtp-vanilla") shouldBe "arc rtp vanilla"
             settings.action("rtp-mining") shouldBe "arc rtp mining"
@@ -158,7 +161,7 @@ class HelpCenterConfigTest : StringSpec({
             MiniMessage.miniMessage().deserialize(settings.text("pay-confirm-label")).color()?.value() shouldBe 0x2bba43
             MiniMessage.miniMessage().deserialize(settings.text("home-delete-confirm")).color()?.value() shouldBe 0xff6b61
             MiniMessage.miniMessage().deserialize(settings.text("back-label")).color()?.value() shouldBe 0xffffff
-            MiniMessage.miniMessage().deserialize(settings.text("setting-chat-current")).color()?.value() shouldBe 0xd7b486
+            MiniMessage.miniMessage().deserialize(settings.text("setting-chat-current")).color()?.value() shouldBe 0xe5ba73
             settings.text("back-command-label").contains("прежнее место", ignoreCase = true) shouldBe true
             listOf(
                 "requests-short-label",

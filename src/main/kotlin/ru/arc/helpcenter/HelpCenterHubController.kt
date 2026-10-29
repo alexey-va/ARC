@@ -1,6 +1,7 @@
 package ru.arc.helpcenter
 
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
@@ -38,16 +39,16 @@ internal class HelpCenterHubController(
                 id = "help.action",
                 title = text("action-title", "action" to command.label),
                 body = listOf(
-                    PaperDialogBody(
+                    presentation.panel(
                         text(
                             "action-body",
                             "description" to command.description,
                             "command" to command.command,
-                        ),
+                        ), 468,
                     ),
                 ),
                 buttons = listOf(
-                    button("run_action", text("action-run-label")) { executeCatalog(player, command.id) }
+                    button("run_action", text(if (command.opensInventory || command.opensDialog) "action-open-label" else "action-run-label")) { executeCatalog(player, command.id) }
                         .let { if (command.opensInventory || command.opensDialog) it else it.closing() },
                 ),
                 exitButton = button("back", text("back-label"), action = returnTo),
@@ -62,7 +63,7 @@ internal class HelpCenterHubController(
             PaperDialogScreen(
                 id = "help.goals",
                 title = text("goals-title"),
-                body = listOf(PaperDialogBody(text("goals-body"), width = 500)),
+                body = listOf(presentation.panel(text("goals-body"), 468)),
                 buttons = HelpCenterGoal.entries.map { goal ->
                     button("goal_${goal.name.lowercase()}", text("goal-${goal.name.lowercase()}-label")) {
                         openGoal(player, goal, returnTo)
@@ -198,12 +199,12 @@ internal class HelpCenterHubController(
                 id = "help.requests",
                 title = text("requests-title"),
                 body = listOf(
-                    PaperDialogBody(
+                    presentation.panel(
                         text(
                             "requests-body",
                             "hint" to plain(if (OnboardingService.hasActiveQuest(player.uniqueId)) "onboarding-pending" else "onboarding-clear"),
                         ),
-                        width = 500,
+                        width = 468,
                     ),
                 ) + listOfNotNull(notice?.let { PaperDialogBody(text(it), width = 500) }),
                 buttons = responseButtons + ids.mapNotNull { id -> entries[id]?.let { command ->
@@ -280,7 +281,7 @@ internal class HelpCenterHubController(
             PaperDialogScreen(
                 id = "help.goal",
                 title = text("goal-title", "goal" to plain("goal-${goal.name.lowercase()}-label")),
-                body = listOf(PaperDialogBody(text("goal-${goal.name.lowercase()}-body"))) +
+                body = listOf(presentation.panel(text("goal-${goal.name.lowercase()}-body"), 468)) +
                     if (commands.isEmpty() && goal != HelpCenterGoal.TOGETHER) listOf(PaperDialogBody(text("category-empty"))) else emptyList(),
                 buttons = ((if (goal == HelpCenterGoal.TOGETHER) listOf(
                     button("goal_players", text("players-label")) { openPage(player, HelpCenterPage.PLAYERS) },
@@ -316,14 +317,14 @@ internal class HelpCenterHubController(
         button("back", text("back-label")) { openPage(player, page) }
 
     private fun button(id: String, label: Component, tooltip: Component = Component.empty(), action: () -> Unit): PaperDialogButton =
-        PaperDialogButton(PaperDialogActionId.of(id.replace('-', '_')), label, tooltip, onClick = { action() })
+        PaperDialogButton(PaperDialogActionId.of(id.replace('-', '_')), label, tooltip, width = 230, onClick = { action() })
 
     private fun PaperDialogButton.closing(): PaperDialogButton = copy(closeDialogBeforeAction = true)
 
     private fun text(key: String, vararg placeholders: Pair<String, String>): Component = miniMessage.deserialize(
         settings.text(key),
         TagResolver.resolver(placeholders.map { (name, value) -> Placeholder.unparsed(name, value) }),
-    )
+    ).decoration(TextDecoration.ITALIC, false)
 
     private fun plain(key: String): String = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
         .plainText().serialize(text(key))

@@ -9,6 +9,7 @@ import ru.arc.network.NetworkPlayerName
 enum class HelpCenterPage(vararg val aliases: String) {
     ROOT("root", "главная", "menu", "меню"),
     HELP("help", "помощь", "справка"),
+    RULES("rules", "правила"),
     NOW("now", "сейчас"),
     MY("my", "мое", "моё", "про меня"),
     GUIDE("guide", "гайд", "start", "начало"),
@@ -261,25 +262,44 @@ object HelpCenterPlanner {
         val needle = normalize(query).removePrefix("/")
         if (needle.isBlank()) return entries.take(limit)
         val allQueryTokens = HelpCenterLexicon.terms(needle)
-        val queryTokens = allQueryTokens.filterNot { it.surface in STOP_WORDS }.ifEmpty { allQueryTokens }
-        val scored = entries
-            .asSequence()
-            .map { entry -> entry to score(entry, needle, queryTokens) }
-            .filter { (_, score) -> score != Int.MAX_VALUE }
-            .sortedWith(compareBy<Pair<HelpCenterSearchEntry, Int>> { it.second }.thenBy { it.first.id })
-            .toList()
+        val content = allQueryTokens.filterNot { it.surface in STOP_WORDS }
+        val queryTokens = content.filterNot { it.surface == "не" }.distinctBy { it.root }.ifEmpty { return emptyList() }
+        val candidates = entries.filterNot { conflictsWithNegation(content, HelpCenterLexicon.terms(it.label)) }
+        val direct = candidates.map { it to directScore(it, needle) }.filter { it.second != Int.MAX_VALUE }
+        if (direct.isNotEmpty()) {
+            return direct.sortedWith(compareBy<Pair<HelpCenterSearchEntry, Int>> { it.second }.thenBy { it.first.id })
+                .take(limit).map { it.first }
+        }
+        val matches = candidates.map { entry -> entry to tokenScores(entry, queryTokens) }
+        // Unknown conversational words do not bury useful configured matches. Rare catalog words
+        // carry more weight than generic words shared by many menu entries.
+        val weights = queryTokens.indices.map { index ->
+            val frequency = matches.count { (_, costs) -> costs[index] != Int.MAX_VALUE }
+            when {
+                frequency == 0 -> 0
+                frequency * 3 <= candidates.size -> 3
+                frequency * 2 <= candidates.size -> 2
+                else -> 1
+            }
+        }
+        val totalWeight = weights.sum()
+        if (totalWeight == 0) return emptyList()
+        val scored = matches.mapNotNull { (entry, costs) ->
+            val matchedWeight = costs.indices.sumOf { if (costs[it] == Int.MAX_VALUE) 0 else weights[it] }
+            if (matchedWeight * 2 < totalWeight) return@mapNotNull null
+            val cost = costs.filter { it != Int.MAX_VALUE }.sum()
+            entry to TOKEN_SCORE + (totalWeight - matchedWeight) * MISSING_TOKEN_PENALTY + cost
+        }.sortedWith(compareBy<Pair<HelpCenterSearchEntry, Int>> { it.second }.thenBy { it.first.id })
         val best = scored.firstOrNull()?.second ?: return emptyList()
         return scored
             .asSequence()
-            .filter { (_, score) ->
-                if (best < TOKEN_SCORE) score < TOKEN_SCORE else score <= best + FUZZY_WINDOW
-            }
+            .filter { (_, score) -> score <= best + FUZZY_WINDOW }
             .take(limit)
             .map { it.first }
             .toList()
     }
 
-    private fun score(entry: HelpCenterSearchEntry, needle: String, queryTokens: List<HelpCenterLexicon.Term>): Int {
+    private fun directScore(entry: HelpCenterSearchEntry, needle: String): Int {
         val command = entry.command?.let(::normalize)?.removePrefix("/")
         val label = normalize(entry.label)
         val description = normalize(entry.description)
@@ -289,24 +309,31 @@ object HelpCenterPlanner {
         if (label == needle) return 1
         if (command?.startsWith(needle) == true) return 2
         if (haystack.contains(needle)) return 3
+        return Int.MAX_VALUE
+    }
 
-        val fields = listOf(command.orEmpty(), label, description, keywords).map(HelpCenterLexicon::terms)
-        var matched = 0
-        var total = 0
-        for (queryToken in queryTokens) {
-            val best = fields.withIndex().minOf { (fieldIndex, fieldTokens) ->
+    private fun tokenScores(entry: HelpCenterSearchEntry, queryTokens: List<HelpCenterLexicon.Term>): List<Int> {
+        val fields = listOf(entry.command.orEmpty(), entry.label, entry.description, entry.keywords).map(HelpCenterLexicon::terms)
+        return queryTokens.map { queryToken ->
+            fields.withIndex().minOf { (fieldIndex, fieldTokens) ->
                 val tokenMatch = fieldTokens.minOfOrNull { candidate -> tokenCost(queryToken, candidate) }
                     ?: Int.MAX_VALUE
                 if (tokenMatch == Int.MAX_VALUE) Int.MAX_VALUE else tokenMatch + fieldIndex * FIELD_WEIGHT
             }
-            if (best != Int.MAX_VALUE) {
-                matched++
-                total += best
-            }
         }
-        val required = if (queryTokens.size == 1) 1 else (queryTokens.size + 1) / 2
-        if (matched < required) return Int.MAX_VALUE
-        return TOKEN_SCORE + (queryTokens.size - matched) * MISSING_TOKEN_PENALTY + total
+    }
+
+    /** A lexical polarity guard, not an intent parser: "не удалять" must not rank "Удалить". */
+    private fun conflictsWithNegation(query: List<HelpCenterLexicon.Term>, label: List<HelpCenterLexicon.Term>): Boolean {
+        fun negativeWords(words: List<HelpCenterLexicon.Term>) = words.zipWithNext()
+            .filter { (left, _) -> left.surface == "не" }.map { it.second }
+        val queryNegative = negativeWords(query)
+        val labelNegative = negativeWords(label)
+        val queryPositive = query.filter { it.surface != "не" && it !in queryNegative }
+        val labelPositive = label.filter { it.surface != "не" && it !in labelNegative }
+        fun overlaps(first: List<HelpCenterLexicon.Term>, second: List<HelpCenterLexicon.Term>) =
+            first.any { a -> second.any { b -> tokenCost(a, b) <= 3 } }
+        return overlaps(queryNegative, labelPositive) || overlaps(queryPositive, labelNegative)
     }
 
     private fun tokenCost(query: HelpCenterLexicon.Term, candidate: HelpCenterLexicon.Term): Int {
@@ -366,6 +393,9 @@ object HelpCenterPlanner {
         "как", "где", "что", "мне", "я", "хочу", "нужно", "надо", "можно", "пожалуйста",
         "команда", "команды", "для", "это", "свой", "свою", "свои", "свое", "мой", "моя",
         "мои", "моей", "мою", "мое", "у", "в", "на", "из", "к", "по",
+        "чтобы", "меня", "с", "со", "за", "о", "об", "до", "от", "и", "или", "а",
+        "бы", "быть", "было", "были", "туда", "оттуда", "там", "тут", "здесь", "этот", "эта", "эти",
+        "подскажи", "помоги", "пожалуй", "нужен", "нужна", "нужны",
     )
     private const val FIELD_WEIGHT = 3
     private const val TOKEN_SCORE = 20
@@ -375,10 +405,9 @@ object HelpCenterPlanner {
 }
 
 /**
- * Small deterministic Russian lexicon for player help search. It deliberately
- * avoids network calls and heavyweight NLP dependencies: Unicode cleanup,
- * Russian suffix reduction and the configured intent vocabulary form the
- * semantic index.
+ * Local lexical fallback for help search: Unicode cleanup, Russian suffixes,
+ * configured keywords and spelling similarity. Meaning-based ranking belongs
+ * to [HelpCenterSearchService]; lexical similarity is not semantic inference.
  */
 internal object HelpCenterLexicon {
     data class Term(val surface: String, val root: String)

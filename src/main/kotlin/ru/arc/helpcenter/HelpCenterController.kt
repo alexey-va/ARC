@@ -2,6 +2,7 @@ package ru.arc.helpcenter
 
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextColor
+import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
@@ -47,6 +48,7 @@ internal class HelpCenterController(
     private val enchantmentsCatalog: () -> HelpCenterEnchantmentsCatalog = HelpCenterEnchantmentsCatalog::fromAeApi,
     private val activeGraveCount: (Player) -> Int = { player -> GravesModule.activeCount(player) },
     private val openGraves: (Player) -> Boolean = { player -> GravesModule.open(player) },
+    private val searchService: HelpCenterSearchService = HelpCenterSearchService(options = settings.searchAi),
 ) {
     private val presentation = HelpCenterPresentation(settings)
     private val present: (Player, PaperDialogScreen) -> Unit = showDialog
@@ -80,10 +82,10 @@ internal class HelpCenterController(
                     label = command.label,
                     description = command.description,
                     keywords = command.keywords,
-                    action = if (command.id == "privat") {
-                        HelpCenterSearchAction.OpenPage(HelpCenterPage.PRIVAT)
-                    } else {
-                        HelpCenterSearchAction.Execute(command.command)
+                    action = when (command.id) {
+                        "privat" -> HelpCenterSearchAction.OpenPage(HelpCenterPage.PRIVAT)
+                        "rules" -> HelpCenterSearchAction.OpenPage(HelpCenterPage.RULES)
+                        else -> HelpCenterSearchAction.Execute(command.command)
                     },
                     command = command.command,
                 ),
@@ -133,6 +135,7 @@ internal class HelpCenterController(
         active = false
         navigation.close()
         tasks.close()
+        searchService.close()
         personalSettings.close()
         hub.close()
         inventoryReturn.close()
@@ -143,6 +146,7 @@ internal class HelpCenterController(
         when (page) {
             HelpCenterPage.ROOT -> openRoot(player)
             HelpCenterPage.HELP -> openHelp(player)
+            HelpCenterPage.RULES -> openRules(player)
             HelpCenterPage.NOW, HelpCenterPage.MY -> openNow(player)
             HelpCenterPage.GUIDE -> openGuide(player)
             HelpCenterPage.DUNGEONS_GUIDE -> openDungeonsGuide(player)
@@ -165,6 +169,11 @@ internal class HelpCenterController(
             HelpCenterPage.CONTEXT -> hub.openContext(player)
             HelpCenterPage.REQUESTS -> hub.openRequests(player)
         }
+    }
+
+    fun search(player: Player, query: String) {
+        ArcMenus.beginDialogFlow(player)
+        openSearch(player, query)
     }
 
     private fun openRoot(player: Player) {
@@ -259,31 +268,40 @@ internal class HelpCenterController(
             PaperDialogScreen(
                 id = "help.help",
                 title = text("help-title"),
-                body = listOfNotNull(presentation.paragraph(text("help-body"), 506), presentation.separator(506)),
+                body = listOf(presentation.panel(text("help-body"), 468)),
                 buttons = listOf(
-                    button("help_guide", text("help-guide-label"), text("guide-tooltip")) {
-                        openGuide(player) { openHelp(player) }
-                    },
-                    button("help_goals", text("help-goals-label"), text("goals-tooltip")) {
-                        hub.openGoals(player, HelpCenterPage.HELP)
-                    },
+                    button("help_commands", text("help-commands-label"), text("commands-tooltip")) { openCommands(player) },
                     button("help_recovery", text("help-recovery-label"), text("recovery-tooltip")) {
                         openRecovery(player, HelpCenterPage.HELP)
                     },
-                    button("help_commands", text("help-commands-label"), text("commands-tooltip")) { openCommands(player) },
-                    button("help_now", text("help-now-label"), text("now-tooltip")) { openNow(player) },
-                    button("help_context", text("help-context-label"), text("context-tooltip")) {
-                        hub.openContext(player, HelpCenterPage.HELP)
+                    button("help_guide", text("help-guide-label"), text("guide-tooltip")) {
+                        openGuide(player) { openHelp(player) }
+                    },
+                    button("help_rules", text("rules-label"), text("rules-tooltip")) { openRules(player) },
+                    button("help_goals", text("help-goals-label"), text("goals-tooltip")) {
+                        hub.openGoals(player, HelpCenterPage.HELP)
                     },
                     button("help_players", text("help-players-label"), text("players-tooltip")) { openPlayers(player) },
                     button("help_requests", text("help-requests-label"), text("requests-tooltip")) {
                         hub.openRequests(player, HelpCenterPage.HELP)
                     },
-                    button("help_menu", text("help-menu-label"), text("main-menu-tooltip")) { openRoot(player) },
-                ),
+                    button("help_context", text("help-context-label"), text("context-tooltip")) {
+                        hub.openContext(player, HelpCenterPage.HELP)
+                    },
+                ).map { it.copy(width = 230) },
                 columns = 2,
             ),
         )
+    }
+
+    private fun openRules(player: Player) {
+        markNavigation(player) { openRules(player) }
+        present(player, PaperDialogScreen(
+            id = "help.rules",
+            title = text("rules-title"),
+            body = listOf(presentation.panel(text("rules-body"), 468)),
+            buttons = emptyList(),
+        ))
     }
 
     private fun openDungeonsGuide(player: Player) {
@@ -389,14 +407,14 @@ internal class HelpCenterController(
             PaperDialogScreen(
                 id = "help.guide",
                 title = text("guide-title"),
-                body = listOf(presentation.paragraph(text("guide-body"), 500)),
+                body = listOf(presentation.panel(text("guide-body"), 468)),
                 buttons = listOf(
                     button("kit", text("kit-label"), commandTooltip("kit")) { executeCatalog(player, "kit") }.closing(),
                     button("jobs", text("jobs-label"), commandTooltip("jobs")) { executeCatalog(player, "jobs") },
                     button("home", text("travel-label"), text("travel-tooltip")) { openTravel(player) },
                     button("privat", text("privat-label"), text("privat-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
-                    button("rules", text("rules-label"), commandTooltip("rules")) { executeCatalog(player, "rules") }.closing(),
-                ),
+                    button("rules", text("rules-label"), text("rules-tooltip")) { openRules(player) },
+                ).map { it.copy(width = 230) },
                 exitButton = backButton("back", player, action = { returnTo() }),
                 columns = 2,
             ),
@@ -410,12 +428,29 @@ internal class HelpCenterController(
             PaperDialogScreen(
                 id = "help.commands",
                 title = text("commands-title"),
-                body = listOf(presentation.callout(text("commands-body"), 500)),
-                inputs = listOf(PaperDialogTextInput(SEARCH_INPUT, text("search-input"), maxLength = 48)),
+                body = listOf(presentation.panel(text("commands-body"), 468)),
+                inputs = listOf(PaperDialogTextInput(SEARCH_INPUT, text("search-input"), maxLength = 120, width = 460)),
                 buttons = listOf(
                     contextButton("search", text("search-label"), text("search-tooltip")) { context ->
                         openSearch(player, context.text(SEARCH_INPUT).orEmpty())
                     },
+                    button("search_catalog", text("search-catalog-label"), text("search-catalog-tooltip")) {
+                        openSearchCatalog(player)
+                    },
+                ).map { it.copy(width = 230) },
+                exitButton = rootButton(player),
+                columns = 2,
+            ),
+        )
+    }
+
+    private fun openSearchCatalog(player: Player) {
+        markNavigation(player) { openSearchCatalog(player) }
+        present(player, PaperDialogScreen(
+                id = "help.catalog",
+                title = text("search-catalog-title"),
+                body = emptyList(),
+                buttons = listOf(
                     categoryButton(player, HelpCenterCategory.START),
                     categoryButton(player, HelpCenterCategory.TRAVEL),
                     categoryButton(player, HelpCenterCategory.PROTECTION),
@@ -423,13 +458,11 @@ internal class HelpCenterController(
                     categoryButton(player, HelpCenterCategory.TRADE),
                     categoryButton(player, HelpCenterCategory.PROGRESS),
                     categoryButton(player, HelpCenterCategory.TECHNOLOGY),
-                    categoryButton(player, HelpCenterCategory.SETTINGS),
-                    button("recovery", text("recovery-label"), text("recovery-tooltip")) { openRecovery(player) },
-                ),
-                exitButton = rootButton(player),
+                    button("category_settings", text("category-settings-label"), text("category-settings-tooltip")) { openSettings(player) },
+                ).map { it.copy(width = 230) },
+                exitButton = backButton("back", player, ::openCommands),
                 columns = 2,
-            ),
-        )
+            ))
     }
 
     private fun openPlayers(player: Player, rawQuery: String = "", page: Int = 0, localOnly: Boolean = false) {
@@ -598,7 +631,8 @@ internal class HelpCenterController(
                         "problem_${problem.name.lowercase()}",
                         text("problem-${problem.name.lowercase().replace('_', '-')}-label"),
                     ) { hub.openDiagnostics(player, problem) { openRecovery(player, returnTo) } }
-                } + button("stuck", text("stuck-label"), commandTooltip("stuck")) { execute(player, "stuck") }.closing(),
+                }.plus(button("stuck", text("stuck-label"), commandTooltip("stuck")) { execute(player, "stuck") }.closing())
+                    .map { it.copy(width = 230) },
                 exitButton = backButton("back", player, action = { open(player, returnTo) }),
                 columns = 2,
             ),
@@ -606,75 +640,58 @@ internal class HelpCenterController(
     }
 
     private fun openSearch(player: Player, rawQuery: String) {
-        val token = markNavigation(player) { openSearch(player, rawQuery) }
-        val query = rawQuery.trim()
-        present(
-            player,
-            PaperDialogScreen(
-                id = "help.search",
-                title = text("search-title"),
-                body = listOf(PaperDialogBody(text("search-loading"), width = 500)),
-                buttons = emptyList(),
-                exitButton = backButton("back", player, ::openCommands),
-            ),
-        )
-        gateway.loadHomes(player, settings.loadTimeoutSeconds).handle { homes, _ -> homes?.homes.orEmpty() }
-            .whenCompleteSync(tasks) { homes, _ ->
+        val query = rawQuery.trim().take(120)
+        val token = markNavigation(player) { openSearch(player, query) }
+        present(player, PaperDialogScreen(
+            id = "help.search",
+            title = text("search-title"),
+            body = listOf(presentation.panel(text("search-loading"), 468)),
+            inputs = listOf(searchInput(query)),
+            buttons = searchControls(player),
+            exitButton = backButton("back", player, ::openCommands),
+            columns = 2,
+        ))
+        searchService.search(availableSearchCatalog(player), query, settings.maxSearchResults)
+            .whenCompleteSync(tasks) { result, failure ->
                 if (!active || !player.isOnline || !navigation.isCurrent(player, token)) return@whenCompleteSync
-                val resolved = HelpCenterSmartQuery.resolve(query, homes.orEmpty(), gateway.onlinePlayers())
-                if (resolved == null) showSearchResults(player, query) else openResolvedQuery(player, resolved)
+                val available = availableSearchCatalog(player)
+                val allowedIds = available.mapTo(hashSetOf()) { it.id }
+                val resolved = if (failure == null && result != null) {
+                    result.copy(entries = result.entries.filter { it.id in allowedIds })
+                } else HelpCenterSearchResult(HelpCenterPlanner.search(available, query, settings.maxSearchResults), HelpCenterSearchMode.LEXICAL)
+                showSearchResults(player, query, resolved)
             }
     }
 
-    private fun showSearchResults(player: Player, query: String) {
-        val results = HelpCenterPlanner.search(availableSearchCatalog(player), query, settings.maxSearchResults)
-        val body = mutableListOf(
-            PaperDialogBody(
-                text(
-                    "search-body",
-                    "query" to query.ifEmpty { "все команды" },
-                    "count" to results.size.toString(),
-                ),
-            ),
-        )
-        if (results.isEmpty()) body += PaperDialogBody(text("search-empty"))
-        present(
-            player,
-            PaperDialogScreen(
-                id = "help.search",
-                title = text("search-title"),
-                body = body,
-                buttons = results.map { searchResultButton(player, it) }.ifEmpty {
-                    listOf(button("search_again", text("commands-label"), text("commands-tooltip")) { openCommands(player) })
-                } + listOf(button("recovery", text("recovery-label"), text("recovery-tooltip")) { openRecovery(player) }),
-                exitButton = backButton("back", player, ::openCommands),
-                columns = 2,
-            ),
-        )
-    }
+    private fun searchInput(query: String) =
+        PaperDialogTextInput(SEARCH_INPUT, text("search-input"), initial = query, maxLength = 120, width = 460)
 
-    private fun openResolvedQuery(player: Player, resolved: HelpCenterResolvedQuery) {
-        when (resolved) {
-            is HelpCenterResolvedQuery.Home -> when (resolved.action) {
-                HelpCenterHomeAction.TELEPORT -> openHome(player, resolved.home)
-                HelpCenterHomeAction.RELOCATE -> openRelocateHome(player, resolved.home)
-                HelpCenterHomeAction.DELETE -> openDeleteHome(player, resolved.home)
-            }
-            is HelpCenterResolvedQuery.Player -> when (resolved.action) {
-                HelpCenterPlayerAction.TELEPORT_TO -> execute(player, HelpCenterCommands.teleportRequest(resolved.player.name))
-                HelpCenterPlayerAction.TELEPORT_HERE -> execute(player, HelpCenterCommands.teleportHere(resolved.player.name))
-                HelpCenterPlayerAction.MESSAGE -> openPlayerMessage(player, resolved.player)
-                HelpCenterPlayerAction.PAY -> {
-                    val amount = requireNotNull(resolved.value)
-                    openPaymentConfirmation(player, resolved.player, amount, HelpCenterCommands.pay(resolved.player.name, amount))
-                }
-                HelpCenterPlayerAction.DUEL -> execute(player, HelpCenterCommands.duel(resolved.player.name))
-                HelpCenterPlayerAction.INVITE -> inviteToLand(player, resolved.player)
-            }
-            is HelpCenterResolvedQuery.Page -> resolved.catalogId?.let { id ->
-                catalogById[id]?.let { hub.openCatalogAction(player, it) }
-            } ?: open(player, resolved.page)
+    private fun searchControls(player: Player): List<PaperDialogButton> = listOf(
+        contextButton("search", text("search-label"), text("search-tooltip")) { context ->
+            openSearch(player, context.text(SEARCH_INPUT).orEmpty())
+        },
+        button("search_catalog", text("search-catalog-label"), text("search-catalog-tooltip")) { openSearchCatalog(player) },
+    ).map { it.copy(width = 230) }
+
+    private fun showSearchResults(player: Player, query: String, result: HelpCenterSearchResult) {
+        val available = availableSearchCatalog(player).associateBy { it.id }
+        val entries = result.entries.mapNotNull { available[it.id] }
+        val summary = text("search-body", "query" to query.ifEmpty { plainText("search-all-query") }, "count" to entries.size.toString())
+        val body = buildList {
+            add(presentation.panel(summary, 468))
+            if (result.mode == HelpCenterSearchMode.LEXICAL) add(presentation.paragraph(text("search-lexical-notice"), 468))
+            if (entries.isEmpty()) add(presentation.panel(text("search-empty"), 468))
         }
+        present(player, PaperDialogScreen(
+            id = "help.search",
+            title = text("search-title"),
+            body = body,
+            inputs = listOf(searchInput(query)),
+            buttons = entries.map { searchResultButton(player, it) { showSearchResults(player, query, result) } }
+                .map { it.copy(width = 230) } + searchControls(player),
+            exitButton = backButton("back", player, ::openCommands),
+            columns = 2,
+        ))
     }
 
     private fun openCategory(player: Player, category: HelpCenterCategory, returnToRoot: Boolean = false) {
@@ -706,8 +723,8 @@ internal class HelpCenterController(
                     }
                     addAll(entries.map { commandButton(player, it) })
                 }.ifEmpty { listOf(button("empty_search", text("commands-label")) { openCommands(player) }) }
-                    .map { if (category == HelpCenterCategory.TECHNOLOGY) it.copy(width = 230) else it },
-                exitButton = backButton("back", player, if (returnToRoot) ::openRoot else ::openCommands),
+                    .map { it.copy(width = 230) },
+                exitButton = backButton("back", player, if (returnToRoot) ::openRoot else ::openSearchCatalog),
                 columns = 2,
             ),
         )
@@ -1175,7 +1192,7 @@ internal class HelpCenterController(
         } else result.closing()
     }
 
-    private fun searchResultButton(player: Player, entry: HelpCenterSearchEntry): PaperDialogButton {
+    private fun searchResultButton(player: Player, entry: HelpCenterSearchEntry, returnTo: () -> Unit): PaperDialogButton {
         val result = button(
             "result_${entry.id.replace('-', '_')}",
             text("command-label", "label" to entry.label),
@@ -1184,7 +1201,7 @@ internal class HelpCenterController(
             } ?: text("search-result-tooltip", "description" to entry.description),
         ) {
             when (val action = entry.action) {
-                is HelpCenterSearchAction.Execute -> catalogById[entry.id]?.let { hub.openCatalogAction(player, it) }
+                is HelpCenterSearchAction.Execute -> catalogById[entry.id]?.let { hub.openCatalogAction(player, it, returnTo) }
                 is HelpCenterSearchAction.OpenPage -> open(player, action.page)
                 HelpCenterSearchAction.CreateHome -> openCreateHome(player)
             }
@@ -1216,7 +1233,9 @@ internal class HelpCenterController(
             player.sendMessage(text("action-unavailable"))
             return
         }
-        if (id == "warps") {
+        if (id == "rules") {
+            openRules(player)
+        } else if (id == "warps") {
             openWarps(player)
         } else if (id == "builder") {
             openBuilder(player)
@@ -1295,7 +1314,7 @@ internal class HelpCenterController(
     private fun text(key: String, vararg placeholders: Pair<String, String>): Component = miniMessage.deserialize(
         settings.text(key),
         TagResolver.resolver(placeholders.map { (name, value) -> Placeholder.unparsed(name, value) }),
-    )
+    ).decoration(TextDecoration.ITALIC, false)
 
     private fun plainText(key: String): String = plainText.serialize(text(key))
 
@@ -1315,7 +1334,7 @@ internal class HelpCenterController(
 
     companion object {
         // These commands join Core's shared history while this callback is active.
-        private val NATIVE_DIALOG_COMMANDS = setOf("events", "farms", "civs", "giveaways", "jobs", "rank", "teams", "quests", "builder", "warps", "enchants")
+        private val NATIVE_DIALOG_COMMANDS = setOf("rules", "events", "farms", "civs", "giveaways", "jobs", "rank", "teams", "quests", "builder", "warps", "enchants")
         private const val PUBLIC_HOMES_PAGE_SIZE = 10
         private val SEARCH_INPUT = PaperDialogInputId.of("search")
         private val HOME_INPUT = PaperDialogInputId.of("home_name")
@@ -1327,7 +1346,6 @@ internal class HelpCenterController(
             CommandDefinition("menu", HelpCenterCategory.START, "menu"),
             CommandDefinition("kit", HelpCenterCategory.START, "kit start"),
             CommandDefinition("rules", HelpCenterCategory.START, "rules"),
-            CommandDefinition("tutorial", HelpCenterCategory.START, "tutorial"),
             CommandDefinition("warps", HelpCenterCategory.TRAVEL, "warps", HelpCenterFeature.PLAYER_WARPS, "pw.warp"),
             CommandDefinition("spawn", HelpCenterCategory.TRAVEL, "spawn"),
             CommandDefinition("rtp", HelpCenterCategory.TRAVEL, "rtp"),

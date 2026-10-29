@@ -44,6 +44,13 @@ object HelpCenterModule : PluginModule {
             .isSuccess
     }
 
+    fun search(player: Player, query: String): Boolean {
+        val current = controller ?: return false
+        return runCatching { current.search(player, query) }
+            .onFailure { failure -> error("Could not search help center for {}", player.name, failure) }
+            .isSuccess
+    }
+
     fun openDungeonsGuide(player: Player, returnTo: () -> Unit): Boolean {
         val current = controller ?: return false
         return runCatching { current.openDungeonsGuide(player, returnTo) }

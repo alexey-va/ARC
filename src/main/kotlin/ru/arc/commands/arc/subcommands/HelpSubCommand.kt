@@ -32,14 +32,12 @@ object HelpSubCommand : SubCommand {
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
         val player = sender.player
-        if (player != null && ARC.plugin?.runtimeProfile != ArcRuntimeProfile.ISOLATED && HelpCenterModule.isAvailable()) {
-            if (args.isEmpty()) {
-                if (HelpCenterModule.open(player, HelpCenterPage.HELP)) return true
-            } else {
-                HelpCenterPage.from(args[0])?.let { page ->
-                    if (HelpCenterModule.open(player, page)) return true
-                }
-            }
+        if (player != null && ARC.plugin?.runtimeProfile != ArcRuntimeProfile.ISOLATED) {
+            val query = args.joinToString(" ").trim()
+            val page = if (query.isEmpty()) HelpCenterPage.HELP else HelpCenterPage.from(query)
+            val opened = if (page != null) HelpCenterModule.open(player, page) else HelpCenterModule.search(player, query)
+            if (!opened) player.sendMessage(Component.text("Справка сейчас недоступна. Попробуйте позже.", NamedTextColor.WHITE))
+            return true
         }
         if (args.isNotEmpty()) {
             // Справка по конкретной команде

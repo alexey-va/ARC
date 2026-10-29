@@ -4,10 +4,13 @@ import org.bukkit.Location
 import org.bukkit.entity.Player
 import ru.arc.ai.config.LlmModuleConfig
 import ru.arc.ai.config.NpcChatConfig
+import ru.arc.ai.llm.ChatTurn
 import ru.arc.ai.llm.ModerationOutcome
 import ru.arc.ai.llm.ModerationService
 import ru.arc.ai.llm.OpenRouterLlmClient
+import ru.arc.ai.llm.SimpleChatService
 import ru.arc.ai.npc.NpcChatRpcClient
+import ru.arc.core.BoundedAsyncExecutor
 import ru.arc.core.ScheduledTask
 import ru.arc.core.Tasks
 import ru.arc.core.repeatingAsync
@@ -24,7 +27,9 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executor
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 object GPTManager {
@@ -37,7 +42,8 @@ object GPTManager {
     private val threadNumber = AtomicInteger()
     private var cleanupTask: ScheduledTask? = null
     private var requestExecutor: ExecutorService? = null
-    private var running = false
+    @Volatile private var running = false
+    @Volatile private var helpSearch: HelpSearchRuntime? = null
 
     private lateinit var npcChatConfig: NpcChatConfig
     private lateinit var moderationService: ModerationService
@@ -63,6 +69,7 @@ object GPTManager {
         moderationService = ModerationService(llmClient, llmConfig, executor)
 
         try {
+            if (llmClient.enabled) helpSearch = HelpSearchRuntime(llmClient)
             cleanupTask =
                 Tasks.scheduler.repeatingAsync(period = (20 * 30L).ticks, delay = 0.ticks) {
                     val now = System.currentTimeMillis()
@@ -74,6 +81,8 @@ object GPTManager {
                 }
             running = true
         } catch (error: Exception) {
+            helpSearch?.close()
+            helpSearch = null
             executor.shutdownNow()
             requestExecutor = null
             throw error
@@ -83,6 +92,8 @@ object GPTManager {
     @JvmStatic
     fun shutdown() {
         running = false
+        helpSearch?.close()
+        helpSearch = null
         cancel()
         entities.clear()
         conversations.clear()
@@ -96,6 +107,16 @@ object GPTManager {
     fun cancel() {
         cleanupTask?.cancel()
         cleanupTask = null
+    }
+
+    /** Public catalog/query data only; isolated bounded workers never delay chat moderation. */
+    @JvmStatic
+    fun completeHelpSearch(model: String, maxOutputTokens: Int, systemPrompt: String, catalogQuery: String): CompletableFuture<String?> {
+        require(model.matches(Regex("[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}"))) { "Help search requires a model ID" }
+        require(maxOutputTokens in 32..256) { "Help search output token budget must be in 32..256" }
+        val current = helpSearch
+        if (!running || current == null) return CompletableFuture.completedFuture(null)
+        return current.complete(model, maxOutputTokens, systemPrompt, catalogQuery)
     }
 
     @JvmStatic
@@ -306,6 +327,36 @@ object GPTManager {
     internal fun isRunning(): Boolean = running
 
     internal fun hasActiveExecutor(): Boolean = requestExecutor?.isShutdown == false
+
+    internal fun hasActiveHelpSearchExecutor(): Boolean = helpSearch != null
+}
+
+/** Owns only search work; the HTTP client is borrowed from the AI module. */
+private class HelpSearchRuntime(llm: OpenRouterLlmClient) : AutoCloseable {
+    private val worker = BoundedAsyncExecutor("arc-help-search", 2, 2, true)
+    // complete() is invoked only inside worker.submit; this reuses the shared request construction.
+    private val chat = SimpleChatService(llm, Executor { it.run() })
+    @Volatile private var active = true
+
+    fun complete(model: String, maxOutputTokens: Int, systemPrompt: String, catalogQuery: String): CompletableFuture<String?> {
+        val expiresAt = System.nanoTime() + TimeUnit.SECONDS.toNanos(6)
+        return worker.submit {
+            // Queued searches that already timed out or belong to a retired generation cost no HTTP request.
+            if (!active || System.nanoTime() >= expiresAt) return@submit null
+            chat.complete(
+                model = model,
+                systemPrompt = systemPrompt,
+                history = listOf(ChatTurn("user", catalogQuery)),
+                maxTokens = maxOutputTokens,
+                temperature = 0.0,
+            ).join().takeIf { active && System.nanoTime() < expiresAt }
+        }
+    }
+
+    override fun close() {
+        active = false
+        worker.close()
+    }
 }
 
 internal class AwaitingResponseGate {
