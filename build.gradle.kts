@@ -22,7 +22,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath("ru.ruscrafting.arc:arc-core-integration-testing:2.7.78")
+        classpath("ru.ruscrafting.arc:arc-core-integration-testing:2.7.79")
     }
 }
 
@@ -76,10 +76,10 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.492"
+version = "1.4.493"
 description = "ARC"
 val pluginVersion = version.toString()
-val arcCoreVersion = "2.7.78"
+val arcCoreVersion = "2.7.79"
 val arcCorePluginVersion: String by project
 val arcDungeonsPluginVersion: String by project
 val landsJar = providers.gradleProperty("landsJar").orNull?.let(::file)
@@ -274,7 +274,7 @@ dependencies {
     testImplementation(libs.com.github.retrooper.packetevents.spigot) { exclude(group = "io.netty") }
     testImplementation("org.mockito:mockito-core:5.14.2")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
-    testImplementation("com.openai:openai-java:3.5.2") // Matches arc-core-ai 2.7.78 runtime for the bounded-search client test.
+    testImplementation("com.openai:openai-java:3.5.2") // Matches arc-core-ai 2.7.79 runtime for the bounded-search client test.
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
 
