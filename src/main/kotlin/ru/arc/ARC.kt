@@ -660,6 +660,7 @@ open class ARC : JavaPlugin() {
             LandsUiModule,
             ru.arc.decorinteraction.DecorInteractionModule,
             ru.arc.survival.SurvivalGameplayModule,
+            ru.arc.playerseat.PlayerSeatModule,
             ru.arc.barrierremover.BarrierRemoverModule,
             ru.arc.backwings.BackWingsModule,
             HelpCenterModule,
