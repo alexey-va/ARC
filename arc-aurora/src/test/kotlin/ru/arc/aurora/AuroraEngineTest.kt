@@ -452,8 +452,10 @@ class AuroraEngineTest : FreeSpec({
         cursor.plan().next() shouldBe null
     }
 
-    "sky deadlines and a one request cap preserve profile fairness without batching" {
-        val settings = skySettings(points = 20, packets = 1).let { original -> original.copy(skyField = original.skyField.copy(maxScenes = 3), profiles =
+    "a one request cap preserves sky profile fairness without batching" {
+        // Measure logical-tick fairness without timing MockBukkit/MockK against a real 10 ms slice.
+        val settings = skySettings(points = 20, packets = 1).let { original -> original.copy(nativeBudgetMicros = Int.MAX_VALUE,
+            skyField = original.skyField.copy(maxScenes = 3), profiles =
             listOf(Particle.END_ROD, Particle.ELECTRIC_SPARK, Particle.SMALL_FLAME).mapIndexed { index, particle ->
                 original.profiles.single().copy(id = "sky_$index", particle = particle)
             }) }
