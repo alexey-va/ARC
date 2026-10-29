@@ -3,6 +3,7 @@ package ru.arc.backwings
 import com.destroystokyo.paper.event.player.PlayerPostRespawnEvent
 import dev.lone.itemsadder.api.CustomStack
 import org.bukkit.Bukkit
+import org.bukkit.Location
 import org.bukkit.NamespacedKey
 import org.bukkit.entity.ItemDisplay
 import org.bukkit.entity.Player
@@ -17,8 +18,10 @@ import org.bukkit.event.inventory.InventoryDragEvent
 import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerDropItemEvent
 import org.bukkit.event.player.PlayerJoinEvent
+import org.bukkit.event.player.PlayerMoveEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerSwapHandItemsEvent
+import org.bukkit.event.player.PlayerTeleportEvent
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 import org.bukkit.plugin.Plugin
@@ -86,6 +89,7 @@ internal class BackWingsRuntime(
     }
 
     private val worn = mutableMapOf<UUID, Worn>()
+    private val bodyYaws = mutableMapOf<UUID, BackWingBodyYaw>()
     private val roundRobin = ArrayDeque<Worn>()
     private val waitingForSync = mutableSetOf<UUID>()
     private val huskSync = plugin.server.pluginManager.isPluginEnabled("HuskSync")
@@ -107,7 +111,7 @@ internal class BackWingsRuntime(
             }
         }.also { plugin.server.pluginManager.registerEvents(it, plugin) }
         // Startup/reload maintenance; ordinary ticks visit one wearer per shared budget step.
-        plugin.server.onlinePlayers.forEach(::restore)
+        plugin.server.onlinePlayers.forEach { resetBody(it); restore(it) }
         tasks.runTimer(1L, 1L, ::refresh)
     }
 
@@ -147,20 +151,37 @@ internal class BackWingsRuntime(
     fun onInventoryDrag(event: InventoryDragEvent) { (event.whoClicked as? Player)?.let(::invalidateInventory) }
 
     @EventHandler fun onJoin(event: PlayerJoinEvent) {
+        resetBody(event.player)
         if (huskSync) waitingForSync.add(event.player.uniqueId)
         else tasks.runLater(1L) { if (event.player.isOnline) restore(event.player) }
     }
 
     @EventHandler fun onQuit(event: PlayerQuitEvent) {
         waitingForSync.remove(event.player.uniqueId)
+        bodyYaws.remove(event.player.uniqueId)
         remove(event.player.uniqueId)
     }
 
     @EventHandler fun onDeath(event: PlayerDeathEvent) = remove(event.entity.uniqueId)
 
-    @EventHandler fun onRespawn(event: PlayerPostRespawnEvent) = restore(event.player)
+    @EventHandler fun onRespawn(event: PlayerPostRespawnEvent) {
+        resetBody(event.player)
+        restore(event.player)
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onMove(event: PlayerMoveEvent) {
+        if (closed || event.isCancelled || event.player.uniqueId in worn) return
+        observeBody(event.player, event.to)
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onTeleport(event: PlayerTeleportEvent) {
+        if (!closed && !event.isCancelled) resetBody(event.player, event.to)
+    }
 
     @EventHandler fun onWorldChange(event: PlayerChangedWorldEvent) {
+        resetBody(event.player)
         // Core follows the new carrier world and replays the same display. Never add a Bukkit passenger.
         worn[event.player.uniqueId]?.let { reconcile(it, true) } ?: restore(event.player)
     }
@@ -224,11 +245,17 @@ internal class BackWingsRuntime(
                 }
                 state.nextOwnershipCheck = tick + 10L
             }
+            val location = player.location
             val pose = backWingPose(
-                settings.styles.getValue(state.wing), player.bodyYaw, player.pose == Pose.SNEAKING,
+                settings.styles.getValue(state.wing), observeBody(player, location), player.pose == Pose.SNEAKING,
                 player.height.toFloat(), settings.crouchOffset, settings.crouchPitchDegrees,
             )
-            val display = state.display ?: displays.spawnItem(player.location, checkNotNull(state.item)).also {
+            // FIXED DisplayRenderer applies the entity's Euler rotation before its transformation.
+            // The pose already uses world axes; retaining the equip-time gaze would rotate it twice.
+            val display = state.display ?: displays.spawnItem(location.apply {
+                yaw = 0f
+                pitch = 0f
+            }, checkNotNull(state.item)).also {
                 state.display = it
                 it.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.NONE
                 it.pauseWhenNotObserved = false
@@ -258,6 +285,15 @@ internal class BackWingsRuntime(
 
     private fun remove(playerId: UUID) { worn.remove(playerId)?.display?.remove() }
 
+    private fun resetBody(player: Player, location: Location = player.location) {
+        bodyYaws[player.uniqueId] = BackWingBodyYaw(player.bodyYaw, location.x, location.z, tick)
+    }
+
+    private fun observeBody(player: Player, location: Location): Float =
+        bodyYaws.getOrPut(player.uniqueId) {
+            BackWingBodyYaw(player.bodyYaw, location.x, location.z, tick)
+        }.observe(tick, location.x, location.z, location.yaw, player.isBlocking)
+
     fun closeAsync(): CompletableFuture<Void> {
         completion?.let { return it.copy() }
         closed = true
@@ -267,6 +303,7 @@ internal class BackWingsRuntime(
         syncListener?.let(HandlerList::unregisterAll)
         syncListener = null
         waitingForSync.clear()
+        bodyYaws.clear()
         worn.clear()
         roundRobin.clear()
         // Core's host-owned cleanup outlives the consumer queue and reports admitted packet cleanup.

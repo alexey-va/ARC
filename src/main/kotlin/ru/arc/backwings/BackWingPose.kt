@@ -5,7 +5,9 @@ import org.joml.Quaternionf
 import org.joml.Vector3f
 
 /**
- * Pure world-axis pose for ItemDisplay NONE. The item renderer centers the JSON model at
+ * Pure world-axis pose for ItemDisplay NONE with entity yaw/pitch fixed at zero. The renderer
+ * applies those Euler angles before this transformation, so they must not inherit the equip-time
+ * gaze. The item renderer centers the JSON model at
  * (8, 8, 8) / 16 before this transform. Core attaches at feet + current native player height;
  * subtract that origin once. Body yaw rotates both anchor and mesh; camera pitch is irrelevant.
  */

@@ -33,11 +33,24 @@ inventory bound. An unchanged transform produces no packet delta in Core.
 All models use `ItemDisplayTransform.NONE`; the ItemDisplay item renderer centers
 the model at JSON coordinate `(8, 8, 8)` before our scale/rotation. The configured
 anchor is relative to feet in body axes: +X left, +Y up, +Z forward at yaw zero.
-`backWingPose` rotates the anchor and mesh by actual Paper `bodyYaw`, applies the
+`backWingPose` rotates the anchor and mesh by the cosmetic body-yaw history, applies the
 crouch torso lean, then subtracts the full native passenger origin `player.height`.
-Camera pitch is not used. `pauseWhenNotObserved = false` keeps the owner's third-person
+Display entity yaw and pitch are zero: the FIXED renderer applies those angles before
+the transformation. Camera pitch is not used. `pauseWhenNotObserved = false` keeps the owner's third-person
 view active. Transform and teleport interpolation durations are zero; translational
 motion belongs to the native passenger relation rather than repeated world teleports.
+
+Paper's `bodyYaw` is only an initial baseline. Native 26.3 recording showed the server
+remaining at 50° while the walking client's torso reached 1.4°, and at -40° while the
+client reached -90°. The server resets its movement origin before its body calculation.
+`BackWingBodyYaw` therefore uses observed X/Z displacement and head yaw with the native
+1.21.11/26.3 movement threshold, backwards-facing correction, 0.3 smoothing, and 50°
+head/body limit (15° while blocking). Small head-only turns retain the torso direction.
+Nonwearers update lightweight history through move events, so equipping after a walk
+keeps that pose; only wearers use the existing bounded tick pulse. Observations in one
+tick revise one step. History survives toggle/switch/config reload, resets on teleport,
+world change and respawn, and is discarded on quit/shutdown. Network timing still makes
+this a reconstruction of the native pose, not access to each viewer's render state.
 
 | Item ID | Existing base / CMD | Model | Rotated source bounds X / Y / Z (pixels) | Initial scale / Y rotation / anchor (blocks) |
 | --- | --- | --- | --- | --- |
@@ -56,6 +69,7 @@ models do not yet have independently authored pose variants.
 
 ```bash
 ./gradlew :test --tests ru.arc.backwings.BackWingPoseTest \
+  --tests ru.arc.backwings.BackWingBodyYawTest \
   --tests ru.arc.backwings.BackWingsRuntimeTest \
   --tests ru.arc.backwings.BackWingsConfigTest
 ```
