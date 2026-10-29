@@ -21,6 +21,7 @@ class AuroraConfigTest : FreeSpec({
         profile.particle shouldBe Particle.END_ROD
         profile.particleData shouldBe null
         profile.skyScene shouldBe false
+        profile.skyOptions shouldBe AuroraSkyOptions()
         listOf(profile.sceneDurationTicks, profile.motionPeriodTicks, profile.updateTicks) shouldBe listOf(240, 400, 4)
         profile.biomes shouldBe listOf("*")
         profile.matches("iris:unknown_biome", "world", 15000, false, false, 80.0, 12, false) shouldBe true
@@ -80,18 +81,20 @@ class AuroraConfigTest : FreeSpec({
 
     "distant sky anchors and bounded tracers do not widen ordinary biome profile bounds" {
         val sky = AuroraConfig.parse(profileConfig("sky-scene" to true, "radius" to 96, "min-distance" to 72,
-            "vertical-min" to 32, "vertical-max" to 64, "spawn-delay-ticks" to 400, "sky-tracers" to 4)).profiles.single()
+            "vertical-min" to 32, "vertical-max" to 64, "spawn-delay-ticks" to 400, "sky-tracers" to 4, "sky-refresh-ticks" to 24)).profiles.single()
         sky.radius shouldBe 96.0
         sky.minDistance shouldBe 72.0
         sky.verticalMax shouldBe 64.0
         sky.spawnDelayTicks shouldBe 400
         sky.skyTracers shouldBe 4
+        sky.skyRefreshTicks shouldBe 24
         listOf("radius" to 32.01, "vertical-max" to 32.01).forEach { (field, value) ->
             shouldThrow<AuroraConfigException> { AuroraConfig.parse(profileConfig(field to value)) }
                 .path shouldBe "profiles.ambient.$field"
         }
         listOf("radius" to 96.01, "vertical-max" to 64.01, "spawn-delay-ticks" to -1,
-            "spawn-delay-ticks" to 401, "sky-tracers" to 0, "sky-tracers" to 5).forEach { (field, value) ->
+            "spawn-delay-ticks" to 401, "sky-tracers" to 0, "sky-tracers" to 5,
+            "sky-refresh-ticks" to -1, "sky-refresh-ticks" to 201).forEach { (field, value) ->
             shouldThrow<AuroraConfigException> { AuroraConfig.parse(profileConfig("sky-scene" to true, field to value)) }
                 .path shouldBe "profiles.ambient.$field"
         }
@@ -112,6 +115,82 @@ class AuroraConfigTest : FreeSpec({
             .path shouldBe "profiles.ambient.sky-scene"
         shouldThrow<AuroraConfigException> { AuroraConfig.parse(profileConfig("update-ticks" to 0)) }
             .path shouldBe "profiles.ambient.update-ticks"
+    }
+
+    "global sky defaults resolve into profiles and local options override only their own fields" {
+        val source = yaml("""
+            sky-defaults:
+              fan-degrees: 180
+              angular-gap-degrees: 12
+              anchor-candidates: 16
+              terrain-clearance: 3
+              scale-min: 0.6
+              scale-max: 1.2
+              roll-radians: 0.3
+              wave-amplitude: 0.4
+              wave-cycles: 2
+              wave-slope: -0.1
+              wave-depth: 0.2
+              stroke-drift: -0.2
+              stroke-lift: 0.1
+              held-drift: -0.08
+              held-lift: 0.04
+              exit-ticks: 20
+              fresh-head-repair: false
+              fresh-head-max-age-ticks: 3
+            profiles:
+              ambient:
+                sky-scene: true
+            event-presets:
+              hunt:
+                wave:
+                  sky-scene: true
+                  sky-options:
+                    wave-amplitude: 0.3
+                    fresh-head-repair: true
+        """)
+        val settings = AuroraConfig.parse(source)
+        val defaults = AuroraSkyOptions(180.0, 12.0, 16, 3.0, 0.6, 1.2, 0.3, 0.4, 2.0, -0.1,
+            0.2, -0.2, 0.1, -0.08, 0.04, 20, false, 3)
+        settings.profiles.single().skyOptions shouldBe defaults
+        settings.eventPresets.getValue("hunt").single().skyOptions shouldBe
+            defaults.copy(waveAmplitude = 0.3, freshHeadRepair = true)
+        source.set("sky-defaults.wave-amplitude", 0.7)
+        settings.profiles.single().skyOptions shouldBe defaults // Detached snapshot until a successful reload.
+        AuroraConfig.parse(source).profiles.single().skyOptions.waveAmplitude shouldBe 0.7
+    }
+
+    "invalid sky options reject the candidate without changing the last complete snapshot" {
+        val source = profileConfig("sky-scene" to true)
+        val active = AuroraConfig.parse(source)
+        listOf(
+            "fan-degrees" to 360.01, "angular-gap-degrees" to -0.1, "anchor-candidates" to 33,
+            "terrain-clearance" to 0.99, "scale-min" to 0.09, "scale-max" to 2.01,
+            "roll-radians" to Double.NaN, "wave-amplitude" to Double.POSITIVE_INFINITY,
+            "wave-cycles" to 0.0, "wave-slope" to -1.01, "wave-depth" to -0.1,
+            "stroke-drift" to 1.01, "stroke-lift" to "0.05", "held-drift" to 0.251,
+            "held-lift" to -0.251, "exit-ticks" to 1.5, "fresh-head-repair" to "true",
+            "fresh-head-max-age-ticks" to 5,
+        ).forEach { (field, value) ->
+            source.set("sky-defaults", null)
+            source.set("sky-defaults.$field", value)
+            shouldThrow<AuroraConfigException> { AuroraConfig.parse(source) }.path shouldBe "sky-defaults.$field"
+            active.profiles.single().skyOptions shouldBe AuroraSkyOptions()
+        }
+        shouldThrow<AuroraConfigException> { AuroraConfig.parse(yaml("sky-defaults: []")) }.path shouldBe "sky-defaults"
+        shouldThrow<AuroraConfigException> { AuroraConfig.parse(profileConfig("sky-options" to false)) }
+            .path shouldBe "profiles.ambient.sky-options"
+        shouldThrow<AuroraConfigException> {
+            AuroraConfig.parse(profileConfig("sky-options.scale-min" to 1.1))
+        }.path shouldBe "profiles.ambient.sky-options.scale-max"
+        shouldThrow<AuroraConfigException> {
+            AuroraConfig.parse(profileConfig("sky-scene" to true, "shape-size" to 20, "sky-options.scale-max" to 2))
+        }.path shouldBe "profiles.ambient.shape-size"
+        val fixed = AuroraConfig.parse(profileConfig("sky-scene" to true, "shape-size" to 16,
+            "sky-options.scale-min" to 2, "sky-options.scale-max" to 2, "sky-options.fan-degrees" to 0,
+            "sky-options.roll-radians" to 0, "sky-options.exit-ticks" to 0)).profiles.single()
+        fixed.shapeSize * fixed.skyOptions.scaleMax shouldBe 32.0
+        fixed.skyOptions.exitTicks shouldBe 0
     }
 
     "custom Iris and unknown biome keys use full namespaced globs without a registry" {

@@ -12,10 +12,14 @@ object AuroraSkyShapes {
     private val cubeWalk = intArrayOf(6, 7, 5, 4, 6, 2, 3, 2, 0, 1, 5, 4, 0, 1, 3, 7)
 
     /** A complete pose for diagnostics; ordinary biome geometry lives in AuroraGeometry. */
-    fun offsets(shape: AuroraShape, size: Double, points: Int, ageTicks: Long, periodTicks: Int = 400): List<AuroraOffset> {
+    fun offsets(shape: AuroraShape, size: Double, points: Int, ageTicks: Long, periodTicks: Int = 400): List<AuroraOffset> =
+        offsets(shape, size, points, ageTicks, periodTicks, AuroraSkyOptions())
+
+    fun offsets(shape: AuroraShape, size: Double, points: Int, ageTicks: Long, periodTicks: Int,
+        options: AuroraSkyOptions): List<AuroraOffset> {
         validate(size, points, periodTicks)
         val phase = Math.floorMod(ageTicks, periodTicks.toLong()).toDouble() * 2.0 * PI / periodTicks
-        return List(points) { sample(shape, size, points, it, phase) }
+        return List(points) { sample(shape, size, points, it, phase, options) }
     }
 
     /**
@@ -26,6 +30,11 @@ object AuroraSkyShapes {
     fun stroke(
         shape: AuroraShape, size: Double, points: Int, updateTicks: Int, periodTicks: Int,
         phaseTicks: Int, roll: Double, reverse: Boolean, tracers: Int = 1,
+    ): List<AuroraOffset> = stroke(shape, size, points, updateTicks, periodTicks, phaseTicks, roll, reverse, tracers, AuroraSkyOptions())
+
+    fun stroke(
+        shape: AuroraShape, size: Double, points: Int, updateTicks: Int, periodTicks: Int,
+        phaseTicks: Int, roll: Double, reverse: Boolean, tracers: Int, options: AuroraSkyOptions,
     ): List<AuroraOffset> {
         validate(size, points, periodTicks)
         require(updateTicks in 1..200 && roll.isFinite() && tracers in 1..4)
@@ -36,9 +45,23 @@ object AuroraSkyShapes {
             val step = emitted / tracers
             val progress = if (steps == 1) 0.0 else step.toDouble() / (steps - 1)
             val phase = (phaseTicks.toLong() + step.toLong() * updateTicks) * 2.0 * PI / periodTicks
-            val point = sample(shape, size, points, if (reverse) points - 1 - index else index, phase)
+            val point = sample(shape, size, points, if (reverse) points - 1 - index else index, phase, options)
             val posed = rotate(point, 0.0, 0.0, roll)
-            AuroraOffset(posed.x + size * 0.12 * progress, posed.y + size * 0.05 * sin(progress * PI), posed.z)
+            AuroraOffset(posed.x + size * options.strokeDrift * progress, posed.y + size * options.strokeLift * sin(progress * PI), posed.z)
+        }
+    }
+
+    /** Small coherent travel for held contours; computed off-thread, including its full envelope. */
+    fun heldMotion(size: Double, durationTicks: Int, periodTicks: Int): List<AuroraOffset> =
+        heldMotion(size, durationTicks, periodTicks, AuroraSkyOptions())
+
+    fun heldMotion(size: Double, durationTicks: Int, periodTicks: Int,
+        options: AuroraSkyOptions): List<AuroraOffset> {
+        validate(size, 1, periodTicks)
+        require(durationTicks in 40..1200)
+        return List(durationTicks) { age ->
+            AuroraOffset(sin(age.toDouble() / durationTicks * PI) * size * options.heldDrift,
+                sin(age * 2.0 * PI / periodTicks) * size * options.heldLift, 0.0)
         }
     }
 
@@ -48,7 +71,8 @@ object AuroraSkyShapes {
         require(periodTicks in 40..2400) { "Sky motion period must be in 40..2400 ticks" }
     }
 
-    private fun sample(shape: AuroraShape, size: Double, points: Int, index: Int, phase: Double): AuroraOffset {
+    private fun sample(shape: AuroraShape, size: Double, points: Int, index: Int, phase: Double,
+        options: AuroraSkyOptions): AuroraOffset {
         val progress = if (points == 1) 0.5 else index.toDouble() / (points - 1)
         val along = progress * 2.0 - 1.0
         return when (shape) {
@@ -56,8 +80,8 @@ object AuroraSkyShapes {
             AuroraShape.LINE -> AuroraOffset(along * size, 0.0, 0.0)
             AuroraShape.WAVE -> AuroraOffset(
                 along * size,
-                (sin(along * PI + phase) * 0.22 + along * 0.07) * size,
-                sin(along * PI / 2.0 + phase) * size * 0.05,
+                (sin(along * PI * options.waveCycles + phase) * options.waveAmplitude + along * options.waveSlope) * size,
+                sin(along * PI * options.waveCycles / 2.0 + phase) * size * options.waveDepth,
             )
             AuroraShape.RING, AuroraShape.CIRCLE -> {
                 val angle = progress * 2.0 * PI * if (shape == AuroraShape.RING) 1.0 else 2.0

@@ -204,7 +204,7 @@ class AuroraEngineTest : FreeSpec({
         }
     }
 
-    "a prepared stroke releases one point per Main tick even while the next worker is held" {
+    "a prepared wave advances one head per visit with at most one fresh repair despite worker delay" {
         val settings = skySettings(points = 24, shape = AuroraShape.WAVE, packets = 36)
         withEngine(settings) { fixture ->
             fixture.event = settings.profiles
@@ -215,8 +215,9 @@ class AuroraEngineTest : FreeSpec({
                 fixture.engine.tick()
                 fixture.locations.size - before
             }
-            sent.take(24) shouldBe List(24) { 1 }
-            sent.drop(24).all { it == 0 } shouldBe true // Finite stroke; no cyclic overpainting.
+            val afterAdmission = sent.dropWhile { it == 0 }
+            afterAdmission.take(25) shouldBe listOf(1) + List(23) { 2 } + listOf(1)
+            afterAdmission.drop(25).all { it == 0 } shouldBe true // Finite stroke; no cyclic overpainting.
             fixture.queued.size shouldBe 1 // The delayed refresh never stalled or burst the retained path.
             fixture.locations.toSet().size shouldBe 24
         }
@@ -230,6 +231,11 @@ class AuroraEngineTest : FreeSpec({
             fixture.event = settings.profiles
             fixture.capture()
             fixture.completePlanning()
+            repeat(8) {
+                if (fixture.emissions.map { it.particle }.toSet().size < 2) fixture.engine.tick()
+            }
+            fixture.locations.clear()
+            fixture.emissions.clear()
             repeat(12) {
                 val before = fixture.emissions.size
                 fixture.engine.tick()
@@ -240,8 +246,8 @@ class AuroraEngineTest : FreeSpec({
         }
     }
 
-    "three cube tracers remain bounded and release all prepared samples without affecting the one-point wave" {
-        val settings = skySettings(points = 56, shape = AuroraShape.WAVE, packets = 4).let { original -> original.copy(profiles = listOf(
+    "three cube tracers and a repaired wave share the cap and finish without old-tail replay" {
+        val settings = skySettings(points = 56, shape = AuroraShape.WAVE, packets = 5).let { original -> original.copy(profiles = listOf(
             original.profiles.single(), original.profiles.single().copy(id = "cube", shape = AuroraShape.CUBE,
                 points = 96, skyTracers = 3, particle = Particle.FIREWORK),
         )) }
@@ -249,17 +255,49 @@ class AuroraEngineTest : FreeSpec({
             fixture.event = settings.profiles
             fixture.capture()
             fixture.completePlanning()
-            repeat(32) {
+            repeat(80) {
                 val before = fixture.emissions.size
                 fixture.engine.tick()
                 val sent = fixture.emissions.drop(before)
-                sent.size shouldBe 4
-                sent.count { it.particle == Particle.END_ROD } shouldBe 1
-                sent.count { it.particle == Particle.FIREWORK } shouldBe 3
+                (sent.size <= 5) shouldBe true
+                (sent.count { it.particle == Particle.END_ROD } <= 2) shouldBe true
+                (sent.count { it.particle == Particle.FIREWORK } <= 3) shouldBe true
             }
             fixture.emissions.count { it.particle == Particle.FIREWORK } shouldBe 96
-            fixture.engine.tick()
-            fixture.emissions.last().particle shouldBe Particle.END_ROD
+            fixture.locations.filterIndexed { index, _ -> fixture.emissions[index].particle == Particle.END_ROD }
+                .toSet().size shouldBe 56
+        }
+    }
+
+    "sky options control actual anchor geometry fresh repair and terrain clearance" {
+        val options = AuroraSkyOptions(fanDegrees = 0.0, scaleMin = 1.0, scaleMax = 1.0,
+            rollRadians = 0.0, waveAmplitude = 0.0, waveSlope = 0.0, waveDepth = 0.0,
+            strokeDrift = 0.0, strokeLift = 0.0)
+        for (repair in listOf(false, true)) {
+            val settings = skySettings(points = 8, shape = AuroraShape.WAVE, packets = 8).let { original ->
+                original.copy(profiles = original.profiles.map { it.copy(skyOptions = options.copy(freshHeadRepair = repair)) })
+            }
+            withEngine(settings) { fixture ->
+                fixture.event = settings.profiles
+                fixture.capture()
+                fixture.completePlanning()
+                repeat(32) { fixture.engine.tick() }
+                fixture.locations.size shouldBe if (repair) 16 else 8
+                fixture.locations.all { it.y == 90.0 && kotlin.math.abs(it.z - 8.5) < 1e-8 } shouldBe true
+                fixture.locations.minOf { it.x } shouldBe -1.5
+                fixture.locations.maxOf { it.x } shouldBe 2.5
+            }
+        }
+        val cautious = skySettings(points = 8, shape = AuroraShape.WAVE, packets = 8).let { original ->
+            original.copy(profiles = original.profiles.map { it.copy(skyOptions = options.copy(terrainClearance = 8.0)) })
+        }
+        withEngine(cautious) { fixture ->
+            fixture.roof(85)
+            fixture.event = cautious.profiles
+            fixture.capture()
+            fixture.completePlanning()
+            repeat(32) { fixture.engine.tick() }
+            fixture.locations shouldBe emptyList()
         }
     }
 
@@ -395,19 +433,19 @@ class AuroraEngineTest : FreeSpec({
         val bundled = AuroraConfig.parse(YamlConfiguration().apply {
             loadFromString(checkNotNull(javaClass.classLoader.getResourceAsStream("config.yml")).bufferedReader().use { it.readText() })
         }).copy(nativeBudgetMicros = 10000)
-        withEngine(bundled) { fixture ->
+        withEngine(bundled, highSky = true) { fixture ->
             fixture.loadChunks(6)
             fixture.event = bundled.eventPresets.getValue("treasure-hunt")
             val timeline = StringBuilder("tick,particle,x,y,z\n")
-            repeat(600) { tick ->
+            repeat(1000) { tick ->
                 if (fixture.queued.isNotEmpty() && tick % 2 == 0) fixture.completePlanning()
                 val before = fixture.emissions.size
                 fixture.engine.tick()
                 val sent = fixture.emissions.drop(before)
-                (sent.size <= 5) shouldBe true
-                (sent.count { it.particle == Particle.END_ROD } <= 1) shouldBe true
-                (sent.count { it.particle == Particle.FIREWORK } <= 3) shouldBe true
-                (sent.count { it.particle == Particle.TOTEM_OF_UNDYING } <= 1) shouldBe true
+                (sent.size <= bundled.skyPacketsPerViewer) shouldBe true
+                (sent.count { it.particle == Particle.END_ROD } <= 6) shouldBe true
+                (sent.count { it.particle == Particle.FIREWORK } <= 11) shouldBe true
+                (sent.count { it.particle == Particle.TOTEM_OF_UNDYING } <= 6) shouldBe true
                 for (index in before until fixture.emissions.size) {
                     val at = fixture.locations[index]
                     timeline.append("$tick,${fixture.emissions[index].particle.name},${at.x - 0.5},${at.y - 80.0},${at.z - 0.5}\n")
@@ -416,6 +454,97 @@ class AuroraEngineTest : FreeSpec({
             fixture.emissions.map { it.particle }.toSet() shouldBe setOf(Particle.END_ROD, Particle.FIREWORK, Particle.TOTEM_OF_UNDYING)
             // Optional source-driven preview export: exact native submissions from this same engine fixture.
             System.getenv("ARCAURORA_PREVIEW_CSV")?.let { path -> java.nio.file.Files.writeString(java.nio.file.Path.of(path), timeline) }
+        }
+    }
+
+    "held cube refreshes revealed points after birth and stops replenishing before natural exit" {
+        val settings = skySettings(points = 192, shape = AuroraShape.CUBE, packets = 12).let { original ->
+            original.copy(profiles = original.profiles.map { it.copy(shapeSize = 6.0, verticalMin = 20.0,
+                verticalMax = 20.0, skyTracers = 3, particle = Particle.FIREWORK, skyRefreshTicks = 24, sceneDurationTicks = 320) })
+        }
+        withEngine(settings) { fixture ->
+            fixture.event = settings.profiles
+            fixture.capture()
+            fixture.completePlanning()
+            val perTick = List(400) {
+                val before = fixture.locations.size
+                fixture.engine.tick() // Hold later worker work: pacing/refresh must not depend on it.
+                fixture.locations.size - before
+            }
+            perTick.all { it in 0..11 } shouldBe true
+            (perTick.take(120).sum() > 192) shouldBe true
+            (perTick.slice(160..240).sum() >= 300) shouldBe true // Full contour sustained at 8..12 seconds.
+            perTick.takeLast(40).all { it == 0 } shouldBe true
+        }
+    }
+
+    "the minimum held scene duration supports both a proportional exit and no staged exit" {
+        for (exitTicks in listOf(0, 40)) {
+            val settings = skySettings(points = 12, shape = AuroraShape.LINE, packets = 4).let { original ->
+                original.copy(profiles = original.profiles.map { it.copy(skyRefreshTicks = 12, sceneDurationTicks = 40,
+                    skyOptions = it.skyOptions.copy(exitTicks = exitTicks)) })
+            }
+            withEngine(settings) { fixture ->
+                fixture.event = settings.profiles
+                fixture.capture()
+                fixture.completePlanning()
+                repeat(50) { fixture.engine.tick() }
+                (fixture.locations.size > 12) shouldBe true
+            }
+        }
+    }
+
+    "a dropped advancing wave point is repaired next visit without keeping its older tail alive" {
+        val settings = skySettings(points = 96, shape = AuroraShape.WAVE, packets = 12).let { original ->
+            original.copy(profiles = original.profiles.map { it.copy(shapeSize = 6.0, verticalMin = 20.0,
+                verticalMax = 20.0, skyRefreshTicks = 0, sceneDurationTicks = 160) })
+        }
+        withEngine(settings) { fixture ->
+            fixture.event = settings.profiles
+            fixture.capture()
+            fixture.completePlanning()
+            repeat(40) { fixture.engine.tick() }
+            fixture.dropNextEmission = true
+            fixture.engine.tick()
+            val missing = checkNotNull(fixture.droppedEmission)
+            val before = fixture.locations.size
+            fixture.engine.tick()
+            fixture.locations.drop(before).any { it == missing } shouldBe true
+            repeat(180) { fixture.engine.tick() }
+            fixture.locations.groupingBy { Triple(it.x, it.y, it.z) }.eachCount().values.all { it <= 2 } shouldBe true
+            (fixture.locations.size <= 192) shouldBe true
+            val stopped = fixture.locations.size
+            repeat(80) { fixture.engine.tick() }
+            fixture.locations.size shouldBe stopped // No whole-wave hold or old-tail refresh after the head exits.
+        }
+    }
+
+    "a roof above otherwise free spawn centres rejects the whole sky candidate before its first point" {
+        withEngine(skySettings(points = 48, shape = AuroraShape.WAVE)) { fixture ->
+            fixture.roof(94)
+            fixture.event = fixture.settings.profiles
+            repeat(40) {
+                if (fixture.queued.isNotEmpty()) fixture.completePlanning()
+                fixture.engine.tick()
+            }
+            fixture.locations shouldBe emptyList()
+        }
+    }
+
+    "new terrain retires an admitted held figure and blocked replacements never start" {
+        val settings = skySettings(points = 24, packets = 8).let { original -> original.copy(profiles =
+            original.profiles.map { it.copy(skyRefreshTicks = 12, sceneDurationTicks = 240) }) }
+        withEngine(settings) { fixture ->
+            fixture.event = settings.profiles
+            fixture.pass()
+            val before = fixture.locations.size
+            (before > 0) shouldBe true
+            fixture.roof(90)
+            repeat(30) {
+                if (fixture.queued.isNotEmpty()) fixture.completePlanning()
+                fixture.engine.tick()
+            }
+            fixture.locations.size shouldBe before
         }
     }
 
@@ -443,6 +572,7 @@ class AuroraEngineTest : FreeSpec({
             fixture.permission(true)
             fixture.player.location.block.biome = org.bukkit.block.Biome.PLAINS
             fixture.pass()
+            repeat(6) { if (fixture.locations.isEmpty()) fixture.engine.tick() }
             fixture.locations.size shouldBe 1
             fixture.player.location.block.biome = org.bukkit.block.Biome.DESERT
             repeat(4) { fixture.engine.tick() }
@@ -475,24 +605,27 @@ class AuroraEngineTest : FreeSpec({
 
 })
 
-private fun withEngine(settings: AuroraSettings = engineSettings(), block: (EngineFixture) -> Unit) {
+private fun withEngine(settings: AuroraSettings = engineSettings(), highSky: Boolean = false, block: (EngineFixture) -> Unit) {
     failOnUnsupportedMockBukkitOperation {
         MockBukkitTestRuntime.open().use { paper ->
-            EngineFixture(paper, settings).use(block)
+            EngineFixture(paper, settings, highSky).use(block)
         }
     }
 }
 
-private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: AuroraSettings) : AutoCloseable {
+private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: AuroraSettings, highSky: Boolean) : AutoCloseable {
     private val mainThread = Thread.currentThread()
     private val plugin = paper.createSimplePlugin("ArcAuroraEngineTest")
-    private val world = paper.addSimpleWorld("ambient")
+    private val world = if (highSky) org.mockbukkit.mockbukkit.world.WorldMock(Material.DIRT, 0, 192, 64)
+        .also { paper.server.addWorld(it) } else paper.addSimpleWorld("ambient")
     val player = EnginePlayer(paper.server)
     var currentPing: Int
         get() = player.observedPing
         set(value) { player.observedPing = value }
     var event: List<AuroraProfile>? = null
     var preview: List<AuroraProfile>? = null
+    var dropNextEmission = false
+    var droppedEmission: Location? = null
     val locations = mutableListOf<Location>()
     val emissions = mutableListOf<ObservedEmission>()
     val queued = ArrayDeque<Runnable>()
@@ -511,6 +644,11 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
         every { emitter.emit(any<Player>(), any<Location>(), any<Particle>(), any<Int>(),
             any<Double>(), any<Double>(), any<Double>(), any<Double>(), any(), any<Boolean>()) } answers {
             requireMain()
+            if (dropNextEmission) {
+                dropNextEmission = false
+                droppedEmission = arg<Location>(1).clone()
+                return@answers Unit
+            }
             locations += arg<Location>(1).clone()
             emissions += ObservedEmission(arg<Particle>(2), arg<Int>(3),
                 listOf(arg<Double>(4), arg<Double>(5), arg<Double>(6), arg<Double>(7)), arg<Boolean>(9), arg<Player>(0).uniqueId)
@@ -536,6 +674,8 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
         engine.join(extra)
         return extra.uniqueId
     }
+
+    fun roof(y: Int) { for (x in -12..12) for (z in -12..12) world.getBlockAt(x, y, z).type = Material.STONE }
 
     fun loadChunks(radius: Int) { for (x in -radius..radius) for (z in -radius..radius) world.loadChunk(x, z) }
 

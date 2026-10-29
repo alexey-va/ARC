@@ -98,6 +98,8 @@ data class AuroraProfile(
     val updateTicks: Int = 4,
     val spawnDelayTicks: Int = 60,
     val skyTracers: Int = 1,
+    val skyRefreshTicks: Int = 0,
+    val skyOptions: AuroraSkyOptions = AuroraSkyOptions(),
 ) {
     private val biomePatterns = biomes.map(::compileGlob)
     private val worldPatterns = worlds.map(::compileGlob)
@@ -151,12 +153,13 @@ object AuroraConfig {
         val source = Fields(root, root.currentPath.orEmpty())
         val permission = source.string("permission", "arcaurora.view")
         source.check("permission", permissionNode.matches(permission), "expected a nonblank lowercase permission node")
+        val skyDefaults = skyOptions(source.section("sky-defaults"), AuroraSkyOptions())
         var totalProfiles = 0
         fun profiles(fields: Fields?): List<AuroraProfile> {
             if (fields == null) return emptyList()
             totalProfiles += fields.keys.size
             fields.check("", totalProfiles <= 128, "at most 128 profiles are allowed across profiles and event-presets")
-            return fields.keys.map { id -> profile(id, fields.requiredSection(id)) }.immutable()
+            return fields.keys.map { id -> profile(id, fields.requiredSection(id), skyDefaults) }.immutable()
         }
         val ordinaryProfiles = profiles(source.section("profiles"))
         val events = source.section("event-presets")?.let { presets ->
@@ -194,7 +197,7 @@ object AuroraConfig {
         )
     }
 
-    private fun profile(id: String, source: Fields): AuroraProfile {
+    private fun profile(id: String, source: Fields, skyDefaults: AuroraSkyOptions): AuroraProfile {
         source.check("", id.isNotBlank(), "profile ID must not be blank")
         val biomes = source.strings("biomes", listOf("*")).map { raw ->
             normalizeBiomeKey(raw).also {
@@ -203,6 +206,10 @@ object AuroraConfig {
         }.immutable()
         val worlds = source.strings("worlds", listOf("*")).immutable()
         val skyScene = source.boolean("sky-scene", false)
+        val skyOptions = skyOptions(source.section("sky-options"), skyDefaults)
+        val shapeSize = source.double("shape-size", 1.0, if (skyScene) 0.1..32.0 else 0.1..8.0)
+        source.check("shape-size", !skyScene || shapeSize * skyOptions.scaleMax <= 32.0,
+            "shape-size multiplied by sky-options.scale-max must not exceed 32")
         val minY = source.int("min-y", -2048, -2048..2048)
         val maxY = source.int("max-y", 2048, -2048..2048)
         source.check("max-y", maxY >= minY, "must be at least min-y")
@@ -250,7 +257,7 @@ object AuroraConfig {
             verticalMin = verticalMin,
             verticalMax = verticalMax,
             shape = source.enum("shape", AuroraShape.POINT),
-            shapeSize = source.double("shape-size", 1.0, if (skyScene) 0.1..32.0 else 0.1..8.0),
+            shapeSize = shapeSize,
             points = if (skyScene) source.int("sky-points", source.int("points", 1, 1..192), 1..192)
                 else source.int("points", 1, 1..24),
             particle = particle,
@@ -266,7 +273,35 @@ object AuroraConfig {
             updateTicks = source.int("update-ticks", 4, 1..200),
             spawnDelayTicks = source.int("spawn-delay-ticks", 60, 0..400),
             skyTracers = source.int("sky-tracers", 1, 1..4),
+            skyRefreshTicks = source.int("sky-refresh-ticks", 0, 0..200),
+            skyOptions = skyOptions,
         )
+    }
+
+    private fun skyOptions(source: Fields?, defaults: AuroraSkyOptions): AuroraSkyOptions {
+        if (source == null) return defaults
+        val options = AuroraSkyOptions(
+            fanDegrees = source.double("fan-degrees", defaults.fanDegrees, 0.0..360.0),
+            angularGapDegrees = source.double("angular-gap-degrees", defaults.angularGapDegrees, 0.0..90.0),
+            anchorCandidates = source.int("anchor-candidates", defaults.anchorCandidates, 1..32),
+            terrainClearance = source.double("terrain-clearance", defaults.terrainClearance, 1.0..32.0),
+            scaleMin = source.double("scale-min", defaults.scaleMin, 0.1..2.0),
+            scaleMax = source.double("scale-max", defaults.scaleMax, 0.1..2.0),
+            rollRadians = source.double("roll-radians", defaults.rollRadians, 0.0..Math.PI),
+            waveAmplitude = source.double("wave-amplitude", defaults.waveAmplitude, 0.0..1.0),
+            waveCycles = source.double("wave-cycles", defaults.waveCycles, 0.1..8.0),
+            waveSlope = source.double("wave-slope", defaults.waveSlope, -1.0..1.0),
+            waveDepth = source.double("wave-depth", defaults.waveDepth, 0.0..1.0),
+            strokeDrift = source.double("stroke-drift", defaults.strokeDrift, -1.0..1.0),
+            strokeLift = source.double("stroke-lift", defaults.strokeLift, -1.0..1.0),
+            heldDrift = source.double("held-drift", defaults.heldDrift, -0.25..0.25),
+            heldLift = source.double("held-lift", defaults.heldLift, -0.25..0.25),
+            exitTicks = source.int("exit-ticks", defaults.exitTicks, 0..200),
+            freshHeadRepair = source.boolean("fresh-head-repair", defaults.freshHeadRepair),
+            freshHeadMaxAgeTicks = source.int("fresh-head-max-age-ticks", defaults.freshHeadMaxAgeTicks, 1..4),
+        )
+        source.check("scale-max", options.scaleMax >= options.scaleMin, "must be at least scale-min")
+        return options
     }
 
     private class Fields(private val section: ConfigurationSection, private val prefix: String) {

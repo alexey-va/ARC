@@ -34,7 +34,7 @@ import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.logging.Level
 
-class ArcAuroraPlugin : JavaPlugin(), Listener {
+open class ArcAuroraPlugin : JavaPlugin(), Listener {
     private var runtime: PaperPluginRuntime? = null
     internal var engine: AuroraEngine? = null; private set
     private var messages: LocalizedMiniMessage? = null
