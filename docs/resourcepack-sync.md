@@ -40,16 +40,22 @@ repeated source blocks are collapsed; empty directory results disappear from
 the specialized files. Unknown atlas source types are preserved. Texture
 resolution and model geometry are not reduced.
 
-After directory expansion, the specialized blocks atlas omits the six vanilla
-`gui/title/background/panorama_0` through `_5` sprites accidentally imported by
-a broad `gui/` directory source. Minecraft loads the title panorama directly
-through its standalone cube-map texture, independently of the blocks atlas.
-The pass retains explicit single sources/aliases, pack PNG replacements and any
-ID referenced by an effective non-atlas JSON. Unsupported atlas sources or an
-unparseable consumer disable this omission. A sprite-map check permits only
-these six removals; all other sprites, image files, models and the items atlas
-remain unchanged. The manifest records `unusedPanoramaSourcesRemoved`. The
-universal archive retains its original imports.
+After directory expansion, the specialized blocks atlas omits unused vanilla
+`gui/` and `entity/` sprites accidentally imported by broad directory sources.
+The exact official blocks declarations of all four pinned clients preserve
+`entity/conduit/`, `entity/bell/bell_body` and the enchanting-table book
+(`entity/enchanting_table_book` in 1.21.11, under `entity/enchantment/` in 26.x).
+Other vanilla GUI/entity textures use separate atlases or standalone textures;
+for example, the title panorama is loaded directly through a cube-map texture.
+The pass additionally retains explicit single sources/aliases, every pack PNG
+replacement and IDs referenced by effective non-atlas JSON keys or values
+(including unqualified IDs, `textures/` prefixes and `.png` suffixes).
+Unsupported atlas sources or an unparseable consumer disable this omission.
+A sprite-map check permits only the proved-unused removals. Custom namespaces,
+image files, models and the items atlas remain unchanged. The manifest records
+`unusedVanillaBlockSourcesRemoved`; the universal archive retains its imports.
+When updating the pinned client catalogue, recheck its official blocks atlas
+declaration before extending this rule to that client.
 
 The same default production flow then calls the bundled `resourcepack_fonts.py`
 for each catalogued client variant. It groups compatible single-glyph bitmap

@@ -171,10 +171,14 @@ class ResourcePackVariantsTest(unittest.TestCase):
         self.assertEqual(manifest["packs"][0]["stats"]["duplicateSourcesRemoved"], 2)
         self.assertEqual(manifest["packs"][1]["stats"]["duplicateSourcesRemoved"], 2)
 
-    def test_omits_only_implicit_unused_vanilla_block_panoramas(self):
-        panoramas = sorted(variants.VANILLA_PANORAMAS)
+    def test_omits_only_implicit_unused_vanilla_gui_entity_block_sprites(self):
+        panoramas = [f"minecraft:gui/title/background/panorama_{index}" for index in range(6)]
+        native = sorted(variants.VANILLA_BLOCK_ENTITY_TEXTURES) + ["minecraft:entity/conduit/base"]
+        referenced = "minecraft:entity/zombie/zombie"
+        unused = "minecraft:entity/cow/cow"
         atlas = make_atlas([
             {"type": "directory", "source": "gui", "prefix": "gui/"},
+            {"type": "directory", "source": "entity", "prefix": "entity/"},
             {"type": "single", "resource": panoramas[0]},
             {"type": "single", "resource": panoramas[5], "sprite": "demo:panorama_alias"},
         ])
@@ -184,12 +188,13 @@ class ResourcePackVariantsTest(unittest.TestCase):
             "assets/minecraft/atlases/items.json": atlas,
             "assets/demo/models/item/example.json": json.dumps({"textures": {"0": panoramas[1]}}).encode(),
             "assets/demo/models/item/example2.json": json.dumps({"textures": {"0": panoramas[2].split(":")[1]}}).encode(),
+            "assets/demo/other.json": json.dumps({"minecraft:textures/entity/zombie/zombie.png": True}).encode(),
             "assets/minecraft/textures/gui/title/background/panorama_3.png": b"custom replacement",
             "assets/demo/textures/gui/icon.png": b"custom gui",
         })
         self.write_catalog([{
             "version": "26.3", "protocol": 777, "format": [97, 1],
-            "textures": panoramas + ["minecraft:gui/sprites/widget/button"],
+            "textures": panoramas + native + [referenced, unused, "minecraft:gui/sprites/widget/button"],
         }])
 
         manifest = self.build()
@@ -197,7 +202,7 @@ class ResourcePackVariantsTest(unittest.TestCase):
         with zipfile.ZipFile(self.root / "out" / "RusCraftingResource.zip") as archive:
             self.assertEqual(archive.read("assets/minecraft/atlases/blocks.json"), atlas)
         with zipfile.ZipFile(self.root / "out" / "RusCraftingResource-26.3.zip") as archive:
-            blocks = variants._evaluate_sources(json.loads(archive.read("assets/minecraft/atlases/blocks.json"))["sources"], set(panoramas) | {"demo:gui/icon", "minecraft:gui/sprites/widget/button"})
+            blocks = variants._evaluate_sources(json.loads(archive.read("assets/minecraft/atlases/blocks.json"))["sources"], set(panoramas + native + [referenced, unused]) | {"demo:gui/icon", "minecraft:gui/sprites/widget/button"})
             items = json.loads(archive.read("assets/minecraft/atlases/items.json"))["sources"]
             for resource in panoramas[:4]:
                 self.assertEqual(blocks[resource], resource)
@@ -205,14 +210,18 @@ class ResourcePackVariantsTest(unittest.TestCase):
             self.assertNotIn(panoramas[5], blocks)
             self.assertEqual(blocks["demo:panorama_alias"], panoramas[5])
             self.assertEqual(blocks["demo:gui/icon"], "demo:gui/icon")
+            for resource in native + [referenced]:
+                self.assertEqual(blocks[resource], resource)
+            self.assertNotIn(unused, blocks)
+            self.assertNotIn("minecraft:gui/sprites/widget/button", blocks)
             self.assertIn({"type": "minecraft:single", "resource": panoramas[4]}, items)
             self.assertEqual(archive.read("assets/minecraft/textures/gui/title/background/panorama_3.png"), b"custom replacement")
-        self.assertEqual(manifest["packs"][1]["stats"]["unusedPanoramaSourcesRemoved"], 2)
+        self.assertEqual(manifest["packs"][1]["stats"]["unusedVanillaBlockSourcesRemoved"], 4)
 
-    def test_panorama_omission_keeps_unknown_atlas_and_unparseable_consumers(self):
+    def test_vanilla_texture_omission_keeps_unknown_atlas_and_unparseable_consumers(self):
         panorama = "minecraft:gui/title/background/panorama_0"
         files = {"assets/demo/models/item/bad.json": b"not JSON"}
-        self.assertEqual(variants._unused_vanilla_panoramas(files, frozenset([panorama])), set())
+        self.assertEqual(variants._unused_vanilla_block_textures(files, frozenset([panorama])), set())
         atlas = make_atlas([
             {"type": "directory", "source": "gui", "prefix": "gui/"},
             {"type": "future:procedural"},
@@ -225,7 +234,18 @@ class ResourcePackVariantsTest(unittest.TestCase):
         manifest = self.build()
         with zipfile.ZipFile(self.root / "out" / "RusCraftingResource-26.3.zip") as archive:
             self.assertEqual(archive.read("assets/minecraft/atlases/blocks.json"), atlas)
-        self.assertEqual(manifest["packs"][1]["stats"]["unusedPanoramaSourcesRemoved"], 0)
+        self.assertEqual(manifest["packs"][1]["stats"]["unusedVanillaBlockSourcesRemoved"], 0)
+
+    def test_implicit_directory_alias_is_retained_even_between_candidate_ids(self):
+        textures = {"minecraft:gui/example", "minecraft:entity/example"}
+        atlas = make_atlas([
+            {"type": "directory", "source": "gui", "prefix": "entity/"},
+            {"type": "directory", "source": "entity", "prefix": "entity/"},
+        ])
+        expanded, _ = variants._rewrite_atlas(atlas, textures, expand_directories=True, strict=True)
+        kept, removed = variants._omit_unused_directory_sprites(atlas, expanded, textures, textures)
+        self.assertEqual(kept, expanded)
+        self.assertEqual(removed, 0)
 
     def test_unknown_atlas_source_is_preserved_without_partial_rewrite(self):
         atlas = make_atlas([

@@ -26,7 +26,12 @@ MAX_ARCHIVE_ENTRIES = 100_000
 MAX_ENTRY_BYTES = 128 * 1024 * 1024
 MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
 MAX_REPEATED_BLOCK_WIDTH = 64
-VANILLA_PANORAMAS = frozenset(f"minecraft:gui/title/background/panorama_{index}" for index in range(6))
+# The blocks declarations in all four pinned clients import only these entity
+# textures. GUI and other entity textures have separate native consumers.
+VANILLA_BLOCK_ENTITY_TEXTURES = frozenset({
+    "minecraft:entity/bell/bell_body", "minecraft:entity/enchanting_table_book",
+    "minecraft:entity/enchantment/enchanting_table_book",
+})
 
 
 class PackError(ValueError):
@@ -548,15 +553,15 @@ def _variant_files(
     textures = set(client.textures)
     textures.update(_texture_ids(effective))
     totals = {"directoriesExpanded": 0, "emptyDirectories": 0, "duplicateSourcesRemoved": 0, "atlasesOptimized": 0, "atlasesSkipped": 0}
-    totals["unusedPanoramaSourcesRemoved"] = 0
-    unused_panoramas = _unused_vanilla_panoramas(effective, client.textures)
+    totals["unusedVanillaBlockSourcesRemoved"] = 0
+    unused_textures = _unused_vanilla_block_textures(effective, client.textures)
     for name, data in list(effective.items()):
         if not _atlas_path(name, []):
             continue
         rewritten, stats = _rewrite_atlas(data, textures, expand_directories=True, strict=True)
         if name == "assets/minecraft/atlases/blocks.json" and not stats["atlasesSkipped"]:
-            rewritten, removed = _omit_directory_panoramas(data, rewritten, unused_panoramas, textures)
-            totals["unusedPanoramaSourcesRemoved"] += removed
+            rewritten, removed = _omit_unused_directory_sprites(data, rewritten, unused_textures, textures)
+            totals["unusedVanillaBlockSourcesRemoved"] += removed
         effective[name] = rewritten
         for key in ("directoriesExpanded", "emptyDirectories", "duplicateSourcesRemoved", "atlasesSkipped"):
             totals[key] += stats[key]
@@ -590,20 +595,24 @@ def _variant_files(
     return effective, stats
 
 
-def _unused_vanilla_panoramas(files: dict[str, bytes], vanilla_textures: frozenset[str]) -> set[str]:
-    # CubeMap loads these six standalone textures; a broad gui/ directory also
-    # imports them into blocks. Keep custom replacements and explicit consumers.
-    candidates = set(VANILLA_PANORAMAS & vanilla_textures) - _texture_ids(files)
+def _unused_vanilla_block_textures(files: dict[str, bytes], vanilla_textures: frozenset[str]) -> set[str]:
+    candidates = {
+        texture for texture in vanilla_textures
+        if texture.startswith(("minecraft:gui/", "minecraft:entity/"))
+        and not texture.startswith("minecraft:entity/conduit/")
+        and texture not in VANILLA_BLOCK_ENTITY_TEXTURES
+    } - _texture_ids(files)
 
     def referenced(value: Any) -> None:
         if isinstance(value, str):
-            resource = value.removesuffix(".png")
-            candidates.discard(resource if ":" in resource else "minecraft:" + resource)
+            namespace, resource = value.split(":", 1) if ":" in value else ("minecraft", value)
+            resource = resource.removeprefix("textures/").removesuffix(".png")
+            candidates.discard(namespace + ":" + resource)
         elif isinstance(value, list):
             for item in value:
                 referenced(item)
         elif isinstance(value, dict):
-            for item in value.values():
+            for item in (*value.keys(), *value.values()):
                 referenced(item)
 
     for name, data in files.items():
@@ -615,7 +624,7 @@ def _unused_vanilla_panoramas(files: dict[str, bytes], vanilla_textures: frozens
     return candidates
 
 
-def _omit_directory_panoramas(
+def _omit_unused_directory_sprites(
     original: bytes, rewritten: bytes, candidates: set[str], textures: set[str]
 ) -> tuple[bytes, int]:
     original_sources = _load_json(original, "blocks atlas")["sources"]
@@ -624,17 +633,22 @@ def _omit_directory_panoramas(
         _validate_resource_id(source.get("sprite", source["resource"]))
         for source in original_sources if _source_kind(source) == "single"
     }
-    removable = candidates - explicit
-    if not removable:
-        return rewritten, 0
     document = _load_json(rewritten, "blocks atlas")
     sources = document["sources"]
+    aliases = {
+        _validate_resource_id(source.get("sprite", source["resource"]))
+        for source in sources if _source_kind(source) == "single"
+        and _validate_resource_id(source.get("sprite", source["resource"])) != _validate_resource_id(source["resource"])
+    }
+    removable = candidates - explicit - aliases
+    if not removable:
+        return rewritten, 0
     kept = [
         source for source in sources
         if not (
             _source_kind(source) == "single"
             and _validate_resource_id(source.get("resource")) in removable
-            and _validate_resource_id(source.get("sprite", source["resource"])) in removable
+            and _validate_resource_id(source.get("sprite", source["resource"])) == _validate_resource_id(source["resource"])
         )
     ]
     if kept == sources:
@@ -642,7 +656,7 @@ def _omit_directory_panoramas(
     before = _evaluate_sources(sources, textures)
     after = _evaluate_sources(kept, textures)
     if after != {sprite: resource for sprite, resource in before.items() if sprite not in removable}:
-        raise PackError("panorama omission changed another block sprite")
+        raise PackError("unused vanilla texture omission changed another block sprite")
     document["sources"] = kept
     return (json.dumps(document, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8"), len(sources) - len(kept)
 
