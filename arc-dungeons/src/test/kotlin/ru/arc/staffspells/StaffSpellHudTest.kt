@@ -177,7 +177,7 @@ class StaffSpellHudTest : FreeSpec({
         )
         val rows = cases.map { (name, text) ->
             val bounds = staffSpellHudBounds(text, staffSpellHudVisualSpec().lineWidth)
-            val before = staffHudPosition(position, StaffHudPlacement.TOP, bounds, 0.18)
+            val before = staffHudSafePosition(position, StaffHudPlacement.TOP, bounds, 0.18)
             val after = guidanceHudPosition(position, bounds, 0.18)
             fun project(pose: StaffSpellHudPositionSettings): List<Double> {
                 val radius = bounds.verticalRadius * pose.scale
@@ -196,6 +196,63 @@ class StaffSpellHudTest : FreeSpec({
         java.nio.file.Files.writeString(output, com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(mapOf(
             "verticalFovDegrees" to 70,
             "source" to "StaffSpellHud.kt: guidanceHudPosition and staffSpellHudBounds",
+            "evidence" to "Source-derived conservative card bounds; native client rendering and motion unverified.",
+            "cases" to rows,
+        )) + "\n")
+    }
+
+    "staff rises within the viewport and aim clearance without raising guidance again" {
+        val position = StaffSpellHudPositionSettings()
+        val cases = linkedMapOf(
+            "ready" to "ПКМ · Комета",
+            "ready-hotkeys" to "ПКМ · Комета\nQ готово   F готово",
+            "charging-hotkeys" to "Shift + ПКМ · Метеоры\n55% ■■■■■□□□□□\nQ готово   F готово",
+            "wrapped-cooldown" to "Shift + ПКМ · Гравитационный обвал\n0.9 с ■■■■■□□□□□\nQ готово   F готово",
+        )
+        val rows = cases.map { (name, text) ->
+            val bounds = staffSpellHudBounds(text, staffSpellHudVisualSpec().lineWidth)
+            val before = staffHudSafePosition(position, StaffHudPlacement.TOP, bounds, 0.18)
+            val after = staffHudPosition(position, StaffHudPlacement.TOP, bounds, 0.18)
+            val rise = before.verticalBlocks - after.verticalBlocks
+            (rise >= 0.0 && rise <= 0.25 + 1.0e-9) shouldBe true
+            after.forwardBlocks shouldBe before.forwardBlocks
+            after.horizontalBlocks shouldBe before.horizontalBlocks
+            after.scale shouldBe before.scale
+            when (name) {
+                "ready" -> (abs(rise - 0.25) < 1.0e-9) shouldBe true
+                "ready-hotkeys", "charging-hotkeys" -> (rise > 0.0 && rise < 0.25) shouldBe true
+                "wrapped-cooldown" -> rise shouldBe 0.0
+            }
+            if (rise > 0.0) {
+                val farEdge = -after.verticalBlocks + bounds.verticalRadius * after.scale + 2 * 0.18
+                (farEdge <= after.forwardBlocks * Math.tan(Math.toRadians(35.0)) + 1.0e-9) shouldBe true
+            }
+            // Default BOTTOM is already on the safe aim boundary; a further-away setting can rise.
+            staffHudPosition(position, StaffHudPlacement.BOTTOM, bounds, 0.18) shouldBe
+                staffHudSafePosition(position, StaffHudPlacement.BOTTOM, bounds, 0.18)
+            val lower = position.copy(verticalBlocks = 1.5)
+            (staffHudSafePosition(lower, StaffHudPlacement.BOTTOM, bounds, 0.18).verticalBlocks -
+                staffHudPosition(lower, StaffHudPlacement.BOTTOM, bounds, 0.18).verticalBlocks) shouldBe 0.25
+            fun project(pose: StaffSpellHudPositionSettings): List<Double> {
+                val radius = bounds.verticalRadius * pose.scale
+                val denominator = 2 * pose.forwardBlocks * Math.tan(Math.toRadians(35.0))
+                return listOf(0.5 + (pose.verticalBlocks - radius) / denominator,
+                    0.5 + (pose.verticalBlocks + radius) / denominator)
+            }
+            mapOf("case" to name, "text" to text, "cameraUpBlocks" to rise,
+                "beforeTop" to project(before), "afterTop" to project(after))
+        }
+        val charge = staffSpellHudBounds(cases.getValue("charging-hotkeys"), 220)
+        staffHudPosition(position.copy(verticalBlocks = 1.2), StaffHudPlacement.BOTTOM, charge) shouldBe
+            staffHudSafePosition(position, StaffHudPlacement.BOTTOM, charge)
+        val quest = staffSpellHudBounds("ПКМ блоком привата по земле — защитить участок", 220)
+        val guidance = guidanceHudPosition(position, quest, 0.18)
+        (abs(guidance.verticalBlocks - (-1.2815)) < 1.0e-9) shouldBe true
+        val output = java.nio.file.Path.of("build/reports/guidance-hud/staff-projection.json")
+        java.nio.file.Files.createDirectories(output.parent)
+        java.nio.file.Files.writeString(output, com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(mapOf(
+            "verticalFovDegrees" to 70,
+            "source" to "StaffSpellHud.kt: staffHudPosition and staffSpellHudBounds",
             "evidence" to "Source-derived conservative card bounds; native client rendering and motion unverified.",
             "cases" to rows,
         )) + "\n")
@@ -484,8 +541,10 @@ class StaffSpellHudTest : FreeSpec({
 
     "mounted camera keeps the full card clear through delayed ascent reversal yaw pitch and pose transitions" {
         val config = StaffSpellConfig(StaffTestConfig(emptyMap()))
-        val bounds = staffSpellHudBounds("Shift + ПКМ · Метеоры\n55% ■■■■■□□□□□\nQ готово   F готово", 220)
-        for (preference in listOf(StaffHudPlacement.TOP, StaffHudPlacement.BOTTOM)) {
+        val cards = listOf("ПКМ · Комета", "ПКМ · Комета\nQ готово   F готово",
+            "Shift + ПКМ · Метеоры\n55% ■■■■■□□□□□\nQ готово   F готово")
+        for (text in cards) for (preference in listOf(StaffHudPlacement.TOP, StaffHudPlacement.BOTTOM)) {
+            val bounds = staffSpellHudBounds(text, 220)
             val frames = staffHudMotionPreviewFrames(config, bounds, preference)
             val side = if (preference == StaffHudPlacement.BOTTOM) 1 else -1
             // Sample the whole route, including the old failures 40.5, 75, 91 and their next frames.
@@ -523,7 +582,7 @@ class StaffSpellHudTest : FreeSpec({
                     val far = atan2(side * relative.dot(down) + bounds.verticalRadius * scale, depth)
                     check(depth > 0 && near > Math.toRadians(if (view == "first") 7.9 else 0.0) &&
                         far < Math.toRadians(35.0)) {
-                        "$preference $view t=$time depth=$depth near=${Math.toDegrees(near)} far=${Math.toDegrees(far)}"
+                        "$preference $text $view t=$time depth=$depth near=${Math.toDegrees(near)} far=${Math.toDegrees(far)}"
                     }
                     (abs(relative.dot(right)) + bounds.halfWidth * scale < depth * 1.12) shouldBe true
                 }

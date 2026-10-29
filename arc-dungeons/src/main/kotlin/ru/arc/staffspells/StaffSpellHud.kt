@@ -584,6 +584,29 @@ internal fun staffHudPosition(
     bounds: StaffSpellHudBounds,
     passengerGap: Double = 0.18,
 ): StaffSpellHudPositionSettings {
+    val baseline = staffHudSafePosition(position, preference, bounds, passengerGap)
+    val radius = bounds.verticalRadius * position.scale
+    val availableRise = if (preference == StaffHudPlacement.BOTTOM) {
+        // Move toward the reticle only while retaining the original full-card aim clearance.
+        val minimum = radius + max(0.5, 2 * abs(passengerGap)) + position.forwardBlocks * STAFF_HUD_AIM_SLOPE
+        baseline.verticalBlocks - minimum
+    } else {
+        // Keep the top edge inside the reference 70-degree viewport, including the delayed
+        // head-to-eye correction. Tall cards already at that limit receive no additional lift.
+        val highestCenter = position.forwardBlocks * Math.tan(Math.toRadians(35.0)) -
+            radius - 2 * abs(passengerGap)
+        highestCenter + baseline.verticalBlocks
+    }
+    return baseline.copy(verticalBlocks = baseline.verticalBlocks - availableRise.coerceIn(0.0, 0.25))
+}
+
+/** Original aim-safe placement, also retained as the unchanged base for quest/claim guidance. */
+internal fun staffHudSafePosition(
+    position: StaffSpellHudPositionSettings,
+    preference: StaffHudPlacement,
+    bounds: StaffSpellHudBounds,
+    passengerGap: Double = 0.18,
+): StaffSpellHudPositionSettings {
     val side = if (preference == StaffHudPlacement.BOTTOM) 1.0 else -1.0
     // The native passenger already follows the client's predicted movement. A speed/turn-based
     // retreat here would turn server movement-packet jitter into visible HUD movement and scaling.
@@ -603,7 +626,7 @@ internal fun guidanceHudPosition(
     bounds: StaffSpellHudBounds,
     passengerGap: Double,
     verticalOffset: Double = 0.0,
-): StaffSpellHudPositionSettings = staffHudPosition(position, StaffHudPlacement.TOP, bounds, passengerGap).let {
+): StaffSpellHudPositionSettings = staffHudSafePosition(position, StaffHudPlacement.TOP, bounds, passengerGap).let {
     val upperEdge = position.forwardBlocks * Math.tan(Math.toRadians(35.0)) * 0.9
     val highestCenter = (upperEdge - bounds.verticalRadius * position.scale).coerceAtLeast(0.0)
     it.copy(verticalBlocks = -minOf(-it.verticalBlocks + 0.25, highestCenter) - verticalOffset)
