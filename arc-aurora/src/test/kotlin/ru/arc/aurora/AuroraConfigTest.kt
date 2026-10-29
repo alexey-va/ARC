@@ -14,11 +14,14 @@ class AuroraConfigTest : FreeSpec({
         settings.permission shouldBe "arcaurora.view"
         listOf(settings.intervalTicks, settings.viewersPerTick, settings.attemptsPerViewer,
             settings.packetsPerViewer, settings.nativeBudgetMicros) shouldBe listOf(10, 8, 8, 12, 1500)
+        settings.skyPacketsPerViewer shouldBe 36
         settings.ping shouldBe AuroraPingSettings()
         val profile = settings.profiles.single()
         profile.id shouldBe "ambient"
         profile.particle shouldBe Particle.END_ROD
         profile.particleData shouldBe null
+        profile.skyScene shouldBe false
+        listOf(profile.sceneDurationTicks, profile.motionPeriodTicks, profile.updateTicks) shouldBe listOf(240, 400, 4)
         profile.biomes shouldBe listOf("*")
         profile.matches("iris:unknown_biome", "world", 15000, false, false, 80.0, 12, false) shouldBe true
         profile.matches("minecraft:plains", "world", 0, false, false, 80.0, 12, true) shouldBe false
@@ -26,6 +29,70 @@ class AuroraConfigTest : FreeSpec({
         source.set("profiles.ambient.radius", 24)
         profile.biomes shouldBe listOf("*")
         profile.radius shouldBe 12.0
+    }
+
+    "sky packet cap is bounded independently from the ordinary packet cap" {
+        listOf(1, 128).forEach { cap ->
+            val settings = AuroraConfig.parse(yaml("sky-packets-per-viewer: $cap"))
+            settings.skyPacketsPerViewer shouldBe cap
+            settings.packetsPerViewer shouldBe 12
+        }
+        val ordinaryOverride = AuroraConfig.parse(yaml("packets-per-viewer: 7"))
+        ordinaryOverride.packetsPerViewer shouldBe 7
+        ordinaryOverride.skyPacketsPerViewer shouldBe 36
+        listOf(0, 129, 1.5, "36").forEach { value ->
+            val source = YamlConfiguration().apply { set("sky-packets-per-viewer", value) }
+            shouldThrow<AuroraConfigException> { AuroraConfig.parse(source) }
+                .path shouldBe "sky-packets-per-viewer"
+        }
+    }
+
+    "sky scene mode expands shape bounds while legacy profiles keep their existing limits" {
+        val ordinary = AuroraConfig.parse(profileConfig("shape-size" to 8, "points" to 24)).profiles.single()
+        ordinary.skyScene shouldBe false
+        ordinary.shapeSize shouldBe 8.0
+        ordinary.points shouldBe 24
+        val sky = AuroraConfig.parse(profileConfig(
+            "sky-scene" to true, "shape-size" to 32, "points" to 192,
+            "scene-duration-ticks" to 1200, "motion-period-ticks" to 2400, "update-ticks" to 200,
+        )).profiles.single()
+        sky.skyScene shouldBe true
+        sky.shapeSize shouldBe 32.0
+        sky.points shouldBe 192
+        listOf(sky.sceneDurationTicks, sky.motionPeriodTicks, sky.updateTicks) shouldBe listOf(1200, 2400, 200)
+        sky.particle shouldBe Particle.END_ROD
+        sky.count shouldBe 1
+
+        listOf(false, true).forEach { skyScene ->
+            val minimum = AuroraConfig.parse(profileConfig(
+                "sky-scene" to skyScene, "shape-size" to 0.1, "points" to 1,
+                "scene-duration-ticks" to 40, "motion-period-ticks" to 40, "update-ticks" to 1,
+            )).profiles.single()
+            minimum.shapeSize shouldBe 0.1
+            minimum.points shouldBe 1
+            listOf(minimum.sceneDurationTicks, minimum.motionPeriodTicks, minimum.updateTicks) shouldBe listOf(40, 40, 1)
+        }
+        listOf("shape-size" to 8.01, "points" to 25).forEach { (field, value) ->
+            shouldThrow<AuroraConfigException> { AuroraConfig.parse(profileConfig("sky-scene" to false, field to value)) }
+                .path shouldBe "profiles.ambient.$field"
+        }
+    }
+
+    "invalid sky geometry and timing reject the complete candidate at their own field paths" {
+        listOf(
+            "shape-size" to 0.099, "shape-size" to 32.01, "shape-size" to Double.NaN,
+            "shape-size" to Double.POSITIVE_INFINITY, "points" to 0, "points" to 193, "points" to 1.5,
+            "scene-duration-ticks" to 39, "scene-duration-ticks" to 1201, "scene-duration-ticks" to 240.5,
+            "motion-period-ticks" to 39, "motion-period-ticks" to 2401,
+            "update-ticks" to 0, "update-ticks" to 201, "update-ticks" to "4",
+        ).forEach { (field, value) ->
+            shouldThrow<AuroraConfigException> { AuroraConfig.parse(profileConfig("sky-scene" to true, field to value)) }
+                .path shouldBe "profiles.ambient.$field"
+        }
+        shouldThrow<AuroraConfigException> { AuroraConfig.parse(profileConfig("sky-scene" to "true")) }
+            .path shouldBe "profiles.ambient.sky-scene"
+        shouldThrow<AuroraConfigException> { AuroraConfig.parse(profileConfig("update-ticks" to 0)) }
+            .path shouldBe "profiles.ambient.update-ticks"
     }
 
     "custom Iris and unknown biome keys use full namespaced globs without a registry" {
@@ -168,7 +235,9 @@ class AuroraConfigTest : FreeSpec({
     "profile count is bounded across ordinary profiles and all event presets" {
         val source = YamlConfiguration()
         repeat(127) { source.createSection("profiles.biome_$it") }
+        source.set("profiles.biome_0.sky-scene", true)
         source.createSection("event-presets.festival.spark")
+        source.set("event-presets.festival.spark.sky-scene", true)
         val accepted = AuroraConfig.parse(source)
         accepted.profiles.size shouldBe 127
         accepted.eventPresets.getValue("festival").single().id shouldBe "spark"

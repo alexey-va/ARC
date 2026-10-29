@@ -28,7 +28,7 @@ class AuroraResourcesTest : FreeSpec({
         val settings = AuroraConfig.parse(resource("config.yml"))
         settings.permission shouldBe "arcaurora.view"
         (settings.profiles.isNotEmpty()) shouldBe true
-        (settings.eventPresets["treasure-hunt"].orEmpty().isNotEmpty()) shouldBe true
+        settings.eventPresets["treasure-hunt"].orEmpty().any { it.skyScene && it.points > 24 } shouldBe true
         settings.ping shouldBe AuroraPingSettings(250, 180, 10, 20)
         (settings.profiles + settings.eventPresets.values.flatten()).forEach { profile ->
             ParticleTypes.getByName(profile.particle.key.toString()).name.toString() shouldBe profile.particle.key.toString()

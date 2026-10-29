@@ -16,6 +16,7 @@ data class AuroraSettings(
     val profiles: List<AuroraProfile>,
     val eventPresets: Map<String, List<AuroraProfile>>,
     val ping: AuroraPingSettings = AuroraPingSettings(),
+    val skyPacketsPerViewer: Int = 36,
 ) {
     /** Exact, single-hop aliases; unknown biome keys remain usable without a registry lookup. */
     fun canonicalBiomeKey(raw: String): String = normalizeBiomeKey(raw).let { biomeAliases[it] ?: it }
@@ -91,6 +92,10 @@ data class AuroraProfile(
     val offsetZ: Double,
     val speed: Double,
     val particleData: Any?,
+    val skyScene: Boolean = false,
+    val sceneDurationTicks: Int = 240,
+    val motionPeriodTicks: Int = 400,
+    val updateTicks: Int = 4,
 ) {
     private val biomePatterns = biomes.map(::compileGlob)
     private val worldPatterns = worlds.map(::compileGlob)
@@ -183,6 +188,7 @@ object AuroraConfig {
                 windowSamples = ping?.int("window-samples", 10, 1..120) ?: 10,
                 sampleIntervalTicks = ping?.int("sample-interval-ticks", 20, 1..1200) ?: 20,
             ),
+            skyPacketsPerViewer = source.int("sky-packets-per-viewer", 36, 1..128),
         )
     }
 
@@ -194,6 +200,7 @@ object AuroraConfig {
             }
         }.immutable()
         val worlds = source.strings("worlds", listOf("*")).immutable()
+        val skyScene = source.boolean("sky-scene", false)
         val minY = source.int("min-y", -2048, -2048..2048)
         val maxY = source.int("max-y", 2048, -2048..2048)
         source.check("max-y", maxY >= minY, "must be at least min-y")
@@ -241,8 +248,9 @@ object AuroraConfig {
             verticalMin = verticalMin,
             verticalMax = verticalMax,
             shape = source.enum("shape", AuroraShape.POINT),
-            shapeSize = source.double("shape-size", 1.0, 0.1..8.0),
-            points = source.int("points", 1, 1..24),
+            shapeSize = source.double("shape-size", 1.0, if (skyScene) 0.1..32.0 else 0.1..8.0),
+            points = if (skyScene) source.int("sky-points", source.int("points", 1, 1..192), 1..192)
+                else source.int("points", 1, 1..24),
             particle = particle,
             count = source.int("count", 1, 0..16),
             offsetX = source.double("offset-x", 0.0, 0.0..2.0),
@@ -250,6 +258,10 @@ object AuroraConfig {
             offsetZ = source.double("offset-z", 0.0, 0.0..2.0),
             speed = source.double("speed", 0.0, 0.0..1.0),
             particleData = particleData,
+            skyScene = skyScene,
+            sceneDurationTicks = source.int("scene-duration-ticks", 240, 40..1200),
+            motionPeriodTicks = source.int("motion-period-ticks", 400, 40..2400),
+            updateTicks = source.int("update-ticks", 4, 1..200),
         )
     }
 

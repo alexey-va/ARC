@@ -18,6 +18,7 @@ import ru.arc.aurora.api.ArcAuroraService
 import ru.arc.config.Config
 import ru.arc.core.PaperArcRuntime
 import ru.arc.core.Tasks
+import ru.arc.core.ScheduledTask
 import ru.arc.logging.ArcLogging
 import ru.arc.logging.LoggingConfigSource
 import ru.arc.logging.paper.PaperLoggingPlatform
@@ -38,7 +39,10 @@ class ArcAuroraPlugin : JavaPlugin(), Listener {
     internal var engine: AuroraEngine? = null; private set
     private var messages: LocalizedMiniMessage? = null
     private val events = linkedMapOf<UUID, LinkedHashMap<UUID, String>>()
+    private class Preview(val preset: String) { var timer: ScheduledTask? = null }
+    private val previews = mutableMapOf<UUID, Preview>()
     @Volatile private var eventCount = 0
+    @Volatile private var previewCount = 0
     private val hotload = PaperPluginHotload(this) {
         stopRuntime()
         mapOf("particles" to CompletableFuture.completedFuture(Unit))
@@ -58,7 +62,7 @@ class ArcAuroraPlugin : JavaPlugin(), Listener {
             owner.registerHealth("ambient") {
                 RuntimeHealthContribution(
                     state = if (engine != null) RuntimeHealthState.UP else RuntimeHealthState.DOWN,
-                    activeLeases = eventCount,
+                    activeLeases = eventCount + previewCount,
                     dependencies = mapOf("packet-budget" to (engine != null)),
                 )
             }
@@ -98,6 +102,8 @@ class ArcAuroraPlugin : JavaPlugin(), Listener {
         }
         val replacement = AuroraEngine(this, owner.tasks, settings, eventProfiles = { world ->
             events[world]?.values?.lastOrNull()?.let { engine?.settings?.eventPresets?.get(it) }
+        }, previewProfiles = { playerId ->
+            previews[playerId]?.let { engine?.settings?.eventPresets?.get(it.preset) }
         })
         try {
             server.onlinePlayers.forEach(replacement::join) // startup/manual maintenance, no online-player scan on tick
@@ -144,14 +150,35 @@ class ArcAuroraPlugin : JavaPlugin(), Listener {
     }
 
     @EventHandler fun onJoin(event: PlayerJoinEvent) { engine?.join(event.player) }
-    @EventHandler fun onQuit(event: PlayerQuitEvent) { engine?.quit(event.player.uniqueId) }
+    @EventHandler fun onQuit(event: PlayerQuitEvent) { stopPreview(event.player.uniqueId); engine?.quit(event.player.uniqueId) }
     @EventHandler fun onWorld(event: PlayerChangedWorldEvent) { engine?.invalidate(event.player.uniqueId) }
     @EventHandler(ignoreCancelled = true) fun onTeleport(event: PlayerTeleportEvent) { engine?.invalidate(event.player.uniqueId) }
 
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
         val action = args.firstOrNull()?.lowercase() ?: "toggle"
-        if (action in setOf("reload", "status")) {
+        if (action in setOf("reload", "status", "preview")) {
             if (!sender.hasPermission("arcaurora.admin")) return reply(sender, "no-permission")
+            if (action == "preview") {
+                val current = engine ?: return reply(sender, "stopped")
+                if (args.size == 1 && sender !is Player) return reply(sender, "players-only")
+                val target = args.getOrNull(1)?.let(server::getPlayerExact) ?: if (args.size == 1) sender as? Player else null
+                if (target == null) return reply(sender, "player-not-found", mapOf("player" to args.getOrNull(1).orEmpty()))
+                if (previews.containsKey(target.uniqueId)) {
+                    stopPreview(target.uniqueId)
+                    return reply(sender, "preview-off")
+                }
+                if (!current.settings.eventPresets.containsKey("treasure-hunt")) return reply(sender, "preview-missing")
+                val preview = Preview("treasure-hunt")
+                val targetId = target.uniqueId
+                previews[targetId] = preview
+                previewCount = previews.size
+                current.invalidate(targetId)
+                preview.timer = runtime!!.tasks.runLater(1200L) {
+                    if (previews[targetId] === preview) stopPreview(targetId)
+                }
+                if (sender !== target) reply(sender, "preview-on")
+                return reply(target, "preview-on")
+            }
             if (action == "status") return reply(sender, "status", mapOf(
                 "profiles" to (engine?.settings?.profiles?.size ?: 0).toString(),
                 "events" to eventCount.toString(), "viewers" to (engine?.viewerCount ?: 0).toString(),
@@ -164,6 +191,7 @@ class ArcAuroraPlugin : JavaPlugin(), Listener {
                 }
                 val candidateMessages = loadMessages()
                 val replacement = prepareEngine(candidate)
+                previews.keys.toList().forEach(::stopPreview)
                 runtime!!.reload()
                 installEngine(replacement)
                 messages = candidateMessages
@@ -184,6 +212,11 @@ class ArcAuroraPlugin : JavaPlugin(), Listener {
         return reply(sender, if (enabled) "enabled" else "disabled")
     }
 
+    private fun stopPreview(playerId: UUID) {
+        previews.remove(playerId)?.let { it.timer?.cancel(); engine?.invalidate(playerId) }
+        previewCount = previews.size
+    }
+
     private fun reply(sender: CommandSender, key: String, values: Map<String, String> = emptyMap()): Boolean {
         val locale = if (sender is Player && sender.locale().language != "ru") "en" else "ru"
         sender.sendMessage(messages?.render(key, locale, values.mapValues { Component.text(it.value) }) ?: Component.text("ArcAurora: $key"))
@@ -194,6 +227,7 @@ class ArcAuroraPlugin : JavaPlugin(), Listener {
         val owner = runtime
         runtime = null
         owner?.tasks?.close()
+        previews.keys.toList().forEach(::stopPreview)
         engine?.close(); engine = null
         events.clear(); eventCount = 0
         server.servicesManager.unregisterAll(this)

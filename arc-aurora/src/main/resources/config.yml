@@ -6,6 +6,7 @@ interval-ticks: 10
 viewers-per-tick: 8
 attempts-per-viewer: 8
 packets-per-viewer: 12
+sky-packets-per-viewer: 36
 native-budget-micros: 1500
 
 # Both observed limits must pass before new ambient/event submissions.
@@ -410,45 +411,75 @@ profiles:
 # It intentionally bypasses the ordinary permission/toggle and time/biome filters.
 # Ping, loaded-chunk, passable-block and packet-budget gates still apply.
 # These decorative forms do not reveal treasure positions or change rewards.
-# Four particles per point add visibility without more packet/native submissions.
-# Four points per form allow three small nearby forms per 12-packet pass.
+# Three different native sprites are verified full-bright in client 1.21.11.
+# White/purple END_ROD draws a wave, FIREWORK traces a cube, green/gold TOTEM falls
+# from a halo. Native colour, gravity and fade are intentional, not RGB overrides.
+# A cyclic cursor shares the 36-request SKY cap. All 144 positions take nominally
+# 1.2 s at the 4-tick cadence, before terrain, ping and shared runtime limits.
 event-presets:
   treasure-hunt:
-    golden_constellations:
+    sky_wave:
       biomes: ['*']
       time-start: 0
       time-end: 23999
-      radius: 9
-      min-distance: 3.5
-      vertical-min: 0.8
-      vertical-max: 3.2
-      shape: SPHERE
-      shape-size: 0.65
-      points: 4
-      particle: minecraft:dust_color_transition
-      count: 4
-      offset-x: 0.12
-      offset-y: 0.08
-      offset-z: 0.12
-      dust-color: '#E8C66B'
-      dust-to-color: '#F0DEA2'
-      dust-size: 1.0
-    blue_ribbons:
-      biomes: ['*']
-      time-start: 0
-      time-end: 23999
-      radius: 11
-      min-distance: 4
-      vertical-min: 1.8
-      vertical-max: 4.2
+      sky-scene: true
+      scene-duration-ticks: 240
+      motion-period-ticks: 800
+      update-ticks: 4
+      radius: 30
+      min-distance: 24
+      vertical-min: 12
+      vertical-max: 15
       shape: WAVE
-      shape-size: 1.2
-      points: 4
-      particle: minecraft:dust_color_transition
-      count: 4
-      offset-x: 0.12
-      offset-y: 0.08
-      offset-z: 0.12
-      dust-color: '#65BAB9'
-      dust-to-color: '#9FBADB'
-      dust-size: 0.9
+      shape-size: 6
+      points: 24
+      sky-points: 48
+      particle: minecraft:end_rod
+      count: 1
+      offset-x: 0
+      offset-y: 0
+      offset-z: 0
+      speed: 0
+    sky_cube:
+      biomes: ['*']
+      time-start: 0
+      time-end: 23999
+      sky-scene: true
+      scene-duration-ticks: 320
+      motion-period-ticks: 2400
+      update-ticks: 4
+      radius: 30
+      min-distance: 24
+      vertical-min: 11
+      vertical-max: 14
+      shape: CUBE
+      shape-size: 2.5
+      points: 24
+      sky-points: 72
+      particle: minecraft:firework
+      count: 1
+      offset-x: 0
+      offset-y: 0
+      offset-z: 0
+      speed: 0
+    falling_halo:
+      biomes: ['*']
+      time-start: 0
+      time-end: 23999
+      sky-scene: true
+      scene-duration-ticks: 400
+      motion-period-ticks: 600
+      update-ticks: 4
+      radius: 30
+      min-distance: 24
+      vertical-min: 14
+      vertical-max: 17
+      shape: RING
+      shape-size: 4
+      points: 24
+      particle: minecraft:totem_of_undying
+      count: 1
+      offset-x: 0
+      offset-y: 0
+      offset-z: 0
+      speed: 0
