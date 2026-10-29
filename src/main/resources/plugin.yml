@@ -30,6 +30,7 @@ softdepend:
   - zAuctionHouseV3
   - AdvancedEnchantments
   - ItemsAdder
+  - CosmeticsCore
   - GravesX
   - PlayerParticles
   - ProtocolLib

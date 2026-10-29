@@ -1,88 +1,89 @@
 # Back wings
 
-`BackWingsModule` owns the cosmetic preference and one `PacketItemDisplay` per wearer.
-The existing ItemsAdder meshes, textures, base items and model IDs are unchanged.
-Core owns attachment, shared passenger lists, visibility, world changes and viewer replay.
-The module never creates a native entity/passenger, teleports a display on each tick,
-changes inventory, consumes items or changes attributes.
+CosmeticsCore owns wing rendering, movement, its equipped state and native persistence.
+ARC only supplies item entitlement, the existing plain-F shortcut and migration of the
+old `arc:back-wings` PDC preference. There is no custom display, body-yaw estimator,
+per-tick transform update or fallback renderer. Original ItemsAdder items, meshes and
+textures remain unchanged; vendor content configuration owns fitting.
 
-Plain **F**, with one of the exact IDs below in the **actual main hand**, cancels the
-hand swap. The same selected wing turns off; another selects that wing on the same
-display. Shift+F, already-cancelled input (including ArcBuilder's editor), ordinary
-items and wings held only in the offhand keep their existing routes. The handler
-runs at NORMAL with `ignoreCancelled = true`, after MenuShortcutController's LOWEST.
+| Original item ID | CosmeticsCore ID |
+| --- | --- |
+| `dreadknight:dreadknight_wings` | `arc_dreadknight_wings` |
+| `galaxy_set:galaxy_wings` | `arc_galaxy_wings` |
+| `deceaseset:decease_wings` | `arc_decease_wings` |
 
-The matching item must remain in one of the 36 storage slots. The cursor, armor,
-offhand and nested containers are not storage ownership. Inventory changes request
-a check on the next pulse; an every-ten-tick check also catches direct plugin writes.
-Loss clears the selection and removes the display. Death/quit hide it while keeping
-the preference; respawn/rejoin restore only if the item is still owned. HuskSync joins
-wait for `BukkitSyncCompleteEvent` before reading inventory. The preference uses
-`arc:back-wings` in the native player's PDC, with no extra persistence service. Current
-Spawn/Survival HuskSync configurations have `persistent_data: false`, so the preference
-is local to each server; this module does not change that policy.
+Plain **F**, with one of those exact ItemsAdder IDs in the **actual main hand**, cancels
+only the hand swap. An equipped wing turns off; another wing first removes only other
+ARC wing IDs, then equips the requested one. Foreign body cosmetics are never removed
+by ARC. Neither hand, event hand nor any inventory slot is changed. Shift+F,
+already-cancelled input (including ArcBuilder's editor), ordinary items and offhand-only
+wings keep their existing controls. The handler runs at NORMAL with `ignoreCancelled`,
+after MenuShortcutController's LOWEST handler.
 
-Configuration is `modules/back-wings.yml`. Normal module reload updates poses in place.
-Shutdown unregisters listeners, cancels the lifecycle scope and closes the display
-owner; `BackWingsModule.drained()` participates in ARC's native cleanup completion.
-One wearer is processed per shared `BudgetedTaskQueue` step, with a fixed 36-slot
-inventory bound. An unchanged transform produces no packet delta in Core.
+The original item must remain in one of the 36 storage slots; cursor, armor, offhand
+and nested containers do not establish ownership. ARC grants two temporary Bukkit
+permissions for each owned wing: `cosmeticscore.user.cosmetics.wear.<id>` and
+`cosmeticscore.user.cosmetics.seeingui.<id>`. No wildcard, admin permission, LuckPerms
+record or permanent entitlement is created. Newly acquired items are discovered without
+pressing F, so the native wardrobe can show and equip them. Item loss revokes only those
+permissions and removes only the corresponding ARC wing. Death, quit, provider absence
+and module shutdown revoke ARC's attachment. Native CosmeticsCore owns its visual
+lifecycle and saved selections; quitting or reloading ARC does not overwrite them.
 
-## Model placement
+One initial online-player enumeration seeds a queue maintained by join/quit events.
+Every ten ticks, one player inventory is checked per shared `BudgetedTaskQueue` step.
+This bounds each step to 36 slots and three native state placeholders. There are no
+per-tick online-player snapshots or motion listeners. HuskSync joins wait for
+`BukkitSyncCompleteEvent` before reading inventory. Existing online players are checked
+on module enable; respawn/world changes request a check too.
 
-All models use `ItemDisplayTransform.NONE`; the ItemDisplay item renderer centers
-the model at JSON coordinate `(8, 8, 8)` before our scale/rotation. The configured
-anchor is relative to feet in body axes: +X left, +Y up, +Z forward at yaw zero.
-`backWingPose` rotates the anchor and mesh by the cosmetic body-yaw history, applies the
-crouch torso lean, then subtracts the full native passenger origin `player.height`.
-Display entity yaw and pitch are zero: the FIXED renderer applies those angles before
-the transformation. Camera pitch is not used. `pauseWhenNotObserved = false` keeps the owner's third-person
-view active. Transform interpolation lasts one tick with zero delay, so native quaternion
-SLERP draws intermediate render frames between the 20 Hz poses. Core restarts interpolation
-when a transform changes. Teleport interpolation stays zero; world motion belongs to the
-native passenger relation rather than repeated world teleports. Quaternion SLERP chooses
-the short arc across yaw wrapping; a longer duration would add unnecessary turn lag.
+The old PDC choice is migrated once, only while its original item is owned. An existing
+native ARC-wing choice wins. The old key is cleared after verified native equip, an
+existing native choice, or an invalid/unowned legacy value; failed requests keep it for
+retry. ARC never writes a new selection key. After migration, the native wardrobe is
+authoritative: a GUI unequip remains off across checks, world changes and ARC reload.
+No new database, Redis contract or cross-server preference policy is introduced.
 
-Paper's `bodyYaw` is only an initial baseline. Native 26.3 recording showed the server
-remaining at 50° while the walking client's torso reached 1.4°, and at -40° while the
-client reached -90°. The server resets its movement origin before its body calculation.
-`BackWingBodyYaw` therefore uses observed X/Z displacement and head yaw with the native
-1.21.11/26.3 movement threshold, backwards-facing correction, 0.3 smoothing, and 50°
-head/body limit (15° while blocking). Small head-only turns retain the torso direction.
-Nonwearers update lightweight history through move events, so equipping after a walk
-keeps that pose; only wearers use the existing bounded tick pulse. Observations in one
-tick revise one step. History survives toggle/switch/config reload, resets on teleport,
-world change and respawn, and is discarded on quit/shutdown. Network timing still makes
-this a reconstruction of the native pose, not access to each viewer's render state.
+## Documented integration boundary
 
-| Item ID | Existing base / CMD | Model | Rotated source bounds X / Y / Z (pixels) | Initial scale / Y rotation / anchor (blocks) |
-| --- | --- | --- | --- | --- |
-| `dreadknight:dreadknight_wings` | NETHERITE_SWORD / 10067 | `dreadknight:dreadknight/dreadknight_wings` | 4.75..11.25 / -1..37.5772 / -25.3706..41.3706 | .70 / 90° / (0, 1.02, -.31) |
-| `galaxy_set:galaxy_wings` | PAPER / 11905 | `galaxy_set:galaxy_set/wings` | 6..9 / -1..30.2 / -15.4094..31.4094 | .90 / 90° / (0, 1.02, -.25) |
-| `deceaseset:decease_wings` | PAPER / 11917 | `deceaseset:wings` | -13.725..29.725 / -.6231..17.3769 / 7.1..8.9 | .95 / 0° / (0, 1.10, -.22) |
+The bridge uses only the vendor's documented console commands:
 
-Bounds include each original cuboid rotation. Dreadknight is the representative:
-the initial standing span is about 2.92 blocks and its upper point is 2.31 blocks
-above feet. Galaxy and Decease spans are about 2.63 and 2.58 blocks. Global crouch
-adjustment is `(0, -.20, +.12)` with 28.64789° forward torso lean. Standing/crouching
-are the authored poses; swimming, elytra flight, sleeping and unusual scaled player
-models do not yet have independently authored pose variants.
+- `cosmetics <player> add <id> silent`
+- `cosmetics <player> remove <id> silent`
+
+It queries `%cosmetics_has_equipped_<id>%` through the existing PlaceholderAPI dependency.
+The three fixed IDs are the entire command/permission surface. Only literal `true` or
+`false` (with surrounding whitespace ignored) is accepted; an unresolved token is unknown,
+not an empty wardrobe. A successful Bukkit command dispatch is verified by reading back
+the requested native state. No vendor classes, reflection, paid JAR dependency or API
+artifact redistribution is involved. ItemsAdder, CosmeticsCore and PlaceholderAPI must
+all be enabled when the module starts. If an optional provider is absent, no renderer is
+started. An ARC module reload can start the bridge after providers become available.
+
+References: [commands](https://cosmeticscore.devs.beer/commands),
+[permissions](https://cosmeticscore.devs.beer/permissions),
+[PlaceholderAPI](https://cosmeticscore.devs.beer/compatibility-with-other-plugins/compatible/placeholderapi),
+[static body cosmetics](https://cosmeticscore.devs.beer/adding-content/body-cosmetic/static-body-cosmetic).
+
+Configuration is `modules/back-wings.yml`; its Russian feedback remains editable and
+reloadable through the normal module lifecycle. Existing obsolete pose keys are ignored
+and preserved by merge-forward rather than destructively rewriting operator files.
+Shutdown unregisters listeners, cancels its scope and removes all ARC permission
+attachments. `BackWingsModule.drained()` remains the immediate completed cleanup contract
+because ARC no longer owns a visual task queue.
 
 ## Focused checks and evidence boundary
 
 ```bash
-./gradlew :test --tests ru.arc.backwings.BackWingPoseTest \
-  --tests ru.arc.backwings.BackWingBodyYawTest \
-  --tests ru.arc.backwings.BackWingsRuntimeTest \
+./gradlew :test --tests ru.arc.backwings.BackWingsRuntimeTest \
   --tests ru.arc.backwings.BackWingsConfigTest
 ```
 
-The pose tests cover full-height origin compensation, yaw and crouch. Runtime tests
-use the real mock inventory/PDC with explicit native pose and packet-display doubles:
-they cover both-hand invariance, toggle/switch identity, storage ownership, exclusions,
-death/quit/replay, reload and asynchronous cleanup. Config checks cover merge-forward,
-preserved operator tuning and invalid-model fallback. They do not prove packet wire
-delivery, the Minecraft model renderer, native walking/turning or observer visibility.
-The parent task performs the first Dreadknight fit and walking acceptance in the actual
-26.3 client, then confirms or adjusts the three configurable poses. Source-preview
-mesh PNGs establish model identity only, not player fitting or motion acceptance.
+The focused tests use real mock inventories, PDC and Bukkit permission attachments with
+a documented-command/PAPI double. They cover both-hand invariance, exact toggle/switch
+commands, foreign-cosmetic preservation, storage-only ownership, temporary permission
+revocation, old-choice migration, native GUI authority, provider failures and lifecycle
+cleanup. They do not prove CosmeticsCore 1.3.13's actual placeholder output, command
+readback timing, loading order, model fitting, cross-server persistence or native motion.
+Those require the installed vendor plugin and the actual Minecraft client; source or
+mock checks do not establish visual acceptance.
