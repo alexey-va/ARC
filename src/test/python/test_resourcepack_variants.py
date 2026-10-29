@@ -1,4 +1,5 @@
 import hashlib
+import io
 import json
 import sys
 import tempfile
@@ -6,6 +7,8 @@ import unittest
 import warnings
 import zipfile
 from pathlib import Path
+
+from PIL import Image
 
 
 SCRIPT_DIR = Path(__file__).resolve().parents[2] / "main" / "resources" / "scripts"
@@ -204,6 +207,40 @@ class ResourcePackVariantsTest(unittest.TestCase):
 
         self.assertEqual([p["sha256"] for p in first["packs"]], [p["sha256"] for p in second["packs"]])
         self.assertEqual(sha256(self.input_zip), original_hash)
+
+    def test_optimizes_only_effective_variant_fonts_after_atlas_expansion(self):
+        cell = io.BytesIO()
+        Image.new("RGBA", (3, 2), (12, 34, 56, 0)).save(cell, format="PNG")
+        base_font = b'{"providers":[{"type":"space","advances":{" ":4}}]}'
+        overlay_font = json.dumps({"providers": [
+            {"type": "bitmap", "file": "demo:font/cell.png", "ascent": 7, "chars": ["a"]},
+            {"type": "bitmap", "file": "demo:font/cell.png", "ascent": 7, "chars": ["b"]},
+        ]}).encode()
+        write_pack(self.input_zip, {
+            "pack.mcmeta": json.dumps(pack_metadata()).encode(),
+            "assets/minecraft/font/default.json": base_font,
+            "modern/assets/minecraft/font/default.json": overlay_font,
+            "modern/assets/demo/textures/font/cell.png": cell.getvalue(),
+            "assets/arc/atlases/items.json": make_atlas([{"type": "directory", "source": "", "prefix": ""}]),
+        })
+        self.write_catalog()
+
+        manifest = self.build()
+
+        with zipfile.ZipFile(self.root / "out" / "RusCraftingResource.zip") as archive:
+            self.assertEqual(archive.read("assets/minecraft/font/default.json"), base_font)
+            self.assertEqual(archive.read("modern/assets/minecraft/font/default.json"), overlay_font)
+            self.assertFalse(any("/font/optimized/" in name for name in archive.namelist()))
+        with zipfile.ZipFile(self.root / "out" / "RusCraftingResource-26.3.zip") as archive:
+            provider = json.loads(archive.read("assets/minecraft/font/default.json"))["providers"][0]
+            self.assertEqual(provider["chars"], ["ab"])
+            self.assertTrue(provider["file"].startswith("arc:font/optimized/"))
+            self.assertEqual(len([name for name in archive.namelist() if "/font/optimized/" in name]), 1)
+            sources = json.loads(archive.read("assets/arc/atlases/items.json"))["sources"]
+            self.assertFalse(any(source.get("resource", "").startswith("arc:font/optimized/") for source in sources))
+            self.assertEqual(archive.read("assets/demo/textures/font/cell.png"), cell.getvalue())
+        self.assertEqual(manifest["packs"][1]["stats"]["fontProvidersBefore"], 2)
+        self.assertEqual(manifest["packs"][1]["stats"]["fontProvidersAfter"], 1)
 
     def test_missing_single_resource_does_not_replace_an_existing_sprite(self):
         textures = {"demo:items/present"}

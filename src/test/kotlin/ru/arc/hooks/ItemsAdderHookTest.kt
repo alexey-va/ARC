@@ -153,14 +153,18 @@ class ItemsAdderHookTest :
 
                 installed.shouldExist()
                 dataFolder.resolve("scripts/resourcepack_variants.py").shouldExist()
+                dataFolder.resolve("scripts/resourcepack_fonts.py").shouldExist()
                 dataFolder.resolve("scripts/resourcepack_clients.json").shouldExist()
+                dataFolder.resolve("scripts/resourcepack-requirements.txt").shouldExist()
                 Files.isExecutable(installed).shouldBeTrue()
                 installed.readText().contains("ItemsAdder generated.zip").shouldBeTrue()
 
                 installed.writeText("stale")
+                dataFolder.resolve("scripts/resourcepack_fonts.py").writeText("stale font optimizer")
                 BundledResourcePackSyncScript.install(dataFolder)
 
                 installed.readText().contains("ItemsAdder generated.zip").shouldBeTrue()
+                dataFolder.resolve("scripts/resourcepack_fonts.py").readText().contains("def optimize_fonts").shouldBeTrue()
             }
         }
 

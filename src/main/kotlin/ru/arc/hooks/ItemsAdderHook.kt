@@ -291,7 +291,13 @@ internal class ResourcePackSyncConfig(
 
 internal object BundledResourcePackSyncScript {
     const val RESOURCE_PATH = "scripts/resourcepack_sync.sh"
-    private val resources = listOf(RESOURCE_PATH, "scripts/resourcepack_variants.py", "scripts/resourcepack_clients.json")
+    private val resources = listOf(
+        RESOURCE_PATH,
+        "scripts/resourcepack_variants.py",
+        "scripts/resourcepack_fonts.py",
+        "scripts/resourcepack_clients.json",
+        "scripts/resourcepack-requirements.txt",
+    )
 
     fun install(
         dataFolder: Path,

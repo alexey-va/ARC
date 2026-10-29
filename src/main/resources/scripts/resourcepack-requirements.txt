@@ -1,0 +1,3 @@
+# Validated with production Pillow 9.0.1 and local Pillow 12.3.0.
+# The upper bound keeps an unreviewed major from changing image decoding.
+Pillow>=9.0.1,<13

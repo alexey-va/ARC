@@ -40,6 +40,39 @@ repeated source blocks are collapsed; empty directory results disappear from
 the specialized files. Unknown atlas source types are preserved. Texture
 resolution and model geometry are not reduced.
 
+The same default production flow then calls the bundled `resourcepack_fonts.py`
+for each catalogued client variant. It groups compatible single-glyph bitmap
+providers in `minecraft:default` and `minecraft:uniform` into content-addressed
+sheets. The transformation runs **after** overlay resolution and atlas-directory
+expansion, so the new font sheets are not accidentally included in block or item
+atlases. No operator command or post-generation patch is required: every
+subsequent ItemsAdder generation runs the font transformation again.
+
+The optimizer copies each complete original RGBA cell, including transparent
+margins and hidden RGB, without resampling, alpha blending or drawing. It keeps
+codepoints, cell dimensions, height, ascent, filters and provider precedence.
+References, space providers, external textures and unsupported definitions remain
+unchanged barriers. Original PNG resources are retained. Generated sheets are
+reused between identical fonts; no extra reference-font or FontSet is introduced.
+The unknown-client universal archive retains its original font definitions and
+compatibility overlays.
+
+Pillow is the image-decoder dependency, declared in the bundled
+`resourcepack-requirements.txt` (`>=9.0.1,<13`, tested with production 9.0.1 and
+local 12.3.0). A missing or unsupported runtime fails variant generation before
+uploads. Install the declared requirements when provisioning a new publisher.
+The variant manifest records provider counts, merged groups, new sheets and
+skip reasons. An undecodable source provider is retained; a generated-cell
+validation mismatch aborts the publication. Two fresh builds and a repeated
+optimization must reproduce their contents.
+
+The equivalence boundary is the effective vanilla-plus-RusCrafting stack. A
+higher-priority third-party pack that overrides only an original bitmap resource
+cannot automatically override its copied cell in a generated sheet. Such a pack
+must target the generated font definition or sheet. External vanilla references
+are deliberately not copied, so each supported client retains its own fallback
+assets and glyphs.
+
 `resourcepack_clients.json` records protocols 774/775/776/777 and resource
 formats 75.0/84.0/88.0/97.1. Its texture IDs come from the corresponding official
 client JARs; each entry retains the download URL and verified client SHA-1.

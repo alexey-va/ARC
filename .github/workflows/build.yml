@@ -42,6 +42,12 @@ jobs:
           distribution: temurin
           java-version: "25"
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+      - name: Check resource pack publishing transformations
+        run: |
+          python3 -m venv .tmp/resourcepack-python
+          .tmp/resourcepack-python/bin/python -m pip install -r src/main/resources/scripts/resourcepack-requirements.txt
+          echo "$PWD/.tmp/resourcepack-python/bin" >> "$GITHUB_PATH"
+          .tmp/resourcepack-python/bin/python -m unittest discover -s src/test/python -v
       - run: ./gradlew --no-parallel --build-cache :test :arc-dungeons:test :shadowJar :arc-dungeons:shadowJar :prepareExtractedPluginArtifacts
       - name: Verify ArcDungeons core consumer contract
         run: python3 .tmp/arc-core-verifier/scripts/verify_consumer_architecture.py arc-dungeons

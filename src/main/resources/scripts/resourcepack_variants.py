@@ -17,6 +17,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from resourcepack_fonts import FontOptimizationError, optimize_fonts
+
 
 SUPPORTED_TARGETS = ("1.21.11", "26.1", "26.2", "26.3")
 MODERN_FORMAT_MAJOR = 75
@@ -553,6 +555,11 @@ def _variant_files(
         for key in ("directoriesExpanded", "emptyDirectories", "duplicateSourcesRemoved", "atlasesSkipped"):
             totals[key] += stats[key]
         totals["atlasesOptimized"] += int(rewritten != data)
+    # Expand atlas directories first so generated font sheets cannot enter them.
+    try:
+        effective, font_stats = optimize_fonts(effective)
+    except FontOptimizationError as exc:
+        raise PackError(f"font optimization failed: {exc}") from exc
     metadata_copy = json.loads(json.dumps(metadata))
     metadata_copy.pop("overlays", None)
     pack = metadata_copy.get("pack")
@@ -572,6 +579,7 @@ def _variant_files(
         "filesBefore": files_before,
         "filesAfter": len(effective),
         **totals,
+        **font_stats,
     }
     return effective, stats
 
