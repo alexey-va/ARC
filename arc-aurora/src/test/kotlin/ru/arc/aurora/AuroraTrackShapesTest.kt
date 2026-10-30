@@ -63,7 +63,8 @@ class AuroraTrackShapesTest : FreeSpec({
             val tuned = AuroraSkyOptions(trackTurns = 2.0, trackTightening = 0.4,
                 trackBranchAngleDegrees = 40.0, trackBendDegrees = 110.0, trackSplit = 0.4,
                 lensSpread = 0.7, knotRadius = 0.4, flybyGap = 0.5, flockSpread = 0.2,
-                kinkAngleDegrees = 90.0, rippleSpacing = 0.44)
+                kinkAngleDegrees = 90.0, rippleSpacing = 0.44, eyeOpening = 0.5,
+                slingshotRadius = 0.4, skipHeight = 0.7)
             (stroke(shape, 144, options = tuned) != normal) shouldBe true
         }
     }
@@ -108,10 +109,12 @@ class AuroraTrackShapesTest : FreeSpec({
         for (options in listOf(
             AuroraSkyOptions(trackTurns = 0.5, trackTightening = 0.8, trackBranchAngleDegrees = 10.0,
                 trackBendDegrees = 15.0, trackSplit = 0.1, lensSpread = 0.15, knotRadius = 0.15,
-                flybyGap = 0.1, flockSpread = 0.1, kinkAngleDegrees = 35.0, rippleSpacing = 0.2),
+                flybyGap = 0.1, flockSpread = 0.1, kinkAngleDegrees = 35.0, rippleSpacing = 0.2,
+                eyeOpening = 0.15, slingshotRadius = 0.12, skipHeight = 0.2),
             AuroraSkyOptions(trackTurns = 3.0, trackTightening = 0.05, trackBranchAngleDegrees = 75.0,
                 trackBendDegrees = 180.0, trackSplit = 0.6, lensSpread = 0.9, knotRadius = 0.45,
-                flybyGap = 0.7, flockSpread = 0.4, kinkAngleDegrees = 120.0, rippleSpacing = 0.45),
+                flybyGap = 0.7, flockSpread = 0.4, kinkAngleDegrees = 120.0, rippleSpacing = 0.45,
+                eyeOpening = 0.65, slingshotRadius = 0.45, skipHeight = 0.8),
         )) for (shape in AuroraShape.entries.filter { it.isTrack }) for (points in listOf(1, 2, 7, 192)) {
             val path = stroke(shape, points, options = options)
             path.size shouldBe points
@@ -172,6 +175,58 @@ class AuroraTrackShapesTest : FreeSpec({
             (abs(ripple.first().y - ripple.last().y) < 1e-12) shouldBe true
         }
         ripples.zipWithNext().all { (a, b) -> b.first().x > a.first().x + 2.0 && b.first().y > a.first().y } shouldBe true
+    }
+
+    "eye heads split from one birth meet again and leave as one continuous head" {
+        val path = stroke(AuroraShape.TRACK_EYE, 96)
+        val sides = (0 until 2).map { head -> path.take(64).filterIndexed { i, _ -> i % 2 == head } }
+        for (side in sides) {
+            (trackDistance(side.first(), AuroraOffset(-7.0, 0.0, 0.0)) < 1e-12) shouldBe true
+            (trackDistance(side.last(), AuroraOffset(2.8, 0.0, 0.0)) < 1e-12) shouldBe true
+            val gaps = side.zipWithNext(::trackDistance)
+            (gaps.max() / gaps.min() < 1.01 && gaps.max() < 0.4) shouldBe true
+            side.zipWithNext().all { (a, b) -> b.x > a.x } shouldBe true
+        }
+        sides[0].zip(sides[1]).all { (a, b) -> a.x == b.x && a.y == -b.y } shouldBe true
+        (sides[0].maxOf { it.y } - sides[1].minOf { it.y } > 4.4) shouldBe true
+        val exit = listOf(sides[0].last()) + path.drop(64)
+        exit.size shouldBe 33
+        exit.zipWithNext().all { (a, b) -> b.x > a.x && b.y >= a.y && trackDistance(a, b) < 0.15 } shouldBe true
+        exit.last().x shouldBe 7.0
+    }
+
+    "slingshot makes one smooth hairpin and returns without a gap or crossing" {
+        val path = stroke(AuroraShape.TRACK_SLINGSHOT, 96, tracers = 3)
+        val turn = path.indices.maxBy { path[it].x }
+        (path[turn].x > 3.3) shouldBe true
+        path.take(turn + 1).zipWithNext().all { (a, b) -> b.x > a.x } shouldBe true
+        path.drop(turn).zipWithNext().all { (a, b) -> b.x < a.x } shouldBe true
+        path.zipWithNext().all { (a, b) -> b.y >= a.y } shouldBe true
+        (abs(path.last().x - path.first().x) < 1e-12) shouldBe true
+        (path.last().y - path.first().y > 5.3) shouldBe true
+        val gaps = path.zipWithNext(::trackDistance)
+        (gaps.max() / gaps.min() < 1.01 && gaps.max() < 0.27) shouldBe true
+        for ((a, b, c) in path.windowed(3)) {
+            val ux = b.x - a.x; val uy = b.y - a.y
+            val vx = c.x - b.x; val vy = c.y - b.y
+            // A sweeping turn, not the distinct corner of TRACK_KINK.
+            ((ux * vx + uy * vy) / sqrt((ux * ux + uy * uy) * (vx * vx + vy * vy)) > 0.98) shouldBe true
+        }
+    }
+
+    "skipping head stays continuous through three successively lower arches" {
+        val path = stroke(AuroraShape.TRACK_SKIP, 96, tracers = 3)
+        path.first() shouldBe AuroraOffset(-7.0, 0.0, 0.0)
+        (trackDistance(path.last(), AuroraOffset(7.0, 0.0, 0.0)) < 1e-12) shouldBe true
+        path.zipWithNext().all { (a, b) -> b.x > a.x && trackDistance(a, b) < 0.3 } shouldBe true
+        val peaks = (1 until path.lastIndex).filter { path[it].y > path[it - 1].y && path[it].y >= path[it + 1].y }
+        peaks.size shouldBe 3
+        (path[peaks[0]].y in 3.8..3.86) shouldBe true
+        (path[peaks[1]].y / path[peaks[0]].y in 0.54..0.56) shouldBe true
+        (path[peaks[2]].y / path[peaks[0]].y in 0.29..0.31) shouldBe true
+        for ((from, to) in peaks.zipWithNext()) {
+            (path.subList(from, to + 1).minOf { it.y } < 0.15) shouldBe true
+        }
     }
 })
 

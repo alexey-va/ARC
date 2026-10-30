@@ -558,7 +558,8 @@ class AuroraEngineTest : FreeSpec({
         }).copy(nativeBudgetMicros = 10000)
         withEngine(bundled, highSky = true) { fixture ->
             for (x in -8..24) for (z in -8..8) fixture.player.world.loadChunk(x, z)
-            fixture.event = bundled.eventPresets.getValue("treasure-hunt")
+            val profiles = bundled.eventPresets.getValue("treasure-hunt")
+            fixture.event = profiles
             val timeline = StringBuilder("tick,particle,x,y,z\n")
             val observer = StringBuilder("tick,x,y,z,yaw\n")
             val scenes = StringBuilder("tick,id,profile,particle,cell_x,cell_z,epoch,x,y,z,starts_at,culled,rejected\n")
@@ -585,7 +586,20 @@ class AuroraEngineTest : FreeSpec({
                 }
                 fixture.sceneRows(tick).forEach { scenes.append(it).append('\n') }
             }
-            fixture.emissions.map { it.particle }.toSet() shouldBe bundled.eventPresets.getValue("treasure-hunt").map { it.particle }.toSet()
+            fixture.emissions.isNotEmpty() shouldBe true
+            // Cell/profile assignments change with the catalog; a finite route need not visit every palette.
+            // Keep supplemental palette coverage out of the full-preset movement CSV.
+            for (profile in profiles.distinctBy { it.particle }) {
+                if (fixture.emissions.any { it.particle == profile.particle }) continue
+                fixture.event = listOf(profile)
+                repeat(profile.spawnDelayTicks + profile.sceneDurationTicks + bundled.intervalTicks * 2) {
+                    if (fixture.queued.isNotEmpty()) fixture.completePlanning()
+                    val before = fixture.emissions.size
+                    fixture.engine.tick()
+                    (fixture.emissions.size - before <= bundled.skyPacketsPerViewer) shouldBe true
+                }
+            }
+            fixture.emissions.map { it.particle }.toSet() shouldBe profiles.map { it.particle }.toSet()
             System.getenv("ARCAURORA_PREVIEW_CSV")?.let { path ->
                 val target = java.nio.file.Path.of(path)
                 java.nio.file.Files.writeString(target, timeline)

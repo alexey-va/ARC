@@ -29,12 +29,12 @@ jobs:
           path: .tmp/aurora-verifier
           persist-credentials: false
       - name: Verify source contract and production JAR
-        run: python3 .tmp/aurora-verifier/scripts/verify_consumer_architecture.py arc-aurora --jar build/libs/ArcAurora-0.1.7.jar
+        run: python3 .tmp/aurora-verifier/scripts/verify_consumer_architecture.py arc-aurora --jar build/libs/ArcAurora-0.1.8.jar
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: ArcAurora-${{ github.sha }}
           path: |
-            arc-aurora/build/libs/ArcAurora-0.1.7.jar
+            arc-aurora/build/libs/ArcAurora-0.1.8.jar
             arc-aurora-api/build/libs/arc-aurora-api-0.1.0.jar
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()

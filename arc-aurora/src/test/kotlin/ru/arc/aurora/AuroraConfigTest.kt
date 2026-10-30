@@ -151,6 +151,9 @@ class AuroraConfigTest : FreeSpec({
               flock-spread: 0.2
               kink-angle-degrees: 85
               ripple-spacing: 0.4
+              eye-opening: 0.5
+              slingshot-radius: 0.4
+              skip-height: 0.7
             profiles:
               ambient:
                 sky-scene: true
@@ -163,16 +166,21 @@ class AuroraConfigTest : FreeSpec({
                     fresh-head-repair: true
                     track-turns: 1.5
                     flyby-gap: 0.2
+                    eye-opening: 0.25
+                    slingshot-radius: 0.2
+                    skip-height: 0.4
         """)
         val settings = AuroraConfig.parse(source)
         val defaults = AuroraSkyOptions(180.0, 12.0, 16, 3.0, 0.6, 1.2, 0.3, 0.4, 2.0, -0.1,
             0.2, -0.2, 0.1, -0.08, 0.04, 20, false, 3, meteorSplit = 0.5, meteorSpread = 0.6,
             trackTurns = 2.0, trackTightening = 0.25, trackBranchAngleDegrees = 35.0,
             trackBendDegrees = 95.0, trackSplit = 0.4, lensSpread = 0.7, knotRadius = 0.4,
-            flybyGap = 0.4, flockSpread = 0.2, kinkAngleDegrees = 85.0, rippleSpacing = 0.4)
+            flybyGap = 0.4, flockSpread = 0.2, kinkAngleDegrees = 85.0, rippleSpacing = 0.4,
+            eyeOpening = 0.5, slingshotRadius = 0.4, skipHeight = 0.7)
         settings.profiles.single().skyOptions shouldBe defaults
         settings.eventPresets.getValue("hunt").single().skyOptions shouldBe
-            defaults.copy(waveAmplitude = 0.3, freshHeadRepair = true, trackTurns = 1.5, flybyGap = 0.2)
+            defaults.copy(waveAmplitude = 0.3, freshHeadRepair = true, trackTurns = 1.5, flybyGap = 0.2,
+                eyeOpening = 0.25, slingshotRadius = 0.2, skipHeight = 0.4)
         source.set("sky-defaults.wave-amplitude", 0.7)
         settings.profiles.single().skyOptions shouldBe defaults // Detached snapshot until a successful reload.
         AuroraConfig.parse(source).profiles.single().skyOptions.waveAmplitude shouldBe 0.7
@@ -205,6 +213,9 @@ class AuroraConfigTest : FreeSpec({
             "flock-spread" to 0.09, "flock-spread" to 0.41,
             "kink-angle-degrees" to 34.9, "kink-angle-degrees" to 120.1,
             "ripple-spacing" to Double.NaN, "ripple-spacing" to 0.46,
+            "eye-opening" to 0.14, "eye-opening" to 0.66, "eye-opening" to Double.NaN,
+            "slingshot-radius" to 0.11, "slingshot-radius" to 0.46, "slingshot-radius" to Double.POSITIVE_INFINITY,
+            "skip-height" to 0.19, "skip-height" to 0.81, "skip-height" to Double.NaN,
         ).forEach { (field, value) ->
             source.set("sky-defaults", null)
             source.set("sky-defaults.$field", value)

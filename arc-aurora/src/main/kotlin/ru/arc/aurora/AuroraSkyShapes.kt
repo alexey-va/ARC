@@ -121,7 +121,8 @@ object AuroraSkyShapes {
             AuroraShape.METEOR -> meteorPoint(size, points, index, phase, 4, options)
             AuroraShape.TRACK_SPIRAL, AuroraShape.TRACK_PAIR, AuroraShape.TRACK_SCATTER,
             AuroraShape.TRACK_LENS, AuroraShape.TRACK_KNOT, AuroraShape.TRACK_FLYBY,
-            AuroraShape.TRACK_FLOCK, AuroraShape.TRACK_KINK, AuroraShape.TRACK_RIPPLE ->
+            AuroraShape.TRACK_FLOCK, AuroraShape.TRACK_KINK, AuroraShape.TRACK_RIPPLE,
+            AuroraShape.TRACK_EYE, AuroraShape.TRACK_SLINGSHOT, AuroraShape.TRACK_SKIP ->
                 error("Tracks are sampled as complete ordered paths above")
             AuroraShape.RING, AuroraShape.CIRCLE -> {
                 val angle = progress * 2.0 * PI * if (shape == AuroraShape.RING) 1.0 else 2.0
@@ -213,6 +214,44 @@ object AuroraSkyShapes {
         val heading = radians(options.trackBranchAngleDegrees)
         val bend = radians(options.trackBendDegrees)
         val path = when (shape) {
+            AuroraShape.TRACK_SLINGSHOT -> sampleCurve(points) { t ->
+                val radius = options.slingshotRadius
+                when {
+                    t < 0.35 -> AuroraOffset(-1.0 + t / 0.35 * 1.2, -radius, 0.0)
+                    t < 0.65 -> {
+                        val angle = -PI / 2.0 + (t - 0.35) / 0.3 * PI
+                        AuroraOffset(0.2 + cos(angle) * radius, sin(angle) * radius, 0.0)
+                    }
+                    else -> {
+                        val exit = (t - 0.65) / 0.35
+                        AuroraOffset(0.2 - exit * 1.2, radius + exit * exit * 0.2, 0.0)
+                    }
+                }
+            }
+            AuroraShape.TRACK_SKIP -> sampleCurve(points) { t ->
+                val bounce = minOf((t * 3.0).toInt(), 2)
+                val local = t * 3.0 - bounce
+                val height = options.skipHeight * when (bounce) { 0 -> 1.0; 1 -> 0.55; else -> 0.3 }
+                AuroraOffset(t * 2.0 - 1.0, height * 4.0 * local * (1.0 - local), 0.0)
+            }
+            AuroraShape.TRACK_EYE -> {
+                if (points < 4) sampleCurve(points) { AuroraOffset(it * 2.0 - 1.0, 0.0, 0.0) }
+                else {
+                    val paired = maxOf(4, points * 2 / 3 / 2 * 2).coerceAtMost(points)
+                    val vertex = AuroraOffset(0.4, 0.0, 0.0)
+                    val sides = interleave((0 until 2).map { head ->
+                        val sign = if (head == 0) 1.0 else -1.0
+                        sampleCurve((paired + 1 - head) / 2) { t ->
+                            if (t == 1.0) vertex else
+                                AuroraOffset(-1.0 + t * 1.4, sign * options.eyeOpening * sin(t * PI), 0.0)
+                        }
+                    })
+                    // Both sides meet before a single head leaves; no segment connects their interiors.
+                    sides + sampleCurve(points - paired + 1) { t ->
+                        AuroraOffset(vertex.x + t * 0.6, t * t * 0.12, 0.0)
+                    }.drop(1)
+                }
+            }
             AuroraShape.TRACK_LENS -> interleave((0 until 3).map { head ->
                 val lane = head - 1.0
                 sampleCurve((points + 2 - head) / 3) { t ->

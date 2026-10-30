@@ -38,4 +38,7 @@ data class AuroraSkyOptions(
     val flockSpread: Double = 0.3,
     val kinkAngleDegrees: Double = 60.0,
     val rippleSpacing: Double = 0.36,
+    val eyeOpening: Double = 0.32,
+    val slingshotRadius: Double = 0.28,
+    val skipHeight: Double = 0.55,
 )

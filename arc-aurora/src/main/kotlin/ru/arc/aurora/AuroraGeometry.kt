@@ -64,7 +64,8 @@ object AuroraGeometry {
                 AuroraShape.METEOR -> AuroraSkyShapes.meteorPoint(size * 0.75, points, index, 0.0, 4)
                 AuroraShape.TRACK_SPIRAL, AuroraShape.TRACK_PAIR, AuroraShape.TRACK_SCATTER,
                 AuroraShape.TRACK_LENS, AuroraShape.TRACK_KNOT, AuroraShape.TRACK_FLYBY,
-                AuroraShape.TRACK_FLOCK, AuroraShape.TRACK_KINK, AuroraShape.TRACK_RIPPLE ->
+                AuroraShape.TRACK_FLOCK, AuroraShape.TRACK_KINK, AuroraShape.TRACK_RIPPLE,
+                AuroraShape.TRACK_EYE, AuroraShape.TRACK_SLINGSHOT, AuroraShape.TRACK_SKIP ->
                     error("Tracks are sampled as complete ordered paths above")
             }
         }

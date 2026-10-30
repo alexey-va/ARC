@@ -9,7 +9,7 @@ the PacketEvents compile version comes from the repository's dependency catalog.
 
 ## Visual direction
 
-The bundled configuration contains **25 ordinary profiles** and **19 sky variants**
+The bundled configuration contains **25 ordinary profiles** and **22 sky variants**
 sampled into up to **nine retained world cells** for `treasure-hunt`. The sky
 preserves the accepted soft-lines palette: one familiar white wave, blue and
 orange waves/curls, a green spark wave, three frequent meteor variants and one
@@ -17,7 +17,9 @@ rare held crystal. Three bubble-chamber-inspired tracks add an inward spiral,
 a two-branch V and an incoming track that scatters into three different curves.
 Six further finite effects add a converging magnetic lens, a travelling knot,
 a two-colour opposing flyby, a weaving flock, a distinct kink and successive
-light ripples. These are artistic interpretations, not a particle-physics simulation. No cube,
+light ripples. Three more gestures add a split-and-rejoin eye, a smooth slingshot
+hairpin and one skipping head with three decreasing arches. These are artistic
+interpretations, not a particle-physics simulation. No cube,
 star or TOTEM ring is selected by the bundled night catalogue; those supported
 shapes remain available to custom profiles.
 
@@ -236,6 +238,9 @@ previous engine and settings active. Admin previews stop on reload; run
 | `flock-spread` | `0.3`; `0.1..0.4` | Width/depth of the three exchanging lanes |
 | `kink-angle-degrees` | `60`; `35..120` | Change in heading at the kink vertex |
 | `ripple-spacing` | `0.36`; `0.2..0.45` | Position offset between successive short curved strokes |
+| `eye-opening` | `0.32`; `0.15..0.65` | Half-opening of the two eye paths before they rejoin |
+| `slingshot-radius` | `0.28`; `0.12..0.45` | Radius of the smooth hairpin relative to shape-size |
+| `skip-height` | `0.55`; `0.2..0.8` | First arch height; the following two use 55% and 30% of it |
 
 | `sky-field` option | Default; range | Meaning |
 | --- | --- | --- |
@@ -305,14 +310,18 @@ generic stroke drift/lift: their head motion is the ordered path itself. Pair
 tracks begin at a common vertex, with no visible incoming neutral-particle line;
 scatter has one incoming line followed by two unequal arcs and a tightening curl.
 Their geometry options are resolved through the same atomic reload as other
-sky controls. All nine bundled track profiles use `sky-refresh-ticks: 0`.
+sky controls. All twelve bundled track profiles use `sky-refresh-ticks: 0`.
 `TRACK_LENS` interleaves three converging/crossing paths; `TRACK_KNOT` has one
 continuous 3D loop that crosses its earlier path before escaping. `TRACK_FLYBY`
 keeps two mirrored paths apart at closest approach; `TRACK_FLOCK` swaps three
 lanes before one head lags and two rise. `TRACK_KINK` retains the turning vertex
 between two differently curved sections. `TRACK_RIPPLE` starts four separate
 short strokes in sequence; a new stroke is an intentional new head, not a
-connector or a jump along a continuous line.
+connector or a jump along a continuous line. `TRACK_EYE` draws two sides from a
+shared birth, joins them at one vertex, then continues with one escaping head.
+`TRACK_SLINGSHOT` enters a smooth hairpin and leaves on a return diagonal.
+`TRACK_SKIP` keeps one head through three connected, successively lower arches;
+the apparent bounces are an authored path, not collisions with blocks.
 A rotated cube can extend up to `sqrt(3) ×
 shape-size` from its anchor. Before a sky figure starts, Main checks its entire swept footprint against
 loaded world-surface columns, including sprite padding and native falling
@@ -454,15 +463,18 @@ are not treasure markers and do not change discovery, rewards or gameplay.
 | Flock | SOUL_FIRE_FLAME; half-width 7 | Three heads exchange lanes for 28 visits, then one lags while two rise for 20 visits; lifecycle 112 ticks, delay 0..30 |
 | Kink | FLAME; size 7 | One head, 96 points over 1.6 s, with one distinct change of heading; lifecycle 96 ticks, delay 0..30 |
 | Light ripple | SOUL_FIRE_FLAME; size 7 | Four short strokes in succession, each 12 visits / 0.6 s; lifecycle 112 ticks, delay 0..24 |
+| Eye | SOUL_FIRE_FLAME; size 7 | Two sides over 16 visits, then one exit over eight visits; 96 points in 1.2 s; lifecycle 88 ticks, delay 0..28 |
+| Slingshot | FLAME; size 7 | One continuous hairpin, 96 points over 1.6 s; lifecycle 96 ticks, delay 0..30 |
+| Skipping head | SOUL_FIRE_FLAME; size 7 | Three decreasing connected arches, 96 points over 1.6 s; lifecycle 96 ticks, delay 0..30 |
 
 Timings assume 20 TPS and one eligible visit each tick. Admission starts a scene's
 own lifetime after its birth delay; a field epoch never cuts that lifetime short.
 Native flame particles live 12..44 ticks, so chamber tracks show moving segments,
 not a permanently illuminated photograph. Old tracks are never refreshed.
 The short emission window makes several curved segments visible together; the
-client finishes their tails after emission ends. The six new profiles preserve
-all thirteen 0.1.6 profiles unchanged, including the familiar white wave. The
-three original chamber profiles remain available. New tracks admit
+client finishes their tails after emission ends. The three new profiles preserve
+all nineteen 0.1.7 profiles unchanged, including the familiar white wave. All
+earlier chamber profiles remain available. Tracks admit
 at 30..96 blocks (scatter 32..96), at Y +32..60 above loaded terrain.
 Random scale remains 80..100%; chamber roll is ±0.25..0.35 radians. World orientation
 can foreshorten a track when viewed edge-on, as with the existing planar figures.
@@ -484,7 +496,7 @@ Run from the repository root with JDK 25:
 ```
 
 The expected local runtime artifact is
-`arc-aurora/build/libs/ArcAurora-0.1.7.jar`. The public Maven API artifact
+`arc-aurora/build/libs/ArcAurora-0.1.8.jar`. The public Maven API artifact
 `ru.ruscrafting.arc:arc-aurora-api:0.1.0` was verified on 2026-10-29 in the
 [RusCrafting repository](https://repo.rus-crafting.ru/grocermc/ru/ruscrafting/arc/arc-aurora-api/0.1.0/arc-aurora-api-0.1.0.pom).
 That API publication does not establish a runtime-plugin build, delivery,
@@ -525,5 +537,5 @@ measured performance result is claimed by this README. Publication, artifact
 delivery and runtime activation require separate operational evidence.
 
 `sky-points` overrides `points` only for sky scenes. The nightly mode and current shape catalog
-require ArcAurora 0.1.7; do not reload this configuration into an older runtime.
+require ArcAurora 0.1.8; do not reload this configuration into an older runtime.
 The 25 ordinary biome profiles and their sampling behavior are unchanged.

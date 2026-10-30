@@ -70,11 +70,11 @@ enum class AuroraWeather { ANY, CLEAR, RAIN, THUNDER }
 enum class AuroraShape {
     POINT, LINE, CUBE, RING, CIRCLE, SPHERE, WAVE, HELIX, ARC, CRYSTAL, STAR, METEOR,
     TRACK_SPIRAL, TRACK_PAIR, TRACK_SCATTER, TRACK_LENS, TRACK_KNOT,
-    TRACK_FLYBY, TRACK_FLOCK, TRACK_KINK, TRACK_RIPPLE;
+    TRACK_FLYBY, TRACK_FLOCK, TRACK_KINK, TRACK_RIPPLE, TRACK_EYE, TRACK_SLINGSHOT, TRACK_SKIP;
 
     internal val isTrack: Boolean get() = when (this) {
         TRACK_SPIRAL, TRACK_PAIR, TRACK_SCATTER, TRACK_LENS, TRACK_KNOT,
-        TRACK_FLYBY, TRACK_FLOCK, TRACK_KINK, TRACK_RIPPLE -> true
+        TRACK_FLYBY, TRACK_FLOCK, TRACK_KINK, TRACK_RIPPLE, TRACK_EYE, TRACK_SLINGSHOT, TRACK_SKIP -> true
         else -> false
     }
 }
@@ -372,6 +372,9 @@ object AuroraConfig {
             flockSpread = source.double("flock-spread", defaults.flockSpread, 0.1..0.4),
             kinkAngleDegrees = source.double("kink-angle-degrees", defaults.kinkAngleDegrees, 35.0..120.0),
             rippleSpacing = source.double("ripple-spacing", defaults.rippleSpacing, 0.2..0.45),
+            eyeOpening = source.double("eye-opening", defaults.eyeOpening, 0.15..0.65),
+            slingshotRadius = source.double("slingshot-radius", defaults.slingshotRadius, 0.12..0.45),
+            skipHeight = source.double("skip-height", defaults.skipHeight, 0.2..0.8),
         )
         source.check("scale-max", options.scaleMax >= options.scaleMin, "must be at least scale-min")
         source.check("yaw-max-degrees", options.yawMaxDegrees >= options.yawMinDegrees, "must be at least yaw-min-degrees")

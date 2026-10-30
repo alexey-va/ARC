@@ -76,6 +76,9 @@ sky-defaults:
   flock-spread: 0.3 # Width of the three weaving lanes; 0.1..0.4.
   kink-angle-degrees: 60 # Distinct change in heading at the kink; 35..120.
   ripple-spacing: 0.36 # Offset between successive short arcs; 0.2..0.45.
+  eye-opening: 0.32 # Half-opening of the split-and-rejoin path; 0.15..0.65.
+  slingshot-radius: 0.28 # Smooth hairpin radius relative to shape-size; 0.12..0.45.
+  skip-height: 0.55 # First arch height; the next two shrink to 55% and 30%; 0.2..0.8.
 
 # Optional exact, single-hop aliases. Read the actual key with /arcaurora biome.
 # Iris namespaces/paths depend on the installed generator pack; none are assumed here.
@@ -471,7 +474,7 @@ profiles:
 # It intentionally bypasses the ordinary permission/toggle and time/biome filters.
 # Ping, loaded-chunk, passable-block and packet-budget gates still apply.
 # These decorative forms do not reveal treasure positions or change rewards.
-# Nineteen variants share nine world cells: soft blue/warm traces and bubble-chamber tracks.
+# Twenty-two variants share nine world cells: soft blue/warm traces and bubble-chamber tracks.
 # One familiar white wave and one rare crystal remain; no cube/star in this night catalogue.
 # Three short meteor variants repeat more often. FLAME is orange, not a red recolour.
 # Only the crystal holds a complete outline; coloured traces keep their native short tails.
@@ -902,3 +905,60 @@ event-presets:
       sky-refresh-ticks: 0
       sky-options:
         roll-radians: 0.3
+    chamber_eye:
+      biomes: ['*']
+      sky-scene: true
+      scene-duration-ticks: 88
+      spawn-delay-ticks: 28
+      sky-tracers: 4 # Two samples per side, then four adjacent samples of the single exit.
+      update-ticks: 1
+      radius: 96
+      min-distance: 30
+      vertical-min: 32
+      vertical-max: 58
+      shape: TRACK_EYE
+      shape-size: 7
+      sky-points: 96 # Split for 16 visits, merge at one vertex, then escape for eight visits.
+      particle: minecraft:soul_fire_flame
+      count: 1
+      sky-refresh-ticks: 0
+      sky-options:
+        roll-radians: 0.25
+    chamber_slingshot:
+      biomes: ['*']
+      sky-scene: true
+      scene-duration-ticks: 96
+      spawn-delay-ticks: 30
+      sky-tracers: 3 # One continuous head, three adjacent samples per visit.
+      update-ticks: 1
+      radius: 96
+      min-distance: 30
+      vertical-min: 32
+      vertical-max: 58
+      shape: TRACK_SLINGSHOT
+      shape-size: 7
+      sky-points: 96 # Enter, sweep around a smooth hairpin, then leave along a return diagonal.
+      particle: minecraft:flame
+      count: 1
+      sky-refresh-ticks: 0
+      sky-options:
+        roll-radians: 0.25
+    chamber_skip:
+      biomes: ['*']
+      sky-scene: true
+      scene-duration-ticks: 96
+      spawn-delay-ticks: 30
+      sky-tracers: 3 # One continuous head through all three diminishing arches.
+      update-ticks: 1
+      radius: 96
+      min-distance: 30
+      vertical-min: 32
+      vertical-max: 58
+      shape: TRACK_SKIP
+      shape-size: 7
+      sky-points: 96
+      particle: minecraft:soul_fire_flame
+      count: 1
+      sky-refresh-ticks: 0
+      sky-options:
+        roll-radians: 0.25

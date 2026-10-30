@@ -37,6 +37,9 @@ class AuroraReloadTest : FreeSpec({
                 candidate.set("sky-defaults.flock-spread", 0.2)
                 candidate.set("sky-defaults.kink-angle-degrees", 85.0)
                 candidate.set("sky-defaults.ripple-spacing", 0.4)
+                candidate.set("sky-defaults.eye-opening", 0.5)
+                candidate.set("sky-defaults.slingshot-radius", 0.4)
+                candidate.set("sky-defaults.skip-height", 0.7)
                 candidate.set("event-presets.treasure-hunt.chamber_flyby.sky-head-particles", listOf("flame", "soul_fire_flame"))
                 candidate.set("sky-field.cell-size", 52.0)
                 candidate.set("sky-field.jitter", 0.25)
@@ -64,6 +67,9 @@ class AuroraReloadTest : FreeSpec({
                 reloaded.skyOptions.flockSpread shouldBe 0.2
                 reloaded.skyOptions.kinkAngleDegrees shouldBe 85.0
                 reloaded.skyOptions.rippleSpacing shouldBe 0.4
+                reloaded.skyOptions.eyeOpening shouldBe 0.5
+                reloaded.skyOptions.slingshotRadius shouldBe 0.4
+                reloaded.skyOptions.skipHeight shouldBe 0.7
                 replacement.settings.eventPresets.getValue("treasure-hunt").single { it.id == "chamber_flyby" }
                     .skyHeadParticles shouldBe listOf(org.bukkit.Particle.FLAME, org.bukkit.Particle.SOUL_FIRE_FLAME)
                 val reloadedField = AuroraSkyFieldSettings(
@@ -113,6 +119,14 @@ class AuroraReloadTest : FreeSpec({
                 paper.server.dispatchCommand(paper.server.consoleSender, "arcaurora reload") shouldBe true
                 (plugin.engine === replacement) shouldBe true
                 candidate.set("sky-defaults.flyby-gap", 0.45)
+                for (field in listOf("eye-opening", "slingshot-radius", "skip-height")) {
+                    val previous = candidate.getDouble("sky-defaults.$field")
+                    candidate.set("sky-defaults.$field", 1.0)
+                    candidate.save(file)
+                    paper.server.dispatchCommand(paper.server.consoleSender, "arcaurora reload") shouldBe true
+                    (plugin.engine === replacement) shouldBe true
+                    candidate.set("sky-defaults.$field", previous)
+                }
                 candidate.set("event-presets.treasure-hunt.chamber_flyby.sky-head-particles", listOf("flame"))
                 candidate.save(file)
                 paper.server.dispatchCommand(paper.server.consoleSender, "arcaurora reload") shouldBe true

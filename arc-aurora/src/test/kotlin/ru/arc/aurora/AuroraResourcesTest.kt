@@ -29,7 +29,7 @@ class AuroraResourcesTest : FreeSpec({
         settings.permission shouldBe "arcaurora.view"
         settings.profiles.size shouldBe 25
         val sky = settings.eventPresets.getValue("treasure-hunt")
-        sky.size shouldBe 19
+        sky.size shouldBe 22
         val wave = sky.single { it.id == "sky_wave" }
         wave.skyOptions shouldBe AuroraSkyOptions(freshHeadRepair = false)
         wave.skyTracers shouldBe 1
