@@ -11,10 +11,35 @@ import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerJoinEvent
 import ru.arc.dungeons.ArcDungeonsPlugin
 import ru.ruscrafting.onboarding.api.OptionalOnboardingProgressService
+import ru.ruscrafting.onboarding.api.PrimisQuestGuidanceService
+import org.bukkit.plugin.ServicePriority
+import java.util.UUID
 import java.util.logging.Level
 
 /** Captures native turn-in, and recovers missed acknowledgements from EliteMobs' persisted quest marker. */
-internal class PrimisOnboardingListener(private val plugin: ArcDungeonsPlugin) : Listener {
+internal class PrimisOnboardingListener(private val plugin: ArcDungeonsPlugin) : Listener, PrimisQuestGuidanceService, AutoCloseable {
+    init {
+        plugin.server.servicesManager.register(PrimisQuestGuidanceService::class.java, this, plugin, ServicePriority.Normal)
+    }
+
+    override fun stage(playerId: UUID): PrimisQuestGuidanceService.Stage {
+        check(plugin.server.isPrimaryThread)
+        val player = plugin.server.getPlayer(playerId) ?: return PrimisQuestGuidanceService.Stage.UNAVAILABLE
+        if (!PlayerData.isDataLoaded(playerId)) return PrimisQuestGuidanceService.Stage.UNAVAILABLE
+        if (player.getMetadata(INTRO_MARKER).any { it.owningPlugin?.name == "EliteMobs" && it.asBoolean() })
+            return PrimisQuestGuidanceService.Stage.COMPLETED
+        val quest = PlayerData.getQuests(playerId).filterIsInstance<CustomQuest>()
+            .firstOrNull { it.configurationFilename == INTRO_QUEST && it.playerUUID == playerId }
+            ?: return PrimisQuestGuidanceService.Stage.NOT_ACCEPTED
+        return when {
+            quest.questObjectives.isTurnedIn -> PrimisQuestGuidanceService.Stage.COMPLETED
+            quest.questObjectives.isOver -> PrimisQuestGuidanceService.Stage.READY_TO_TURN_IN
+            else -> PrimisQuestGuidanceService.Stage.ACTIVE_OBJECTIVE
+        }
+    }
+
+    override fun close() { plugin.server.servicesManager.unregister(PrimisQuestGuidanceService::class.java, this) }
+
     @EventHandler(priority = EventPriority.MONITOR)
     fun onReward(event: QuestRewardEvent) {
         val quest = event.quest as? CustomQuest ?: return

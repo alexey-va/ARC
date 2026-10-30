@@ -30,8 +30,9 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
         val trials = mutableMapOf<UUID, MutableMap<CasinoIntroService.Game, CasinoIntroService.State>>()
         val npcs = mutableMapOf<OptionalQuestKind, OnboardingQuestNpc>()
         val locationPending = mutableSetOf<Key>()
-        val selected = mutableMapOf<UUID, OptionalQuestKind>()
+        val loaded = mutableSetOf<Key>()
         val hud = OptionalQuestHud(config::text)
+        val guidance = OptionalQuestGuidance(config)
         lateinit var menu: OptionalQuestDialog
     }
 
@@ -71,18 +72,23 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
         Bukkit.getServicesManager().unregister(OptionalOnboardingProgressService::class.java, this)
         previous.menu.close()
         previous.hud.close()
+        previous.guidance.close()
         previous.npcs.values.forEach(OnboardingQuestNpc::close)
         previous.tasks.close()
         drained = CompletableFuture.allOf(*previous.pending.toTypedArray()).thenApply { Unit }
     }
 
-    internal fun closeCompletion(): CompletableFuture<Unit> = drained.copy()
+    internal fun closeCompletion(): CompletableFuture<Unit> = CompletableFuture.allOf(drained, StoryQuestJournal.closeCompletion()).thenApply { Unit }
 
     internal fun view(player: Player, kind: OptionalQuestKind): OptionalQuestView? {
         val current = runtime ?: return null
         val progress = current.players[Key(player.uniqueId, kind)]
         return OptionalQuestView(kind, progress != null, progress?.completed == true, progress?.steps.orEmpty(),
-            current.trials[player.uniqueId]?.toMap().orEmpty())
+            current.trials[player.uniqueId]?.toMap().orEmpty(),
+            if (kind == OptionalQuestKind.ADVENTURE && progress?.completed == false)
+                Bukkit.getServicesManager().load(ru.ruscrafting.onboarding.api.PrimisQuestGuidanceService::class.java)?.stage(player.uniqueId)
+                    ?: ru.ruscrafting.onboarding.api.PrimisQuestGuidanceService.Stage.UNAVAILABLE
+            else ru.ruscrafting.onboarding.api.PrimisQuestGuidanceService.Stage.UNAVAILABLE)
     }
 
     internal fun text(key: String): Component = runtime?.config?.text(key) ?: Component.empty()
@@ -90,17 +96,23 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
     internal fun activeView(player: Player): OptionalQuestView? {
         val current = runtime ?: return null
         val active = OptionalQuestKind.entries.filter { kind -> current.players[Key(player.uniqueId, kind)]?.completed == false }
-        val location = player.location
-        val local = current.config.areas.entries.firstOrNull { (step, area) -> step.kind in active &&
-            area.contains(player.world.name, location.x, location.y, location.z) }?.key?.kind
-        val kind = local ?: current.selected[player.uniqueId]?.takeIf { it in active } ?: active.firstOrNull() ?: return null
+        val kind = active.firstOrNull { StoryQuestJournal.isTracked(player, it.id) } ?: return null
         return view(player, kind)
     }
 
     private fun refreshHud(current: Runtime, player: Player) {
-        if (valid(current, player)) current.hud.refresh(player,
-            if (OnboardingService.guideView(player) == null) activeView(player) else null)
+        if (valid(current, player)) {
+            val view = activeView(player)
+            current.hud.refresh(player, view)
+            current.guidance.refresh(player, view)
+        }
     }
+
+    internal fun journalReady(playerId: UUID): Boolean = runtime?.let { current ->
+        OptionalQuestKind.entries.all { Key(playerId, it) in current.loaded }
+    } ?: true
+
+    internal fun refreshTracking(player: Player) { runtime?.let { refreshHud(it, player) } }
 
     internal fun resume(player: Player) {
         val current = runtime ?: return
@@ -115,9 +127,10 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
     internal fun leave(playerId: UUID) {
         val current = runtime ?: return
         current.players.keys.removeIf { it.player == playerId }
+        current.loaded.removeIf { it.player == playerId }
         current.trials.remove(playerId)
-        current.selected.remove(playerId)
         current.hud.clear(playerId)
+        current.guidance.clear(playerId)
         current.menu.forget(playerId)
         current.npcs.values.forEach { it.clear(playerId) }
         current.tails.entries.removeIf { it.key.player == playerId && it.value.isDone }
@@ -128,10 +141,9 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
         open(player, kind)
     }
 
-    internal fun open(player: Player, kind: OptionalQuestKind) {
+    internal fun open(player: Player, kind: OptionalQuestKind, beginFlow: Boolean = true) {
         val current = runtime ?: return
-        current.selected[player.uniqueId] = kind
-        ArcMenus.beginDialogFlow(player)
+        if (beginFlow) ArcMenus.beginDialogFlow(player)
         val visit = current.menu.beginPending(player, kind)
         request(current, player, kind, { current.store.load(player.uniqueId, kind) }, visit) { progress ->
             if (kind == OptionalQuestKind.CASINO && progress != null) reconcileTrials(current, player)
@@ -142,9 +154,9 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
 
     private fun accept(player: Player, kind: OptionalQuestKind) {
         val current = runtime ?: return
-        current.selected[player.uniqueId] = kind
         val visit = current.menu.beginPending(player, kind)
         request(current, player, kind, { current.store.accept(player.uniqueId, kind).thenApply { it } }, visit) {
+            StoryQuestJournal.accepted(player, kind.id)
             observeLocation(current, player)
             if (kind == OptionalQuestKind.CASINO) reconcileTrials(current, player)
             current.menu.finish(player, kind, visit)
@@ -262,6 +274,7 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
     }
 
     private fun publish(current: Runtime, player: Player, key: Key, updated: OptionalQuestProgress?) {
+        current.loaded += key
         // Progress is append-only: an earlier read callback may never hide a later accepted step.
         if (updated != null) {
             val before = current.players[key]

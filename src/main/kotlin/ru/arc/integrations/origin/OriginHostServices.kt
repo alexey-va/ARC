@@ -151,6 +151,8 @@ internal class OriginPortalVisualProvider : ArcOriginPortalVisuals {
             override fun gateSpawned() = spawned
             override fun tick(elapsedTicks: Int) = controller.tickOpening(settings.entryTick + elapsedTicks)
             override fun updateScale(scale: Float) = controller.updateScale(scale)
+            override fun updateScale(scale: Float, verticalTranslation: Double) =
+                controller.updateScale(scale, verticalTranslation.toFloat())
             override fun renderSuction(tick: Int, full: List<Player>, reduced: List<Player>) =
                 BukkitPortalOriginGate.renderSuction(center, tick, settings, style, full, reduced)
             override fun close() = controller.remove()

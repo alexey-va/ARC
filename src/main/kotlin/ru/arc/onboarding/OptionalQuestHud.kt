@@ -8,7 +8,7 @@ import org.bukkit.entity.Player
 import ru.arc.staffspells.api.QuestGuidanceHudService
 import java.util.UUID
 
-/** One selected optional activity; the service gives the first-home guide precedence. */
+/** One explicitly tracked story; holograms accompany its ordinary progress bar. */
 internal class OptionalQuestHud(
     private val text: (String) -> Component,
     private val hologram: QuestHologramHud = QuestHologramHud(QuestGuidanceHudService.Source.OPTIONAL),
@@ -17,16 +17,13 @@ internal class OptionalQuestHud(
 
     fun refresh(player: Player, view: OptionalQuestView?) {
         val instruction = view?.let(::optionalQuestInstruction)
-        if (!player.isOnline || player.isDead || instruction == null) {
+        if (view == null || !player.isOnline || player.isDead || instruction == null) {
             clear(player.uniqueId)
             return
         }
         val title = text("goal-$instruction").colorIfAbsent(BODY).decoration(TextDecoration.ITALIC, false)
         val hint = text("hint-$instruction").colorIfAbsent(BODY).decoration(TextDecoration.ITALIC, false)
-        if (hologram.refresh(player, title.append(Component.newline()).append(hint))) {
-            clearBar(player.uniqueId)
-            return
-        }
+        hologram.refresh(player, title.append(Component.newline()).append(hint))
         if (bars[player.uniqueId]?.first?.let { it !== player } == true) clear(player.uniqueId)
         val bar = bars.getOrPut(player.uniqueId) {
             val created = BossBar.bossBar(title, 1f, BossBar.Color.GREEN, BossBar.Overlay.PROGRESS)
@@ -34,6 +31,7 @@ internal class OptionalQuestHud(
             player to created
         }.second
         bar.name(title)
+        bar.progress((view.steps.size.toFloat() / view.kind.steps.size).coerceIn(0f, 1f))
     }
 
     fun clear(playerId: UUID) {
@@ -51,7 +49,7 @@ internal class OptionalQuestHud(
     }
 }
 
-/** Three short rows, without promising any extra onboarding payout. */
+/** At most four short rows, without promising any extra onboarding payout. */
 internal fun optionalQuestGuideLines(view: OptionalQuestView, text: (String) -> Component): List<Component> {
     val instruction = optionalQuestInstruction(view) ?: return emptyList()
     fun copy(key: String) = text(key).colorIfAbsent(BODY).decoration(TextDecoration.ITALIC, false)
@@ -59,9 +57,24 @@ internal fun optionalQuestGuideLines(view: OptionalQuestView, text: (String) -> 
     return listOf(
         copy("title-${view.kind.id}").append(Component.text(" · $done / ${view.kind.steps.size}", BODY)),
         Component.text("★ ", GOLD).append(copy("goal-$instruction")),
-        Component.text("   ", BODY).append(copy("hint-$instruction")),
-    )
+    ) + optionalQuestHintLines(copy("hint-$instruction")).map { Component.text("   ", BODY).append(Component.text(it, BODY)) }
 }
 
 private val BODY = TextColor.color(0xE8DFD2)
 private val GOLD = TextColor.color(0xF4D87A)
+
+private fun optionalQuestHintLines(text: Component): List<String> {
+    val words = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+        .serialize(text).split(Regex("\\s+")).filter(String::isNotBlank)
+    val lines = mutableListOf<String>()
+    var line = ""
+    for (word in words) {
+        val next = if (line.isEmpty()) word else "$line $word"
+        if (next.sumOf(ru.arc.paper.menu.DialogTextLayout::glyphWidth) > 225 && line.isNotEmpty()) {
+            lines += line
+            line = word
+        } else line = next
+    }
+    if (line.isNotEmpty()) lines += line
+    return lines.take(2)
+}

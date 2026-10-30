@@ -88,6 +88,19 @@ class PortalOriginGateTest : FreeSpec({
     }
 
     "origin-gate controller" - {
+        "passes a grounded pulse as one pose and stops updating after removal" {
+            val handle = RecordingOriginGateHandle()
+            val controller = PortalOriginGateController(settings().shouldNotBeNull()) { handle }
+            controller.tickOpening(66).shouldBeTrue()
+            controller.updateScale(1.035f, 0.12f)
+            handle.scales.last() shouldBe 1.035f
+            handle.verticalTranslations.last() shouldBe 0.12f
+            controller.remove()
+            val count = handle.scales.size
+            controller.updateScale(0.965f, -0.12f)
+            handle.scales.size shouldBe count
+        }
+
         "renders server-driven opening, idle pulse, closing, and idempotent cleanup" {
             val handle = RecordingOriginGateHandle()
             var spawnCount = 0
@@ -295,6 +308,7 @@ private fun settings(
 
 private class RecordingOriginGateHandle : PortalOriginGateHandle {
     val scales = mutableListOf<Float>()
+    val verticalTranslations = mutableListOf<Float>()
     var playOpeningSoundCount = 0
     var removeCount = 0
     var valid = true
@@ -302,8 +316,11 @@ private class RecordingOriginGateHandle : PortalOriginGateHandle {
     override val isValid: Boolean
         get() = valid
 
-    override fun updateScale(multiplier: Float) {
+    override fun updateScale(multiplier: Float) = updateScale(multiplier, 0f)
+
+    override fun updateScale(multiplier: Float, verticalTranslation: Float) {
         scales += multiplier
+        verticalTranslations += verticalTranslation
     }
 
     override fun playOpeningSound() {

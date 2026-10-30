@@ -29,6 +29,8 @@ import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.plugin.Plugin
 import ru.arc.hooks.HookRegistry
+import ru.arc.core.LifecycleTaskScope
+import ru.arc.core.TestTaskScheduler
 import ru.arc.hooks.packetevents.PacketEventsHook
 import ru.arc.paper.display.PacketTextDisplay
 import ru.arc.paper.display.PaperPacketDisplays
@@ -39,6 +41,7 @@ import ru.arc.paper.scene.ScenePart
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 
 class OnboardingQuestDialogTest : FreeSpec({
     val player = mockk<Player>(relaxed = true)
@@ -50,12 +53,19 @@ class OnboardingQuestDialogTest : FreeSpec({
     var shown: PaperDialogScreen? = null
     var dismiss: (() -> Unit)? = null
     val actions = mutableListOf<String>()
-    val dialog = OnboardingQuestDialog(
+    var scheduler = TestTaskScheduler()
+    var tracked = false
+    var trackingSave = CompletableFuture.completedFuture<Void>(null)
+    fun newDialog() = OnboardingQuestDialog(
         view = { current },
         accept = { _, run -> actions += "accept:$run" },
         openGoal = { _, goal -> actions += "goal:$goal" },
         showDialog = { _, screen, _, onDismiss -> shown = screen; dismiss = onDismiss },
+        isTracked = { _, _ -> tracked },
+        track = { _, id -> trackingSave.thenApply { tracked = id != null; null } },
+        tasks = LifecycleTaskScope(scheduler),
     )
+    var dialog = newDialog()
     fun plain(component: Component) = PlainTextComponentSerializer.plainText().serialize(component)
     fun click(screen: PaperDialogScreen, id: String) = screen.buttons.single { it.id.value == id }.onClick.handle(context)
     val base = setOf(OnboardingMilestone.FIRST_RTP, OnboardingMilestone.HOME_CREATED,
@@ -63,20 +73,25 @@ class OnboardingQuestDialogTest : FreeSpec({
 
     beforeEach {
         dialog.close()
+        scheduler = TestTaskScheduler()
+        tracked = false
+        trackingSave = CompletableFuture.completedFuture(null)
+        dialog = newDialog()
         current = OnboardingQuestView(runId, false, emptySet())
         shown = null
         dismiss = null
         actions.clear()
     }
 
-    "offer is one short message and one action for the exact run" {
+    "offer shows the full four-step route and one accept action for the exact run" {
         val screen = dialog.screen(current)
         screen.id shouldBe "onboarding.quest"
         screen.buttons.map { it.id.value } shouldContainExactly listOf("accept")
         screen.buttons.all { !it.closeDialogBeforeAction } shouldBe true
-        screen.body.size shouldBe 1
-        plain(screen.body.single().text) shouldContain "первый дом"
-        plain(screen.body.single().text).codePoints().anyMatch { it in 0xFA300..0xFAF1B } shouldBe true
+        screen.body.size shouldBe 2
+        plain(screen.body.first().text) shouldContain "первый дом"
+        plain(screen.body.first().text).codePoints().anyMatch { it in 0xFA300..0xFAF1B } shouldBe true
+        plain(screen.body.last().text) shouldContain "Защита участка"
         click(screen, "accept")
         actions shouldContainExactly listOf("accept:$runId")
     }
@@ -105,9 +120,8 @@ class OnboardingQuestDialogTest : FreeSpec({
     "construction in progress and completion hide the unnecessary kit action" {
         val building = OnboardingQuestView(runId, true, base + OnboardingMilestone.AUTOBUILD_STARTED)
         val complete = building.copy(milestones = building.milestones + OnboardingMilestone.AUTOBUILD_COMPLETE)
-        for (view in listOf(building, complete)) {
-            dialog.screen(view).buttons shouldBe emptyList()
-        }
+        dialog.screen(building).buttons.map { it.id.value } shouldContainExactly listOf("track")
+        dialog.screen(complete).buttons shouldBe emptyList()
         plain(dialog.screen(building).body.first().text) shouldContain "Дом строится"
         plain(dialog.screen(complete).body.first().text) shouldContain "Дом готов"
         current = OnboardingQuestView(runId, true, base)
@@ -127,8 +141,8 @@ class OnboardingQuestDialogTest : FreeSpec({
         for ((milestones, goal) in stages) {
             current = OnboardingQuestView(runId, true, milestones)
             val screen = dialog.screen(current)
-            screen.body.size shouldBe 1
-            screen.buttons.map { it.id.value } shouldContainExactly listOf("goal")
+            screen.body.size shouldBe 2
+            screen.buttons.map { it.id.value } shouldContainExactly listOf("goal", "track")
             click(screen, "goal")
             actions.last() shouldBe "goal:$goal"
         }
@@ -156,6 +170,27 @@ class OnboardingQuestDialogTest : FreeSpec({
         plain(shown!!.body.first().text) shouldContain "Не удалось сохранить"
         shown!!.buttons.map { it.id.value } shouldContainExactly listOf("accept")
         dialog.isCurrent(player, second) shouldBe false
+    }
+
+    "tracking save failure retains the selected quest and dismissed saves cannot reopen the dialog" {
+        current = OnboardingQuestView(runId, true, emptySet())
+        tracked = true
+        dialog.open(player)
+        plain(shown!!.buttons.single { it.id.value == "track" }.label) shouldContain "✔"
+        trackingSave = CompletableFuture()
+        click(shown!!, "track")
+        trackingSave.completeExceptionally(IllegalStateException("fixture tracking save failure"))
+        scheduler.executeImmediate()
+        tracked shouldBe true
+        plain(shown!!.body.first().text) shouldContain "Не удалось сохранить отслеживание"
+        trackingSave = CompletableFuture()
+        click(shown!!, "track")
+        dismiss!!.invoke()
+        val dismissed = shown
+        trackingSave.complete(null)
+        scheduler.executeImmediate()
+        tracked shouldBe false
+        shown shouldBe dismissed
     }
 
     "NPC command is intercepted only for the configured NPC and eligible viewer" {

@@ -41,6 +41,7 @@ object OnboardingService : OnboardingBuildProgressService {
         val starterInventory = OnboardingStarterInventory(ARC.instance.dataPath, ARC.instance.backgroundOwner(), tasks)
         val ready = CompletableFuture<Void>()
         val players = mutableMapOf<UUID, OnboardingProgress>()
+        val loaded = mutableSetOf<UUID>()
         val tails = mutableMapOf<UUID, CompletableFuture<OnboardingProgress?>>()
         val pending = ConcurrentHashMap.newKeySet<CompletableFuture<*>>()
         val requests = mutableMapOf<UUID, Long>()
@@ -117,7 +118,7 @@ object OnboardingService : OnboardingBuildProgressService {
                 visible = { player -> canAccess(player) && current.players[player.uniqueId]?.status != OnboardingStatus.ACTIVE &&
                     current.players[player.uniqueId]?.status != OnboardingStatus.COMPLETED },
                 eligible = ::canAccess,
-                open = ::open,
+                open = { open(it) },
             ).also { it.start() }
         }
         current.tasks.runTimer(20L, 100L) {
@@ -183,9 +184,13 @@ object OnboardingService : OnboardingBuildProgressService {
         )
     }
 
+    internal fun journalReady(playerId: UUID): Boolean = runtime?.loaded?.contains(playerId) ?: (disabledConfig != null)
+
+    internal fun refreshTracking(player: Player) { runtime?.let { refreshHud(it, player) } }
+
     private fun refreshHud(current: Runtime, player: Player) {
         if (runtime === current && player.isOnline && Bukkit.getPlayer(player.uniqueId) === player) {
-            current.hud.refresh(player, guideView(player))
+            current.hud.refresh(player, guideView(player).takeIf { StoryQuestJournal.isTracked(player, "first_home") })
         }
     }
 
@@ -208,6 +213,7 @@ object OnboardingService : OnboardingBuildProgressService {
         val current = runtime ?: return
         Bukkit.getPlayer(playerId)?.let { samplePlaytime(current, it, force = true) }
         current.players.remove(playerId)
+        current.loaded.remove(playerId)
         current.played.remove(playerId)
         current.playtimeFailures.remove(playerId)
         current.invalidPlaytimes.remove(playerId)
@@ -222,9 +228,9 @@ object OnboardingService : OnboardingBuildProgressService {
         } }
     }
 
-    fun open(player: Player) {
+    fun open(player: Player, beginFlow: Boolean = true) {
         val active = runtime ?: return
-        ArcMenus.beginDialogFlow(player)
+        if (beginFlow) ArcMenus.beginDialogFlow(player)
         val visit = active.menu.beginPending(player)
         request(player, { store, id -> store.load(id) }, pendingToken = visit) { current, _ ->
             current.menu.finish(player, visit, if (canAccess(player)) null else "Начальный квест пока проходит закрытый тест. Для администратора: /arc onboarding test")
@@ -323,6 +329,7 @@ object OnboardingService : OnboardingBuildProgressService {
         }, refreshOnReject = true, pendingToken = visit) { active, progress ->
             if (progress == null || progress.status !in setOf(OnboardingStatus.ACTIVE, OnboardingStatus.COMPLETED)) { active.menu.finish(player, visit, "Квест изменился. Открой журнал ещё раз."); return@request }
             active.npc?.refresh(player)
+            if (progress.status == OnboardingStatus.ACTIVE) StoryQuestJournal.accepted(player, "first_home")
             if (active.menu.isCurrent(player, visit)) {
                 active.menu.forget(player.uniqueId)
                 // Keep the native visit alive so the asynchronous chooser replaces it.
@@ -516,6 +523,7 @@ object OnboardingService : OnboardingBuildProgressService {
                 else message(player, "<red>Не удалось сохранить квест. Прогресс не подтверждён, попробуй ещё раз.")
                 return@whenCompleteSync
             }
+            current.loaded += playerId
             val previousProgress = current.players[playerId]
             if (progress == null) current.players.remove(playerId) else current.players[playerId] = progress
             refreshHud(current, player)

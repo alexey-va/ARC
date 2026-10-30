@@ -160,3 +160,40 @@ Focused checks: `./gradlew :test --tests 'ru.arc.onboarding.OptionalQuest*Test'`
 and `:arc-dungeons:test --tests 'ru.arc.hooks.elitemobs.PrimisOnboardingListenerTest'`.
 ArcFarms checks its typed dispatch with
 `./gradlew test --tests 'ru.ruscrafting.farms.paper.farm.shift.FarmOnboardingProgressTest'`.
+
+
+## Shared story journal and guidance (2026-10-30)
+
+ArcRanks `/quests` and `/rank quests` open the unified journal; `/rank daily` and
+`/quests daily` retain the recurring board. ARC owns story acceptance/progress and
+exports `StoryQuestService` from `arc-onboarding-api:0.1.5`; consumers never shade
+that API. The journal shows cached enabled-owner snapshots and opens their real
+details without resetting dialog history. The four authored stories are first
+home, adventure, casino introduction and first work shift. No rewards changed.
+
+`StoryQuestJournal` stores one explicit selection in Redis
+`arc.onboarding.tracking.v1`, separately from all append-only progress hashes.
+Acceptance selects the story; tracking never accepts, resets or rewards it.
+An explicit empty selection suppresses story guidance and lets the recurring
+tracker resume. A failed write preserves the previous visible selection.
+Accepted writes drain independently of Paper callbacks before a fresh generation.
+Story details show the full chain plus tracking controls. Sidebar and bossbar
+coexist; the opt-in experimental hologram no longer removes the bossbar.
+
+`OptionalQuestGuidance` uses the persisted `origin-spawn.yml` entrance anchors.
+`StoryQuestWaypointHud` owns one viewer-only packet label and a bounded particle
+cue; distant targets are projected locally with actual distance, without loading
+chunks. `PrimisQuestGuidanceService`, provided by ArcDungeons, reads only loaded
+native state: captain -> village leader -> first mate. Only EliteMobs' actual
+introductory quest turn-in credits completion. Native rewards remain unchanged.
+The configured native anchors were read back from Spawn on 2026-10-30.
+
+A backend with `optional-quests.enabled=false` keeps those stories disabled:
+its journal does not expose the optional owner there. Shared Redis progress and
+selection remain intact and restore on an enabled backend; this change does not
+turn on new enrollment, trial admission or travel on disabled backends.
+
+Focused checks: `StoryQuestTrackingStoreTest`, `StoryQuestWaypointHudTest`,
+`OptionalQuestDialogTest`, `OnboardingQuestDialogTest`, `QuestHologramHudTest`,
+and ArcDungeons `PrimisOnboardingListenerTest`. Runtime activation and native
+client appearance remain distinct from source/unit/preview evidence.

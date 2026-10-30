@@ -6,14 +6,19 @@ import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.entity.Player
 import ru.arc.gui.ArcMenus
+import ru.arc.core.LifecycleTaskScope
+import ru.arc.core.whenCompleteSync
 import ru.arc.paper.menu.DialogTables
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
 import ru.arc.paper.menu.PaperDialogButton
 import ru.arc.paper.menu.PaperDialogScreen
 import ru.ruscrafting.onboarding.api.CasinoIntroService
+import ru.ruscrafting.onboarding.api.PrimisQuestGuidanceService
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CompletionStage
 
 /** The service owns acceptance, travel, trial admission and durable completion. */
 internal class OptionalQuestDialog(
@@ -24,13 +29,16 @@ internal class OptionalQuestDialog(
     private val showDialog: (Player, PaperDialogScreen, () -> Unit, () -> Unit) -> Unit = { player, screen, reopen, dismiss ->
         ArcMenus.openDialog(player, screen, reopen = reopen, onDismiss = dismiss)
     },
+    private val isTracked: (Player, String) -> Boolean = StoryQuestJournal::isTracked,
+    private val track: (UUID, String?) -> CompletionStage<Void> = StoryQuestJournal::track,
+    private val tasks: LifecycleTaskScope = LifecycleTaskScope(),
 ) : AutoCloseable {
     private val pending = mutableMapOf<UUID, Pair<OptionalQuestKind, Long>>()
     private var sequence = 0L
 
     fun open(player: Player, kind: OptionalQuestKind, notice: String? = null) {
         forget(player.uniqueId)
-        showDialog(player, screen(kind, view(player, kind), notice), { open(player, kind) }, {})
+        showDialog(player, screen(kind, view(player, kind), notice, isTracked(player, kind.id)), { open(player, kind) }, {})
     }
 
     fun beginPending(player: Player, kind: OptionalQuestKind): Long {
@@ -50,9 +58,9 @@ internal class OptionalQuestDialog(
     }
 
     fun forget(playerId: UUID) { pending.remove(playerId) }
-    override fun close() { pending.clear() }
+    override fun close() { pending.clear(); tasks.close() }
 
-    internal fun screen(kind: OptionalQuestKind, snapshot: OptionalQuestView?, notice: String? = null): PaperDialogScreen {
+    internal fun screen(kind: OptionalQuestKind, snapshot: OptionalQuestView?, notice: String? = null, tracked: Boolean = false): PaperDialogScreen {
         val current = snapshot?.takeIf { it.kind == kind }
         return PaperDialogScreen(
             id = "onboarding.optional.${kind.id}",
@@ -60,7 +68,7 @@ internal class OptionalQuestDialog(
             body = listOfNotNull(notice?.takeIf(String::isNotBlank)?.let {
                 PaperDialogBody(Component.text(it, BODY).decoration(TextDecoration.ITALIC, false), WIDTH)
             }) + body(kind, current),
-            buttons = buttons(kind, current),
+            buttons = buttons(kind, current, tracked),
             exitButton = PaperDialogButton(
                 id = PaperDialogActionId.of("close"), label = copy("close"), width = 200, onClick = {},
             ),
@@ -84,9 +92,19 @@ internal class OptionalQuestDialog(
             (!snapshot.accepted || optionalQuestNextStep(snapshot)?.trialGame() != null)) {
             add(panel(copy("trial-rules")))
         }
+        if (snapshot != null) add(DialogTables.body(
+            kind.steps.map { step ->
+                val key = step.name.lowercase(Locale.ROOT).replace('_', '-')
+                copy("goal-$key") to copy(when {
+                    step in snapshot.steps -> "step-done"
+                    step == optionalQuestNextStep(snapshot) -> "step-current"
+                    else -> "step-ahead"
+                })
+            }, frame = DialogTables.Frame.UNCOMMON, width = 300, columns = DialogTables.Columns.LABEL_WIDE,
+        ))
     }
 
-    private fun buttons(kind: OptionalQuestKind, snapshot: OptionalQuestView?): List<PaperDialogButton> = buildList {
+    private fun buttons(kind: OptionalQuestKind, snapshot: OptionalQuestView?, tracked: Boolean): List<PaperDialogButton> = buildList {
         if (snapshot == null) return@buildList
         if (!snapshot.accepted && !snapshot.completed) add(PaperDialogButton(
             id = PaperDialogActionId.of("accept"), label = copy("accept"), width = WIDTH,
@@ -107,6 +125,26 @@ internal class OptionalQuestDialog(
                 },
             ))
         }
+        if (snapshot.accepted && !snapshot.completed) add(PaperDialogButton(
+            id = PaperDialogActionId.of("track"), label = copy(if (tracked) "tracked" else "track"),
+            tooltip = copy(if (tracked) "untrack-tip" else "track-tip"), width = WIDTH,
+            onClick = { context ->
+                val current = view(context.player, kind)
+                if (current?.accepted == true && !current.completed) toggleTracking(context.player, kind)
+                else open(context.player, kind)
+            },
+        ))
+    }
+
+    private fun toggleTracking(player: Player, kind: OptionalQuestKind) {
+        val target = if (isTracked(player, kind.id)) null else kind.id
+        val visit = beginPending(player, kind)
+        runCatching { track(player.uniqueId, target).toCompletableFuture() }
+            .getOrElse { CompletableFuture.failedFuture(it) }.whenCompleteSync(tasks) { _, failure ->
+                if (failure != null) ru.arc.util.Logging.error("Could not save optional quest tracking for {}", player.uniqueId, failure)
+                finish(player, kind, visit, if (failure == null) null else
+                    net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(copy("tracking-failed")))
+            }
     }
 
     private fun copy(key: String) = text(key).colorIfAbsent(BODY).decoration(TextDecoration.ITALIC, false)
@@ -122,7 +160,7 @@ internal class OptionalQuestDialog(
             "title-farm" to "<#9bd48d>Первая смена",
             "offer-adventure" to "<#e8dfd2>Загляните в гильдию искателей приключений, доберитесь до острова Примис и выполните первое задание.",
             "offer-casino" to "<#e8dfd2>Осмотрите три этажа казино и попробуйте слоты, блэкджек и плинко — по одному бесплатному раунду.",
-            "offer-farm" to "<#e8dfd2>Побывайте на ферме и поработайте до конца своей первой смены.",
+            "offer-farm" to "<#e8dfd2>Познакомьтесь с производственными работами: пройдите первую смену на ферме, затем попробуйте лесопилку и шахту.",
             "complete-adventure" to "<#9bd48d>Первое приключение пройдено.<newline><#e8dfd2>Гильдия и остров Примис ждут вас снова.",
             "complete-casino" to "<#9bd48d>Знакомство с казино завершено.<newline><#e8dfd2>Вы осмотрели три этажа и попробовали все три игры.",
             "complete-farm" to "<#9bd48d>Первая смена завершена.<newline><#e8dfd2>Возвращайтесь на ферму, когда захотите поработать.",
@@ -130,6 +168,14 @@ internal class OptionalQuestDialog(
             "pending" to "<#e8dfd2>Загрузка…",
             "saving" to "<#e8dfd2>Сохраняем выполнение поручения…",
             "progress" to "<#e8dfd2>Выполнено:",
+            "step-done" to "<#9bd48d>✔ Готово",
+            "step-current" to "<#c4abff>Сейчас",
+            "step-ahead" to "<#e8dfd2>Впереди",
+            "track" to "<white>○ Отслеживать",
+            "tracked" to "<#9bd48d>✔ Отслеживать",
+            "track-tip" to "<#e8dfd2>Показать текущую цель на табло и в боссбаре.",
+            "untrack-tip" to "<#e8dfd2>Скрыть этот сюжет с табло и боссбара.",
+            "tracking-failed" to "Не удалось сохранить отслеживание. Попробуйте ещё раз.",
             "accept" to "<#9bd48d>Начать поручение",
             "close" to "<white>Закрыть",
             "action-guild" to "<#92bed8>В гильдию",
@@ -144,11 +190,19 @@ internal class OptionalQuestDialog(
             "trial-failed" to "<#e8dfd2>Не удалось подготовить бесплатную пробу. Попробуйте ещё раз.",
             "save-failed" to "<#e8dfd2>Не удалось сохранить поручение. Попробуйте ещё раз.",
             "goal-guild-visited" to "<#77ee94>Посетите гильдию",
-            "hint-guild-visited" to "<#e8dfd2>Кнопка «В гильдию»",
+            "hint-guild-visited" to "<#e8dfd2>Войдите в подсвеченный портал рядом с Гарретом",
             "goal-primis-visited" to "<#77ee94>Доберитесь до Примиса",
-            "hint-primis-visited" to "<#e8dfd2>Кнопка «На остров Примис»",
+            "hint-primis-visited" to "<#e8dfd2>В гильдии найдите подсвеченный портал Примиса",
             "goal-primis-intro-complete" to "<#77ee94>Первое задание Примиса",
-            "hint-primis-intro-complete" to "<#e8dfd2>Пройдите его у жителей острова",
+            "hint-primis-intro-complete" to "<#e8dfd2>Поговорите с капитаном, главой деревни и первым помощником",
+            "goal-primis-intro-accept" to "<#77ee94>Поговорите с капитаном",
+            "hint-primis-intro-accept" to "<#e8dfd2>Примите первое задание у Сквалуса",
+            "goal-primis-intro-objective" to "<#77ee94>Найдите главу деревни",
+            "hint-primis-intro-objective" to "<#e8dfd2>Поговорите с Писцисом в деревне",
+            "goal-primis-intro-turn-in" to "<#77ee94>Вернитесь к первому помощнику",
+            "hint-primis-intro-turn-in" to "<#e8dfd2>Сдайте задание Иракунди",
+            "goal-primis-intro-saving" to "<#77ee94>Первое задание выполнено",
+            "hint-primis-intro-saving" to "<#e8dfd2>Сохраняем завершение квеста",
             "goal-casino-ground-visited" to "<#77ee94>Нижний этаж: покер",
             "hint-casino-ground-visited" to "<#e8dfd2>Подойдите к покерному столу",
             "goal-casino-middle-visited" to "<#77ee94>Средний этаж: бильярд",
@@ -174,7 +228,7 @@ internal class OptionalQuestDialog(
             "goal-trial-unavailable" to "<#ffb277>Проба пока недоступна",
             "hint-trial-unavailable" to "<#e8dfd2>Вернитесь чуть позже",
             "goal-farm-visited" to "<#77ee94>Побывайте на ферме",
-            "hint-farm-visited" to "<#e8dfd2>Кнопка «На ферму»",
+            "hint-farm-visited" to "<#e8dfd2>Пройдите в подсвеченный портал фермы",
             "goal-farm-shift-complete" to "<#77ee94>Завершите первую смену",
             "hint-farm-shift-complete" to "<#e8dfd2>Работайте до конца смены",
         )
@@ -195,6 +249,13 @@ internal fun OptionalQuestStep.trialGame(): CasinoIntroService.Game? = when (thi
 internal fun optionalQuestInstruction(view: OptionalQuestView): String? {
     val step = optionalQuestNextStep(view) ?: return null
     val key = step.name.lowercase(Locale.ROOT).replace('_', '-')
+    if (step == OptionalQuestStep.PRIMIS_INTRO_COMPLETE) return when (view.primisStage) {
+        PrimisQuestGuidanceService.Stage.NOT_ACCEPTED -> "primis-intro-accept"
+        PrimisQuestGuidanceService.Stage.ACTIVE_OBJECTIVE -> "primis-intro-objective"
+        PrimisQuestGuidanceService.Stage.READY_TO_TURN_IN -> "primis-intro-turn-in"
+        PrimisQuestGuidanceService.Stage.COMPLETED -> "primis-intro-saving"
+        PrimisQuestGuidanceService.Stage.UNAVAILABLE -> key
+    }
     return when (step.trialGame()?.let(view.trialStates::get)) {
         CasinoIntroService.State.ARMED -> "$key-armed"
         CasinoIntroService.State.PLAYING -> "trial-playing"

@@ -6,12 +6,16 @@ import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.entity.Player
 import ru.arc.gui.ArcMenus
+import ru.arc.core.LifecycleTaskScope
+import ru.arc.core.whenCompleteSync
 import ru.arc.paper.menu.DialogTables
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
 import ru.arc.paper.menu.PaperDialogButton
 import ru.arc.paper.menu.PaperDialogScreen
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CompletionStage
 
 internal data class OnboardingQuestView(
     val runId: String,
@@ -43,6 +47,9 @@ internal class OnboardingQuestDialog(
     private val showDialog: (Player, PaperDialogScreen, () -> Unit, () -> Unit) -> Unit = { player, screen, reopen, dismiss ->
         ArcMenus.openDialog(player, screen, reopen = reopen, onDismiss = dismiss)
     },
+    private val isTracked: (Player, String) -> Boolean = StoryQuestJournal::isTracked,
+    private val track: (UUID, String?) -> CompletionStage<Void> = StoryQuestJournal::track,
+    private val tasks: LifecycleTaskScope = LifecycleTaskScope(),
 ) : AutoCloseable {
     private val pending = mutableMapOf<UUID, Long>()
     private var sequence = 0L
@@ -50,7 +57,7 @@ internal class OnboardingQuestDialog(
     /** The command/NPC entry starts the flow; native child navigation keeps the shared history. */
     fun open(player: Player, notice: String? = null) {
         forget(player.uniqueId)
-        showDialog(player, screen(view(player), notice), { open(player) }, {})
+        showDialog(player, screen(view(player), notice, isTracked(player, "first_home")), { open(player) }, {})
     }
 
     /** Loading replaces this same visit synchronously; its footer can still dismiss the work. */
@@ -71,16 +78,16 @@ internal class OnboardingQuestDialog(
     }
 
     fun forget(playerId: UUID) { pending.remove(playerId) }
-    override fun close() { pending.clear() }
+    override fun close() { pending.clear(); tasks.close() }
 
     internal fun pendingScreen(): PaperDialogScreen = screen(null).copy(body = listOf(prose("pending")))
 
-    internal fun screen(snapshot: OnboardingQuestView?, notice: String? = null): PaperDialogScreen = PaperDialogScreen(
+    internal fun screen(snapshot: OnboardingQuestView?, notice: String? = null, tracked: Boolean = false): PaperDialogScreen = PaperDialogScreen(
         id = "onboarding.quest",
         title = copy("title"),
         body = listOfNotNull(notice?.takeIf(String::isNotBlank)?.let { literal(it) }) +
             if (snapshot == null) listOf(prose("unavailable")) else body(snapshot),
-        buttons = if (snapshot == null) emptyList() else buttons(snapshot),
+        buttons = if (snapshot == null) emptyList() else buttons(snapshot, tracked),
         exitButton = PaperDialogButton(
             id = PaperDialogActionId.of("close"), label = copy("close"), width = 200, onClick = {},
         ),
@@ -97,9 +104,22 @@ internal class OnboardingQuestDialog(
         snapshot.notice?.takeIf(String::isNotBlank)?.let {
             add(literal(it))
         }
+        add(DialogTables.body(OnboardingQuestGoal.entries.map { step ->
+            val done = when (step) {
+                OnboardingQuestGoal.TRAVEL -> OnboardingMilestone.FIRST_RTP in snapshot.milestones
+                OnboardingQuestGoal.HOME -> OnboardingMilestone.HOME_CREATED in snapshot.milestones && snapshot.goal != OnboardingQuestGoal.HOME
+                OnboardingQuestGoal.CLAIM -> OnboardingMilestone.FOOTHOLD_COMPLETE in snapshot.milestones
+                OnboardingQuestGoal.BUILD -> snapshot.completed
+            }
+            copy("step-${step.name.lowercase()}") to copy(when {
+                done -> "step-done"
+                snapshot.goal == step -> "step-current"
+                else -> "step-ahead"
+            })
+        }, frame = DialogTables.Frame.UNCOMMON, width = 300, columns = DialogTables.Columns.LABEL_WIDE))
     }
 
-    private fun buttons(snapshot: OnboardingQuestView): List<PaperDialogButton> = buildList {
+    private fun buttons(snapshot: OnboardingQuestView, tracked: Boolean): List<PaperDialogButton> = buildList {
         if (!snapshot.accepted) {
             add(button("accept", "accept", snapshot) { player, current ->
                 if (!current.accepted) accept(player, snapshot.runId) else open(player)
@@ -111,6 +131,20 @@ internal class OnboardingQuestDialog(
                 if (actionGoal(current) == goal) openGoal(player, goal) else open(player)
             })
         }
+        if (snapshot.accepted && !snapshot.completed) add(button("track", if (tracked) "tracked" else "track", snapshot) { player, current ->
+            if (current.accepted && !current.completed) toggleTracking(player) else open(player)
+        }.copy(tooltip = copy(if (tracked) "untrack-tip" else "track-tip")))
+    }
+
+    private fun toggleTracking(player: Player) {
+        val target = if (isTracked(player, "first_home")) null else "first_home"
+        val visit = beginPending(player)
+        runCatching { track(player.uniqueId, target).toCompletableFuture() }
+            .getOrElse { CompletableFuture.failedFuture(it) }.whenCompleteSync(tasks) { _, failure ->
+                if (failure != null) ru.arc.util.Logging.error("Could not save first-home tracking for {}", player.uniqueId, failure)
+                finish(player, visit, if (failure == null) null else
+                    net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(copy("tracking-failed")))
+            }
     }
 
     private fun actionGoal(snapshot: OnboardingQuestView): OnboardingQuestGoal? = snapshot.goal?.takeUnless {
@@ -161,6 +195,18 @@ internal class OnboardingQuestDialog(
             "complete" to "<#9bd48d>Дом готов, участок защищён.",
             "unavailable" to "<#e8dfd2>Квест не запущен.",
             "pending" to "<#e8dfd2>Загрузка…",
+            "step-travel" to "<#e8dfd2>Мир выживания",
+            "step-home" to "<#e8dfd2>Точка дома",
+            "step-claim" to "<#e8dfd2>Защита участка",
+            "step-build" to "<#e8dfd2>Первый дом",
+            "step-done" to "<#9bd48d>✔ Готово",
+            "step-current" to "<#c4abff>Сейчас",
+            "step-ahead" to "<#e8dfd2>Впереди",
+            "track" to "<white>○ Отслеживать",
+            "tracked" to "<#9bd48d>✔ Отслеживать",
+            "track-tip" to "<#e8dfd2>Показать текущую цель на табло и в боссбаре.",
+            "untrack-tip" to "<#e8dfd2>Скрыть этот сюжет с табло и боссбара.",
+            "tracking-failed" to "Не удалось сохранить отслеживание. Попробуйте ещё раз.",
             "goal-travel" to "<#c4abff>1 / 4 · Найдите место<newline><#e8dfd2>Выберите мир выживания.",
             "goal-home" to "<#c4abff>2 / 4 · Точка дома<newline><#e8dfd2>Встаньте на месте базы и сохраните дом.",
             "goal-match" to "<#c4abff>2 / 4 · Точка дома<newline><#e8dfd2>Сохраните дом внутри своего привата.",

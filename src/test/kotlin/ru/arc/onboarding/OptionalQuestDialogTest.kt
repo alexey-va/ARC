@@ -15,12 +15,16 @@ import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.entity.Player
 import ru.arc.paper.menu.DialogTextLayout
+import ru.arc.core.LifecycleTaskScope
+import ru.arc.core.TestTaskScheduler
 import ru.arc.paper.menu.PaperDialogClickContext
 import ru.arc.paper.menu.PaperDialogScreen
 import ru.ruscrafting.onboarding.api.CasinoIntroService
+import ru.ruscrafting.onboarding.api.PrimisQuestGuidanceService
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 
 class OptionalQuestDialogTest : FreeSpec({
     val player = mockk<Player>(relaxed = true)
@@ -33,12 +37,19 @@ class OptionalQuestDialogTest : FreeSpec({
     var shown: PaperDialogScreen? = null
     var dismiss: (() -> Unit)? = null
     val actions = mutableListOf<String>()
-    val dialog = OptionalQuestDialog(
+    var scheduler = TestTaskScheduler()
+    var tracked = false
+    var trackingSave = CompletableFuture.completedFuture<Void>(null)
+    fun newDialog() = OptionalQuestDialog(
         view = { _, _ -> current },
         accept = { _, kind -> actions += "accept:${kind.id}" },
         action = { _, _, action -> actions += action.name },
         showDialog = { _, screen, _, onDismiss -> shown = screen; dismiss = onDismiss },
+        isTracked = { _, _ -> tracked },
+        track = { _, id -> trackingSave.thenApply { tracked = id != null; null } },
+        tasks = LifecycleTaskScope(scheduler),
     )
+    var dialog = newDialog()
     fun text(key: String) = MiniMessage.miniMessage().deserialize(OptionalQuestDialog.DEFAULT_TEXT.getValue(key))
     fun plain(component: Component) = PlainTextComponentSerializer.plainText().serialize(component)
     fun view(kind: OptionalQuestKind, steps: Set<OptionalQuestStep> = emptySet()) =
@@ -50,6 +61,10 @@ class OptionalQuestDialogTest : FreeSpec({
 
     beforeEach {
         dialog.close()
+        scheduler = TestTaskScheduler()
+        tracked = false
+        trackingSave = CompletableFuture.completedFuture(null)
+        dialog = newDialog()
         current = null
         shown = null
         dismiss = null
@@ -98,7 +113,7 @@ class OptionalQuestDialogTest : FreeSpec({
             actions.last() shouldBe action
             for (state in CasinoIntroService.State.entries.filter { it != CasinoIntroService.State.AVAILABLE }) {
                 current = current!!.copy(trialStates = mapOf(game to state))
-                dialog.screen(OptionalQuestKind.CASINO, current).buttons.map { it.id.value } shouldContainExactly listOf("casino")
+                dialog.screen(OptionalQuestKind.CASINO, current).buttons.map { it.id.value } shouldContainExactly listOf("casino", "track")
                 val oldActionCount = actions.size
                 click(ready)
                 actions.size shouldBe oldActionCount
@@ -108,6 +123,25 @@ class OptionalQuestDialogTest : FreeSpec({
             plain(dialog.screen(OptionalQuestKind.CASINO, current).body.first().text) shouldContain "Сыграйте"
             current = current!!.copy(trialStates = mapOf(game to CasinoIntroService.State.COMPLETE))
             plain(dialog.screen(OptionalQuestKind.CASINO, current).body.first().text) shouldContain "Сохраняем результат"
+        }
+    }
+
+    "Primis guidance follows native acceptance objective and turn-in without inventing completion" {
+        val arrived = view(OptionalQuestKind.ADVENTURE,
+            setOf(OptionalQuestStep.GUILD_VISITED, OptionalQuestStep.PRIMIS_VISITED))
+        for ((stage, instruction) in listOf(
+            PrimisQuestGuidanceService.Stage.NOT_ACCEPTED to "primis-intro-accept",
+            PrimisQuestGuidanceService.Stage.ACTIVE_OBJECTIVE to "primis-intro-objective",
+            PrimisQuestGuidanceService.Stage.READY_TO_TURN_IN to "primis-intro-turn-in",
+            PrimisQuestGuidanceService.Stage.COMPLETED to "primis-intro-saving",
+            PrimisQuestGuidanceService.Stage.UNAVAILABLE to "primis-intro-complete",
+        )) {
+            val projected = arrived.copy(primisStage = stage)
+            optionalQuestInstruction(projected) shouldBe instruction
+            projected.completed shouldBe false
+            projected.steps shouldBe arrived.steps
+            val combined = plain(text("goal-$instruction")) + " · " + plain(text("hint-$instruction"))
+            (combined.length <= 100) shouldBe true
         }
     }
 
@@ -143,6 +177,27 @@ class OptionalQuestDialogTest : FreeSpec({
         dialog.finish(player, OptionalQuestKind.FARM, second)
         shown shouldBe dismissed
         dialog.isCurrent(player, OptionalQuestKind.FARM, second) shouldBe false
+    }
+
+    "tracking save failure retains the selected story and dismissal fences its late result" {
+        current = view(OptionalQuestKind.ADVENTURE)
+        tracked = true
+        dialog.open(player, OptionalQuestKind.ADVENTURE)
+        plain(shown!!.buttons.single { it.id.value == "track" }.label) shouldContain "✔"
+        trackingSave = CompletableFuture()
+        click(shown!!, "track")
+        trackingSave.completeExceptionally(IllegalStateException("fixture tracking save failure"))
+        scheduler.executeImmediate()
+        tracked shouldBe true
+        plain(shown!!.body.first().text) shouldContain "Не удалось сохранить отслеживание"
+        trackingSave = CompletableFuture()
+        click(shown!!, "track")
+        dismiss!!.invoke()
+        val dismissed = shown
+        trackingSave.complete(null)
+        scheduler.executeImmediate()
+        tracked shouldBe false
+        shown shouldBe dismissed
     }
 
     "every offered progress and trial state resolves readable short hints and exportable panels" {

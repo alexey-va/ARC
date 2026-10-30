@@ -76,7 +76,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.506"
+version = "1.4.507"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.81"
@@ -115,6 +115,9 @@ kotlin.target.compilations.getByName("integrationTest")
     .associateWith(kotlin.target.compilations.getByName("main"))
 
 repositories {
+    providers.gradleProperty("originApiRepository").orNull?.let { staging ->
+        maven(staging) { content { includeModule("ru.ruscrafting.arc", "arc-origin-api") } }
+    }
     exclusiveContent {
         forRepository { maven("https://repo.auxilor.io/repository/maven-public/") }
         filter {
@@ -184,7 +187,7 @@ dependencies {
     implementation(project(":arc-staff-spells-api"))
     implementation(project(":arc-dungeons-api"))
     implementation("ru.ruscrafting.arc:arc-mounts-api:0.1.1")
-    implementation("ru.ruscrafting.arc:arc-origin-api:0.1.1")
+    implementation("ru.ruscrafting.arc:arc-origin-api:0.1.2")
     implementation("ru.ruscrafting.arc:arc-contracts-api:0.1.1")
 
     // snakeyaml-engine comes transitively from arc-core

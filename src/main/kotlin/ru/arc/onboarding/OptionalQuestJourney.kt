@@ -75,4 +75,5 @@ internal data class OptionalQuestView(
     val completed: Boolean,
     val steps: Set<OptionalQuestStep>,
     val trialStates: Map<CasinoIntroService.Game, CasinoIntroService.State> = emptyMap(),
+    val primisStage: ru.ruscrafting.onboarding.api.PrimisQuestGuidanceService.Stage = ru.ruscrafting.onboarding.api.PrimisQuestGuidanceService.Stage.UNAVAILABLE,
 )

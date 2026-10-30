@@ -14,18 +14,21 @@ import ru.arc.core.Tasks
 internal class OnboardingPlayerListener : Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     fun onQuit(event: PlayerQuitEvent) {
+        StoryQuestJournal.leave(event.player.uniqueId)
         OnboardingService.leave(event.player.uniqueId)
         OptionalOnboardingService.leave(event.player.uniqueId)
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     fun onJoin(event: PlayerJoinEvent) {
+        StoryQuestJournal.resume(event.player)
         OnboardingService.resume(event.player)
         OptionalOnboardingService.resume(event.player)
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     fun onWorldChanged(event: PlayerChangedWorldEvent) {
+        StoryQuestJournal.resume(event.player)
         OnboardingService.resume(event.player)
         OptionalOnboardingService.resume(event.player)
     }

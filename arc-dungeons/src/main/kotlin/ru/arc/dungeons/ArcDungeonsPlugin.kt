@@ -310,10 +310,7 @@ open class ArcDungeonsPlugin : JavaPlugin() {
 
         dungeonQol = qol
         listen(EMListener())
-        val onboardingHost = server.pluginManager.getPlugin("ARC")
-        if (onboardingHost != null && runCatching {
-                Class.forName("ru.ruscrafting.onboarding.api.OptionalOnboardingProgressService", false, onboardingHost.javaClass.classLoader)
-            }.isSuccess) listen(PrimisOnboardingListener(this))
+        listen(PrimisOnboardingListener(this))
         listen(EliteMobsEventAnnouncementGuard())
         PrimisEncounterGuard(nativeWork, logger, { player, reason ->
             val (key, fallback) = when (reason) {
@@ -437,6 +434,7 @@ open class ArcDungeonsPlugin : JavaPlugin() {
         val actions = mutableListOf<() -> Unit>()
         captureFailure?.let { problem -> actions.add { throw problem } }
         listeners.forEach { listener -> actions.add { HandlerList.unregisterAll(listener) } }
+        listeners.filterIsInstance<PrimisOnboardingListener>().forEach { listener -> actions.add { listener.close() } }
         sharedXp?.let { actions.add { it.close() } }
         progressionOwner?.let { actions.add { it.close() } }
         masteryOwner?.let { actions.add { it.close() } }

@@ -15,7 +15,7 @@ import java.nio.file.Path
 import java.util.UUID
 
 class QuestHologramHudTest : FreeSpec({
-    "permission absence skips the provider and provider refusal preserves the ordinary bar" {
+    "hologram permission and provider state never remove the ordinary progress bar" {
         val player = mockk<Player>(relaxed = true)
         val playerId = UUID.randomUUID()
         every { player.uniqueId } returns playerId
@@ -39,15 +39,15 @@ class QuestHologramHudTest : FreeSpec({
             shown.size shouldBe 1
             every { provider.show(player, QuestGuidanceHudService.Source.OPTIONAL, any()) } returns true
             hud.refresh(player, view)
-            verify(exactly = 1) { player.hideBossBar(shown.first()) }
+            verify(exactly = 0) { player.hideBossBar(shown.first()) }
             allowed = false
             hud.refresh(player, view)
             verify(exactly = 2) { provider.clear(playerId, QuestGuidanceHudService.Source.OPTIONAL) }
-            shown.size shouldBe 2
+            shown.size shouldBe 1
             allowed = true
             service = null
             hud.refresh(player, view)
-            shown.size shouldBe 2
+            shown.size shouldBe 1
         }
     }
 

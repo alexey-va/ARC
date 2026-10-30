@@ -255,6 +255,8 @@ internal interface PortalOriginGateHandle {
 
     fun updateScale(multiplier: Float)
 
+    fun updateScale(multiplier: Float, verticalTranslation: Float) = updateScale(multiplier)
+
     fun playOpeningSound()
 
     fun remove()
@@ -322,10 +324,10 @@ internal class PortalOriginGateController(
     }
 
     /** Applies a bounded feature-owned idle pulse without exposing the display entity. */
-    fun updateScale(multiplier: Float) {
+    fun updateScale(multiplier: Float, verticalTranslation: Float = 0f) {
         if (!removed) {
             currentScale = multiplier
-            handle?.takeIf(PortalOriginGateHandle::isValid)?.updateScale(multiplier)
+            handle?.takeIf(PortalOriginGateHandle::isValid)?.updateScale(multiplier, verticalTranslation)
         }
     }
 
@@ -657,9 +659,10 @@ internal object BukkitPortalOriginGate {
         x: Float,
         y: Float,
         z: Float,
+        verticalTranslation: Float = 0f,
     ): Transformation =
         Transformation(
-            Vector3f(),
+            Vector3f(0f, verticalTranslation, 0f),
             AxisAngle4f(),
             Vector3f(x, y, z),
             AxisAngle4f(),
@@ -673,12 +676,15 @@ internal object BukkitPortalOriginGate {
         override val isValid: Boolean
             get() = display.isValid
 
-        override fun updateScale(multiplier: Float) {
+        override fun updateScale(multiplier: Float) = updateScale(multiplier, 0f)
+
+        override fun updateScale(multiplier: Float, verticalTranslation: Float) {
             if (!isValid) return
             display.transformation = transformation(
                 settings.width * multiplier,
                 settings.height * multiplier,
                 1f,
+                verticalTranslation,
             )
         }
 

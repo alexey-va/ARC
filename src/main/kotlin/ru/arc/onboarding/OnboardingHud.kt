@@ -35,10 +35,7 @@ internal class OnboardingHud(
             hasBuildBook = needsBook && items.any(::isOnboardingBuildBook),
             worldHint = worldHint,
         ) ?: return
-        if (hologram.refresh(player, title)) {
-            clearBar(player.uniqueId)
-            return
-        }
+        hologram.refresh(player, title)
         if (bars[player.uniqueId]?.first?.let { it !== player } == true) clear(player.uniqueId)
         val bar = bars.getOrPut(player.uniqueId) {
             val created = BossBar.bossBar(title, 1f, BossBar.Color.GREEN, BossBar.Overlay.PROGRESS)
