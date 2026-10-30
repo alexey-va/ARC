@@ -8,8 +8,11 @@ reader are removed; old files are not imported into the new opt-in state.
 - `/arc onboarding test` and `restart` require `arc.admin` or operator and target
   only the sender. They create a fresh offer; the player explicitly accepts it.
   `test` preserves inventory. `restart` durably backs up the sender inventory with
-  the Core player-state codec, then replaces it with the native free CMI `start`
-  kit. CMI owns its two item commands scheduled on the next tick.
+  the Core player-state codec, clears all three optional introduction records and
+  the tracked story, creates a fresh first-home offer, then replaces inventory
+  with the native free CMI `start` kit. Restart never opens a pending or result
+  dialog; its completion or failure is reported in chat. CMI owns its two item
+  commands scheduled on the next tick.
 - `/arc onboarding stop` stops only the sender. Administrator test controls
   stay in commands; the player screen shows only its current goal and action.
 - `quest.public-enabled` defaults to false, independently of legacy `enabled`.
@@ -106,6 +109,14 @@ the steps, `OptionalQuestStore` persists append-only Redis CAS records in
 `arc.onboarding.optional.v1` under `<player UUID>:<adventure|casino|farm>`, and
 `OptionalQuestDialog` / `OptionalQuestHud` render the journal and current goal.
 Reaccepting or reopening a completed journey retains its original completion.
+The administrator's `/arc onboarding restart` is the explicit exception: it
+removes all three ARC introduction records and their local guidance, including
+when invoked on a backend where optional introductions are disabled. Old queued
+callbacks cannot restore the removed run or credit a new run after reset.
+Native EliteMobs quest state, casino free-round receipts, and lifetime reward
+ledgers remain owned by their providers; restarting ARC introductions does not
+grant a second free round or payment. Reacceptance can recognize those retained
+native prerequisites. Daily and weekly ArcRanks contracts are independent.
 Join and world-change handling load existing records without enrolling anyone.
 The initial home guide has priority over the optional bossbar and sidebar rows.
 
@@ -115,7 +126,7 @@ Spawn runtime. NPC 426 (Garret), 452 (casino guide), and 464 (farm guide) use th
 existing personal quest marker and open the corresponding journal on click.
 Their Citizens command traits must be removed when enabling these guides.
 The same journals are available at `/arc onboarding adventure`, `casino`, and
-`farm`; the existing administrative home-test commands remain independent.
+`farm`; administrative `restart` resets all four introductions for its sender.
 Safe native travel stays available before accepting and after completing the
 introductions: Garret runs `/ag`, the casino guide runs `/rccasino`, and the
 farm guide runs `/arcfarms travel farm`. These routes never enroll a player or

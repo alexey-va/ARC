@@ -18,6 +18,8 @@ import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionStage
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CancellationException
+import java.util.concurrent.CompletionException
 
 /** Optional side quests own no rewards and never change the initial home quest. All Bukkit access is on Paper. */
 object OptionalOnboardingService : OptionalOnboardingProgressService {
@@ -31,6 +33,8 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
         val npcs = mutableMapOf<OptionalQuestKind, OnboardingQuestNpc>()
         val locationPending = mutableSetOf<Key>()
         val loaded = mutableSetOf<Key>()
+        val resetGenerations = mutableMapOf<UUID, Long>()
+        val resetting = mutableMapOf<UUID, CompletableFuture<Unit>>()
         val hud = OptionalQuestHud(config::text)
         val guidance = OptionalQuestGuidance(config)
         lateinit var menu: OptionalQuestDialog
@@ -55,7 +59,8 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
         if (Bukkit.getPluginManager().isPluginEnabled("Citizens")) {
             config.npcIds.filterValues { it >= 0 }.forEach { (kind, npcId) ->
                 current.npcs[kind] = OnboardingQuestNpc(ARC.instance, npcId,
-                    visible = { current.players[Key(it.uniqueId, kind)] == null },
+                    visible = { it.uniqueId !in current.resetting && Key(it.uniqueId, kind) in current.loaded &&
+                        current.players[Key(it.uniqueId, kind)] == null },
                     eligible = { runtime === current }, open = { open(it, kind) }).also { it.start() }
             }
         }
@@ -80,8 +85,79 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
 
     internal fun closeCompletion(): CompletableFuture<Unit> = CompletableFuture.allOf(drained, StoryQuestJournal.closeCompletion()).thenApply { Unit }
 
+    /** Invalidates a prior visit immediately, before the administrator's asynchronous inventory backup. */
+    internal fun dismissPending(playerId: UUID) { runtime?.menu?.forget(playerId) }
+
+    /** Paper-thread entry; succeeds after durable deletion and cache reconciliation, without opening a menu. */
+    internal fun reset(player: Player): CompletableFuture<Unit> {
+        check(Bukkit.isPrimaryThread()) { "Optional quest resets must start on Paper" }
+        val current = runtime
+        if (current == null) {
+            val redis = ARC.redisManager
+                ?: return CompletableFuture.failedFuture(IllegalStateException("Optional quest storage unavailable"))
+            // Manual resets on a disabled node share the existing lifecycle drain before reinitialization.
+            val pending = drained.handle { _, _ -> Unit }.thenCompose { OptionalQuestStore(redis).reset(player.uniqueId) }
+            drained = pending
+            return pending
+        }
+        val playerId = player.uniqueId
+        current.resetting[playerId]?.let { return it }
+        val result = CompletableFuture<Unit>()
+        current.resetting[playerId] = result
+        current.resetGenerations[playerId] = generation(current, playerId) + 1
+        current.loaded.removeIf { it.player == playerId }
+        try {
+            current.menu.forget(playerId)
+            current.hud.clear(playerId)
+            current.guidance.clear(playerId)
+            current.npcs.values.forEach { it.clear(playerId) }
+        } catch (failure: Throwable) {
+            current.resetting.remove(playerId, result)
+            error("Could not prepare optional quest reset for {}", playerId, failure)
+            resume(player)
+            result.completeExceptionally(failure)
+            return result
+        }
+
+        val keys = OptionalQuestKind.entries.map { Key(playerId, it) }
+        val saved = CompletableFuture.allOf(*keys.mapNotNull(current.tails::get).toTypedArray())
+            .handle { _, _ -> Unit }.thenCompose { current.store.reset(playerId) }
+        val barrier = saved.thenApply<OptionalQuestProgress?> { null }
+        keys.forEach { current.tails[it] = barrier }
+        current.pending += saved
+        saved.whenComplete { _, failure ->
+            current.pending.remove(saved)
+            current.tasks.callSync {
+                if (runtime !== current) throw CancellationException("Optional quest runtime changed during reset")
+                current.resetting.remove(playerId, result)
+                current.players.keys.removeIf { it.player == playerId }
+                current.trials.remove(playerId)
+                current.locationPending.removeAll(keys.toSet())
+                current.menu.forget(playerId)
+                current.hud.clear(playerId)
+                current.guidance.clear(playerId)
+                val viewer = Bukkit.getPlayer(playerId)?.takeIf(Player::isOnline)
+                if (failure != null) {
+                    error("Optional quest reset failed for {}", playerId, failure)
+                    // A lost acknowledgement may follow a committed HDEL; reload the actual state before offering anything.
+                    if (viewer != null) resume(viewer)
+                    throw CompletionException(failure)
+                }
+                if (viewer != null) {
+                    current.loaded.addAll(keys)
+                    current.npcs.values.forEach { it.refresh(viewer) }
+                }
+                Unit
+            }.whenComplete { _, callbackFailure ->
+                if (callbackFailure == null) result.complete(Unit) else result.completeExceptionally(callbackFailure)
+            }
+        }
+        return result
+    }
+
     internal fun view(player: Player, kind: OptionalQuestKind): OptionalQuestView? {
         val current = runtime ?: return null
+        if (player.uniqueId in current.resetting || Key(player.uniqueId, kind) !in current.loaded) return null
         val progress = current.players[Key(player.uniqueId, kind)]
         return OptionalQuestView(kind, progress != null, progress?.completed == true, progress?.steps.orEmpty(),
             current.trials[player.uniqueId]?.toMap().orEmpty(),
@@ -95,6 +171,7 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
 
     internal fun activeView(player: Player): OptionalQuestView? {
         val current = runtime ?: return null
+        if (player.uniqueId in current.resetting) return null
         val active = OptionalQuestKind.entries.filter { kind -> current.players[Key(player.uniqueId, kind)]?.completed == false }
         val kind = active.firstOrNull { StoryQuestJournal.isTracked(player, it.id) } ?: return null
         return view(player, kind)
@@ -109,13 +186,14 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
     }
 
     internal fun journalReady(playerId: UUID): Boolean = runtime?.let { current ->
-        OptionalQuestKind.entries.all { Key(playerId, it) in current.loaded }
+        playerId !in current.resetting && OptionalQuestKind.entries.all { Key(playerId, it) in current.loaded }
     } ?: true
 
     internal fun refreshTracking(player: Player) { runtime?.let { refreshHud(it, player) } }
 
     internal fun resume(player: Player) {
         val current = runtime ?: return
+        if (!valid(current, player)) return
         OptionalQuestKind.entries.forEach { kind ->
             request(current, player, kind, { current.store.load(player.uniqueId, kind) }) { progress ->
                 if (progress != null) observeLocation(current, player)
@@ -143,6 +221,7 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
 
     internal fun open(player: Player, kind: OptionalQuestKind, beginFlow: Boolean = true) {
         val current = runtime ?: return
+        if (!valid(current, player)) return
         if (beginFlow) ArcMenus.beginDialogFlow(player)
         val visit = current.menu.beginPending(player, kind)
         request(current, player, kind, { current.store.load(player.uniqueId, kind) }, visit) { progress ->
@@ -154,6 +233,7 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
 
     private fun accept(player: Player, kind: OptionalQuestKind) {
         val current = runtime ?: return
+        if (!valid(current, player) || Key(player.uniqueId, kind) !in current.loaded) return
         val visit = current.menu.beginPending(player, kind)
         request(current, player, kind, { current.store.accept(player.uniqueId, kind).thenApply { it } }, visit) {
             StoryQuestJournal.accepted(player, kind.id)
@@ -165,6 +245,8 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
 
     private fun action(player: Player, kind: OptionalQuestKind, action: OptionalQuestAction) {
         val current = runtime ?: return
+        if (!valid(current, player)) return
+        val expectedGeneration = generation(current, player.uniqueId)
         val progress = current.players[Key(player.uniqueId, kind)]
         when (action) {
             OptionalQuestAction.GUILD -> if (kind == OptionalQuestKind.ADVENTURE) command(player, "ag")
@@ -186,7 +268,7 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
                 current.pending += pending
                 pending.whenCompleteSync(current.tasks) { state, failure ->
                     current.pending.remove(pending)
-                    if (!valid(current, player)) return@whenCompleteSync
+                    if (!valid(current, player, expectedGeneration) || current.players[Key(player.uniqueId, kind)]?.runId != progress.runId) return@whenCompleteSync
                     if (failure == null && state != null) current.trials.getOrPut(player.uniqueId, ::mutableMapOf)[game] = state
                     if (failure == null && state == CasinoIntroService.State.COMPLETE)
                         recordCasinoTrial(player.uniqueId, game, "readback:${game.name.lowercase()}")
@@ -200,6 +282,7 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
 
     private fun observeLocation(current: Runtime, player: Player) {
         if (!valid(current, player)) return
+        val expectedGeneration = generation(current, player.uniqueId)
         val location = player.location
         OptionalQuestKind.entries.forEach { kind ->
             val key = Key(player.uniqueId, kind)
@@ -211,21 +294,26 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
             current.locationPending += key
             val pending = enqueue(current, key) {
                 steps.fold(CompletableFuture.completedFuture<OptionalQuestProgress?>(before)) { future, step ->
-                    future.thenCompose { current.store.observe(key.player, kind, step) }
+                    future.thenCompose { current.store.observe(key.player, kind, step, before.runId) }
                 }
             }
             pending.whenCompleteSync(current.tasks) { updated, failure ->
+                if (generation(current, player.uniqueId) != expectedGeneration) return@whenCompleteSync
                 current.locationPending.remove(key)
-                if (failure == null && valid(current, player) && updated != null) publish(current, player, key, updated)
+                if (failure == null && valid(current, player, expectedGeneration) && updated != null) publish(current, player, key, updated)
             }
         }
     }
 
     private fun reconcileTrials(current: Runtime, player: Player) {
+        if (!valid(current, player)) return
+        val key = Key(player.uniqueId, OptionalQuestKind.CASINO)
+        val runId = current.players[key]?.runId ?: return
+        val expectedGeneration = generation(current, player.uniqueId)
         val provider = Bukkit.getServicesManager().load(CasinoIntroService::class.java) ?: return
         CasinoIntroService.Game.entries.forEach { game ->
             provider.state(player.uniqueId, game).whenCompleteSync(current.tasks) { state, failure ->
-                if (failure != null || state == null || !valid(current, player)) return@whenCompleteSync
+                if (failure != null || state == null || !valid(current, player, expectedGeneration) || current.players[key]?.runId != runId) return@whenCompleteSync
                 current.trials.getOrPut(player.uniqueId, ::mutableMapOf)[game] = state
                 if (state == CasinoIntroService.State.COMPLETE) recordCasinoTrial(player.uniqueId, game, "readback:${game.name.lowercase()}")
             }
@@ -250,20 +338,27 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
     private fun record(playerId: UUID, step: OptionalQuestStep): CompletionStage<Void> {
         check(Bukkit.isPrimaryThread()) { "Optional quest observations must be captured on Paper" }
         val current = runtime ?: return CompletableFuture.completedFuture(null)
+        if (playerId in current.resetting) return CompletableFuture.completedFuture(null)
         val key = Key(playerId, step.kind)
-        val pending = enqueue(current, key) { current.store.observe(playerId, step.kind, step) }
+        val expectedGeneration = generation(current, playerId)
+        val observedPlayer = Bukkit.getPlayer(playerId)
+        val runId = current.players[key]?.runId
+        val pending = enqueue(current, key) { current.store.observe(playerId, step.kind, step, runId) }
         pending.whenCompleteSync(current.tasks) { updated, failure ->
             val player = Bukkit.getPlayer(playerId)
-            if (failure == null && player != null && valid(current, player) && updated != null) publish(current, player, key, updated)
+            if (failure == null && player != null && player === observedPlayer && valid(current, player, expectedGeneration) && updated != null)
+                publish(current, player, key, updated)
         }
         return pending.thenApply { null }
     }
 
     private fun request(current: Runtime, player: Player, kind: OptionalQuestKind,
         operation: () -> CompletableFuture<OptionalQuestProgress?>, visit: Long? = null, complete: (OptionalQuestProgress?) -> Unit) {
+        if (!valid(current, player)) return
         val key = Key(player.uniqueId, kind)
+        val expectedGeneration = generation(current, player.uniqueId)
         enqueue(current, key, operation).whenCompleteSync(current.tasks) { updated, failure ->
-            if (!valid(current, player)) return@whenCompleteSync
+            if (!valid(current, player, expectedGeneration)) return@whenCompleteSync
             if (failure != null) {
                 if (visit != null) current.menu.finish(player, kind, visit, notice(current, "save-failed"))
                 return@whenCompleteSync
@@ -296,6 +391,9 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
         return pending
     }
 
-    private fun valid(current: Runtime, player: Player) = runtime === current && player.isOnline && Bukkit.getPlayer(player.uniqueId) === player
+    private fun generation(current: Runtime, playerId: UUID): Long = current.resetGenerations[playerId] ?: 0
+    private fun valid(current: Runtime, player: Player, expectedGeneration: Long = generation(current, player.uniqueId)) =
+        runtime === current && player.uniqueId !in current.resetting && generation(current, player.uniqueId) == expectedGeneration &&
+            player.isOnline && Bukkit.getPlayer(player.uniqueId) === player
     private fun notice(current: Runtime, key: String) = PlainTextComponentSerializer.plainText().serialize(current.config.text(key))
 }

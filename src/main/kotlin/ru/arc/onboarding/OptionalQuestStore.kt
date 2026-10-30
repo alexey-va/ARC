@@ -15,7 +15,7 @@ import ru.arc.util.Common
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
-/** Independent, network-wide opt-in records. There is deliberately no reset or reward operation. */
+/** Independent, network-wide opt-in records. Reset deletes only this player's three quest fields. */
 internal class OptionalQuestStore(private val redis: RedisOperations, gson: Gson = Common.gson) {
     private val codec = codec(gson)
     private val updater = RedisHashUpdater(redis, HASH_KEY, codec)
@@ -29,9 +29,19 @@ internal class OptionalQuestStore(private val redis: RedisOperations, gson: Gson
     fun accept(playerId: UUID, kind: OptionalQuestKind): CompletableFuture<OptionalQuestProgress> =
         update(playerId, kind) { it ?: OptionalQuestProgress.accepted(kind) }.thenApply(::requireNotNull)
 
-    fun observe(playerId: UUID, kind: OptionalQuestKind, step: OptionalQuestStep): CompletableFuture<OptionalQuestProgress?> {
+    fun reset(playerId: UUID): CompletableFuture<Unit> = redis.saveMapEntries(HASH_KEY,
+        *OptionalQuestKind.entries.flatMap { listOf(key(playerId, it), null) }.toTypedArray(),
+    ).thenApply { Unit }
+
+    fun observe(playerId: UUID, kind: OptionalQuestKind, step: OptionalQuestStep,
+        expectedRunId: String? = null): CompletableFuture<OptionalQuestProgress?> {
         require(step.kind == kind)
-        return update(playerId, kind) { it?.observe(step) }
+        // Freeze the run before entering the retrying CAS. A reset/reaccept must not inherit an old observation.
+        if (expectedRunId == null) return load(playerId, kind).thenCompose { current ->
+            if (current == null) CompletableFuture.completedFuture(null)
+            else observe(playerId, kind, step, current.runId)
+        }
+        return update(playerId, kind) { it?.takeIf { current -> current.runId == expectedRunId }?.observe(step) }
     }
 
     private fun update(

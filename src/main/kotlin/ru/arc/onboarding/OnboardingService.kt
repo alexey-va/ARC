@@ -249,7 +249,7 @@ object OnboardingService : OnboardingBuildProgressService {
         }
     }
 
-    /** Explicit self-only reset with a durable inventory preimage before any item is replaced. */
+    /** Resets every introduction for the administrator, without opening a dialog. */
     fun restartSelf(player: Player) {
         if (!isTestAdmin(player)) { message(player, "<red>Повторный запуск теста доступен администратору."); return }
         val current = runtime ?: return
@@ -260,8 +260,8 @@ object OnboardingService : OnboardingBuildProgressService {
         if (current.starterInventory.isPending(playerId)) {
             message(player, "<yellow>Повторный запуск уже готовится. Дождись завершения."); return
         }
-        ArcMenus.beginDialogFlow(player)
-        val visit = current.menu.beginPending(player)
+        current.menu.forget(playerId)
+        OptionalOnboardingService.dismissPending(playerId)
         val sequence = (current.requests[playerId] ?: 0L) + 1L
         current.requests[playerId] = sequence
         var expectedRunId = current.players[playerId]?.runId
@@ -269,12 +269,30 @@ object OnboardingService : OnboardingBuildProgressService {
             current.players[playerId]?.runId == expectedRunId
 
         val operation = current.starterInventory.replace(player, ::valid) {
-            enqueue(current, playerId) { store.enroll(playerId).thenApply { it } }.thenCompose { enrolled ->
+            OptionalOnboardingService.reset(player).thenCompose {
+                current.tasks.callSync {
+                    if (!valid() || !player.isOnline || Bukkit.getPlayer(playerId) !== player) {
+                        throw CancellationException("Onboarding restart was superseded")
+                    }
+                    StoryQuestJournal.track(playerId, null).toCompletableFuture()
+                }.thenCompose { it }
+            }.thenCompose {
+                current.tasks.callSync {
+                    if (!valid() || !player.isOnline || Bukkit.getPlayer(playerId) !== player) {
+                        throw CancellationException("Onboarding restart was superseded")
+                    }
+                    enqueue(current, playerId) { store.enroll(playerId).thenApply { it } }
+                }.thenCompose { it }
+            }.thenCompose { enrolled ->
                 current.tasks.callSync {
                     if (!valid() || !player.isOnline || Bukkit.getPlayer(playerId) !== player) {
                         throw CancellationException("Onboarding restart was superseded")
                     }
                     current.players[playerId] = requireNotNull(enrolled)
+                    current.loaded += playerId
+                    current.played.remove(playerId)
+                    current.playtimeFailures.remove(playerId)
+                    current.invalidPlaytimes.remove(playerId)
                     refreshHud(current, player)
                     expectedRunId = enrolled.runId
                     Unit
@@ -294,16 +312,16 @@ object OnboardingService : OnboardingBuildProgressService {
             current.npc?.refresh(player)
             val notice = when {
                 failure == null -> {
-                    info("Initial quest starter inventory applied for {}; backup={}", playerId, backup)
-                    null
+                    info("All onboarding quests reset and starter inventory applied for {}; backup={}", playerId, backup)
+                    "Все вводные квесты сброшены."
                 }
                 generateSequence(failure) { it.cause }.any { it is OnboardingStarterInventory.CraftingItemsPresent } ->
                     "Освободи ячейки создания предметов и повтори /arc onboarding restart."
                 generateSequence(failure) { it.cause }.any { it is OnboardingStarterInventory.InventoryChanged } ->
                     "Инвентарь изменился во время подготовки. Предметы сохранены; повтори /arc onboarding restart."
-                else -> "Не удалось заменить инвентарь. Подробности сохранены в журнале сервера; попробуй ещё раз."
+                else -> "Не удалось полностью перезапустить квесты. Подробности сохранены в журнале сервера; попробуй ещё раз."
             }
-            current.menu.finish(player, visit, notice)
+            message(player, (if (failure == null) "<green>" else "<red>") + notice)
         }
     }
 
