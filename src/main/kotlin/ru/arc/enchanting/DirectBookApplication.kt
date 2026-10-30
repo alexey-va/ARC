@@ -2,6 +2,7 @@ package ru.arc.enchanting
 
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
+import ru.arc.listeners.CreativeRewardItemGuard
 
 /** Commit an already prepared result in place, consuming one book without opening an inventory. */
 internal fun applyBookInInventory(
@@ -53,6 +54,7 @@ internal fun enchantmentInputsMatch(expectedTarget: ItemStack, expectedBook: Ite
 
 /** Creative proposes a cursor stack; keep it in a server-owned slot before Paper clears DENY. */
 internal fun admitCreativeBook(player: Player, book: ItemStack): Int? {
+    if (CreativeRewardItemGuard.isProtected(book)) return null
     if (book.amount !in 1..book.maxStackSize) return null
     player.inventory.addItem(book.clone()).values.forEach { player.world.dropItem(player.location, it) }
     return (0 until player.inventory.storageContents.size).firstOrNull {

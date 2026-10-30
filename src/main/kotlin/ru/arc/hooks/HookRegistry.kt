@@ -481,6 +481,7 @@ class HookRegistry(
         }
         if (blockListener == null) {
             blockListener = registerListener(BlockListener())
+            registerListener(ru.arc.listeners.CreativeRewardItemGuard())
         }
         if (pickupListener == null) {
             pickupListener = registerListener(PickupListener())

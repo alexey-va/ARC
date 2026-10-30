@@ -2,6 +2,7 @@ package ru.arc.itemcatalog
 
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import org.bukkit.GameMode
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.HandlerList
@@ -73,6 +74,7 @@ class PhysicalRewardController internal constructor(
             val player = event.player
             val identity = PhysicalRewardVoucher.identity(player.inventory.itemInMainHand) ?: return
             event.isCancelled = true
+            if (player.gameMode == GameMode.CREATIVE) return
             openOrStart(player, identity)
         }
 
@@ -285,6 +287,7 @@ class PhysicalRewardController internal constructor(
         choiceSelection: ChoiceSelection? = null,
     ) {
         if (!active.get() || !ledger.available) return unavailable(player)
+        if (player.gameMode == GameMode.CREATIVE) return
         if (pending.containsKey(player.uniqueId)) {
             player.sendMessage(TextUtil.mm(BUSY_MESSAGE, true))
             return
@@ -380,7 +383,7 @@ class PhysicalRewardController internal constructor(
         }
         when (result) {
             is OneTimeUseClaimResult.Acquired -> {
-                if (redemption.cancelled || !active.get() || !player.isOnline) {
+                if (redemption.cancelled || !active.get() || !player.isOnline || player.gameMode == GameMode.CREATIVE) {
                     release(redemption, player, null)
                     return
                 }

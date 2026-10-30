@@ -5,12 +5,29 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
+import io.mockk.verify
 import org.bukkit.Material
 import org.bukkit.enchantments.Enchantment
 import org.bukkit.inventory.ItemStack
 import ru.arc.paper.testing.MockBukkitTestRuntime
+import ru.arc.listeners.CreativeRewardItemGuard
 
 class DirectBookApplicationTest : StringSpec({
+    "a protected proposed creative book cannot be admitted after another listener denies it" {
+        val player = mockk<org.bukkit.entity.Player>()
+        val proposed = mockk<ItemStack>()
+        mockkObject(CreativeRewardItemGuard.Companion)
+        try {
+            every { CreativeRewardItemGuard.isProtected(proposed) } returns true
+            admitCreativeBook(player, proposed) shouldBe null
+            verify(exactly = 0) { player.inventory }
+            verify(exactly = 0) { player.world }
+        } finally {
+            unmockkObject(CreativeRewardItemGuard.Companion)
+        }
+    }
     "success replaces the target in place, consumes one cursor book and never opens a menu" {
         MockBukkitTestRuntime.open().use { runtime ->
             val player = runtime.addPlayer("Enchanter")

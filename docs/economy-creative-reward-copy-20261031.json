@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "title": "Creative-mode copies of ARC money rewards: conditional new-copy redemption sensitivity",
+  "assumptions": [
+    "This models only NEW unauthorized copies of ARC reward-tagged money carriers created through creative-mode cloning and subsequently redeemed; before assumes this conditional path is available and after assumes the new-copy path is denied.",
+    "One actor is used in each scenario: participants [1, 1, 1] is a calculation anchor, not an estimate of the player population.",
+    "The 2,940 money deposits observed on 2026-10-30, totaling 2,361,769.320139 Vault, do not establish that any or all deposits came from copied items. Using 2,940 events in the base sensitivity is not a claim about their origin or a measured per-player-day rate.",
+    "Event sensitivities [64, 2940, 7200] mean respectively: one copied stack scenario; the observed deposit count reused as a scenario; and a theoretical one-hour redemption pace at one event per 500 ms. They are alternatives and are not summed. The observed peak was 100 deposits/minute; the 7200-event stress case is not telemetry.",
+    "The modeled current hugemoney amount is 850 Vault per event, the arithmetic mean of the stated 800–900 Vault range. Legacy money items in the 150–300 Vault range are outside this flow.",
+    "Legitimate Survival reward prices, ranges, and quantities are unchanged. A reference example of 64 legitimate hugemoney redemptions/day is 54,400 Vault per player-day both before and after; it is omitted from this flow total so it is not added to incompatible conditional-copy scenarios.",
+    "Legitimate reward item quantities and XP change by zero. Tokens have no flows and remain a separate unit; no exchange rate or conversion is assumed. No SELL revenue is attributed to this change, and the planned EconomyShopGUI SELL-to-contract transition is unchanged.",
+    "The assessment covers only newly created copies under the guarded path. It does not claim all copied items will be blocked after activation: historical indistinguishable copies are not revoked, and no unique issuance IDs are added."
+  ],
+  "participants": [1, 1, 1],
+  "currencies": {
+    "vault": {
+      "minor_per_unit": 100,
+      "flows": [
+        {
+          "id": "new_creative_copy_redemption",
+          "kind": "mint",
+          "source": "2026-10-30 Vault money-item deposit observation; ARC reward-tagged carrier redemption is the modeled path",
+          "basis": "Conditional sensitivity only. Deposits total 2,361,769.320139 Vault across 2,940 observed deposits, but origin is not proven. Amount 850 major is the midpoint of the current hugemoney range 800–900; legacy 150–300 is excluded. Events are alternate per-actor-day scenarios, not measured rates.",
+          "before": {
+            "enabled": true,
+            "amount_per_event": {"value": "850", "unit": "major"},
+            "events_per_player_day": [64, 2940, 7200]
+          },
+          "after": {
+            "enabled": false,
+            "amount_per_event": {"value": "850", "unit": "major"},
+            "events_per_player_day": [64, 2940, 7200]
+          }
+        }
+      ]
+    },
+    "tokens": {
+      "minor_per_unit": 1,
+      "flows": []
+    }
+  }
+}

@@ -2,6 +2,7 @@ package ru.arc.listeners
 
 import com.jeff_media.customblockdata.CustomBlockData
 import de.tr7zw.changeme.nbtapi.NBT
+import org.bukkit.GameMode
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.block.Beehive
@@ -76,6 +77,14 @@ class BlockListener : Listener {
         if (item.type == Material.AIR) return
         if (event.action != Action.RIGHT_CLICK_AIR && event.action != Action.RIGHT_CLICK_BLOCK) return
         if (event.hand != EquipmentSlot.HAND) return
+
+        val held = event.player.inventory.itemInMainHand
+        if (held != item) return
+        if (event.player.gameMode == GameMode.CREATIVE && CreativeRewardItemGuard.isProtected(held)) {
+            event.isCancelled = true
+            CreativeRewardItemGuard.deny(event.player)
+            return
+        }
 
         LegacyTreasureItems.replacement(item)?.let { replacement ->
             // PlayerInteractEvent retains the old stack; consume and read the new main-hand stack on this click.

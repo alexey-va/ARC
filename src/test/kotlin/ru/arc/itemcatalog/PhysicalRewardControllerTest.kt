@@ -5,6 +5,7 @@ import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import net.kyori.adventure.text.Component
+import org.bukkit.GameMode
 import org.bukkit.Material
 import org.bukkit.block.BlockFace
 import org.bukkit.event.block.Action
@@ -25,6 +26,70 @@ import ru.arc.paper.testing.MockBukkitTestRuntime
 import java.util.concurrent.CompletableFuture
 
 class PhysicalRewardControllerTest : StringSpec({
+    "cancelled creative voucher use cannot claim redeem open a choice or query an archive while survival still redeems" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val ledger = RecordingVoucherLedger()
+            val effects = mutableListOf<String>()
+            val spec = PhysicalRewardSpec(
+                "reward.test", OneTimeUseFingerprint.sha256Fields("creative-boundary"), ItemStack(Material.PAPER),
+            )
+            val choice = choiceSpec(choiceOptions(3))
+            val missingKey = "frozen:${spec.fingerprint.sha256}"
+            val controller = PhysicalRewardController(
+                paper.createSimplePlugin("PhysicalRewardCreative"), ledger,
+                { key -> when (key) { spec.key -> spec; choice.key -> choice; else -> null } },
+                redeem = { _, _, _ ->
+                    effects += "redeem"
+                    CompletableFuture.completedFuture(PhysicalRewardOutcome.Applied)
+                },
+                scope = "spawn",
+                openChoice = { _, _, _, _, _ -> effects += "choice" },
+                beforeUse = { _, _, _ -> effects += "before-use"; true },
+                resolveArchiveAsync = {
+                    effects += "archive"
+                    CompletableFuture<FrozenPhysicalArchiveLookup>()
+                },
+                importArchiveLookup = { _, _ -> effects += "archive-import"; null },
+            )
+            val scheduler = TestTaskScheduler()
+            Tasks.withScheduler(scheduler) {
+                controller.register()
+                try {
+                    val player = paper.addPlayer("creative-voucher")
+                    player.gameMode = GameMode.CREATIVE
+                    for ((key, fingerprint) in listOf(
+                        spec.key to spec.fingerprint,
+                        choice.key to choice.fingerprint,
+                        missingKey to spec.fingerprint,
+                    )) {
+                        val voucher = PhysicalRewardVoucher.mark(
+                            ItemStack(Material.PAPER),
+                            PhysicalRewardVoucherIdentity(java.util.UUID.randomUUID(), key, fingerprint),
+                        )
+                        player.inventory.setItemInMainHand(voucher.clone())
+                        val click = interact(player, Action.RIGHT_CLICK_AIR).also { it.isCancelled = true }
+                        paper.callEvent(click)
+                        flush(scheduler)
+                        click.isCancelled shouldBe true
+                        player.inventory.itemInMainHand shouldBe voucher
+                        ledger.calls shouldBe emptyList()
+                        effects shouldBe emptyList()
+                    }
+
+                    player.gameMode = GameMode.SURVIVAL
+                    player.inventory.setItemInMainHand(controller.createStack(spec.key)!!)
+                    paper.callEvent(interact(player, Action.RIGHT_CLICK_AIR).also { it.isCancelled = true })
+                    flush(scheduler)
+                    ledger.calls shouldContainExactly listOf("claim", "commit")
+                    effects shouldContainExactly listOf("before-use", "redeem")
+                    player.inventory.itemInMainHand.type shouldBe Material.AIR
+                } finally {
+                    controller.close()
+                }
+            }
+        }
+    }
+
     "shared archive miss is coalesced per player and uses the existing one-use claim after exact recheck" {
         MockBukkitTestRuntime.open().use { paper ->
             val ledger = RecordingVoucherLedger()
@@ -313,6 +378,78 @@ class PhysicalRewardControllerTest : StringSpec({
 
                 ledger.claimFuture.complete(OneTimeUseClaim.acquired(ledger.lastRequest!!, true).let(OneTimeUseClaimResult::Acquired))
                 ledger.calls shouldContainExactly listOf("claim", "release")
+            }
+        }
+    }
+
+    "switching to creative while a claim is pending releases it without applying or consuming the voucher" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val ledger = RecordingVoucherLedger()
+            var nativeCalls = 0
+            val controller = controller(paper.createSimplePlugin("PhysicalRewardClaimMode"), ledger) { _, _, _ ->
+                nativeCalls++
+                CompletableFuture.completedFuture(PhysicalRewardOutcome.Applied)
+            }
+            val scheduler = TestTaskScheduler()
+            Tasks.withScheduler(scheduler) {
+                controller.register()
+                try {
+                    val player = paper.addPlayer("claim-mode-holder")
+                    val voucher = controller.createStack("reward.test")!!
+                    player.inventory.setItemInMainHand(voucher.clone())
+                    ledger.usePendingFuture = true
+                    paper.callEvent(interact(player, Action.RIGHT_CLICK_AIR))
+                    ledger.calls shouldBe listOf("claim")
+
+                    player.gameMode = GameMode.CREATIVE
+                    ledger.claimFuture.complete(
+                        OneTimeUseClaim.acquired(ledger.lastRequest!!, true).let(OneTimeUseClaimResult::Acquired),
+                    )
+                    flush(scheduler)
+
+                    ledger.calls shouldContainExactly listOf("claim", "release")
+                    nativeCalls shouldBe 0
+                    player.inventory.itemInMainHand shouldBe voucher
+                } finally {
+                    controller.close()
+                }
+            }
+        }
+    }
+
+    "a survival choice confirmed after switching to creative does not start a claim or native reward" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val ledger = RecordingVoucherLedger()
+            val spec = choiceSpec(choiceOptions(3))
+            var confirm: ((Int) -> Unit)? = null
+            var nativeCalls = 0
+            val controller = choiceController(
+                paper.createSimplePlugin("PhysicalRewardChoiceMode"), ledger, spec, { confirm = it },
+            ) { _, _, _ ->
+                nativeCalls++
+                CompletableFuture.completedFuture(PhysicalRewardOutcome.Applied)
+            }
+            val scheduler = TestTaskScheduler()
+            Tasks.withScheduler(scheduler) {
+                controller.register()
+                try {
+                    val player = paper.addPlayer("choice-mode-holder")
+                    val voucher = controller.createStack(spec.key)!!
+                    player.inventory.setItemInMainHand(voucher.clone())
+                    paper.callEvent(interact(player, Action.RIGHT_CLICK_AIR))
+                    confirm shouldNotBe null
+                    ledger.calls shouldBe emptyList()
+
+                    player.gameMode = GameMode.CREATIVE
+                    requireNotNull(confirm).invoke(0)
+                    flush(scheduler)
+
+                    ledger.calls shouldBe emptyList()
+                    nativeCalls shouldBe 0
+                    player.inventory.itemInMainHand shouldBe voucher
+                } finally {
+                    controller.close()
+                }
             }
         }
     }
