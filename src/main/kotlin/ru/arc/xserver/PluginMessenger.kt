@@ -178,25 +178,26 @@ class PluginMessenger(private val networkRtpEnabled: Boolean = true) : PluginMes
         world: org.bukkit.World,
         worldName: String,
     ) {
-        when (val result = RegularRtpService.start(player, world)) {
+        fun reportFailure(reason: String) {
+            player.sendMessage(TextUtil.mm("<red>Не удалось запустить RTP: <white>$reason"))
+            warn(
+                "Regular network RTP request {} rejected for {}: {}",
+                request.requestId,
+                player.name,
+                reason,
+            )
+        }
+        when (val result = RegularRtpService.start(player, world, request.mode.serverTransfer, ::reportFailure)) {
             is FirstRtpResult.Started ->
                 info(
-                    "Regular network RTP request {} started for {} in {} through {}",
+                    "Regular network RTP request {} submitted for {} in {} through {}",
                     request.requestId,
                     player.name,
                     worldName,
                     result.provider,
                 )
 
-            is FirstRtpResult.Rejected -> {
-                player.sendMessage(TextUtil.mm("<red>Не удалось запустить RTP: <white>${result.reason}"))
-                warn(
-                    "Regular network RTP request {} rejected for {}: {}",
-                    request.requestId,
-                    player.name,
-                    result.reason,
-                )
-            }
+            is FirstRtpResult.Rejected -> reportFailure(result.reason)
         }
     }
 

@@ -11,6 +11,8 @@ object RegularRtpService {
     fun start(
         player: Player,
         world: World,
+        serverTransfer: Boolean,
+        onFailure: (String) -> Unit,
     ): FirstRtpResult {
         val configuredProvider =
             ConfigManager
@@ -24,8 +26,39 @@ object RegularRtpService {
         if (!Bukkit.getPluginManager().isPluginEnabled(provider.pluginName)) {
             return FirstRtpResult.Rejected("плагин ${provider.pluginName} не включён")
         }
+        return start(
+            provider, player, world, serverTransfer,
+            destinationAllowed = {
+                Bukkit.getPluginManager().isPluginEnabled("LuckPerms") &&
+                    apiAvailable("net.luckperms.api.LuckPerms") &&
+                    DestinationRtpPermission.canUse(player, world)
+            },
+            startLeafTransfer = {
+                if (apiAvailable("io.github.dailystruggle.rtp.api.RTPAPI")) {
+                    LeafRtpTransfer.start(player, world, onFailure)
+                } else {
+                    FirstRtpResult.Rejected("телепортация временно недоступна")
+                }
+            },
+            dispatch = player::performCommand,
+        )
+    }
+
+    internal fun start(
+        provider: RtpProvider,
+        player: Player,
+        world: World,
+        serverTransfer: Boolean,
+        destinationAllowed: () -> Boolean,
+        startLeafTransfer: () -> FirstRtpResult,
+        dispatch: (String) -> Boolean,
+    ): FirstRtpResult {
+        if (provider == RtpProvider.LEAFRTP && serverTransfer && !player.hasPermission("rtp.use")) {
+            if (!destinationAllowed()) return FirstRtpResult.Rejected("нет доступа к выбранному направлению")
+            return startLeafTransfer()
+        }
         val command = buildCommand(provider, player, world)
-        if (!player.performCommand(command)) {
+        if (!dispatch(command)) {
             return FirstRtpResult.Rejected("RTP provider отклонил команду")
         }
         return FirstRtpResult.Started(provider, command)
@@ -42,5 +75,15 @@ object RegularRtpService {
                 FirstRtpService.leafRegion(player, world)
                     ?.let { "rtp region=$it" }
                     ?: "rtp world=${world.name}"
+        }
+
+    private fun apiAvailable(name: String): Boolean =
+        try {
+            Class.forName(name, false, javaClass.classLoader)
+            true
+        } catch (_: ClassNotFoundException) {
+            false
+        } catch (_: LinkageError) {
+            false
         }
 }
