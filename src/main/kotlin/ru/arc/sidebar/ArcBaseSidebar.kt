@@ -72,7 +72,7 @@ internal class ArcBaseSidebar(
         }
         val frame = ArcSidebarFrame(render(player, config.string("title", "&#B22222&lRus&f&lCrafting")), rows)
         source.show(player, frame)
-        service.present(player, frame, guide == null && enabled(SidebarSection.ACTIVITY))
+        service.present(player, frame, guide != null || enabled(SidebarSection.ACTIVITY))
         shown += player.uniqueId
     }
 
