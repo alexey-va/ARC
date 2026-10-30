@@ -19,6 +19,7 @@ object HelpCenterModule : PluginModule {
     override fun reload() = start(HelpCenterConfig.load(ARC.instance.dataPath).snapshot())
 
     override fun shutdown() {
+        HelpCenterAeNativeSources.clear()
         ArcMenus.configureDialogDecoration("")
         controller?.close()
         controller = null
@@ -59,6 +60,7 @@ object HelpCenterModule : PluginModule {
     }
 
     private fun start(settings: HelpCenterSettings) {
+        HelpCenterAeNativeSources.start(org.bukkit.Bukkit.getPluginManager().getPlugin("AdvancedEnchantments"))
         controller?.close()
         controller = null
         ArcMenus.configureDialogDecoration(if (settings.enabled) settings.decorationFont else "")

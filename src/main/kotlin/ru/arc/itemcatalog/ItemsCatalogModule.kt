@@ -76,6 +76,8 @@ object ItemsCatalogModule : PluginModule {
 
     internal fun currentSnapshot(): ItemsCatalogSnapshot? = service?.currentSnapshot()
 
+    internal fun activeRewardSettings(): RewardCatalogSettings? = rewardController?.acquisitionSettings()
+
     fun rewardHealthSnapshot(): Map<String, Any?> {
         val repository = physicalArchiveRepository
         val sharedStatus = repository?.status()

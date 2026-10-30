@@ -46,6 +46,7 @@ internal class HelpCenterController(
     private val closeDialog: (Player) -> Unit = ArcMenus::closeDialog,
     private val enchantmentsGuide: HelpCenterEnchantmentsGuideSettings,
     private val enchantmentsCatalog: () -> HelpCenterEnchantmentsCatalog = HelpCenterEnchantmentsCatalog::fromAeApi,
+    private val enchantmentAcquisition: (String) -> java.util.concurrent.CompletableFuture<HelpCenterEnchantmentAcquisition> = HelpCenterEnchantmentSources::describeAsync,
     private val activeGraveCount: (Player) -> Int = { player -> GravesModule.activeCount(player) },
     private val openGraves: (Player) -> Boolean = { player -> GravesModule.open(player) },
     private val searchService: HelpCenterSearchService = HelpCenterSearchService(options = settings.searchAi),
@@ -77,8 +78,8 @@ internal class HelpCenterController(
     }
     private val catalogById = catalog.associateBy { it.id }
     private val searchCatalog: List<HelpCenterSearchEntry> = buildList {
-        // Slimefun's menu route is explained by its always-visible network guide.
-        catalog.filterNot { it.id == "slimefun" }.forEach { command ->
+        // These domains have one canonical guide entry, including when their provider is absent.
+        catalog.filterNot { it.id in setOf("slimefun", "enchants") }.forEach { command ->
             add(
                 HelpCenterSearchEntry(
                     id = command.id,
@@ -106,7 +107,21 @@ internal class HelpCenterController(
                 ),
             )
         }
-        addAll(HelpCenterGuideCatalog.searchEntries(settings))
+        addAll(HelpCenterGuideCatalog.searchEntries(settings).map { entry ->
+            if (entry.id == "guide-enchants") entry.copy(
+                id = "enchants",
+                action = HelpCenterSearchAction.OpenPage(HelpCenterPage.ENCHANTMENTS),
+            ) else entry
+        })
+        HelpCenterEnchantmentGuideTopic.entries.forEach { topic ->
+            add(HelpCenterSearchEntry(
+                id = "ae-${topic.id}",
+                label = plainText.serialize(miniMessage.deserialize(enchantmentsGuide.text(topic.labelKey))),
+                description = plainText.serialize(miniMessage.deserialize(enchantmentsGuide.text(topic.summaryKey))),
+                keywords = topic.keywords,
+                action = HelpCenterSearchAction.OpenEnchantmentGuide(topic.id),
+            ))
+        }
     }
     private val hub by lazy {
         HelpCenterHubController(
@@ -127,7 +142,8 @@ internal class HelpCenterController(
     }
 
     private val enchantments by lazy {
-        HelpCenterEnchantmentsController(settings, enchantmentsGuide, navigation, present, ::executeInventory, enchantmentsCatalog)
+        HelpCenterEnchantmentsController(settings, enchantmentsGuide, navigation, present, ::executeInventory, enchantmentsCatalog,
+            acquisition = enchantmentAcquisition)
     }
 
     private val personalSettings by lazy {
@@ -145,6 +161,7 @@ internal class HelpCenterController(
         navigation.close()
         tasks.close()
         searchService.close()
+        enchantments.close()
         personalSettings.close()
         cosmetics?.close()
         hub.close()
@@ -1280,7 +1297,7 @@ internal class HelpCenterController(
     private fun searchResultButton(player: Player, entry: HelpCenterSearchEntry, returnTo: () -> Unit): PaperDialogButton {
         val result = button(
             "result_${entry.id.replace('-', '_')}",
-            text(if (entry.action is HelpCenterSearchAction.OpenGuide) "search-guide-label" else "command-label", "label" to entry.label),
+            text("command-label", "label" to entry.label),
             entry.command?.takeIf { entry.action is HelpCenterSearchAction.Execute }?.let { command ->
                 text("command-tooltip", "description" to entry.description, "command" to command)
             } ?: text("search-result-tooltip", "description" to entry.description),
@@ -1289,6 +1306,9 @@ internal class HelpCenterController(
                 is HelpCenterSearchAction.Execute -> catalogById[entry.id]?.let { hub.openCatalogAction(player, it, returnTo) }
                 is HelpCenterSearchAction.OpenPage -> open(player, action.page)
                 is HelpCenterSearchAction.OpenGuide -> openFeatureGuide(player, action.guideId, returnTo)
+                is HelpCenterSearchAction.OpenEnchantmentGuide -> HelpCenterEnchantmentGuideTopic.byId[action.topicId]?.let {
+                    enchantments.openTopic(player, it, returnTo)
+                }
                 HelpCenterSearchAction.CreateHome -> openCreateHome(player)
             }
         }

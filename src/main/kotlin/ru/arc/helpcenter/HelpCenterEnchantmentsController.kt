@@ -8,6 +8,8 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.entity.Player
 import ru.arc.enchanting.EnchantingModule
+import ru.arc.core.LifecycleTaskScope
+import ru.arc.core.whenCompleteSync
 import ru.arc.paper.menu.DialogTables
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
@@ -17,6 +19,7 @@ import ru.arc.paper.menu.PaperDialogInputId
 import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.paper.menu.PaperDialogTextInput
 import java.util.Locale
+import java.util.concurrent.CompletableFuture
 
 /** Player-facing catalogue and verified usage guide for the active AE registry. */
 internal class HelpCenterEnchantmentsController(
@@ -28,10 +31,12 @@ internal class HelpCenterEnchantmentsController(
     private val catalog: () -> HelpCenterEnchantmentsCatalog = HelpCenterEnchantmentsCatalog::fromAeApi,
     private val canPurchase: (Player, String) -> Boolean = EnchantingModule::canPurchase,
     private val openPurchase: (Player, String, () -> Unit) -> Boolean = EnchantingModule::openPurchase,
-) {
+    private val acquisition: (String) -> CompletableFuture<HelpCenterEnchantmentAcquisition> = HelpCenterEnchantmentSources::describeAsync,
+) : AutoCloseable {
     private val miniMessage = MiniMessage.miniMessage()
     private val plainText = PlainTextComponentSerializer.plainText()
     private val presentation = HelpCenterPresentation(settings)
+    private val tasks = LifecycleTaskScope()
 
     fun open(player: Player, returnTo: () -> Unit) {
         openOverview(player, returnTo, catalog())
@@ -200,7 +205,6 @@ internal class HelpCenterEnchantmentsController(
                     text("ui.details-group-label") to Component.text(groupLabel(enchantment.group)),
                     text("ui.details-level-label") to Component.text(enchantment.maxLevel.toString()),
                     text("ui.details-compatible-label") to Component.text(materialSummary(enchantment)),
-                    text("ui.details-source-label") to text(detailsSourceKey(enchantment, soldByEnchanter)),
                 ).map { listOf(it) },
                 width = 400,
             ))
@@ -223,12 +227,17 @@ internal class HelpCenterEnchantmentsController(
                 id = "help.enchantments.details",
                 title = text("ui.details-title", "name" to enchantment.name),
                 body = body,
-                buttons = if (purchaseAvailable) listOf(button("purchase_book", "ui.purchase-label", "ui.purchase-tooltip") {
-                    val opened = openPurchase(player, enchantment.id) {
-                        openDetails(player, snapshot, returnTo, enchantment, backTo)
-                    }
-                    if (!opened) openDetails(player, snapshot, returnTo, enchantment, backTo)
-                }) else emptyList(),
+                buttons = buildList {
+                    if (purchaseAvailable) add(button("purchase_book", "ui.purchase-label", "ui.purchase-tooltip") {
+                        val opened = openPurchase(player, enchantment.id) {
+                            openDetails(player, snapshot, returnTo, enchantment, backTo)
+                        }
+                        if (!opened) openDetails(player, snapshot, returnTo, enchantment, backTo)
+                    })
+                    add(button("acquisition", "ui.acquisition-label", "ui.acquisition-tooltip") {
+                        openAcquisition(player, snapshot, returnTo) { openDetails(player, snapshot, returnTo, enchantment, backTo) }
+                    })
+                },
                 exitButton = back(backTo),
                 columns = 2,
             ),
@@ -239,98 +248,194 @@ internal class HelpCenterEnchantmentsController(
         player: Player,
         snapshot: HelpCenterEnchantmentsCatalog,
         returnTo: () -> Unit,
+        backTo: () -> Unit = { openOverview(player, returnTo, snapshot) },
     ) {
-        navigation.visit(player) { openAcquisition(player, snapshot, returnTo) }
-        show(
-            player,
-            PaperDialogScreen(
-                id = "help.enchantments.acquisition",
-                title = text("ui.acquisition-title"),
-                body = listOf(
-                    PaperDialogBody(text("ui.acquisition-summary"), 468),
-                    DialogTables.body(
-                        rows = listOf(
-                            text("ui.route-enchanter-label") to text("ui.route-enchanter"),
-                            text("ui.route-hunt-label") to text("ui.route-hunt"),
-                            text("ui.route-fishing-label") to text("ui.route-fishing"),
-                            text("ui.route-caches-label") to text("ui.route-caches"),
-                        ),
-                        frame = DialogTables.Frame.UNCOMMON,
-                        width = 320,
-                        columns = DialogTables.Columns.VALUE_WIDE,
-                    ),
-                    PaperDialogBody(text("ui.acquisition-services"), 468),
-                ),
-                buttons = if (canOpenEnchanter(player, snapshot)) listOf(
-                    button("enchanter", "ui.enchanter-label", "ui.enchanter-tooltip") {
-                        if (canOpenEnchanter(player, snapshot)) executeInventory(player, "enchanter")
-                        else openAcquisition(player, snapshot, returnTo)
-                    },
-                ) else emptyList(),
-                exitButton = back { openOverview(player, returnTo, snapshot) },
-                columns = 2,
-            ),
-        )
+        openSources(player, null, backTo, overviewSnapshot = snapshot)
     }
 
     private fun openSpecialItems(
         player: Player,
         snapshot: HelpCenterEnchantmentsCatalog,
         returnTo: () -> Unit,
+        requestedPage: Int = 0,
     ) {
-        navigation.visit(player) { openSpecialItems(player, snapshot, returnTo) }
-        val cards = listOf(
-            listOf("white", "ui.special-white-label", "ui.special-white-body"),
-            listOf("black", "ui.special-black-label", "ui.special-black-body"),
-            listOf("magic_dust", "ui.special-magic-dust-label", "ui.special-magic-dust-body"),
-            listOf("holy_white", "ui.special-holy-white-label", "ui.special-holy-white-body"),
-            listOf("dust_packets", "ui.special-dust-packets-label", "ui.special-dust-packets-body"),
-            listOf("randomizer", "ui.special-randomizer-label", "ui.special-randomizer-body"),
-            listOf("transmog", "ui.special-transmog-label", "ui.special-transmog-body"),
-            listOf("soul_gem", "ui.special-soul-gem-label", "ui.special-soul-gem-body"),
-            listOf("orbs", "ui.special-orbs-label", "ui.special-orbs-body"),
-            listOf("trackers", "ui.special-trackers-label", "ui.special-trackers-body"),
-        )
-        show(
-            player,
-            PaperDialogScreen(
-                id = "help.enchantments.special",
-                title = text("ui.special-title"),
-                body = listOf(PaperDialogBody(text("ui.special-body"), 468)),
-                buttons = cards.map { card ->
-                    val (id, title, body) = card
-                    button("item_$id", title) {
-                        openSpecialItem(player, snapshot, returnTo, title, body) {
-                            openSpecialItems(player, snapshot, returnTo)
-                        }
-                    }
-                },
-                exitButton = back { openOverview(player, returnTo, snapshot) },
-                columns = 2,
-            ),
-        )
+        val topics = HelpCenterEnchantmentGuideTopic.entries.filterNot { it.container }
+        val pages = ((topics.size + SPECIAL_PAGE_SIZE - 1) / SPECIAL_PAGE_SIZE).coerceAtLeast(1)
+        val page = requestedPage.coerceIn(0, pages - 1)
+        navigation.visit(player) { openSpecialItems(player, snapshot, returnTo, page) }
+        show(player, PaperDialogScreen(
+            id = "help.enchantments.special",
+            title = text("ui.special-title"),
+            body = listOf(PaperDialogBody(text("ui.special-body",
+                "page" to (page + 1).toString(), "pages" to pages.toString()), 468)),
+            buttons = buildList {
+                topics.drop(page * SPECIAL_PAGE_SIZE).take(SPECIAL_PAGE_SIZE).forEach { topic ->
+                    add(topicButton(player, topic) { openSpecialItems(player, snapshot, returnTo, page) })
+                }
+                if (page > 0) add(button("previous", "ui.page-previous") {
+                    openSpecialItems(player, snapshot, returnTo, page - 1)
+                })
+                if (page + 1 < pages) add(button("next", "ui.page-next") {
+                    openSpecialItems(player, snapshot, returnTo, page + 1)
+                })
+            },
+            exitButton = back { openOverview(player, returnTo, snapshot) },
+            columns = 2,
+        ))
     }
 
-    private fun openSpecialItem(
+    fun openTopic(player: Player, topic: HelpCenterEnchantmentGuideTopic, returnTo: () -> Unit) {
+        navigation.visit(player) { openTopic(player, topic, returnTo) }
+        val related = when (topic) {
+            HelpCenterEnchantmentGuideTopic.SOUL_GEM -> listOf(HelpCenterEnchantmentGuideTopic.SOUL_TRACKER)
+            HelpCenterEnchantmentGuideTopic.SOUL_TRACKER -> listOf(HelpCenterEnchantmentGuideTopic.SOUL_GEM)
+            HelpCenterEnchantmentGuideTopic.SECRET_DUST -> listOf(HelpCenterEnchantmentGuideTopic.MAGIC_DUST, HelpCenterEnchantmentGuideTopic.MYSTERY_DUST)
+            HelpCenterEnchantmentGuideTopic.MYSTERY_DUST -> listOf(HelpCenterEnchantmentGuideTopic.SECRET_DUST)
+            else -> emptyList()
+        }
+        show(player, PaperDialogScreen(
+            id = "help.enchantments.topic.${topic.id}",
+            title = text(topic.labelKey),
+            body = listOf(presentation.panel(text(topic.bodyKey), 468, DialogTables.PanelSkin.PLUM)),
+            buttons = listOf(button("sources", "ui.sources-label", "ui.sources-tooltip") {
+                openSources(player, topic, { openTopic(player, topic, returnTo) })
+            }) + related.map { target -> topicButton(player, target) { openTopic(player, topic, returnTo) } },
+            exitButton = back(returnTo),
+            columns = 2,
+        ))
+    }
+
+    private fun openSources(
         player: Player,
-        snapshot: HelpCenterEnchantmentsCatalog,
+        topic: HelpCenterEnchantmentGuideTopic?,
         returnTo: () -> Unit,
-        title: String,
-        body: String,
-        backTo: () -> Unit,
+        requestedPage: Int = 0,
+        overviewSnapshot: HelpCenterEnchantmentsCatalog? = null,
     ) {
-        navigation.visit(player) { openSpecialItem(player, snapshot, returnTo, title, body, backTo) }
-        show(
-            player,
-            PaperDialogScreen(
-                id = "help.enchantments.special.item",
-                title = text(title),
-                body = listOf(PaperDialogBody(text(body), 468)),
-                buttons = emptyList(),
-                exitButton = back(backTo),
+        val token = navigation.visit(player) { openSources(player, topic, returnTo, requestedPage, overviewSnapshot) }
+        val screenId = if (topic == null) "help.enchantments.acquisition" else "help.enchantments.sources.${topic.id}"
+        val title = text(topic?.labelKey ?: "ui.acquisition-title")
+        show(player, PaperDialogScreen(
+            id = screenId,
+            title = title,
+            body = listOf(presentation.panel(text("ui.sources-loading"), 468)),
+            buttons = emptyList(),
+            exitButton = back(returnTo),
+        ))
+        acquisition(topic?.id ?: "overview").whenCompleteSync(tasks) { result, failure ->
+            if (!player.isOnline || !navigation.isCurrent(player, token)) return@whenCompleteSync
+            val sources = if (failure == null && result != null) result else HelpCenterEnchantmentAcquisition(
+                listOf(HelpCenterEnchantmentSourceFact("unavailable", mapOf("source" to "rewards"))),
+            )
+            val facts = sources.facts.filterNot { fact ->
+                fact.key == "scope" || (fact.key == "pool-item-value" &&
+                    fact.values["valueKind"] in setOf(null, "", "none") &&
+                    fact.values["group"].isNullOrBlank() && fact.values["level"].isNullOrBlank())
+            }.sortedBy { fact ->
+                when (fact.key) {
+                    "box-rolls" -> 0
+                    "pool-item", "personal-loot-source", "crate-source", "quest-source", "denizen-monsters",
+                    "denizen-bosses", "tinkerer-source", "native-mob", "natural-books", "natural-dust", "boss-source" -> 1
+                    "box-content", "pool-item-value", "slot-settings", "secret-result" -> 2
+                    "pool-source" -> 3
+                    else -> 4
+                }
+            }.ifEmpty { listOf(HelpCenterEnchantmentSourceFact("no-drop")) }
+            val pages = ((facts.size + SOURCE_PAGE_SIZE - 1) / SOURCE_PAGE_SIZE).coerceAtLeast(1)
+            val page = requestedPage.coerceIn(0, pages - 1)
+            val pageFacts = facts.drop(page * SOURCE_PAGE_SIZE).take(SOURCE_PAGE_SIZE)
+            val onPage = pageFacts.flatMap { it.values.values }.toSet()
+            val related = if (topic == null) HelpCenterEnchantmentGuideTopic.entries.filter { it.container }
+            else sources.relatedTopics.distinct().mapNotNull(HelpCenterEnchantmentGuideTopic.byId::get)
+                .filter { it != topic && (!topic.container || it.id in onPage || ("orb" in onPage && it.id.startsWith("orb_"))) }
+            show(player, PaperDialogScreen(
+                id = screenId,
+                title = title,
+                body = buildList {
+                    sources.facts.firstOrNull { it.key == "scope" }?.let { add(PaperDialogBody(sourceFact(it), 468)) }
+                    add(sourcePanel(pageFacts))
+                    if (pages > 1) add(PaperDialogBody(text("ui.sources-page",
+                        "page" to (page + 1).toString(), "pages" to pages.toString()), 468))
+                },
+                buttons = buildList {
+                    if (topic?.id in setOf("secret", "magic", "mystery") && facts.any { it.key == "tinkerer-source" }) {
+                        add(button("tinkerer", "ui.tinkerer-label", "ui.tinkerer-tooltip") { executeInventory(player, "tinkerer") })
+                    }
+                    if (overviewSnapshot != null && canOpenEnchanter(player, overviewSnapshot)) add(
+                        button("enchanter", "ui.enchanter-label", "ui.enchanter-tooltip") {
+                            if (canOpenEnchanter(player, overviewSnapshot)) executeInventory(player, "enchanter")
+                            else openSources(player, topic, returnTo, page, overviewSnapshot)
+                        },
+                    )
+                    related.forEach { target -> add(topicButton(player, target) {
+                        openSources(player, topic, returnTo, page, overviewSnapshot)
+                    }) }
+                    if (page > 0) add(button("previous", "ui.page-previous") {
+                        openSources(player, topic, returnTo, page - 1, overviewSnapshot)
+                    })
+                    if (page + 1 < pages) add(button("next", "ui.page-next") {
+                        openSources(player, topic, returnTo, page + 1, overviewSnapshot)
+                    })
+                },
+                exitButton = back(returnTo),
                 columns = 2,
-            ),
-        )
+            ))
+        }
+    }
+
+    private fun topicButton(player: Player, topic: HelpCenterEnchantmentGuideTopic, returnTo: () -> Unit): PaperDialogButton =
+        button("item_${topic.id}", topic.labelKey, topic.summaryKey) { openTopic(player, topic, returnTo) }
+            .let { it.copy(label = it.label.append(Component.text(" ›"))) }
+
+    private fun sourcePanel(facts: List<HelpCenterEnchantmentSourceFact>): PaperDialogBody {
+        val rows = facts.flatMap { fact ->
+            listOf(Component.newline(), Component.newline(), sourceFact(fact))
+        }
+        return presentation.panel(Component.empty().children(listOf(text("ui.sources-heading")) + rows), 468)
+    }
+
+    private fun sourceFact(fact: HelpCenterEnchantmentSourceFact): Component {
+        val minimum = fact.values["min"].orEmpty()
+        val maximum = fact.values["max"].orEmpty()
+        val range = if (minimum == maximum) minimum else "$minimum–$maximum"
+        // valueKind selects a sentence; it is metadata, not a MiniMessage placeholder.
+        val placeholders = (fact.values.filterKeys { it != "valueKind" } + ("range" to range))
+            .map { (key, value) -> key to sourceValue(key, value) }.toTypedArray()
+        var result = text("ui.source-${fact.key}", *placeholders)
+        if (fact.key == "pool-item" && !fact.values["per_box"].isNullOrBlank()) {
+            result = result.append(Component.newline()).append(text("ui.source-per-box", *placeholders))
+        }
+        if (fact.key in setOf("box-content", "pool-item-value")) {
+            if (!fact.values["group"].isNullOrBlank()) result = result.append(Component.newline()).append(text("ui.source-content-group", *placeholders))
+            if (!fact.values["level"].isNullOrBlank()) result = result.append(Component.newline()).append(text("ui.source-content-level", *placeholders))
+            val valueKind = fact.values["valueKind"].orEmpty()
+            if (valueKind.isNotBlank() && valueKind != "none") {
+                result = result.append(Component.newline()).append(text("ui.source-content-$valueKind", *placeholders))
+            }
+        }
+        return result
+    }
+
+    private fun sourceValue(key: String, value: String): String = when (key) {
+        "cooldown" -> DURATION.matchEntire(value)?.let { match ->
+            val unit = when (match.groupValues[2].lowercase(Locale.ROOT)) {
+                "t" -> "тиков"
+                "s" -> "с"
+                "m" -> "мин"
+                "h" -> "ч"
+                "d" -> "дн."
+                else -> return@let value
+            }
+            "${match.groupValues[1].replace('.', ',')} $unit"
+        } ?: value
+        "group" -> if (value.isBlank()) value else if (value == "random") plainText.serialize(text("ui.source-name-random")) else groupLabel(value)
+        "box", "item", "source", "pool", "common_pool", "bonus_pool", "server" -> {
+            val topic = HelpCenterEnchantmentGuideTopic.byId[value]
+            if (topic != null) plainText.serialize(text(topic.labelKey))
+            else guide.optionalText("ui.source-name-${value.removePrefix("crate:").lowercase(Locale.ROOT).replace('_', '-')}")
+                ?.let { plainText.serialize(miniMessage.deserialize(it)) } ?: value
+        }
+        else -> value
     }
 
     private fun materialSummary(enchantment: HelpCenterEnchantment): String {
@@ -362,12 +467,6 @@ internal class HelpCenterEnchantmentsController(
 
     private fun isSoldByEnchanter(enchantment: HelpCenterEnchantment): Boolean =
         enchantment.availableFromEnchanter && enchantment.group.uppercase(Locale.ROOT) in ENCHANTER_GROUPS
-
-    private fun detailsSourceKey(enchantment: HelpCenterEnchantment, soldByEnchanter: Boolean): String = when {
-        !soldByEnchanter -> "ui.details-source-unavailable"
-        enchantment.group.uppercase(Locale.ROOT) in LOOT_GROUPS -> "ui.details-source-loot-and-enchanter"
-        else -> "ui.details-source-enchanter"
-    }
 
     private fun canOpenEnchanter(player: Player, snapshot: HelpCenterEnchantmentsCatalog): Boolean =
         snapshot.available && snapshot.entries.any { isSoldByEnchanter(it) && canPurchase(player, it.id) }
@@ -403,12 +502,18 @@ internal class HelpCenterEnchantmentsController(
         TagResolver.resolver(placeholders.map { (name, value) -> Placeholder.unparsed(name, value) }),
     ).decoration(TextDecoration.ITALIC, false)
 
+    override fun close() {
+        tasks.close()
+    }
+
     companion object {
         private val SEARCH_INPUT = PaperDialogInputId.of("enchant_search")
         private const val MAX_QUERY_LENGTH = 48
         private const val PAGE_SIZE = 8
+        private const val SPECIAL_PAGE_SIZE = 10
+        private const val SOURCE_PAGE_SIZE = 3
         private const val EQUIPMENT_PAGE_SIZE = 10
+        private val DURATION = Regex("([0-9]+(?:\\.[0-9]+)?)([tsmhd])", RegexOption.IGNORE_CASE)
         private val ENCHANTER_GROUPS = setOf("SIMPLE", "UNIQUE", "ELITE", "ULTIMATE", "LEGENDARY", "FABLED")
-        private val LOOT_GROUPS = setOf("SIMPLE", "UNIQUE", "ELITE", "ULTIMATE", "LEGENDARY")
     }
 }

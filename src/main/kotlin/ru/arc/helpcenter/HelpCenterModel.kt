@@ -135,6 +135,8 @@ sealed interface HelpCenterSearchAction {
 
     data class OpenGuide(val guideId: String) : HelpCenterSearchAction
 
+    data class OpenEnchantmentGuide(val topicId: String) : HelpCenterSearchAction
+
     data object CreateHome : HelpCenterSearchAction
 }
 

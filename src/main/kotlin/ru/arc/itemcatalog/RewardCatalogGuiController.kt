@@ -49,6 +49,8 @@ class RewardCatalogGuiController internal constructor(
 
     fun isAvailable(): Boolean = active.get() && settings.enabled && settings.visibleEntryCount > 0
 
+    internal fun acquisitionSettings(): RewardCatalogSettings? = settings.takeIf { active.get() && it.enabled }
+
     /**
      * Returns the current catalogue capability. The configuration fingerprint
      * is a snapshot marker; voucher references additionally bind the provider

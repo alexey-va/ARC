@@ -21,8 +21,8 @@ chmod 700 "$work_dir"
 
 for relative in "$@"; do
   case "$relative" in
-    ru/ruscrafting/arc/arc-dungeons-api/*|ru/ruscrafting/arc/arc-aurora-api/*|ru/ruscrafting/arc/arc-aurora/*) ;;
-    *) fail "Only the declared Dungeons/Aurora artifacts may be published by this helper" ;;
+    ru/ruscrafting/arc/arc-dungeons-api/*|ru/ruscrafting/arc/arc-aurora-api/*|ru/ruscrafting/arc/arc-aurora/*|ru/ruscrafting/arc/arc-ranks-api/*|ru/ruscrafting/arc/arc-crate-api/*) ;;
+    *) fail "Only the declared ARC integration artifacts may be published by this helper" ;;
   esac
   case "$relative" in
     /*|*../*|../*|*\\*) fail "Artifact paths must be relative Maven repository paths" ;;

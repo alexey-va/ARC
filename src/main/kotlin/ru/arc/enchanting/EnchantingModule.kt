@@ -58,6 +58,8 @@ object EnchantingModule : PluginModule {
     fun openPurchase(player: Player, enchantmentId: String, returnTo: () -> Unit): Boolean =
         bookShop?.openPurchase(player, enchantmentId, returnTo) == true
 
+    internal fun activeLootSettings(): AdvancedEnchantmentLootSettings? = advancedLoot?.settingsSnapshot()
+
     override fun shutdown() {
         creativeWhiteScrollGuard?.close()
         creativeWhiteScrollGuard = null

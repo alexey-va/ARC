@@ -67,6 +67,8 @@ internal data class AdvancedEnchantmentLootSettings(
 
 internal enum class AdvancedEnchantmentLootKind { BOOK, DUST }
 
+internal val advancedEnchantmentWildDustPotency: IntRange = 1..15
+
 /** One draw makes the book and dust outcomes exclusive; values are percentage points. */
 internal fun advancedEnchantmentLootKind(
     roll: Double,
@@ -173,6 +175,12 @@ internal class AdvancedEnchantmentLoot(
     private var bookCandidates: Map<String, List<AdvancedBookCandidate>>? = null
     private var bookCandidatesLoaded = false
 
+    /** The same generation of settings used by both registered loot listeners. */
+    internal fun settingsSnapshot(): AdvancedEnchantmentLootSettings = settings.copy(
+        worldNames = settings.worldNames.toSet(),
+        groupWeights = settings.groupWeights.toMap(),
+    )
+
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun onNaturalEnemyDeath(event: EntityDeathEvent) {
         val mob = event.entity
@@ -258,7 +266,7 @@ internal class AdvancedEnchantmentLoot(
                         settings.normalizedGroupWeights.keys,
                         nextInt(groupTotal),
                     ) ?: error("No weighted public AE group for magic dust")
-                    createDust(group, nextInt(15) + 1)
+                    createDust(group, nextInt(advancedEnchantmentWildDustPotency.count()) + advancedEnchantmentWildDustPotency.first)
                         ?: error("Native AE magic-dust factory unavailable for group=$group")
                 }
             }

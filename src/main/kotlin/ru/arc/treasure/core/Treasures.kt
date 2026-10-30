@@ -80,6 +80,9 @@ object Treasures : PluginModule {
      */
     fun getAllPools(): List<TreasurePool> = _manager.allPools
 
+    /** Read-only help snapshots must not initialize a stopped or not-yet-started owner. */
+    internal fun loadedPools(): List<TreasurePool>? = if (::_manager.isInitialized) _manager.allPools else null
+
     /**
      * Adds a treasure to a pool.
      */

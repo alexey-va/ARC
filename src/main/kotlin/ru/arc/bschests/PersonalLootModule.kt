@@ -221,6 +221,18 @@ object PersonalLootModule {
     private var maxPlayers: Int = 5
     private var useBsLoot: Boolean = false
 
+    /** Current generation's gates plus the same memory config read by ChestGenerator. */
+    internal fun activePoolLootSettings(): PersonalLootPoolSettings? {
+        if (repo == null || !::config.isInitialized || useBsLoot || inventories.isEmpty() || maxPlayers <= 0) return null
+        return PersonalLootPoolSettings(
+            commonPool = config.string("loot.common-pool", "structures_common").trim().lowercase(Locale.ROOT),
+            minRolls = config.integer("loot.min-rolls", 3),
+            maxRolls = config.integer("loot.max-rolls", 5),
+            bonusPool = config.string("loot.bonus-pool", "structures_special").trim().lowercase(Locale.ROOT),
+            bonusChance = config.double("loot.bonus-chance", 0.10),
+        )
+    }
+
     private var repo: CachedRepository<CustomLootData>? = null
     private var repositoryScope: CoroutineScope? = null
     private var identities: PersonalLootIdentities? = null
@@ -877,6 +889,14 @@ internal sealed interface PersonalLootPreview {
         val usePhysicalTemplate: Boolean = false,
     ) : PersonalLootPreview
 }
+
+internal data class PersonalLootPoolSettings(
+    val commonPool: String,
+    val minRolls: Int,
+    val maxRolls: Int,
+    val bonusPool: String,
+    val bonusChance: Double,
+)
 
 internal fun parsePersonalLootUuid(raw: String?): UUID? =
     raw?.let { value -> runCatching { UUID.fromString(value) }.getOrNull()?.takeIf { it.toString().equals(value, ignoreCase = true) } }

@@ -19,6 +19,7 @@ import ru.arc.paper.menu.PaperDialogClickContext
 import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import java.nio.file.Files
+import java.util.concurrent.CompletableFuture
 
 class HelpCenterEnchantmentsControllerTest {
     private lateinit var paper: MockBukkitTestRuntime
@@ -29,6 +30,7 @@ class HelpCenterEnchantmentsControllerTest {
     private lateinit var inventoryReturn: HelpCenterInventoryReturnRuntime
     private val executed = mutableListOf<String>()
     private val directory = Files.createTempDirectory("enchantments-controller")
+    private var sourceResult = CompletableFuture.completedFuture(sourceReport("3,31"))
 
     @BeforeEach
     fun setup() {
@@ -79,6 +81,7 @@ class HelpCenterEnchantmentsControllerTest {
             closeDialog = {},
             enchantmentsGuide = HelpCenterEnchantmentsGuideConfig.load(directory).snapshot(),
             enchantmentsCatalog = { fixtureCatalog },
+            enchantmentAcquisition = { sourceResult },
         )
     }
 
@@ -136,17 +139,106 @@ class HelpCenterEnchantmentsControllerTest {
         open()
         click("special")
         assertEquals("help.enchantments.special", screen.id)
-        assertEquals(10, screen.buttons.size)
+        assertEquals(10, screen.buttons.count { it.id.value.startsWith("item_") })
 
-        click("item_white")
-        assertEquals("help.enchantments.special.item", screen.id)
-        assertTrue(body().contains("Что делает"))
+        click("item_whitescroll")
+        assertEquals("help.enchantments.topic.whitescroll", screen.id)
+        assertTrue(body().contains("Назначение"))
         assertTrue(body().contains("Как использовать"))
         assertTrue(body().contains("ЛКМ"))
 
         click("back")
         assertEquals("help.enchantments.special", screen.id)
-        assertEquals(10, screen.buttons.size)
+        assertEquals(10, screen.buttons.count { it.id.value.startsWith("item_") })
+    }
+
+    @Test
+    fun `global search has one direct enchantment destination without guide suffix`() {
+        controller.search(player, "зачарование")
+        paper.performTicks(2)
+
+        assertEquals(1, screen.buttons.count { it.id.value == "result_enchants" })
+        assertFalse(screen.buttons.any { it.id.value == "result_guide_enchants" })
+        assertFalse(screen.buttons.any { plain(it.label).contains("· справка") })
+        click("result_enchants")
+        assertEquals("help.enchantments", screen.id)
+    }
+
+    @Test
+    fun `colloquial slot sphere search includes the slot increaser`() {
+        controller.search(player, "сфера увеличения слотов")
+        paper.performTicks(2)
+        click("result_ae_slotincreaser")
+        assertEquals("help.enchantments.topic.slotincreaser", screen.id)
+    }
+
+    @Test
+    fun `every individual item and box is searchable and directly opens its own usage page`() {
+        val guide = HelpCenterEnchantmentsGuideConfig.load(directory).snapshot()
+        HelpCenterEnchantmentGuideTopic.entries.forEach { topic ->
+            val label = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(guide.text(topic.labelKey))
+            controller.search(player, plain(label))
+            paper.performTicks(2)
+            click("result_ae_${topic.id}")
+            assertEquals("help.enchantments.topic.${topic.id}", screen.id)
+            assertTrue(body().contains("Как использовать"), topic.id)
+            assertFalse(screen.buttons.single { it.id.value == "sources" }.closeDialogBeforeAction)
+        }
+    }
+
+    @Test
+    fun `special item pagination separates each orb and tracker and preserves the visited page`() {
+        open()
+        click("special")
+        click("next")
+        val secondPage = screen.buttons.filter { it.id.value.startsWith("item_") }.map { it.id.value }
+        assertEquals(9, secondPage.size)
+        assertTrue(secondPage.containsAll(listOf("item_orb_weapon", "item_orb_armor", "item_orb_tool", "item_slotincreaser", "item_fishtrak")))
+        click("item_slotincreaser")
+        assertTrue(body().contains("Осталось зачарований"))
+        click("back")
+        assertEquals(secondPage, screen.buttons.filter { it.id.value.startsWith("item_") }.map { it.id.value })
+    }
+
+    @Test
+    fun `source refresh uses new data and late completion cannot replace another page`() {
+        controller.search(player, "увеличитель слотов")
+        paper.performTicks(2)
+        click("result_ae_slotincreaser")
+        val pending = CompletableFuture<HelpCenterEnchantmentAcquisition>()
+        sourceResult = pending
+        click("sources")
+        assertTrue(body().contains("Проверяем"))
+        click("back")
+        pending.complete(sourceReport("3,31"))
+        paper.performTicks(2)
+        assertEquals("help.enchantments.topic.slotincreaser", screen.id)
+
+        sourceResult = CompletableFuture.completedFuture(sourceReport("7,25"))
+        click("sources")
+        assertEquals("help.enchantments.sources.slotincreaser", screen.id)
+        assertTrue(body().contains("7,25%"), body())
+        assertFalse(body().contains("3,31%"))
+        assertTrue(body().contains("4,90%"))
+        assertFalse(screen.buttons.single { it.id.value == "item_ae_lootbox" }.closeDialogBeforeAction)
+        click("item_ae_lootbox")
+        assertEquals("help.enchantments.topic.ae_lootbox", screen.id)
+        click("back")
+        assertEquals("help.enchantments.sources.slotincreaser", screen.id)
+    }
+
+    @Test
+    fun `closing the controller discards an outstanding acquisition result`() {
+        controller.search(player, "увеличитель слотов")
+        paper.performTicks(2)
+        click("result_ae_slotincreaser")
+        sourceResult = CompletableFuture()
+        click("sources")
+        val beforeClose = screenDisplays
+        controller.close()
+        sourceResult.complete(sourceReport("55"))
+        paper.performTicks(2)
+        assertEquals(beforeClose, screenDisplays)
     }
 
     @Test
@@ -169,11 +261,21 @@ class HelpCenterEnchantmentsControllerTest {
         val context = mockk<PaperDialogClickContext>()
         every { context.text(any()) } returns input
         (screen.buttons + listOfNotNull(screen.exitButton)).single { it.id.value == id }.onClick.handle(context)
+        paper.performTicks(2)
     }
 
     private fun body() = screen.body.joinToString("\n") { plain(it.text) }
 
     private fun plain(component: Component) = PlainTextComponentSerializer.plainText().serialize(component)
+
+    private fun sourceReport(chance: String) = HelpCenterEnchantmentAcquisition(
+        facts = listOf(
+            HelpCenterEnchantmentSourceFact("scope", mapOf("server" to "survival")),
+            HelpCenterEnchantmentSourceFact("pool-item", mapOf("box" to "ae_lootbox", "pool" to "ae", "per_roll" to chance, "per_box" to "4,90", "amount" to "1")),
+            HelpCenterEnchantmentSourceFact("slot-settings", mapOf("base" to "7", "max" to "11", "increment" to "1")),
+        ),
+        relatedTopics = listOf("ae_lootbox"),
+    )
 
     private fun enchantment(id: String, name: String, material: String, description: String) =
         HelpCenterEnchantmentsCatalog.fromApiData(

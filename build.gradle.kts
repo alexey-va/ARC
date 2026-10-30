@@ -76,7 +76,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.504"
+version = "1.4.505"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.81"
@@ -87,7 +87,7 @@ if (landsJar != null) require(landsJar.isFile) { "Lands JAR does not exist: $lan
 val landsCompileDependency: Any = landsJar?.let { files(it) } ?: libs.com.github.angeschossen.landsapi
 val crateApiJar = providers.gradleProperty("crateApiJar").orNull?.let(::file)
 if (crateApiJar != null) require(crateApiJar.isFile) { "Crate API JAR does not exist: $crateApiJar" }
-val crateApiDependency: Any = crateApiJar?.let { files(it) } ?: "ru.ruscrafting.arc:arc-crate-api:0.1.0"
+val crateApiDependency: Any = crateApiJar?.let { files(it) } ?: "ru.ruscrafting.arc:arc-crate-api:0.1.1"
 
 // Compile against the host facade only. Its fat runtime JAR embeds older consumer
 // implementation classes; allowing those onto compileClasspath can mask the explicitly
@@ -205,6 +205,7 @@ dependencies {
     compileOnly("dev.esophose:playerparticles:8.13") { isTransitive = false }
     // ArcExcellentCrates owns this service contract at runtime; never shade it into ARC.
     compileOnly(crateApiDependency)
+    compileOnly("ru.ruscrafting.arc:arc-ranks-api:0.1.4")
     compileOnly(libs.io.papermc.paper.paper.api)
     // Exact GravesX 2026.4.9.2 release API. Runtime is server-provided; never shade this GPL-3.0 JAR.
     compileOnly(files("libs/gravesx-api-2026.4.9.2.jar"))
@@ -332,6 +333,7 @@ dependencies {
     // WorldEdit dependency needed for Building class tests
     testImplementation(libs.com.sk89q.worldedit.worldedit.bukkit)
     testImplementation(crateApiDependency)
+    testImplementation("ru.ruscrafting.arc:arc-ranks-api:0.1.4")
 }
 
 val runtimeClasspathConfiguration = configurations.named("runtimeClasspath")

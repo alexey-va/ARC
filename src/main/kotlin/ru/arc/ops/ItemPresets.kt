@@ -7,6 +7,7 @@ import org.bukkit.inventory.ItemStack
 import ru.arc.ARC
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
+import ru.arc.core.dataPath
 import ru.arc.util.Common
 
 /**
@@ -40,6 +41,16 @@ object ItemPresets {
     internal fun allDefinitions(): List<ItemPresetDefinition> =
         synchronized(mutationLock) {
             allDefinitionsLocked()
+        }
+
+    /** Uses only the configuration prepared by ARC's worker startup/reload phase. */
+    internal fun loadedDefinitions(names: Collection<String>): List<ItemPresetDefinition>? =
+        synchronized(mutationLock) {
+            val root = ARC.instance.dataPath
+            val source = ConfigManager.get("$root/modules/$CONFIG_FILE")
+                ?: ConfigManager.get("$root/$CONFIG_FILE")
+                ?: return@synchronized null
+            names.distinct().mapNotNull { definitionLocked(normalize(it), source) }
         }
 
     internal fun definition(name: String): ItemPresetDefinition? =
@@ -126,24 +137,24 @@ object ItemPresets {
             id
         }
 
-    private fun allDefinitionsLocked(): List<ItemPresetDefinition> {
-        val ids = (presetKeys() + bundleKeys()).sorted()
+    private fun allDefinitionsLocked(source: Config = config): List<ItemPresetDefinition> {
+        val ids = (source.keys("presets") + source.keys("bundles")).sorted()
         return ids.map { id ->
-            definitionLocked(normalize(id))
+            definitionLocked(normalize(id), source)
                 ?: throw IllegalStateException("Item preset disappeared while reading catalog: $id")
         }
     }
 
-    private fun definitionLocked(id: String): ItemPresetDefinition? {
-        val hasPreset = config.exists("presets.$id")
-        val hasBundle = config.exists("bundles.$id")
+    private fun definitionLocked(id: String, source: Config = config): ItemPresetDefinition? {
+        val hasPreset = source.exists("presets.$id")
+        val hasBundle = source.exists("bundles.$id")
         check(!(hasPreset && hasBundle)) {
             "Item preset ID '$id' exists as both preset and bundle"
         }
         return try {
             when {
-                hasPreset -> loadItemDefinition(id)
-                hasBundle -> loadBundleDefinition(id)
+                hasPreset -> loadItemDefinition(id, source)
+                hasBundle -> loadBundleDefinition(id, source)
                 else -> null
             }
         } catch (failure: IllegalStateException) {
@@ -156,16 +167,16 @@ object ItemPresets {
         }
     }
 
-    private fun loadItemDefinition(id: String): ItemDefinition {
-        val section = config.map<Any>("presets.$id").toMutableMap()
+    private fun loadItemDefinition(id: String, source: Config = config): ItemDefinition {
+        val section = source.map<Any>("presets.$id").toMutableMap()
         val description = parseDescription(section.remove("description"), "presets.$id.description")
         require(section.isNotEmpty()) { "Preset '$id' has no ItemSpec fields" }
         val item = Common.gson.toJsonTree(section).asJsonObject
         return ItemDefinition(id, description, item)
     }
 
-    private fun loadBundleDefinition(id: String): BundleDefinition {
-        val section = config.map<Any>("bundles.$id")
+    private fun loadBundleDefinition(id: String, source: Config = config): BundleDefinition {
+        val section = source.map<Any>("bundles.$id")
         val unknown = section.keys - setOf("description", "items")
         require(unknown.isEmpty()) {
             "Bundle '$id' contains unknown fields: ${unknown.sorted().joinToString()}"

@@ -71,11 +71,16 @@ class HelpCenterEnchantmentsCatalogTest : StringSpec({
             guide.text("ui.special-black-body").contains("ЛКМ") shouldBe true
             guide.text("ui.special-soul-gem-body").contains("/withdrawsouls число") shouldBe true
             guide.text("ui.route-enchanter").contains("случайную книгу выбранной группы") shouldBe true
-            guide.text("ui.route-hunt").contains("0,2%") shouldBe true
-            guide.text("ui.route-hunt").contains("0,8%") shouldBe true
-            guide.text("ui.route-fishing").contains("0,5%") shouldBe true
-            guide.text("ui.route-fishing").contains("1,5%") shouldBe true
-            guide.text("ui.acquisition-services").contains("алхимик") shouldBe true
+            HelpCenterEnchantmentGuideTopic.entries.forEach { topic ->
+                guide.text(topic.labelKey).isNotBlank() shouldBe true
+                guide.text(topic.summaryKey).isNotBlank() shouldBe true
+                guide.text(topic.bodyKey).contains("Как использовать") shouldBe true
+            }
+            guide.text("ui.source-pool-item").contains("<per_roll>") shouldBe true
+            guide.text("ui.source-natural-dust").contains("<kill>") shouldBe true
+            guide.text("ui.special-orb-tool-body").contains("Для топора нужна сфера оружия") shouldBe true
+            guide.text("ui.special-soul-tracker-body").contains("Запас принадлежит предмету") shouldBe true
+            guide.text("ui.acquisition-services").lowercase().contains("алхимик") shouldBe true
             listOf(
                 guide.text("ui.acquisition-summary"),
                 guide.text("ui.route-enchanter"),
