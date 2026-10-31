@@ -29,7 +29,13 @@ class AuroraResourcesTest : FreeSpec({
         settings.permission shouldBe "arcaurora.view"
         settings.profiles.size shouldBe 25
         val sky = settings.eventPresets.getValue("treasure-hunt")
-        sky.size shouldBe 22
+        sky.size shouldBe 28
+        val celestial = sky.filter { it.shape.isCelestial }
+        celestial.map { it.shape }.toSet() shouldBe AuroraShape.entries.filter { it.isCelestial }.toSet()
+        celestial.all { it.skyTracers in 8..12 && it.skyPalette.isNotEmpty() && it.skyRefreshTicks == 0 } shouldBe true
+        val gallery = settings.eventPresets.getValue("particle-gallery")
+        (gallery.size >= 12) shouldBe true
+        gallery.all { !it.skyScene } shouldBe true
         val wave = sky.single { it.id == "sky_wave" }
         wave.skyOptions shouldBe AuroraSkyOptions(freshHeadRepair = false)
         wave.skyTracers shouldBe 1
@@ -47,11 +53,15 @@ class AuroraResourcesTest : FreeSpec({
             listOf(org.bukkit.Particle.SOUL_FIRE_FLAME, org.bukkit.Particle.FLAME)
         settings.skyPacketsPerViewer shouldBe 36
         settings.skyField.maxScenes shouldBe 9
+        settings.skyField.maxCelestialScenes shouldBe 2
         sky.all { it.updateTicks == 1 && it.minDistance >= 28 && it.radius <= 96 } shouldBe true
         settings.eventPresets["treasure-hunt"].orEmpty().any { it.skyScene && it.points > 24 } shouldBe true
         settings.ping shouldBe AuroraPingSettings(250, 180, 10, 20)
         (settings.profiles + settings.eventPresets.values.flatten()).forEach { profile ->
             ParticleTypes.getByName(profile.particle.key.toString()).name.toString() shouldBe profile.particle.key.toString()
+            profile.skyPalette.forEach { style ->
+                ParticleTypes.getByName(style.particle.key.toString()).name.toString() shouldBe style.particle.key.toString()
+            }
         }
         resource("locales/ru.yml").getKeys(true) shouldBe resource("locales/en.yml").getKeys(true)
         val descriptor = resource("plugin.yml")

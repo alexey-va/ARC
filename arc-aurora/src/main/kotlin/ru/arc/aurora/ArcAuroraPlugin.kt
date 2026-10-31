@@ -30,6 +30,8 @@ import ru.arc.paper.api.ArcVisualPacketBudget
 import ru.arc.text.ConfigLocaleCatalog
 import ru.arc.text.LocalizedMiniMessage
 import java.nio.file.Files
+import java.util.Collections
+import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.logging.Level
@@ -39,7 +41,10 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
     internal var engine: AuroraEngine? = null; private set
     private var messages: LocalizedMiniMessage? = null
     private val events = linkedMapOf<UUID, LinkedHashMap<UUID, String>>()
-    private class Preview(val preset: String) { var timer: ScheduledTask? = null }
+    private class Preview(profiles: List<AuroraProfile>) {
+        val profiles: List<AuroraProfile> = Collections.unmodifiableList(profiles.toList())
+        var timer: ScheduledTask? = null
+    }
     private val previews = mutableMapOf<UUID, Preview>()
     @Volatile private var eventCount = 0
     @Volatile private var previewCount = 0
@@ -104,7 +109,7 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
         val replacement = AuroraEngine(this, owner.tasks, settings, eventProfiles = { world ->
             events[world]?.values?.lastOrNull()?.let { engine?.settings?.eventPresets?.get(it) }
         }, previewProfiles = { playerId ->
-            previews[playerId]?.let { engine?.settings?.eventPresets?.get(it.preset) }
+            previews[playerId]?.profiles
         })
         try {
             server.onlinePlayers.forEach(replacement::join) // startup/manual maintenance, no online-player scan on tick
@@ -158,21 +163,43 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
     }
 
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
-        val action = args.firstOrNull()?.lowercase() ?: "toggle"
-        if (action in setOf("reload", "status", "preview")) {
+        val action = args.firstOrNull()?.lowercase(Locale.ROOT) ?: "toggle"
+        if (action in setOf("reload", "status", "preview", "catalog")) {
             if (!sender.hasPermission("arcaurora.admin")) return reply(sender, "no-permission")
+            if (action == "catalog") {
+                val current = engine ?: return reply(sender, "stopped")
+                if (args.size > 2) return reply(sender, "usage")
+                val preset = args.getOrNull(1) ?: return reply(sender, "catalog-presets", mapOf(
+                    "presets" to current.settings.eventPresets.keys.sorted().joinToString(", "),
+                ))
+                val profiles = current.settings.eventPresets[preset]
+                    ?: return reply(sender, "preset-not-found", mapOf("preset" to preset))
+                return reply(sender, "catalog-profiles", mapOf(
+                    "preset" to preset, "profiles" to profiles.map { it.id }.sorted().joinToString(", "),
+                ))
+            }
             if (action == "preview") {
                 val current = engine ?: return reply(sender, "stopped")
-                if (args.size == 1 && sender !is Player) return reply(sender, "players-only")
-                val target = args.getOrNull(1)?.let(server::getPlayerExact) ?: if (args.size == 1) sender as? Player else null
-                if (target == null) return reply(sender, "player-not-found", mapOf("player" to args.getOrNull(1).orEmpty()))
-                if (previews.containsKey(target.uniqueId)) {
+                if (args.size > 4) return reply(sender, "usage")
+                val targetName = args.getOrNull(1)
+                val target = if (targetName == null || targetName.equals("self", ignoreCase = true))
+                    sender as? Player ?: return reply(sender, "players-only")
+                else server.getPlayerExact(targetName)
+                    ?: return reply(sender, "player-not-found", mapOf("player" to targetName))
+                val explicit = args.size >= 3
+                if (!explicit && previews.containsKey(target.uniqueId)) {
                     stopPreview(target.uniqueId)
                     return reply(sender, "preview-off")
                 }
-                if (!current.settings.eventPresets.containsKey("treasure-hunt")) return reply(sender, "preview-missing")
-                val preview = Preview("treasure-hunt")
+                val preset = args.getOrNull(2) ?: "treasure-hunt"
+                val profiles = current.settings.eventPresets[preset] ?: return if (explicit)
+                    reply(sender, "preset-not-found", mapOf("preset" to preset)) else reply(sender, "preview-missing")
+                val profileId = args.getOrNull(3)
+                val selected = if (profileId == null) profiles else listOf(profiles.firstOrNull { it.id == profileId }
+                    ?: return reply(sender, "profile-not-found", mapOf("preset" to preset, "profile" to profileId)))
+                val preview = Preview(selected)
                 val targetId = target.uniqueId
+                stopPreview(targetId)
                 previews[targetId] = preview
                 previewCount = previews.size
                 current.invalidate(targetId)
@@ -216,6 +243,29 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
         val enabled = when (action) { "on" -> true; "off" -> false; else -> !current.personallyEnabled(sender) }
         current.setPersonallyEnabled(sender, enabled)
         return reply(sender, if (enabled) "enabled" else "disabled")
+    }
+
+    override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): List<String> {
+        val admin = sender.hasPermission("arcaurora.admin")
+        val candidates = if (args.size <= 1) buildList {
+            if (sender is Player) addAll(listOf("on", "off", "toggle", "biome"))
+            if (admin) addAll(listOf("reload", "status", "catalog", "preview"))
+        } else {
+            if (!admin) return emptyList()
+            val settings = engine?.settings ?: return emptyList()
+            when (args[0].lowercase(Locale.ROOT)) {
+                "catalog" -> if (args.size == 2) settings.eventPresets.keys.toList() else emptyList()
+                "preview" -> when (args.size) {
+                    2 -> server.onlinePlayers.map { it.name } + if (sender is Player) listOf("self") else emptyList()
+                    3 -> settings.eventPresets.keys.toList()
+                    4 -> settings.eventPresets[args[2]]?.map { it.id }.orEmpty()
+                    else -> emptyList()
+                }
+                else -> emptyList()
+            }
+        }
+        val prefix = args.lastOrNull().orEmpty()
+        return candidates.distinct().sorted().filter { it.startsWith(prefix, ignoreCase = true) }
     }
 
     private fun stopPreview(playerId: UUID) {

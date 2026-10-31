@@ -67,13 +67,14 @@ internal class AuroraEngine(
         val cell: AuroraSkyCell, val epoch: Long,
         val x: Double, val y: Double, val z: Double, val normalX: Double, val normalZ: Double,
         val path: List<AuroraOffset>, val motion: List<AuroraOffset>,
+        val animation: SkyAnimation? = null,
     ) {
         val cursor = AuroraSkyCursor(profile.points)
         val rejected = AtomicBoolean()
         val culled = AtomicBoolean()
         var surfaceY: Int? = null // Resolved once on Main; x/y-offset/z never follow a viewer.
         val columns = skyColumns(x, y, z, normalX, normalZ, path, motion,
-            profile.skyHeadParticles.ifEmpty { listOf(profile.particle) })
+            profile.skyPalette.map { it.particle }.ifEmpty { profile.skyHeadParticles.ifEmpty { listOf(profile.particle) } }, animation)
         @Volatile var startsAt = Long.MAX_VALUE // Main publishes birth after the full envelope passes.
         var checkedColumns = 0
         var nextAt = born
@@ -81,6 +82,7 @@ internal class AuroraEngine(
         var refreshCredit = 0
         var repairIndex = -1
         var repairAt = Long.MIN_VALUE
+        var animationCursor = 0
     }
     private enum class Delivery { SUBMITTED, SKIPPED, OBSTRUCTED }
     private data class Input(
@@ -105,6 +107,9 @@ internal class AuroraEngine(
     private var age = 0L
     private var firstViewer = 0
     private var firstSkyViewer = 0
+    // One immutable unit-size animation per configured shape/count, shared by all viewer scenes.
+    // Only the lifecycle-owned single planning worker reads/writes this bounded cache.
+    private val animationFrames = mutableMapOf<Pair<AuroraShape, Int>, List<List<AuroraCelestialPoint>>>()
     @Volatile var viewerCount = 0; private set
     @Volatile var pingSkipped = 0L; private set
     @Volatile var submittedPackets = 0L; private set
@@ -298,6 +303,37 @@ internal class AuroraEngine(
                 if (scene.culled.get() || scene.rejected.get() || !admitSky(scene, player, deadline) || age < scene.startsAt) continue
                 val sceneAge = age - scene.startsAt
                 if (sceneAge >= scene.profile.sceneDurationTicks) continue
+                val animation = scene.animation
+                if (animation != null) {
+                    if (age < scene.nextAt) continue
+                    scene.nextAt = age + scene.profile.updateTicks
+                    val progress = sceneAge.toDouble() / (scene.profile.sceneDurationTicks - 1)
+                    // Sample the current pose only. Slow viewers drop obsolete poses, never replay them.
+                    var scanned = 0
+                    var sampled = 0
+                    while (scanned < scene.profile.points && sampled < scene.profile.skyTracers && remaining > 0) {
+                        if (System.nanoTime() >= deadline) return
+                        if (scene.rejected.get()) break
+                        val index = scene.animationCursor++ % scene.profile.points
+                        scanned++
+                        val sample = AuroraCelestialShapes.pointAt(animation.frames, progress, index)
+                        // Density fade; native particles retain their own alpha, motion and lifetime.
+                        if (sample.opacity <= 0.0) continue
+                        sampled++ // Faded samples consume their slot; refilling it would undo the density fade.
+                        if ((index * 7L + sceneAge) % 16 >= sample.opacity * 16) continue
+                        val point = animation.pose(sample.offset)
+                        val palette = scene.profile.skyPalette
+                        val style = palette.getOrNull(Math.floorMod(sample.paletteSlot, palette.size.coerceAtLeast(1)))
+                        remaining--
+                        if (deliver(Emission(sky.input, scene.profile,
+                            scene.x + point.x * scene.normalZ + point.z * scene.normalX,
+                            scene.y + checkNotNull(scene.surfaceY) + point.y,
+                            scene.z - point.x * scene.normalX + point.z * scene.normalZ,
+                            style?.particle ?: scene.profile.particle,
+                            if (style == null) scene.profile.particleData else style.data)) == Delivery.OBSTRUCTED) scene.rejected.set(true)
+                    }
+                    continue
+                }
                 val refresh = scene.profile.skyRefreshTicks
                 val exitTicks = minOf(scene.profile.skyOptions.exitTicks, scene.profile.sceneDurationTicks / 4)
                 val exitAt = scene.profile.sceneDurationTicks - exitTicks
@@ -439,6 +475,7 @@ internal class AuroraEngine(
             if (input.age < input.viewer.fieldAdmissionAfter || active.size >= field.maxScenes) break
             if (scenes.containsKey(candidate.cell) || retired.containsKey(candidate.cell) || rejected[candidate.cell] == candidate.epoch) continue
             if (active.count { it.profile === candidate.profile } >= field.maxPerProfile) continue
+            if (candidate.profile.shape.isCelestial && active.count { it.profile.shape.isCelestial } >= field.maxCelestialScenes) continue
             val distanceSquared = (candidate.x - input.x).let { it * it } + (candidate.z - input.z).let { it * it }
             val outer = minOf(field.viewDistance, candidate.profile.radius)
             if (distanceSquared > outer * outer || distanceSquared < candidate.profile.minDistance * candidate.profile.minDistance) continue
@@ -456,6 +493,15 @@ internal class AuroraEngine(
         val delay = if (profile.spawnDelayTicks == 0) 0 else random.nextInt(profile.spawnDelayTicks + 1)
         val scale = options.scaleMin + random.nextDouble() * (options.scaleMax - options.scaleMin)
         val size = (profile.shapeSize * scale).coerceAtLeast(0.1)
+        if (profile.shape.isCelestial) {
+            val frames = animationFrames.getOrPut(profile.shape to profile.points) {
+                AuroraCelestialShapes.frames(profile.shape, 1.0, profile.points)
+            }
+            val animation = SkyAnimation(frames, size, (random.nextDouble() * 2.0 - 1.0) * options.rollRadians, random.nextBoolean())
+            return SkyScene(profile, input.world, input.revision, input.age + delay,
+                candidate.cell, candidate.epoch, candidate.x, height, candidate.z, sin(angle), -cos(angle),
+                frames.first().map { animation.pose(it.offset) }, listOf(AuroraOffset(0.0, 0.0, 0.0)), animation)
+        }
         val path = AuroraSkyShapes.stroke(profile.shape, size, profile.points, profile.updateTicks,
             profile.motionPeriodTicks, random.nextInt(profile.motionPeriodTicks),
             (random.nextDouble() * 2.0 - 1.0) * options.rollRadians, random.nextBoolean(), profile.skyTracers, options)
@@ -527,20 +573,53 @@ internal class AuroraSkyCursor(private val points: Int) {
 
 private data class SkyColumn(val x: Int, val z: Int, val low: Double, val high: Double)
 
+private class SkyAnimation(
+    val frames: List<List<AuroraCelestialPoint>>, val size: Double, roll: Double, val reverse: Boolean,
+) {
+    private val rollCos = cos(roll)
+    private val rollSin = sin(roll)
+
+    fun pose(offset: AuroraOffset): AuroraOffset {
+        val x = if (reverse) -offset.x else offset.x
+        return AuroraOffset((x * rollCos - offset.y * rollSin) * size,
+            (x * rollSin + offset.y * rollCos) * size, offset.z * size)
+    }
+}
+
 /** Detached conservative envelope, including full native fall and sprite half-size for bundled types. */
 private fun skyColumns(
     x: Double, y: Double, z: Double, normalX: Double, normalZ: Double,
     path: List<AuroraOffset>, motion: List<AuroraOffset>, particles: List<Particle>,
+    animation: SkyAnimation? = null,
 ): List<SkyColumn> {
-    val flame = particles.any { it == Particle.FLAME || it == Particle.SOUL_FIRE_FLAME }
+    val flame = particles.any { it == Particle.FLAME || it == Particle.SOUL_FIRE_FLAME || it == Particle.COPPER_FIRE_FLAME }
     val padding = if (flame) 0.5 else 0.22 // Flame also has native spawn jitter and a small random drift.
     val fall = particles.maxOf { particle -> when (particle) {
-        Particle.FLAME, Particle.SOUL_FIRE_FLAME -> 0.0
+        Particle.FLAME, Particle.SOUL_FIRE_FLAME, Particle.COPPER_FIRE_FLAME -> 0.0
         Particle.END_ROD -> 0.35
         Particle.FIREWORK -> 2.2
         Particle.TOTEM_OF_UNDYING -> 8.7
         else -> 1.0
     } }
+    if (animation != null) {
+        val columns = linkedMapOf<Pair<Int, Int>, SkyColumn>()
+        // Per-vertex swept boxes include every interpolated pose, including depth and roll.
+        // This is deliberately conservative instead of checking only visible keyframe endpoints.
+        for (index in path.indices) {
+            val poses = animation.frames.map { animation.pose(it[index].offset) }
+            val worldX = poses.map { x + it.x * normalZ + it.z * normalX }
+            val worldZ = poses.map { z - it.x * normalX + it.z * normalZ }
+            val low = y + poses.minOf { it.y } - fall - padding
+            val high = y + poses.maxOf { it.y } + padding
+            for (cx in floor(worldX.min() - padding).toInt()..floor(worldX.max() + padding).toInt()) {
+                for (cz in floor(worldZ.min() - padding).toInt()..floor(worldZ.max() + padding).toInt()) {
+                    val previous = columns[cx to cz]
+                    columns[cx to cz] = SkyColumn(cx, cz, minOf(low, previous?.low ?: low), maxOf(high, previous?.high ?: high))
+                }
+            }
+        }
+        return columns.values.toList()
+    }
     val minX = motion.minOf { it.x }; val maxX = motion.maxOf { it.x }
     val minY = motion.minOf { it.y }; val maxY = motion.maxOf { it.y }
     val columns = linkedMapOf<Pair<Int, Int>, SkyColumn>()

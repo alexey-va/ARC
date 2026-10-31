@@ -70,14 +70,22 @@ enum class AuroraWeather { ANY, CLEAR, RAIN, THUNDER }
 enum class AuroraShape {
     POINT, LINE, CUBE, RING, CIRCLE, SPHERE, WAVE, HELIX, ARC, CRYSTAL, STAR, METEOR,
     TRACK_SPIRAL, TRACK_PAIR, TRACK_SCATTER, TRACK_LENS, TRACK_KNOT,
-    TRACK_FLYBY, TRACK_FLOCK, TRACK_KINK, TRACK_RIPPLE, TRACK_EYE, TRACK_SLINGSHOT, TRACK_SKIP;
+    TRACK_FLYBY, TRACK_FLOCK, TRACK_KINK, TRACK_RIPPLE, TRACK_EYE, TRACK_SLINGSHOT, TRACK_SKIP,
+    JELLYFISH, MANTA_RAY, LIGHT_KNOT, REVERSE_LIGHTNING, SKY_CORAL, MOON_FAN;
 
     internal val isTrack: Boolean get() = when (this) {
         TRACK_SPIRAL, TRACK_PAIR, TRACK_SCATTER, TRACK_LENS, TRACK_KNOT,
         TRACK_FLYBY, TRACK_FLOCK, TRACK_KINK, TRACK_RIPPLE, TRACK_EYE, TRACK_SLINGSHOT, TRACK_SKIP -> true
         else -> false
     }
+
+    internal val isCelestial: Boolean get() = when (this) {
+        JELLYFISH, MANTA_RAY, LIGHT_KNOT, REVERSE_LIGHTNING, SKY_CORAL, MOON_FAN -> true
+        else -> false
+    }
 }
+
+data class AuroraParticleStyle(val particle: Particle, val data: Any?)
 
 data class AuroraProfile(
     val id: String,
@@ -115,6 +123,7 @@ data class AuroraProfile(
     val skyRefreshTicks: Int = 0,
     val skyOptions: AuroraSkyOptions = AuroraSkyOptions(),
     val skyHeadParticles: List<Particle> = emptyList(),
+    val skyPalette: List<AuroraParticleStyle> = emptyList(),
 ) {
     private val biomePatterns = biomes.map(::compileGlob)
     private val worldPatterns = worlds.map(::compileGlob)
@@ -236,6 +245,7 @@ object AuroraConfig {
                 maxScenes = field?.int("max-scenes", 9, 1..16) ?: 9,
                 cullCooldownTicks = field?.int("cull-cooldown-ticks", 80, 72..1200) ?: 80,
                 maxPerProfile = field?.int("max-per-profile", 2, 1..16) ?: 2,
+                maxCelestialScenes = field?.int("max-celestial-scenes", 2, 1..16) ?: 2,
             ),
         )
     }
@@ -250,6 +260,17 @@ object AuroraConfig {
         val worlds = source.strings("worlds", listOf("*")).immutable()
         val skyScene = source.boolean("sky-scene", false)
         val shape = source.enum("shape", AuroraShape.POINT)
+        source.check("shape", skyScene || !shape.isCelestial, "celestial shapes require sky-scene: true")
+        val palette = source.section("sky-palette")?.let { slots ->
+            source.check("sky-palette", skyScene && shape.isCelestial, "only a celestial sky shape accepts a sky palette")
+            source.check("sky-palette", "sky-head-particles" !in source.keys,
+                "must not be combined with sky-head-particles")
+            slots.check("", slots.keys.size in 1..4, "expected 1..4 named particle slots")
+            slots.keys.map { slot ->
+                slots.check(slot, slot.isNotBlank(), "particle slot name must not be blank")
+                particleStyle(slots.requiredSection(slot))
+            }.immutable()
+        }.orEmpty()
         val headParticles = source.strings("sky-head-particles", emptyList(), allowEmpty = true, unique = false).map { raw ->
             val particle = particlesByKey[normalizeBiomeKey(raw)]
                 ?: source.fail("sky-head-particles", "unknown particle '$raw'")
@@ -276,23 +297,7 @@ object AuroraConfig {
         val verticalMin = source.double("vertical-min", -2.0, if (skyScene) -32.0..64.0 else -32.0..32.0)
         val verticalMax = source.double("vertical-max", 6.0, if (skyScene) -32.0..64.0 else -32.0..32.0)
         source.check("vertical-max", verticalMax >= verticalMin, "must be at least vertical-min")
-        val particleKey = normalizeBiomeKey(source.string("particle", "minecraft:end_rod"))
-        val particle = particlesByKey[particleKey] ?: source.fail("particle", "unknown particle '$particleKey'")
-        val color = source.color("dust-color")
-        val toColor = source.color("dust-to-color")
-        val dustSize = source.double("dust-size", 1.0, 0.1..2.0).toFloat()
-        val particleData = when (particle) {
-            Particle.DUST -> Particle.DustOptions(color ?: source.fail("dust-color", "required for $particleKey"), dustSize)
-            Particle.DUST_COLOR_TRANSITION -> {
-                val from = color ?: source.fail("dust-color", "required for $particleKey")
-                Particle.DustTransition(from, toColor ?: from, dustSize)
-            }
-            else -> {
-                source.check("particle", particle.dataType == Void::class.java,
-                    "unsupported particle data type ${particle.dataType.simpleName}; use a no-data or dust particle")
-                null
-            }
-        }
+        val style = particleStyle(source)
         return AuroraProfile(
             id = id,
             priority = source.int("priority", 0, Int.MIN_VALUE..Int.MAX_VALUE),
@@ -314,23 +319,48 @@ object AuroraConfig {
             shapeSize = shapeSize,
             points = if (skyScene) source.int("sky-points", source.int("points", 1, 1..192), 1..192)
                 else source.int("points", 1, 1..24),
-            particle = particle,
+            particle = style.particle,
             count = source.int("count", 1, 0..16),
             offsetX = source.double("offset-x", 0.0, 0.0..2.0),
             offsetY = source.double("offset-y", 0.0, 0.0..2.0),
             offsetZ = source.double("offset-z", 0.0, 0.0..2.0),
             speed = source.double("speed", 0.0, 0.0..1.0),
-            particleData = particleData,
+            particleData = style.data,
             skyScene = skyScene,
             sceneDurationTicks = source.int("scene-duration-ticks", 240, 40..1200),
             motionPeriodTicks = source.int("motion-period-ticks", 400, 40..2400),
             updateTicks = source.int("update-ticks", 4, 1..200),
             spawnDelayTicks = source.int("spawn-delay-ticks", 60, 0..400),
-            skyTracers = source.int("sky-tracers", 1, 1..4),
+            skyTracers = source.int("sky-tracers", 1, if (shape.isCelestial) 1..12 else 1..4),
             skyRefreshTicks = source.int("sky-refresh-ticks", 0, 0..200),
             skyOptions = skyOptions,
             skyHeadParticles = headParticles,
+            skyPalette = palette,
         )
+    }
+
+    private fun particleStyle(source: Fields): AuroraParticleStyle {
+        val particleKey = normalizeBiomeKey(source.string("particle", "minecraft:end_rod"))
+        val particle = particlesByKey[particleKey] ?: source.fail("particle", "unknown particle '$particleKey'")
+        val color = source.color("dust-color")
+        val toColor = source.color("dust-to-color")
+        val particleColor = source.color("particle-color")
+        val dustSize = source.double("dust-size", 1.0, 0.1..2.0).toFloat()
+        val data = when (particle) {
+            Particle.DUST -> Particle.DustOptions(color ?: source.fail("dust-color", "required for $particleKey"), dustSize)
+            Particle.DUST_COLOR_TRANSITION -> {
+                val from = color ?: source.fail("dust-color", "required for $particleKey")
+                Particle.DustTransition(from, toColor ?: from, dustSize)
+            }
+            Particle.ENTITY_EFFECT, Particle.FLASH ->
+                particleColor ?: source.fail("particle-color", "required for $particleKey")
+            else -> {
+                source.check("particle", particle.dataType == Void::class.java,
+                    "unsupported particle data type ${particle.dataType.simpleName}; use a no-data, dust, or color particle")
+                null
+            }
+        }
+        return AuroraParticleStyle(particle, data)
     }
 
     private fun skyOptions(source: Fields?, defaults: AuroraSkyOptions): AuroraSkyOptions {

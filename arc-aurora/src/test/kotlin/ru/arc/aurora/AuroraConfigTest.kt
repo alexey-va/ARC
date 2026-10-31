@@ -22,6 +22,7 @@ class AuroraConfigTest : FreeSpec({
         profile.particleData shouldBe null
         profile.skyScene shouldBe false
         profile.skyOptions shouldBe AuroraSkyOptions()
+        profile.skyPalette shouldBe emptyList()
         listOf(profile.sceneDurationTicks, profile.motionPeriodTicks, profile.updateTicks) shouldBe listOf(240, 400, 4)
         profile.biomes shouldBe listOf("*")
         profile.matches("iris:unknown_biome", "world", 15000, false, false, 80.0, 12, false) shouldBe true
@@ -45,6 +46,23 @@ class AuroraConfigTest : FreeSpec({
             val source = YamlConfiguration().apply { set("sky-packets-per-viewer", value) }
             shouldThrow<AuroraConfigException> { AuroraConfig.parse(source) }
                 .path shouldBe "sky-packets-per-viewer"
+        }
+    }
+
+    "the aggregate celestial scene cap defaults to two and accepts only an integer in one through sixteen" {
+        AuroraSkyFieldSettings().maxCelestialScenes shouldBe 2
+        AuroraConfig.parse(YamlConfiguration()).skyField.maxCelestialScenes shouldBe 2
+        AuroraConfig.parse(yaml("sky-field:\n  max-scenes: 4")).skyField.maxCelestialScenes shouldBe 2
+        (1..16).forEach { cap ->
+            val settings = AuroraConfig.parse(yaml("sky-field:\n  max-celestial-scenes: $cap"))
+            settings.skyField.maxCelestialScenes shouldBe cap
+            settings.skyField.maxScenes shouldBe 9
+            settings.skyPacketsPerViewer shouldBe 36
+        }
+        listOf(0, 17, 1.5, "2").forEach { value ->
+            val source = YamlConfiguration().apply { set("sky-field.max-celestial-scenes", value) }
+            shouldThrow<AuroraConfigException> { AuroraConfig.parse(source) }
+                .path shouldBe "sky-field.max-celestial-scenes"
         }
     }
 
@@ -98,6 +116,19 @@ class AuroraConfigTest : FreeSpec({
             shouldThrow<AuroraConfigException> { AuroraConfig.parse(profileConfig("sky-scene" to true, field to value)) }
                 .path shouldBe "profiles.ambient.$field"
         }
+    }
+
+    "celestial shapes accept twelve tracers while legacy shapes retain their four tracer limit" {
+        AuroraShape.entries.filter { it.isCelestial }.forEach { shape ->
+            AuroraConfig.parse(profileConfig("sky-scene" to true, "shape" to shape.name, "sky-tracers" to 12))
+                .profiles.single().skyTracers shouldBe 12
+            shouldThrow<AuroraConfigException> {
+                AuroraConfig.parse(profileConfig("sky-scene" to true, "shape" to shape.name, "sky-tracers" to 13))
+            }.path shouldBe "profiles.ambient.sky-tracers"
+        }
+        shouldThrow<AuroraConfigException> {
+            AuroraConfig.parse(profileConfig("sky-scene" to true, "shape" to "TRACK_FLYBY", "sky-tracers" to 5))
+        }.path shouldBe "profiles.ambient.sky-tracers"
     }
 
     "invalid sky geometry and timing reject the complete candidate at their own field paths" {
@@ -262,6 +293,98 @@ class AuroraConfigTest : FreeSpec({
         AuroraConfig.parse(config).profiles.single().skyHeadParticles shouldBe emptyList()
     }
 
+    "the six celestial shapes require sky scene mode and keep separate identities from tracks" {
+        val celestial = listOf(AuroraShape.JELLYFISH, AuroraShape.MANTA_RAY, AuroraShape.LIGHT_KNOT,
+            AuroraShape.REVERSE_LIGHTNING, AuroraShape.SKY_CORAL, AuroraShape.MOON_FAN)
+        AuroraShape.entries.filter { it.isCelestial } shouldBe celestial
+        celestial.forEach { shape ->
+            shape.isTrack shouldBe false
+            AuroraConfig.parse(profileConfig("sky-scene" to true, "shape" to shape.name))
+                .profiles.single().shape shouldBe shape
+            shouldThrow<AuroraConfigException> { AuroraConfig.parse(profileConfig("shape" to shape.name)) }
+                .path shouldBe "profiles.ambient.shape"
+        }
+    }
+
+    "celestial palettes retain ordered typed particle payloads in an immutable detached snapshot" {
+        val source = profileConfig("sky-scene" to true, "shape" to "JELLYFISH",
+            "sky-palette.halo.particle" to "entity_effect", "sky-palette.halo.particle-color" to "#12aBcD",
+            "sky-palette.flash.particle" to "flash", "sky-palette.flash.particle-color" to "#445566",
+            "sky-palette.rim.particle" to "dust_color_transition", "sky-palette.rim.dust-color" to "#778899",
+            "sky-palette.rim.dust-to-color" to "#aabbcc", "sky-palette.rim.dust-size" to 0.7,
+            "sky-palette.spark.particle" to "glow")
+        val profile = AuroraConfig.parse(source).profiles.single()
+        profile.skyPalette.map { it.particle } shouldBe
+            listOf(Particle.ENTITY_EFFECT, Particle.FLASH, Particle.DUST_COLOR_TRANSITION, Particle.GLOW)
+        profile.skyPalette[0].data shouldBe Color.fromRGB(0x12abcd)
+        profile.skyPalette[1].data shouldBe Color.fromRGB(0x445566)
+        val transition = profile.skyPalette[2].data as Particle.DustTransition
+        transition.color shouldBe Color.fromRGB(0x778899)
+        transition.toColor shouldBe Color.fromRGB(0xaabbcc)
+        transition.size shouldBe 0.7F
+        profile.skyPalette[3].data shouldBe null
+        source.set("profiles.ambient.sky-palette.halo.particle-color", "#ffffff")
+        profile.skyPalette[0].data shouldBe Color.fromRGB(0x12abcd)
+        AuroraConfig.parse(source).profiles.single().skyPalette[0].data shouldBe Color.WHITE
+        shouldThrow<UnsupportedOperationException> { (profile.skyPalette as MutableList<AuroraParticleStyle>).clear() }
+
+        val dust = AuroraConfig.parse(profileConfig("sky-scene" to true, "shape" to "MOON_FAN",
+            "sky-palette.rim.particle" to "dust", "sky-palette.rim.dust-color" to "#112233"))
+            .profiles.single().skyPalette.single()
+        dust.particle shouldBe Particle.DUST
+        (dust.data as Particle.DustOptions).color shouldBe Color.fromRGB(0x112233)
+    }
+
+    "sky palettes reject unsupported payloads and malformed slot fields at their precise paths" {
+        listOf(
+            Triple("particle", "unknown_particle", "particle"),
+            Triple("particle", "block", "particle"),
+            Triple("particle", "sculk_charge", "particle"),
+            Triple("particle", "trail", "particle"),
+            Triple("particle", "entity_effect", "particle-color"),
+            Triple("particle", "flash", "particle-color"),
+            Triple("particle", "dust", "dust-color"),
+            Triple("particle", "dust_color_transition", "dust-color"),
+            Triple("particle-color", "#xyzxyz", "particle-color"),
+            Triple("dust-to-color", "#123", "dust-to-color"),
+            Triple("dust-size", 2.01, "dust-size"),
+        ).forEach { (field, value, failedField) ->
+            val source = profileConfig("sky-scene" to true, "shape" to "SKY_CORAL",
+                "sky-palette.rim.particle" to "end_rod", "sky-palette.rim.$field" to value)
+            shouldThrow<AuroraConfigException> { AuroraConfig.parse(source) }
+                .path shouldBe "profiles.ambient.sky-palette.rim.$failedField"
+        }
+        val malformed = profileConfig("sky-scene" to true, "shape" to "SKY_CORAL", "sky-palette.rim" to false)
+        shouldThrow<AuroraConfigException> { AuroraConfig.parse(malformed) }
+            .path shouldBe "profiles.ambient.sky-palette.rim"
+    }
+
+    "sky palettes are bounded named mappings reserved for celestial sky scenes" {
+        listOf(0, 5).forEach { count ->
+            val source = profileConfig("sky-scene" to true, "shape" to "LIGHT_KNOT")
+            source.createSection("profiles.ambient.sky-palette")
+            repeat(count) { source.set("profiles.ambient.sky-palette.slot_$it.particle", "end_rod") }
+            shouldThrow<AuroraConfigException> { AuroraConfig.parse(source) }
+                .path shouldBe "profiles.ambient.sky-palette"
+        }
+        listOf(false, true).forEach { skyScene ->
+            shouldThrow<AuroraConfigException> {
+                AuroraConfig.parse(profileConfig("sky-scene" to skyScene, "shape" to "TRACK_FLYBY",
+                    "sky-palette.rim.particle" to "end_rod"))
+            }.path shouldBe "profiles.ambient.sky-palette"
+        }
+        listOf(emptyList(), listOf("flame", "soul_fire_flame")).forEach { heads ->
+            shouldThrow<AuroraConfigException> {
+                AuroraConfig.parse(profileConfig("sky-scene" to true, "shape" to "MANTA_RAY",
+                    "sky-palette.rim.particle" to "end_rod", "sky-head-particles" to heads))
+            }.path shouldBe "profiles.ambient.sky-palette"
+        }
+        shouldThrow<AuroraConfigException> {
+            AuroraConfig.parse(profileConfig("sky-scene" to true, "shape" to "MANTA_RAY",
+                "sky-palette" to emptyList<String>()))
+        }.path shouldBe "profiles.ambient.sky-palette"
+    }
+
     "custom Iris and unknown biome keys use full namespaced globs without a registry" {
         val profile = AuroraConfig.parse(profileConfig(
             "biomes" to listOf("plains", "iris:deep/*_forest", "unknown_namespace:*"),
@@ -389,7 +512,7 @@ class AuroraConfigTest : FreeSpec({
         )).profiles.single().particleData as Particle.DustTransition
         transition.color shouldBe Color.fromRGB(0x112233)
         transition.toColor shouldBe Color.fromRGB(0x445566)
-        listOf("minecraft:block", "minecraft:flash", "minecraft:unknown_particle").forEach { particle ->
+        listOf("minecraft:block", "minecraft:sculk_charge", "minecraft:trail", "minecraft:unknown_particle").forEach { particle ->
             shouldThrow<AuroraConfigException> { AuroraConfig.parse(profileConfig("particle" to particle)) }
                 .path shouldBe "profiles.ambient.particle"
         }
@@ -397,6 +520,17 @@ class AuroraConfigTest : FreeSpec({
             .path shouldBe "profiles.ambient.dust-color"
         shouldThrow<AuroraConfigException> { AuroraConfig.parse(profileConfig("dust-color" to "#xyzxyz")) }
             .path shouldBe "profiles.ambient.dust-color"
+    }
+
+    "color particles use the same required RGB payload in ordinary profiles" {
+        listOf(Particle.ENTITY_EFFECT, Particle.FLASH).forEach { particle ->
+            val profile = AuroraConfig.parse(profileConfig("particle" to particle.key.toString(),
+                "particle-color" to "#123456")).profiles.single()
+            profile.particle shouldBe particle
+            profile.particleData shouldBe Color.fromRGB(0x123456)
+            shouldThrow<AuroraConfigException> { AuroraConfig.parse(profileConfig("particle" to particle.key.toString())) }
+                .path shouldBe "profiles.ambient.particle-color"
+        }
     }
 
     "profile count is bounded across ordinary profiles and all event presets" {

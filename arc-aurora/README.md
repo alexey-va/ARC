@@ -9,7 +9,7 @@ the PacketEvents compile version comes from the repository's dependency catalog.
 
 ## Visual direction
 
-The bundled configuration contains **25 ordinary profiles** and **22 sky variants**
+The bundled configuration contains **25 ordinary profiles** and **28 sky variants**
 sampled into up to **nine retained world cells** for `treasure-hunt`. The sky
 preserves the accepted soft-lines palette: one familiar white wave, blue and
 orange waves/curls, a green spark wave, three frequent meteor variants and one
@@ -22,6 +22,38 @@ hairpin and one skipping head with three decreasing arches. These are artistic
 interpretations, not a particle-physics simulation. No cube,
 star or TOTEM ring is selected by the bundled night catalogue; those supported
 shapes remain available to custom profiles.
+
+Six additional finite scenes form the living-sky catalogue:
+
+| Profile | Shape | Signature action |
+| --- | --- | --- |
+| `lunar_jellyfish` | `JELLYFISH` | A breathing canopy, moving tentacles and an upward departure |
+| `sky_manta` | `MANTA_RAY` | A broad wing stroke, a bank and dissolving wing tips |
+| `light_knot` | `LIGHT_KNOT` | Two coloured ribbons weave, tighten and unravel |
+| `reverse_lightning` | `REVERSE_LIGHTNING` | Branches converge, then one escaping drop carries the exit |
+| `sky_coral` | `SKY_CORAL` | A branching crown grows, pulses and retracts |
+| `moon_fan` | `MOON_FAN` | Curved ribs open, turn edge-on and reopen on the other side |
+
+These scenes deform over their complete lifetime, rather than translating a static
+outline. The worker caches at most 33 unit-size poses per shape/sample count,
+shared across viewers within one runtime generation. Each scene has its own fixed
+world pose. Main interpolates the current age and scans at most its configured
+sample count, emitting at most twelve currently visible samples per visit under the
+existing shared 36-request cap. By default at most two celestial scenes are retained
+per viewer, leaving room for the existing sky catalogue. Sparse phases can emit one active tip every visit;
+they do not duplicate that tip to fill the cap. Missed poses are never replayed.
+Density fades control new emissions; already-sent particles keep native lifetimes.
+Swept admission includes every interpolated pose and its depth, roll and scale.
+Simultaneous legacy strokes and two celestial scenes still share the same cap;
+rotating scene order can reduce an individual scene's effective refresh rate at
+busy moments. An isolated preview does not establish maximum-concurrency density.
+
+The separate `particle-gallery` preset contains ready-to-use material studies.
+It is available through private admin preview and is not mixed into automatic
+night mode. Native colour, brightness, drift and lifetime differ by material:
+fireflies are long-lived, electric sparks are very short, and RGB dust/effect
+particles still sample world lighting. No arbitrary recolouring of flame or
+glow sprites, shader bloom, terrain lighting or native-client acceptance is claimed.
 
 | Environment | Bundled treatment | Main condition |
 | --- | --- | --- |
@@ -115,6 +147,8 @@ bypass. At dawn, new submissions stop and native tails finish fading.
 | `/arcaurora status` | `arcaurora.admin` | Configured ordinary profile count, active event leases and tracked players |
 | `/arcaurora reload` | `arcaurora.admin` | Validate a candidate configuration, then replace the active engine |
 | `/arcaurora preview [player]` | `arcaurora.admin` | Toggle a private, automatically expiring 60-second sky preview; console names an online player |
+| `/arcaurora catalog [preset]` | `arcaurora.admin` | List preset IDs, or the profile IDs in one preset |
+| `/arcaurora preview <player\|self> <preset> [profile]` | `arcaurora.admin` | Replace private preview with a selected preset or one selected profile |
 
 `/aaurora` is an alias. A failed configuration parse retains the previous active
 settings. An event preset that is in use cannot be removed during reload.
@@ -127,10 +161,14 @@ Paper names such as `NORMAL`. A time window crossing midnight is supported.
 An enabled night preset must exist and contain profiles; an invalid reload
 retains the running engine and settings.
 
-The admin preview displays the hunt's sky preset only to its target. It does
+The default admin preview displays the hunt's sky preset only to its target. It does
 not start a treasure hunt, change rewards, grant permissions or create a
 world-wide event. It ends after 60 seconds or when toggled again, and still
 obeys both ping gates. Look above the horizon to inspect the silhouettes.
+For example, `/arcaurora preview self treasure-hunt lunar_jellyfish` selects the
+jellyfish; `/arcaurora catalog particle-gallery` lists material studies, and
+`/arcaurora preview self particle-gallery <profile>` isolates one of them nearby.
+An unknown preset/profile is rejected before replacing an existing preview.
 
 Messages are MiniMessage scalars in `locales/ru.yml` and `locales/en.yml`.
 Russian client locales receive Russian; other clients receive English; console
@@ -183,15 +221,16 @@ biome-aliases:
 | `radius`, `min-distance` | Horizontal admission range; ordinary `2..32`, sky `2..96`. New sky cells must lie in this band and inside `sky-field.view-distance`; active cells use the field's outer cull radius |
 | `vertical-min`, `vertical-max` | Ordinary heights relative to feet (`-32..32`); sky heights above the cell anchor's loaded terrain surface (`-32..64`), independent of player Y |
 | `shape-size` | Unposed radius/half-extent, ordinary `0.1..8`, sky `0.1..32` blocks |
-| `points`, `sky-points` | Ordinary positions `1..24`; sky positions `1..192` across one finite stroke, acknowledged after Main attempts them |
+| `points`, `sky-points` | Ordinary positions `1..24`; sky positions `1..192` across one finite stroke, or stable sample identities in a celestial animation |
 | `sky-scene` | `false` by default; retain a sky anchor and use posed, progressively revealed geometry |
 | `scene-duration-ticks` | Sky anchor lifetime after its delayed birth, `40..1200`; default `240`; unfinished strokes expire too |
 | `spawn-delay-ticks` | Random delay before each sky scene starts, `0..400`; default `60`; selection prefers different birth times |
-| `sky-tracers` | Samples per eligible visit, `1..4`; default `1`. Ordinary sky outlines divide the path into contiguous heads. `METEOR` uses flight samples then that many fragments; `TRACK_*` preserves its authored head/phase ordering and uses this field only for pacing |
+| `sky-tracers` | Samples per eligible visit: celestial `1..12`, legacy `1..4`; default `1`. Ordinary sky outlines divide the path into contiguous heads. `METEOR` uses flight samples then that many fragments; `TRACK_*` preserves its authored head/phase ordering and uses this field only for pacing |
 | `sky-head-particles` | Optional ordered pair of no-data native particle keys, only for a sky `TRACK_FLYBY`; empty/omitted retains `particle` and its data. Present palettes use no data payload. Each head keeps its colour through partial budgets and spatial reversal |
-| `sky-refresh-ticks` | `0` (default) leaves a finite native tail; `1..200` spreads a refresh of revealed positions across this many eligible visits, within the cap |
+| `sky-palette` | Celestial-only ordered mapping of 1..4 named slots. Each slot has `particle` and its own dust/colour fields. Cannot be combined with `sky-head-particles`; omitted uses the profile material |
+| `sky-refresh-ticks` | Legacy contours: `0` (default) leaves a finite native tail; `1..200` spreads a refresh of revealed positions across this many eligible visits, within the cap. Celestial scenes always sample their current animated pose |
 | `sky-options` | Optional mapping overriding individual fields inherited from top-level `sky-defaults`; see below |
-| `motion-period-ticks` | Sky geometric motion period, `40..2400`; default `400` |
+| `motion-period-ticks` | Legacy sky geometric motion period, `40..2400`; default `400`. Celestial animations use `scene-duration-ticks` for their complete finite cycle |
 | `update-ticks` | Minimum ticks between sky head emissions, `1..200`; default `4`; no catch-up; ordinary cadence is unchanged |
 | `particle` | Namespaced native particle key supported by the running API |
 | `count` | Native particles per emission, `0..16`; zero still requests one particle with type-specific semantics |
@@ -199,6 +238,7 @@ biome-aliases:
 | `speed` | Native `extra` value, `0..1`; meaning depends on the particle; default zero |
 | `dust-color`, `dust-to-color` | `'#RRGGBB'`; dust requires the first colour; transition's second colour defaults to the first |
 | `dust-size` | Native dust size, `0.1..2` |
+| `particle-color` | Required `'#RRGGBB'` for `entity_effect` and `flash`, including palette slots. Colour is RGB; opacity is not supplied through this field |
 
 `sky-defaults` provides one shared set of sky controls. An optional `sky-options`
 mapping within any ordinary or event profile overrides only the named fields;
@@ -249,6 +289,7 @@ previous engine and settings active. Admin previews stop on reload; run
 | `view-distance` | `96`; `16..192` blocks | Horizontal radius admitting new cells |
 | `cull-hysteresis` | `16`; `0..64` blocks | Extra outer radius for retaining active cells |
 | `max-scenes` | `9`; `1..16` | Maximum retained scenes per viewer |
+| `max-celestial-scenes` | `2`; `1..16` | Aggregate celestial scene limit within `max-scenes`; the shared packet cap still applies |
 | `max-per-profile` | `2`; `1..16` | Limit on copies of one variant; promotes variety and bounds expensive contours |
 | `cull-cooldown-ticks` | `80`; `72..1200` | Minimum whole-cell retirement period after culling, also respecting the old lifecycle expiry |
 
@@ -379,8 +420,9 @@ profiles share the configured per-viewer allocation; ordinary output retains
 its own cap.
 
 Main owns bounded player/world capture, per-tip dispatch and final validation.
-The lifecycle-owned worker prepares immutable paths of at most 192 positions
-per scene and refreshes captured viewer inputs at the ordinary interval.
+The lifecycle-owned worker prepares immutable legacy paths of at most 192 positions
+per scene, or shared celestial keyframes as described above, and refreshes captured
+viewer inputs at the ordinary interval.
 ArcCore encodes/transmits through its shared Netty path. One replaceable async
 batch is discarded after four ticks; retained sky strokes continue independently
 of later worker delays. A late visit advances its current tips and bounded refresh; it never catches up
@@ -496,7 +538,7 @@ Run from the repository root with JDK 25:
 ```
 
 The expected local runtime artifact is
-`arc-aurora/build/libs/ArcAurora-0.1.8.jar`. The public Maven API artifact
+`arc-aurora/build/libs/ArcAurora-0.1.9.jar`. The public Maven API artifact
 `ru.ruscrafting.arc:arc-aurora-api:0.1.0` was verified on 2026-10-29 in the
 [RusCrafting repository](https://repo.rus-crafting.ru/grocermc/ru/ruscrafting/arc/arc-aurora-api/0.1.0/arc-aurora-api-0.1.0.pom).
 That API publication does not establish a runtime-plugin build, delivery,
@@ -537,5 +579,5 @@ measured performance result is claimed by this README. Publication, artifact
 delivery and runtime activation require separate operational evidence.
 
 `sky-points` overrides `points` only for sky scenes. The nightly mode and current shape catalog
-require ArcAurora 0.1.8; do not reload this configuration into an older runtime.
+require ArcAurora 0.1.9; do not reload this configuration into an older runtime.
 The 25 ordinary biome profiles and their sampling behavior are unchanged.

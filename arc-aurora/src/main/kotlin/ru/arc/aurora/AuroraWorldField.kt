@@ -14,6 +14,7 @@ data class AuroraSkyFieldSettings(
     val maxScenes: Int = 9,
     val cullCooldownTicks: Int = 80,
     val maxPerProfile: Int = 2,
+    val maxCelestialScenes: Int = 2,
 )
 
 internal data class AuroraSkyCell(val x: Int, val z: Int)

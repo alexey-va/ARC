@@ -309,7 +309,8 @@ class AuroraEngineTest : FreeSpec({
             fixture.event = settings.profiles
             fixture.capture()
             fixture.completePlanning()
-            fixture.engine.tick()
+            // Admission may yield to the native deadline; anchoring begins at the first submission.
+            repeat(8) { if (fixture.locations.isEmpty()) fixture.engine.tick() }
             val first = fixture.locations.single()
             (first.z > 0.5) shouldBe true
             fixture.player.teleport(fixture.player.location.add(1.0, 0.0, 0.0).apply { yaw = 180f }) shouldBe true
@@ -589,8 +590,10 @@ class AuroraEngineTest : FreeSpec({
             fixture.emissions.isNotEmpty() shouldBe true
             // Cell/profile assignments change with the catalog; a finite route need not visit every palette.
             // Keep supplemental palette coverage out of the full-preset movement CSV.
-            for (profile in profiles.distinctBy { it.particle }) {
-                if (fixture.emissions.any { it.particle == profile.particle }) continue
+            fun materials(profile: AuroraProfile) = profile.skyPalette.map { it.particle }
+                .ifEmpty { profile.skyHeadParticles.ifEmpty { listOf(profile.particle) } }
+            for (profile in profiles) {
+                if (materials(profile).all { material -> fixture.emissions.any { it.particle == material } }) continue
                 fixture.event = listOf(profile)
                 repeat(profile.spawnDelayTicks + profile.sceneDurationTicks + bundled.intervalTicks * 2) {
                     if (fixture.queued.isNotEmpty()) fixture.completePlanning()
@@ -599,13 +602,149 @@ class AuroraEngineTest : FreeSpec({
                     (fixture.emissions.size - before <= bundled.skyPacketsPerViewer) shouldBe true
                 }
             }
-            fixture.emissions.map { it.particle }.toSet() shouldBe profiles.map { it.particle }.toSet()
+            fixture.emissions.map { it.particle }.toSet() shouldBe profiles.flatMap(::materials).toSet()
             System.getenv("ARCAURORA_PREVIEW_CSV")?.let { path ->
                 val target = java.nio.file.Path.of(path)
                 java.nio.file.Files.writeString(target, timeline)
                 java.nio.file.Files.writeString(target.resolveSibling("observer-timeline.csv"), observer)
                 java.nio.file.Files.writeString(target.resolveSibling("scene-timeline.csv"), scenes)
             }
+        }
+    }
+
+    "celestial scenes submit current animated poses with typed palettes and expire without replay" {
+        val bundled = AuroraConfig.parse(YamlConfiguration().apply {
+            loadFromString(checkNotNull(javaClass.classLoader.getResourceAsStream("config.yml")).bufferedReader().use { it.readText() })
+        })
+        val profiles = bundled.eventPresets.getValue("treasure-hunt").filter { it.shape.isCelestial }
+        profiles.map { it.shape }.toSet() shouldBe AuroraShape.entries.filter { it.isCelestial }.toSet()
+        for (profile in profiles) {
+            val settings = bundled.copy(nativeBudgetMicros = Int.MAX_VALUE,
+                skyField = bundled.skyField.copy(maxScenes = 1, maxPerProfile = 1))
+            withEngine(settings, highSky = true) { fixture ->
+                fixture.loadChunks(8)
+                fixture.event = listOf(profile)
+                val timeline = StringBuilder("tick,particle,x,y,z,rgb,to_rgb,size\n")
+                val observer = StringBuilder("tick,x,y,z,yaw\n")
+                val scenes = StringBuilder("tick,id,profile,particle,cell_x,cell_z,epoch,x,y,z,starts_at,culled,rejected\n")
+                val finish = profile.sceneDurationTicks + profile.spawnDelayTicks + 160
+                val middle = mutableListOf<Int>()
+                val fading = mutableListOf<Int>()
+                repeat(finish) { tick ->
+                    if (tick == 1) fixture.completePlanning()
+                    val before = fixture.emissions.size
+                    fixture.engine.tick() // A single detached plan must animate independently of worker refresh.
+                    val sent = fixture.emissions.drop(before)
+                    (sent.size <= minOf(profile.skyTracers, settings.skyPacketsPerViewer)) shouldBe true
+                    val progress = fixture.currentSkyAge().toDouble() / (profile.sceneDurationTicks - 1)
+                    if (progress in 0.4..0.44) middle += sent.size
+                    if (progress in 0.94..0.98) fading += sent.size
+                    if (tick >= finish - 40) sent.size shouldBe 0
+                    for (index in before until fixture.emissions.size) {
+                        val emission = fixture.emissions[index]
+                        val at = fixture.locations[index]
+                        emission.force shouldBe true
+                        emission.count shouldBe 1
+                        emission.offsets shouldBe listOf(0.0, 0.0, 0.0, 0.0)
+                        profile.skyPalette.any { it.particle == emission.particle && it.data == emission.data } shouldBe true
+                        val dust = emission.data as? Particle.DustOptions
+                        val color = (emission.data as? org.bukkit.Color)?.asRGB() ?: dust?.color?.asRGB()
+                        val to = (emission.data as? Particle.DustTransition)?.toColor?.asRGB()
+                        timeline.append("$tick,${emission.particle.name},${at.x},${at.y},${at.z},${color ?: ""},${to ?: ""},${dust?.size ?: 1.0f}\n")
+                    }
+                    fixture.sceneRows(tick).forEach { scenes.append(it).append('\n') }
+                    val at = fixture.player.location
+                    observer.append("$tick,${at.x},${at.y},${at.z},${at.yaw}\n")
+                }
+                (fixture.emissions.size > profile.points) shouldBe true
+                fixture.emissions.map { it.particle }.toSet() shouldBe profile.skyPalette.map { it.particle }.toSet()
+                if (profile.shape == AuroraShape.JELLYFISH) {
+                    (middle.isNotEmpty() && fading.isNotEmpty()) shouldBe true
+                    (fading.average() < middle.average() * 0.5) shouldBe true
+                }
+                System.getenv("ARCAURORA_CELESTIAL_ENGINE_DIR")?.let { directory ->
+                    val target = java.nio.file.Path.of(directory, profile.id)
+                    java.nio.file.Files.createDirectories(target)
+                    java.nio.file.Files.writeString(target.resolve("engine-timeline.csv"), timeline)
+                    java.nio.file.Files.writeString(target.resolve("observer-timeline.csv"), observer)
+                    java.nio.file.Files.writeString(target.resolve("scene-timeline.csv"), scenes)
+                }
+            }
+        }
+    }
+
+    "celestial density remains inside the shared packet budget and aggregate scene limit" {
+        val base = skySettings(points = 160, shape = AuroraShape.JELLYFISH, packets = 6)
+        val celestial = base.profiles.single().copy(id = "celestial-a", skyTracers = 12)
+        val legacy = celestial.copy(id = "legacy", shape = AuroraShape.POINT, skyTracers = 1)
+        val profiles = listOf(celestial, celestial.copy(id = "celestial-b"), legacy)
+        val settings = base.copy(profiles = profiles, nativeBudgetMicros = Int.MAX_VALUE,
+            skyField = base.skyField.copy(maxScenes = 4, maxPerProfile = 4, maxCelestialScenes = 1))
+        withEngine(settings) { fixture ->
+            fixture.loadChunks(8)
+            fixture.event = profiles
+            repeat(100) { tick ->
+                if (fixture.queued.isNotEmpty()) fixture.completePlanning()
+                val before = fixture.emissions.size
+                fixture.engine.tick()
+                (fixture.emissions.size - before <= 6) shouldBe true
+                val rows = fixture.sceneRows(tick)
+                (rows.size <= 4) shouldBe true
+                (rows.count { it.split(',')[2].startsWith("celestial-") } <= 1) shouldBe true
+            }
+            val rows = fixture.sceneRows(100)
+            rows.size shouldBe 4
+            rows.count { it.split(',')[2].startsWith("celestial-") } shouldBe 1
+            fixture.emissions.isNotEmpty() shouldBe true
+        }
+    }
+
+    "celestial admission rejects terrain reached only by the later swept depth and roll poses" {
+        val base = skySettings(points = 96, shape = AuroraShape.JELLYFISH, packets = 4)
+        val profile = base.profiles.single().copy(shapeSize = 8.0, skyTracers = 4,
+            minDistance = 20.0, verticalMin = 32.0, verticalMax = 32.0,
+            particle = Particle.SOUL_FIRE_FLAME, particleData = null)
+        withEngine(base.copy(profiles = listOf(profile), nativeBudgetMicros = Int.MAX_VALUE)) { fixture ->
+            fixture.loadChunks(8)
+            fixture.event = listOf(profile)
+            fixture.capture()
+            fixture.completePlanning()
+            fixture.obstructLaterCelestialFootprint()
+            repeat(120) { fixture.engine.tick() }
+            fixture.emissions.size shouldBe 0
+        }
+    }
+
+    "celestial typed slots survive a one-packet cap and stop on ping event loss and culling" {
+        val base = skySettings(points = 32, shape = AuroraShape.JELLYFISH, packets = 1)
+        val dust = Particle.DustOptions(org.bukkit.Color.fromRGB(0x9988FF), 1.0f)
+        val profile = base.profiles.single().copy(particle = Particle.DUST, particleData = dust, skyTracers = 4,
+            skyPalette = listOf(AuroraParticleStyle(Particle.SOUL_FIRE_FLAME, null), AuroraParticleStyle(Particle.DUST, dust)))
+        val settings = base.copy(profiles = listOf(profile), nativeBudgetMicros = Int.MAX_VALUE)
+        withEngine(settings) { fixture ->
+            fixture.event = settings.profiles
+            repeat(110) { tick ->
+                if (tick == 1) fixture.completePlanning()
+                val before = fixture.emissions.size
+                fixture.engine.tick()
+                (fixture.emissions.size - before <= 1) shouldBe true
+            }
+            fixture.emissions.map { it.particle }.toSet() shouldBe setOf(Particle.DUST, Particle.SOUL_FIRE_FLAME)
+            fixture.emissions.all { if (it.particle == Particle.DUST) it.data === dust else it.data == null } shouldBe true
+            val before = fixture.emissions.size
+            fixture.currentPing = 251
+            repeat(5) { fixture.engine.tick() }
+            fixture.emissions.size shouldBe before
+            fixture.currentPing = 50
+            fixture.player.teleport(Location(fixture.player.world, 200.0, 80.0, 200.0)) shouldBe true
+            repeat(5) { fixture.engine.tick() }
+            fixture.emissions.size shouldBe before
+            fixture.player.teleport(Location(fixture.player.world, 0.5, 80.0, 0.5)) shouldBe true
+            repeat(5) { fixture.engine.tick() }
+            fixture.emissions.size shouldBe before // Culled figure cannot resume a partial pose.
+            fixture.event = null
+            repeat(5) { fixture.engine.tick() }
+            fixture.emissions.size shouldBe before
         }
     }
 
@@ -1029,6 +1168,40 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
     }
 
     fun roof(y: Int) { for (x in -12..12) for (z in -12..12) world.getBlockAt(x, y, z).type = Material.STONE }
+
+    fun currentSkyAge(): Long {
+        fun field(target: Any, name: String): Any? = target.javaClass.getDeclaredField(name).also { it.isAccessible = true }.get(target)
+        val viewer = (field(engine, "viewers") as Map<*, *>)[player.uniqueId] ?: return -1
+        val sky = field(viewer, "sky") ?: return -1
+        val scene = (field(sky, "scenes") as List<*>).firstOrNull() ?: return -1
+        val start = field(scene, "startsAt") as Long
+        return if (start == Long.MAX_VALUE) -1 else (field(engine, "age") as Long) - start
+    }
+
+    /** Put a roof above a future pose, beyond every first-pose horizontal sample. */
+    fun obstructLaterCelestialFootprint() {
+        fun field(target: Any, name: String): Any? = target.javaClass.getDeclaredField(name).also { it.isAccessible = true }.get(target)
+        val viewer = checkNotNull((field(engine, "viewers") as Map<*, *>)[player.uniqueId])
+        val scene = (field(viewer, "skyScenes") as Map<*, *>).values.first()!!
+        val nx = field(scene, "normalX") as Double
+        val nz = field(scene, "normalZ") as Double
+        val x = field(scene, "x") as Double
+        val z = field(scene, "z") as Double
+        val path = (field(scene, "path") as List<*>).map { it as AuroraOffset }
+        val xs = path.map { x + it.x * nz + it.z * nx }
+        val zs = path.map { z - it.x * nx + it.z * nz }
+        val minX = kotlin.math.floor(xs.min() - 0.5).toInt()
+        val maxX = kotlin.math.floor(xs.max() + 0.5).toInt()
+        val minZ = kotlin.math.floor(zs.min() - 0.5).toInt()
+        val maxZ = kotlin.math.floor(zs.max() + 0.5).toInt()
+        val later = (field(scene, "columns") as List<*>).filterNotNull().first { column ->
+            val cx = field(column, "x") as Int; val cz = field(column, "z") as Int
+            cx !in minX..maxX || cz !in minZ..maxZ
+        }
+        val cx = field(later, "x") as Int; val cz = field(later, "z") as Int
+        (cx != kotlin.math.floor(x).toInt() || cz != kotlin.math.floor(z).toInt()) shouldBe true
+        world.getBlockAt(cx, 100, cz).type = Material.STONE
+    }
 
     fun loadChunks(radius: Int) { for (x in -radius..radius) for (z in -radius..radius) world.loadChunk(x, z) }
 

@@ -477,7 +477,8 @@ profiles:
 # Twenty-two variants share nine world cells: soft blue/warm traces and bubble-chamber tracks.
 # One familiar white wave and one rare crystal remain; no cube/star in this night catalogue.
 # Three short meteor variants repeat more often. FLAME is orange, not a red recolour.
-# Only the crystal holds a complete outline; coloured traces keep their native short tails.
+# The crystal holds its outline; celestial figures animate bounded local poses.
+# Coloured traces and celestial contours retain each material's native short tails.
 # Y ranges are above the loaded terrain at the cell anchor, not above the player.
 # Existing native tails fade on whole-scene radial cull; the shared cap stays 36.
 event-presets:
@@ -962,3 +963,263 @@ event-presets:
       sky-refresh-ticks: 0
       sky-options:
         roll-radians: 0.25
+
+    # Each celestial figure has its own finite opening, main action and departure.
+    # Flame-family materials keep their native colour and known short drift/lifetime.
+    # Palette order maps to stable contour parts; opacity controls emission density only.
+    lunar_jellyfish:
+      biomes: ['*']
+      sky-scene: true
+      scene-duration-ticks: 320
+      spawn-delay-ticks: 40
+      sky-tracers: 12
+      update-ticks: 1
+      radius: 96
+      min-distance: 32
+      vertical-min: 34
+      vertical-max: 58
+      shape: JELLYFISH
+      shape-size: 6
+      sky-points: 160
+      particle: minecraft:soul_fire_flame
+      sky-palette:
+        bell: {particle: minecraft:soul_fire_flame}
+        tentacles: {particle: minecraft:copper_fire_flame}
+      sky-options:
+        roll-radians: 0.12
+    sky_manta:
+      biomes: ['*']
+      sky-scene: true
+      scene-duration-ticks: 320
+      spawn-delay-ticks: 48
+      sky-tracers: 12
+      update-ticks: 1
+      radius: 96
+      min-distance: 34
+      vertical-min: 36
+      vertical-max: 60
+      shape: MANTA_RAY
+      shape-size: 7
+      sky-points: 160
+      particle: minecraft:copper_fire_flame
+      sky-palette:
+        wings: {particle: minecraft:copper_fire_flame}
+        spine: {particle: minecraft:soul_fire_flame}
+      sky-options:
+        roll-radians: 0.1
+    light_knot:
+      biomes: ['*']
+      sky-scene: true
+      scene-duration-ticks: 260
+      spawn-delay-ticks: 40
+      sky-tracers: 12
+      update-ticks: 1
+      radius: 96
+      min-distance: 32
+      vertical-min: 32
+      vertical-max: 56
+      shape: LIGHT_KNOT
+      shape-size: 7
+      sky-points: 160
+      particle: minecraft:copper_fire_flame
+      sky-palette:
+        jade: {particle: minecraft:copper_fire_flame}
+        amber: {particle: minecraft:flame}
+      sky-options:
+        roll-radians: 0.18
+    reverse_lightning:
+      biomes: ['*']
+      sky-scene: true
+      scene-duration-ticks: 240
+      spawn-delay-ticks: 36
+      sky-tracers: 12
+      update-ticks: 1
+      radius: 96
+      min-distance: 32
+      vertical-min: 34
+      vertical-max: 58
+      shape: REVERSE_LIGHTNING
+      shape-size: 7
+      sky-points: 160
+      particle: minecraft:soul_fire_flame
+      sky-palette:
+        branches: {particle: minecraft:soul_fire_flame}
+        drop: {particle: minecraft:flame}
+      sky-options:
+        roll-radians: 0.16
+    sky_coral:
+      biomes: ['*']
+      sky-scene: true
+      scene-duration-ticks: 320
+      spawn-delay-ticks: 44
+      sky-tracers: 12
+      update-ticks: 1
+      radius: 96
+      min-distance: 32
+      vertical-min: 32
+      vertical-max: 56
+      shape: SKY_CORAL
+      shape-size: 7
+      sky-points: 160
+      particle: minecraft:copper_fire_flame
+      sky-palette:
+        branches: {particle: minecraft:copper_fire_flame}
+        tips: {particle: minecraft:flame}
+      sky-options:
+        roll-radians: 0.12
+    moon_fan:
+      biomes: ['*']
+      sky-scene: true
+      scene-duration-ticks: 320
+      spawn-delay-ticks: 48
+      sky-tracers: 12
+      update-ticks: 1
+      radius: 96
+      min-distance: 34
+      vertical-min: 36
+      vertical-max: 60
+      shape: MOON_FAN
+      shape-size: 6
+      sky-points: 160
+      particle: minecraft:flame
+      sky-palette:
+        gold: {particle: minecraft:flame}
+        blue: {particle: minecraft:soul_fire_flame}
+      sky-options:
+        roll-radians: 0.1
+
+  # Nearby material samples, available explicitly through catalog/preview.
+  # This preset is separate from the automatic treasure-hunt night sky.
+  # /arcaurora preview self particle-gallery copper_fire
+  particle-gallery:
+    copper_fire:
+      biomes: ['*']
+      radius: 12
+      min-distance: 5
+      vertical-min: 2
+      vertical-max: 5
+      shape: WAVE
+      shape-size: 1.6
+      points: 4
+      particle: minecraft:copper_fire_flame
+    green_sparks:
+      biomes: ['*']
+      radius: 12
+      min-distance: 5
+      vertical-min: 2
+      vertical-max: 5
+      shape: ARC
+      shape-size: 0.8
+      points: 3
+      particle: minecraft:scrape
+    gold_sparks:
+      biomes: ['*']
+      radius: 12
+      min-distance: 5
+      vertical-min: 2
+      vertical-max: 5
+      shape: ARC
+      shape-size: 0.8
+      points: 3
+      particle: minecraft:wax_on
+    electric_sparks:
+      biomes: ['*']
+      radius: 10
+      min-distance: 4
+      vertical-min: 1
+      vertical-max: 4
+      shape: LINE
+      shape-size: 0.7
+      points: 3
+      particle: minecraft:electric_spark # Brief accents; too short-lived for a held sky contour.
+    fireflies:
+      biomes: ['*']
+      radius: 24
+      min-distance: 8
+      vertical-min: 1
+      vertical-max: 7
+      shape: POINT
+      points: 1 # Long-lived native motes: one point spread across a broad nearby volume.
+      particle: minecraft:firefly
+    glowing_ink:
+      biomes: ['*']
+      radius: 14
+      min-distance: 6
+      vertical-min: 2
+      vertical-max: 5
+      shape: SPHERE
+      shape-size: 0.7
+      points: 3
+      particle: minecraft:glow_squid_ink
+    crimson_spores:
+      biomes: ['*']
+      radius: 12
+      min-distance: 5
+      vertical-min: 1
+      vertical-max: 5
+      shape: CIRCLE
+      shape-size: 0.8
+      points: 3
+      particle: minecraft:crimson_spore
+    warped_spores:
+      biomes: ['*']
+      radius: 12
+      min-distance: 5
+      vertical-min: 1
+      vertical-max: 5
+      shape: CIRCLE
+      shape-size: 0.8
+      points: 3
+      particle: minecraft:warped_spore
+    obsidian_tears:
+      biomes: ['*']
+      radius: 12
+      min-distance: 5
+      vertical-min: 3
+      vertical-max: 7
+      shape: POINT
+      particle: minecraft:dripping_obsidian_tear
+    snowflakes:
+      biomes: ['*']
+      radius: 14
+      min-distance: 5
+      vertical-min: 3
+      vertical-max: 7
+      shape: LINE
+      shape-size: 1.5
+      points: 4
+      particle: minecraft:snowflake
+    cherry_petals:
+      biomes: ['*']
+      radius: 14
+      min-distance: 5
+      vertical-min: 3
+      vertical-max: 7
+      shape: LINE
+      shape-size: 1.2
+      points: 3
+      particle: minecraft:cherry_leaves
+    prismatic_dust:
+      biomes: ['*']
+      radius: 12
+      min-distance: 5
+      vertical-min: 2
+      vertical-max: 5
+      shape: WAVE
+      shape-size: 1.3
+      points: 4
+      particle: minecraft:dust_color_transition # RGB transition samples world light; it does not light the world.
+      dust-color: '#66E1EE'
+      dust-to-color: '#D48AFF'
+      dust-size: 0.75
+    colored_motes:
+      biomes: ['*']
+      radius: 12
+      min-distance: 5
+      vertical-min: 2
+      vertical-max: 5
+      shape: SPHERE
+      shape-size: 0.8
+      points: 3
+      particle: minecraft:entity_effect # Native floating motes, RGB only; their brightness follows world light.
+      particle-color: '#8CDBE8'

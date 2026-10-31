@@ -8,7 +8,7 @@ import kotlin.math.sqrt
 
 class AuroraGeometryTest : FreeSpec({
     "all shape samples remain finite and within the configured size and count" {
-        for (shape in AuroraShape.entries) {
+        for (shape in AuroraShape.entries.filterNot { it.isCelestial }) {
             for (size in listOf(0.1, 1.0, 8.0)) {
                 for (points in listOf(1, 7, 24)) {
                     for (age in listOf(-1L, 0L, 10L, 39L, Long.MAX_VALUE)) {
@@ -56,7 +56,7 @@ class AuroraGeometryTest : FreeSpec({
         val helix = AuroraGeometry.offsets(AuroraShape.HELIX, 4.0, 9, 0)
         (helix != AuroraGeometry.offsets(AuroraShape.HELIX, 4.0, 9, 10)) shouldBe true
         AuroraGeometry.offsets(AuroraShape.HELIX, 4.0, 9, 40) shouldBe helix
-        AuroraShape.entries.filter { it !in setOf(AuroraShape.WAVE, AuroraShape.HELIX) }.forEach {
+        AuroraShape.entries.filter { !it.isCelestial && it !in setOf(AuroraShape.WAVE, AuroraShape.HELIX) }.forEach {
             AuroraGeometry.offsets(it, 4.0, 9, 0) shouldBe AuroraGeometry.offsets(it, 4.0, 9, 10)
         }
     }

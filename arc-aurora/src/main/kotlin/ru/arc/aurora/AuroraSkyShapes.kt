@@ -124,6 +124,9 @@ object AuroraSkyShapes {
             AuroraShape.TRACK_FLOCK, AuroraShape.TRACK_KINK, AuroraShape.TRACK_RIPPLE,
             AuroraShape.TRACK_EYE, AuroraShape.TRACK_SLINGSHOT, AuroraShape.TRACK_SKIP ->
                 error("Tracks are sampled as complete ordered paths above")
+            AuroraShape.JELLYFISH, AuroraShape.MANTA_RAY, AuroraShape.LIGHT_KNOT,
+            AuroraShape.REVERSE_LIGHTNING, AuroraShape.SKY_CORAL, AuroraShape.MOON_FAN ->
+                error("Celestial animations are sampled as keyframes")
             AuroraShape.RING, AuroraShape.CIRCLE -> {
                 val angle = progress * 2.0 * PI * if (shape == AuroraShape.RING) 1.0 else 2.0
                 val radius = if (shape == AuroraShape.RING) size else sqrt(progress) * size
