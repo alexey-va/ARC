@@ -49,7 +49,7 @@ abstract class TestBase {
         }
         ConfigManager.clear()
 
-        server = MockBukkit.mock()
+        server = MockBukkit.mock(ArcTestServerMock())
         loadArcCoreHostForTest()
 
         // Set server name first
@@ -145,6 +145,11 @@ abstract class TestBase {
         // Clear mock GUI factory state
         mockGuiItemFactory.clear()
     }
+}
+
+/** Plugin disable/re-enable is not a full server stop in this fixture. */
+internal class ArcTestServerMock : ServerMock() {
+    override fun isStopping(): Boolean = false
 }
 
 /** Loads the real provider host with an explicit descriptor to avoid the shared test-classpath plugin.yml. */
