@@ -47,6 +47,9 @@ protected-area hint rather than «Здесь уже занято».
   The final consumed block retains the result for five seconds.
 - Removing the held item, death, world change, quit, reload and shutdown clean
   up displays. Grid and text changes add no titles, action bars or chat messages.
+- Grid and text cleanup runs even if the optional HUD provider fails. A failed
+  provider is reported once and skipped until replacement; the guide uses its
+  native text fallback. Replacing a provider releases the previous instance.
 
 The guide is read-only: Lands remains responsible for permissions, placement,
 claims, region selection, limits and all monetary effects. A chunk highlight

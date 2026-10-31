@@ -421,11 +421,14 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig, particleCol
     }
 
     private fun clearVisuals(session: Session) {
-        hud.clear(session.viewerId)
-        session.expansionCost = null
-        clearGrid(session)
-        session.label?.remove()
-        session.label = null
+        try {
+            hud.clear(session.viewerId)
+        } finally {
+            session.expansionCost = null
+            clearGrid(session)
+            session.label?.remove()
+            session.label = null
+        }
     }
 
     private fun clearGrid(session: Session) {

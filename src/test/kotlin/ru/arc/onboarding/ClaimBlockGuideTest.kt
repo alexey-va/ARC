@@ -34,19 +34,20 @@ import java.util.UUID
 import java.util.function.Consumer
 
 class ClaimBlockGuideTest : StringSpec({
-    "a disabled Lands world keeps the scheduled current-chunk guide and forward hologram until the item is removed" {
+    "a disabled Lands world keeps the guide until the item is removed and cleans displays even if HUD cleanup fails" {
         MockBukkitTestRuntime.open().use { paper ->
             val scheduler = TestTaskScheduler()
             Tasks.install(scheduler)
             val previousPlugin = ARC.plugin
             ARC.plugin = mockk(relaxed = true)
             val inventory = paper.addPlayer("claim-guide-inventory").inventory
-            inventory.setItemInMainHand(ItemStack(Material.GOLD_BLOCK).apply {
+            val claimItem = ItemStack(Material.GOLD_BLOCK).apply {
                 editMeta { meta ->
                     meta.persistentDataContainer.set(NamespacedKey("lands", "type"), PersistentDataType.STRING, "CLAIM_BLOCK")
                     meta.persistentDataContainer.set(NamespacedKey("lands", "radius"), PersistentDataType.INTEGER, 4)
                 }
-            })
+            }
+            inventory.setItemInMainHand(claimItem)
             val root = Files.createTempDirectory("arc-claim-guide-")
             Files.createDirectories(root.resolve("modules"))
             Files.writeString(root.resolve("modules/onboarding.yml"), "worlds: [mining]\n")
@@ -58,6 +59,15 @@ class ClaimBlockGuideTest : StringSpec({
             val borders = mutableListOf<BlockDisplay>()
             val labels = mutableListOf<TextDisplay>()
             val messages = mutableListOf<Component>()
+            val hud = mockk<ClaimGuideHud>(relaxed = true)
+            var failHudCleanup = false
+            var hudCleanupFailures = 0
+            every { hud.clear(any()) } answers {
+                if (failHudCleanup) {
+                    hudCleanupFailures++
+                    throw AbstractMethodError("setSuppressed")
+                }
+            }
 
             every { world.name } returns "mining"
             every { world.uid } returns UUID(0, 2)
@@ -105,7 +115,7 @@ class ClaimBlockGuideTest : StringSpec({
                 every { LandsUiModule.isLookingAtClaimMenu(player) } returns false
                 every { LandsUiModule.hasClaimMenu(player) } returns false
                 every { LandsUiModule.isAvailable() } returns true
-                val active = ClaimBlockGuide(config, emptySet()).also { guide = it; it.start() }
+                val active = ClaimBlockGuide(config, emptySet(), hud).also { guide = it; it.start() }
 
                 scheduler.timerCount() shouldBe 1
                 scheduler.tick()
@@ -133,6 +143,25 @@ class ClaimBlockGuideTest : StringSpec({
                 active.hasHologram(player) shouldBe false
                 borders.forEach { display -> verify(exactly = 1) { display.remove() } }
                 verify(exactly = 1) { labels.single().remove() }
+
+                inventory.setItemInMainHand(claimItem.clone())
+                scheduler.tick(5)
+                borders.size shouldBe 8
+                labels.size shouldBe 2
+                failHudCleanup = true
+                inventory.setItemInMainHand(ItemStack(Material.AIR))
+                try {
+                    scheduler.tick(5)
+                } catch (failure: AbstractMethodError) {
+                    failure.message shouldBe "setSuppressed"
+                }
+                hudCleanupFailures shouldBe 1
+                active.hasHologram(player) shouldBe false
+                borders.forEach { display -> verify(exactly = 1) { display.remove() } }
+                labels.forEach { display -> verify(exactly = 1) { display.remove() } }
+                scheduler.tick(5)
+                val playerId = player.uniqueId
+                verify(exactly = 2) { hud.clear(playerId) }
                 active.close()
                 scheduler.timerCount() shouldBe 0
             } finally {

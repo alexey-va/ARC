@@ -49,4 +49,69 @@ class ClaimGuideHudTest : StringSpec({
             ARC.plugin = previous
         }
     }
+
+    listOf(AbstractMethodError("setSuppressed"), IllegalStateException("provider failed")).forEach { failure ->
+        "claim HUD falls back after ${failure.javaClass.simpleName} and accepts a replacement provider" {
+            val previous = ARC.plugin
+            ARC.plugin = mockk(relaxed = true)
+            try {
+                val player = mockk<Player>(relaxed = true)
+                val id = UUID(0, 43)
+                every { player.uniqueId } returns id
+                val broken = mockk<QuestGuidanceHudService>(relaxed = true)
+                val replacement = mockk<QuestGuidanceHudService>(relaxed = true)
+                every { broken.setSuppressed(any(), id, any(), any()) } throws failure
+                every { replacement.showClaim(player, any(), any()) } returns true
+                var provider: QuestGuidanceHudService = broken
+                ClaimGuideHud { provider }.use { hud ->
+                    repeat(3) { hud.refresh(player, Component.text("Claim"), 0.0, false) shouldBe false }
+                    hud.hasHologram(id) shouldBe false
+                    hud.isTarget(player) shouldBe false
+                    // Initial failure plus one best-effort release; subsequent ticks skip the failed instance.
+                    verify(exactly = 2) { broken.setSuppressed(any(), id, any(), false) }
+                    verify(exactly = 1) { broken.clear(id, QuestGuidanceHudService.Source.CLAIM) }
+                    verify(exactly = 0) { broken.showClaim(any(), any(), any()) }
+                    provider = replacement
+                    hud.refresh(player, Component.text("Claim"), 0.0, false) shouldBe true
+                    hud.hasHologram(id) shouldBe true
+                    provider = broken
+                    hud.refresh(player, Component.text("Claim"), 0.0, false) shouldBe false
+                    verify(exactly = 1) { replacement.clear(id, QuestGuidanceHudService.Source.CLAIM) }
+                    verify(exactly = 4) { broken.setSuppressed(any(), id, any(), false) }
+                }
+            } finally {
+                ARC.plugin = previous
+            }
+        }
+    }
+
+    "a provider clear failure releases every viewer and still releases suppression" {
+        val previous = ARC.plugin
+        ARC.plugin = mockk(relaxed = true)
+        try {
+            val first = mockk<Player>(relaxed = true)
+            val second = mockk<Player>(relaxed = true)
+            val firstId = UUID(0, 44)
+            val secondId = UUID(0, 45)
+            every { first.uniqueId } returns firstId
+            every { second.uniqueId } returns secondId
+            val provider = mockk<QuestGuidanceHudService>(relaxed = true)
+            every { provider.showClaim(any(), any(), any()) } returns true
+            ClaimGuideHud { provider }.use { hud ->
+                hud.refresh(first, Component.text("Claim"), 0.0, false) shouldBe true
+                hud.refresh(second, Component.text("Claim"), 0.0, false) shouldBe true
+                every { provider.clear(firstId, QuestGuidanceHudService.Source.CLAIM) } throws
+                    AbstractMethodError("clear")
+                hud.clear(firstId)
+                hud.hasHologram(firstId) shouldBe false
+                hud.hasHologram(secondId) shouldBe false
+                verify(exactly = 1) { provider.clear(secondId, QuestGuidanceHudService.Source.CLAIM) }
+                verify(exactly = 2) { provider.setSuppressed(any(), firstId, any(), false) }
+                verify(exactly = 2) { provider.setSuppressed(any(), secondId, any(), false) }
+                hud.refresh(second, Component.text("Claim"), 0.0, false) shouldBe false
+            }
+        } finally {
+            ARC.plugin = previous
+        }
+    }
 })
