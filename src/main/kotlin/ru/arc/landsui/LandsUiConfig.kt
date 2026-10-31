@@ -290,7 +290,7 @@ class LandsUiConfig(private val config: Config) {
             "table-balance-label" to "<#f4d87a>Баланс",
             "table-territory-value" to "<#e6fff3><used> <#73808d>/ <#e8dfd2><maximum> <#9fb7c9>чанков",
             "table-slots-value" to "<#e6fff3><used> <#73808d>/ <#e8dfd2><maximum>",
-            "table-coins-value" to "<#f4bd6a><value> <white>💰</white>",
+            "table-coins-value" to "<#f4bd6a><value><white>💰</white>",
             "root-title" to "<#9bd48d>Приваты",
             "root-body" to "<#9bd48d>Новый приват<#e8dfd2>: на свободной земле нажми «Создать поселение».<newline><newline><#f3a2c9>Участники и права<#e8dfd2>: открой поселение в списке ниже.<newline><newline><#f4d87a>Расширение<#e8dfd2>: проверь галочку ✔ у нужного поселения. Если нужно, в его карточке нажми «Выбрать для расширения». Возьми блок привата и используй его рядом с границей.",
             "root-empty" to "<#e8dfd2>Ты пока не состоишь в поселении. Начни с «Создать поселение».",

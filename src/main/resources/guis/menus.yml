@@ -308,12 +308,12 @@ menus:
     investigation-start:
       material: WRITABLE_BOOK
       custom-model-data: 12001
-      name: '<green><bold>Взять дело за <fee> <white>💰</white>'
+      name: '<green><bold>Взять дело за <fee><white>💰</white>'
       lore:
         - '<white>Фома выдаст вам предмет <gold>«Дело»<white>.'
         - '<gray>В нём записаны происшествие, вопрос и свидетели.'
         - ''
-        - '<gray>Награда: <gold><reward> <white>💰</white>'
+        - '<gray>Награда: <gold><reward><white>💰</white>'
         - '<gray>Время: <white><duration>'
         - '<gray>Повтор: <white><cooldown>'
         - ''
@@ -722,8 +722,8 @@ menus:
         - '<gray>Сдано: <white><accepted>/<target> <dark_gray>(<progress>%)'
         - '<gray>В обработке: <white><reserved>'
         - '<gray>Осталось: <white><remaining>'
-        - '<gray>Следующий предмет: <gold><payout> <white>💰</white>'
-        - '<gray>Базовая цена: <white><base> <white>💰</white>'
+        - '<gray>Следующий предмет: <gold><payout><white>💰</white>'
+        - '<gray>Базовая цена: <white><base><white>💰</white>'
         - '<gray>Надбавка к базовой цене: <green><growth>'
         - '<gray>Остаток бюджета: <green><budget>'
         - '<gray>До: <white><ends>'
@@ -748,7 +748,7 @@ menus:
       name: '<#2bba43>Опубликовать объявление'
       lore:
         - ''
-        - '<#b8b8b8>Стоимость: <#ffcd70><cost> <white>💰</white>'
+        - '<#b8b8b8>Стоимость: <#ffcd70><cost><white>💰</white>'
         - ''
         - '<#8c8c8c>[<#2bba43>▶<#8c8c8c>] <#2bba43>ЛКМ<#b8b8b8> — создать объявление'
     board-back:

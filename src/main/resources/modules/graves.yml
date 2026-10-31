@@ -53,7 +53,7 @@ text:
   confirm-body: '<italic:false><#e8dfd2>Подтвердите переход к выбранной могиле. Показанная стоимость зафиксирована для этого подтверждения.'
   confirm-label: '<italic:false><#9bd48d>Подтвердить переход'
   confirm-tooltip: '<italic:false><#e8dfd2>Перейти к выбранной могиле по указанной стоимости.'
-  price-value: '<italic:false><#f4bd6a><price> <white>💰</white>'
+  price-value: '<italic:false><#f4bd6a><price><white>💰</white>'
   free-price: '<italic:false><#9bd48d>Бесплатно по праву'
   hud-notice: '<italic:false><#e8dfd2>Могилы: <#ffffff><count> · /graves — открыть меню'
   hud-target: '<italic:false><#c4a7e7>Могила · <#ffffff><distance> м<vertical> · /graves — меню'

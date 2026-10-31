@@ -43,8 +43,8 @@ internal fun onboardingGuideLines(view: OnboardingGuideView): List<Component> {
 
 private fun rewardRow(reward: OnboardingGuideReward): Component {
     val parts = buildList {
-        if (reward.coins > 0) add(text("${reward.coins} ", GOLD).append(text("💰", WHITE)))
-        if (reward.tokens > 0) add(text("${reward.tokens} ", PURPLE).append(text("", WHITE)))
+        if (reward.coins > 0) add(text("${reward.coins}", GOLD).append(text("💰", WHITE)))
+        if (reward.tokens > 0) add(text("${reward.tokens}", PURPLE).append(text("", WHITE)))
     }
     return row("Награда ").append(parts.reduce { first, second -> first.append(text(" ", BODY)).append(second) })
 }

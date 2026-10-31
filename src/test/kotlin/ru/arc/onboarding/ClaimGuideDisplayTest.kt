@@ -23,11 +23,11 @@ class ClaimGuideDisplayTest : StringSpec({
         }
         val plain = PlainTextComponentSerializer.plainText()
         val paid = requireNotNull(claimGuideCostText(template, 1250.5))
-        plain.serialize(paid) shouldBe "Стоимость: 1250.5 💰"
+        plain.serialize(paid) shouldBe "Стоимость: 1250.5💰"
         fun textParts(component: Component): List<TextComponent> =
             listOfNotNull(component as? TextComponent) + component.children().flatMap(::textParts)
         textParts(paid).single { it.content() == "💰" }.color() shouldBe NamedTextColor.WHITE
-        plain.serialize(requireNotNull(claimGuideCostText(template, 0.001))) shouldBe "Стоимость: 0.001 💰"
+        plain.serialize(requireNotNull(claimGuideCostText(template, 0.001))) shouldBe "Стоимость: 0.001💰"
     }
 
     "aiming at the action panel changes only glow and restores it without removing contours" {

@@ -483,7 +483,6 @@ internal class AdvancedBookShop(
 
     private fun priceComponent(priceMinor: Long): Component =
         Component.text(formatContractMoney(priceMinor))
-            .append(Component.space())
             .append(Component.text("💰", NamedTextColor.WHITE).decoration(TextDecoration.ITALIC, false))
             .decoration(TextDecoration.ITALIC, false)
 

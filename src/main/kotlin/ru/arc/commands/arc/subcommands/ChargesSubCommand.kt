@@ -110,4 +110,4 @@ internal fun fullChargeReturnCommand(playerName: String): String =
 private const val MAX_CHARGES_PLACEHOLDER = "%cmi_user_charges_max%"
 private const val REMAINING_CHARGES_PLACEHOLDER = "%cmi_user_charges_left%"
 private const val FULL_CHARGE_REWARD = 50_000
-private const val FULL_CHARGE_DISPLAY = "50 000 <white>💰</white>"
+private const val FULL_CHARGE_DISPLAY = "50 000<white>💰</white>"

@@ -47,7 +47,7 @@ class HelpCenterConfigTest : StringSpec({
             profileBodies.joinToString().contains("<balance>") shouldBe true
             val renderedProfile = renderedProfileLines(profileBodies)
             renderedProfile shouldBe listOf(
-                "ArchitectureMax", "Ранг: Следопыт", "Баланс: 8 000 000 💰", "Жетоны: 125 ",
+                "ArchitectureMax", "Ранг: Следопыт", "Баланс: 8 000 000💰", "Жетоны: 125",
                 "Дома: 3/8 · Приваты: 2 (47 чанков)",
                 "Мир: Ванильный мир",
                 "Координаты: -1842, 71, 3260", "Чат: локальный",

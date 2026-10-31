@@ -470,7 +470,7 @@ object InvestigationModule : PluginModule {
         if (success) {
             player.sendMessage(
                 TextUtil.mm(
-                    "<gray>Бюро выплатило <gold>${money(record.rewardMinor)} <white>💰</white><gray> за точную реконструкцию.",
+                    "<gray>Бюро выплатило <gold>${money(record.rewardMinor)}<white>💰</white><gray> за точную реконструкцию.",
                 ),
             )
         }

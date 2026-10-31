@@ -34,7 +34,6 @@ internal data class ItemInfoSettings(
             ?.takeIf(String::isNotEmpty)
             ?: return base
         val priceLine = Component.text(purchasePrice, NamedTextColor.GOLD)
-            .append(Component.space())
             .append(Component.text(ITEM_INFO_COIN_GLYPH, NamedTextColor.WHITE))
         val actionLine = Component.text("ПКМ — купить", NamedTextColor.GOLD)
         return base

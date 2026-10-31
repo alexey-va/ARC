@@ -251,7 +251,7 @@ text:
   table-balance-label: '<#f4d87a>Баланс'
   table-territory-value: '<#e6fff3><used> <#73808d>/ <#e8dfd2><maximum> <#9fb7c9>чанков'
   table-slots-value: '<#e6fff3><used> <#73808d>/ <#e8dfd2><maximum>'
-  table-coins-value: '<#f4bd6a><value> <white>💰</white>'
+  table-coins-value: '<#f4bd6a><value><white>💰</white>'
   root-title: '<#9bd48d>Приваты'
   root-body: '<#9bd48d>Новый приват<#e8dfd2>: на свободной земле нажми «Создать поселение».<newline><newline><#f3a2c9>Участники и права<#e8dfd2>: открой поселение в списке ниже.<newline><newline><#f4d87a>Расширение<#e8dfd2>: проверь галочку ✔ у нужного поселения. Если нужно, в его карточке нажми «Выбрать для расширения». Возьми блок привата и используй его рядом с границей.'
   root-empty: '<#e8dfd2>Ты пока не состоишь в поселении. Начни с «Создать поселение».'

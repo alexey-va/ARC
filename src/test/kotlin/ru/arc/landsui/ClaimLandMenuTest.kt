@@ -79,7 +79,7 @@ class ClaimLandMenuTest : FunSpec({
     test("the optional price is below all controls without moving their rectangles") {
         val labels = LandsUiPanelAction.entries.associateWith { Component.text(it.name) }
         val free = claimLandMenuLayout(Component.text("Дом"), labels)
-        val price = Component.text("Стоимость: 1250 💰")
+        val price = Component.text("Стоимость: 1250💰")
         val paid = claimLandMenuLayout(Component.text("Дом"), labels, price)
         paid.buttons.map { it.rect } shouldBe free.buttons.map { it.rect }
         paid.labels.map { it.rect } shouldBe free.labels.map { it.rect }
@@ -106,14 +106,14 @@ class ClaimLandMenuTest : FunSpec({
             val button = positions.first().clone().add(0.0, 0.23 / 2.0 - 0.025, 0.0)
             eye = eye.clone().setDirection(button.toVector().subtract(eye.toVector()))
             menu.target(player) shouldBe LandsUiPanelAction.ADD_MEMBER
-            menu.show(player, "home", "Дом", Component.text("Стоимость: 1000 💰"))
+            menu.show(player, "home", "Дом", Component.text("Стоимость: 1000💰"))
             made.size shouldBe 8
             positions.take(7) shouldBe initial
             menu.target(player) shouldBe LandsUiPanelAction.ADD_MEMBER
             val priceDisplay = made.last()
-            menu.show(player, "home", "Дом", Component.text("Стоимость: 2100 💰"))
+            menu.show(player, "home", "Дом", Component.text("Стоимость: 2100💰"))
             made.size shouldBe 8
-            texts.last() shouldBe Component.text("Стоимость: 2100 💰")
+            texts.last() shouldBe Component.text("Стоимость: 2100💰")
             menu.show(player, "home", "Дом")
             positions.take(7) shouldBe initial
             menu.target(player) shouldBe LandsUiPanelAction.ADD_MEMBER

@@ -82,7 +82,7 @@ class HelpCenterPresentationTest : FreeSpec({
     }
 
     "fact columns have exact pixel starts for long values and retain whole white currency glyphs" {
-        val money = Component.text("123 456 789.99 ").append(Component.text("💰", NamedTextColor.WHITE))
+        val money = Component.text("123 456 789.99").append(Component.text("💰", NamedTextColor.WHITE))
         val body = presentation("arc:dialog_ui").facts(listOf(
             listOf(Component.text("Игрок") to Component.text("Long_Player_1234").decorate(TextDecoration.BOLD),
                 Component.text("Баланс") to money),
@@ -129,7 +129,7 @@ class HelpCenterPresentationTest : FreeSpec({
         position(1, "В сети") shouldBe 261
         position(0, "Long_Player_1234", end = true) shouldBe 237
         position(1, "Исследователь", end = true) shouldBe 237
-        position(0, "123 456 789.99 💰", end = true) shouldBe 482
+        position(0, "123 456 789.99💰", end = true) shouldBe 482
         position(1, "999", end = true) shouldBe 482
         val visible = PlainTextComponentSerializer.plainText().serialize(body.text)
         visible.contains("Long_Player_1234") shouldBe true

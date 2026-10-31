@@ -35,11 +35,11 @@ shop:
     FABLED: 'Мифическая'
   level:
     label: '<#d6a5ff>Уровень <level>'
-    tooltip: '<#e8dfd2>Цена: <price> <white>💰</white>. Посмотреть перед покупкой.'
+    tooltip: '<#e8dfd2>Цена: <price><white>💰</white>. Посмотреть перед покупкой.'
     previous: '<#92bed8>‹ Предыдущая страница'
     next: '<#92bed8>Следующая страница ›'
   buy:
-    label: '<#70e0a0>Купить за <price> <white>💰</white>'
+    label: '<#70e0a0>Купить за <price><white>💰</white>'
     tooltip: '<#e8dfd2>Получить одну книгу выбранного зачарования и уровня.'
   back:
     label: '<#ffffff>‹ Назад'
@@ -49,8 +49,8 @@ shop:
   processing-body: '<#e8dfd2>Покупка обрабатывается. Повторно нажимать кнопку не нужно.'
   result-title: '<#d6a5ff>Покупка книги'
   result:
-    success: '<#70e0a0>Книга в инвентаре!<newline><#e8dfd2><name>, уровень <level>.<newline>Потрачено: <price> <white>💰</white>.<newline>Успех: <success>%. Разрушение при неудаче: <failure>%.<newline>Перетащите книгу на подходящий предмет, когда будете готовы.'
-    insufficient: '<#f4bd6a>Недостаточно монет. Нужно <price> <white>💰</white>. Деньги не списаны.'
+    success: '<#70e0a0>Книга в инвентаре!<newline><#e8dfd2><name>, уровень <level>.<newline>Потрачено: <price><white>💰</white>.<newline>Успех: <success>%. Разрушение при неудаче: <failure>%.<newline>Перетащите книгу на подходящий предмет, когда будете готовы.'
+    insufficient: '<#f4bd6a>Недостаточно монет. Нужно <price><white>💰</white>. Деньги не списаны.'
     no-space: '<#f4bd6a>Освободите одну ячейку в основном инвентаре. Деньги не списаны.'
     stale: '<#f4bd6a>Условия покупки изменились. Снова выберите книгу на спавне. Деньги не списаны.'
     failed: '<#f4bd6a>Магазин сейчас не может завершить покупку. Деньги за эту попытку не списаны.'

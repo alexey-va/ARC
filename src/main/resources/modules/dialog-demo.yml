@@ -94,7 +94,7 @@ alignment:
     <#FFE2AE><bold>Горожанин</bold>
     <#E6FFF3>Дома: <#7FE2B5>1 → 2
     <#E6FFF3>Чанки: <#7FE2B5>64 → 96
-    <#E6FFF3>Баланс: <#FFD166>12 500 <white>💰
+    <#E6FFF3>Баланс: <#FFD166>12 500<white>💰
 
 items:
   intro: |
@@ -668,8 +668,8 @@ design:
     heading: <#e8dfd2>Ресурсы и территория
     wallet: <#f4d87a>Кошелёк
     territory: <#e8dfd2>Территория
-    fact-0: {label: '<#e8dfd2>Баланс:', value: '<#f4d87a>67.7M <white>💰</white>'}
-    fact-1: {label: '<#e8dfd2>Жетоны:', value: '<#f4d87a>3 <white></white>'}
+    fact-0: {label: '<#e8dfd2>Баланс:', value: '<#f4d87a>67.7M<white>💰</white>'}
+    fact-1: {label: '<#e8dfd2>Жетоны:', value: '<#f4d87a>3<white></white>'}
     fact-2: {label: '<#e8dfd2>Дома:', value: '<#e8dfd2>1 / 3'}
     fact-3: {label: '<#e8dfd2>Приваты:', value: '<#e8dfd2>4 (124 чанка)'}
     fact-4: {label: '<#e8dfd2>Мир:', value: '<#e8dfd2>Обычный'}

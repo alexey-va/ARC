@@ -89,14 +89,14 @@ class ItemInfoInspectionProviderTest : StringSpec({
         provider.resolve(player)?.suppressesLowerSources shouldBe true
         preparation.completeNext()
         val first = provider.resolve(player)!!
-        plain.serialize(first.hologram) shouldBe "Стул\n1,250.00 💰\nПКМ — купить"
+        plain.serialize(first.hologram) shouldBe "Стул\n1,250.00💰\nПКМ — купить"
         plain.serialize(first.bossbar) shouldBe "Стул"
         priceLookups shouldBe 2
 
         currentPrice = "💰 1,375.00 💰"
         provider.resolve(player)?.suppressesLowerSources shouldBe true
         preparation.completeNext()
-        plain.serialize(provider.resolve(player)!!.hologram) shouldBe "Стул\n1,375.00 💰\nПКМ — купить"
+        plain.serialize(provider.resolve(player)!!.hologram) shouldBe "Стул\n1,375.00💰\nПКМ — купить"
         priceLookups shouldBe 4
 
         every { world.name } returns "rc_origin_spawn"
@@ -134,7 +134,7 @@ class ItemInfoInspectionProviderTest : StringSpec({
 
         provider.resolve(player)?.suppressesLowerSources shouldBe true
         preparation.completeNext()
-        plain.serialize(provider.resolve(player)!!.hologram) shouldBe "Чёрный стол\n8,500.00 💰\nПКМ — купить"
+        plain.serialize(provider.resolve(player)!!.hologram) shouldBe "Чёрный стол\n8,500.00💰\nПКМ — купить"
         every { world.name } returns "rc_origin_spawn"
         provider.resolve(player) shouldBe null
     }

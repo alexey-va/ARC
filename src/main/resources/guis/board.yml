@@ -33,7 +33,7 @@ contracts:
       - "<gray>Сдано: <white><accepted><gray>/<white><target> <dark_gray>(<progress>%)"
       - "<gray>В обработке: <white><reserved>"
       - "<gray>Осталось: <white><remaining>"
-      - "<gray>Следующий предмет: <gold><payout> <white>💰</white>"
+      - "<gray>Следующий предмет: <gold><payout><white>💰</white>"
       - "<gray>Остаток бюджета: <green><remaining_budget>"
       - "<gray>До: <white><ends_at>"
       - ""

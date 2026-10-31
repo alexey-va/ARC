@@ -51,7 +51,7 @@ class SidebarQuestRewardsTest {
             resolveOptionalSidebarLine(line) { placeholder ->
                 when (placeholder) {
                     "%arcranks_quest_board_header%" -> "Квесты"
-                    SidebarQuestRewards.SUMMARY_PLACEHOLDER -> "Итог: 980/980 💰 · 2/2 жет."
+                    SidebarQuestRewards.SUMMARY_PLACEHOLDER -> "Итог: 980/980💰 · 2/2 жет."
                     else -> if (placeholder.startsWith("%arcranks_quest_board_")) "" else placeholder
                 }
             }

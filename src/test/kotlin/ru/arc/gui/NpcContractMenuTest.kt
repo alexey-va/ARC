@@ -31,8 +31,8 @@ class NpcContractMenuTest : StringSpec({
             item.itemMeta.displayName()!!.decoration(TextDecoration.ITALIC) shouldBe TextDecoration.State.FALSE
             val text = item.itemMeta.lore()!!.joinToString("\n") { PlainTextComponentSerializer.plainText().serialize(it) }
             text.contains("Объявитель: Матео") shouldBe true
-            text.contains("1.50 💰") shouldBe true
-            text.contains("Базовая цена: 1.20 💰") shouldBe true
+            text.contains("1.50💰") shouldBe true
+            text.contains("Базовая цена: 1.20💰") shouldBe true
             text.contains("Надбавка к базовой цене: +25%") shouldBe true
             text.contains("arc:any_raw_fish") shouldBe false
         }

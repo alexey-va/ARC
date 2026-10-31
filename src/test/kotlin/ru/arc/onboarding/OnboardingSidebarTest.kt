@@ -46,7 +46,7 @@ class OnboardingSidebarTest : FreeSpec({
             serializer.serialize(lines[1]) shouldContain "&#77ee94"
             plain(lines[2]).startsWith("   ") shouldBe true
             plain(lines[2]).drop(3).first().isLowerCase() shouldBe true
-            plain(lines[3]) shouldBe "   Награда 200 💰 1 "
+            plain(lines[3]) shouldBe "   Награда 200💰 1"
             plain(lines[0]).startsWith("Первый дом · ") shouldBe true
             lines.all { plain(it).length <= 32 && '\n' !in plain(it) && '|' !in plain(it) } shouldBe true
         }
@@ -65,8 +65,8 @@ class OnboardingSidebarTest : FreeSpec({
         val reward = serializer.serialize(onboardingGuideLines(view())[3])
         reward shouldContain "&f💰"
         reward shouldContain "&f"
-        plain(onboardingGuideLines(view().copy(reward = OnboardingGuideReward(0, 3)))[3]) shouldBe "   Награда 3 "
-        plain(onboardingGuideLines(view().copy(reward = OnboardingGuideReward(50, 0)))[3]) shouldBe "   Награда 50 💰"
+        plain(onboardingGuideLines(view().copy(reward = OnboardingGuideReward(0, 3)))[3]) shouldBe "   Награда 3"
+        plain(onboardingGuideLines(view().copy(reward = OnboardingGuideReward(50, 0)))[3]) shouldBe "   Награда 50💰"
         plain(onboardingGuideLines(view().copy(reward = null))[3]) shouldBe "   Подсказки: 3ч 0м"
         plain(onboardingGuideLines(view().copy(reward = OnboardingGuideReward(0, 0), remainingTicks = 1))[3]) shouldBe "   Подсказки: 1м"
     }

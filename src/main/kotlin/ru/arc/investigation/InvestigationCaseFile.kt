@@ -130,7 +130,7 @@ object InvestigationCaseFile : Listener {
                 ) + witnesses +
                 listOf(
                     "",
-                    "<gray>Награда: <gold>${formatCaseMoney(record.rewardMinor)} <white>💰</white>",
+                    "<gray>Награда: <gold>${formatCaseMoney(record.rewardMinor)}<white>💰</white>",
                     "<gray>Срок: <white>${formatCaseDuration(requireNotNull(record.expiresAt) - requireNotNull(record.activeAt))}",
                     "",
                     "<green><bold>ПКМ предметом — открыть материалы",

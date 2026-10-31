@@ -45,7 +45,7 @@ internal sealed interface ContractBoardCard {
             get() = contractPriceGrowth(view.basePayoutMinorPerUnit, view.payoutMinorPerUnit)
 
         val announcement: Component
-            get() = Component.text("[$advertiser] ${view.displayName}: ${money(view.payoutMinorPerUnit)} ")
+            get() = Component.text("[$advertiser] ${view.displayName}: ${money(view.payoutMinorPerUnit)}")
                 .append(TextUtil.mm("<white>💰</white>"))
                 .append(Component.text(" ($priceGrowth) · Заказы на доске объявлений"))
 

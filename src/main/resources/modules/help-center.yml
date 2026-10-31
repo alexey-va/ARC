@@ -186,8 +186,8 @@ text:
   table-chat-local: 'локальный'
   table-rank-value: '<#c4abff><value>'
   table-currency-amount-value: '<#f4bd6a><value>'
-  table-coins-value: '<#f4bd6a><value> <white>💰</white>'
-  table-tokens-value: '<#f4bd6a><value> <white></white>'
+  table-coins-value: '<#f4bd6a><value><white>💰</white>'
+  table-tokens-value: '<#f4bd6a><value><white></white>'
   table-slots-value: '<used> / <maximum>'
   table-lands-value: '<count> (<chunks> чанков)'
   menu-close-label: "<#ffffff>Закрыть меню"
@@ -575,7 +575,7 @@ text:
   world-alias-parkour: Паркур
   world-alias-other: 'Другой мир'
   now-identity: '<#e6fff3><player>'
-  now-progress: '<#e8dfd2>Ранг: <#c4abff><rank><newline><#e8dfd2>Баланс: <#f4bd6a><balance> <white>💰</white><newline><#e8dfd2>Жетоны: <#f4bd6a><tokens> <white></white><newline><newline><#e8dfd2>Дома: <#91c4ff><homes>/<max_homes> <#e8dfd2>· Приваты: <#a3de92><lands> (<claimed_chunks> чанков)'
+  now-progress: '<#e8dfd2>Ранг: <#c4abff><rank><newline><#e8dfd2>Баланс: <#f4bd6a><balance><white>💰</white><newline><#e8dfd2>Жетоны: <#f4bd6a><tokens><white></white><newline><newline><#e8dfd2>Дома: <#91c4ff><homes>/<max_homes> <#e8dfd2>· Приваты: <#a3de92><lands> (<claimed_chunks> чанков)'
   now-location: '<#e8dfd2>Мир: <#e6fff3><world><newline><#e8dfd2>Координаты: <#e6fff3><x>, <y>, <z><newline><#e8dfd2>Чат: <#e6fff3><chat>'
   rec-home-label: '<#91c4ff>Поставить первый дом ›'
   rec-land-label: '<#a3de92>Защитить территорию ›'
@@ -670,7 +670,7 @@ text:
   my-title: '<#f4bd6a>Про меня'
   my-loading: '<#e6fff3>Собираю ваш профиль…'
   my-identity: '<#e6fff3><player><newline><#e8dfd2>Ранг: <#86dcf1><rank>'
-  my-summary: '<#e8dfd2>Баланс: <#f4bd6a><balance> <white>💰</white><newline><#e8dfd2>Жетоны: <#f4bd6a><tokens> <white></white><newline><#e8dfd2>Дома: <#9bd48d><homes>/<max_homes><newline><#e8dfd2>Поселения: <#9bd48d><lands> (<claimed_chunks> чанков)'
+  my-summary: '<#e8dfd2>Баланс: <#f4bd6a><balance><white>💰</white><newline><#e8dfd2>Жетоны: <#f4bd6a><tokens><white></white><newline><#e8dfd2>Дома: <#9bd48d><homes>/<max_homes><newline><#e8dfd2>Поселения: <#9bd48d><lands> (<claimed_chunks> чанков)'
   my-location: '<#e8dfd2>Мир: <#d7b486><world><newline><#e8dfd2>Координаты: <#e6fff3><x>, <y>, <z>'
   my-error: '<#e6fff3>Часть профиля сейчас недоступна. Быстрые разделы всё равно работают.'
   my-homes-label: '<#91c4ff>Мои дома ›'

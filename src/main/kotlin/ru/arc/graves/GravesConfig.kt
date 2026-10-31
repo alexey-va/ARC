@@ -107,7 +107,7 @@ internal class GravesConfig(private val source: Config) {
             "confirm-body" to "<italic:false><#e8dfd2>Подтвердите переход к выбранной могиле. Показанная стоимость зафиксирована для этого подтверждения.",
             "confirm-label" to "<italic:false><#9bd48d>Подтвердить переход",
             "confirm-tooltip" to "<italic:false><#e8dfd2>Перейти к выбранной могиле по указанной стоимости.",
-            "price-value" to "<italic:false><#f4bd6a><price> <white>💰</white>",
+            "price-value" to "<italic:false><#f4bd6a><price><white>💰</white>",
             "free-price" to "<italic:false><#9bd48d>Бесплатно по праву",
             "hud-notice" to "<italic:false><#e8dfd2>Могилы: <#ffffff><count> · /graves — открыть меню",
             "hud-target" to "<italic:false><#c4a7e7>Могила · <#ffffff><distance> м<vertical> · /graves — меню",

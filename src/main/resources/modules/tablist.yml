@@ -12,7 +12,7 @@ sections:
   profile:
     - '&#FFFFFF%player% &#7C8596• &#53CFE0%arcranks_rank_name%'
   balance:
-    - '&#F6C453%rediseco_bal_short_vault% &#FFFFFF💰 &#7C8596• &#B58CFF%rediseco_bal_short_tokens% &#FFFFFF'
+    - '&#F6C453%rediseco_bal_short_vault%&#FFFFFF💰 &#7C8596• &#B58CFF%rediseco_bal_short_tokens%&#FFFFFF'
   location:
     - '<font:arc:small_caps><#F6C453>Мир</#F6C453> <#F4F6FA>%arc_worldname%</#F4F6FA></font>'
     - '@survival ?<font:arc:small_caps><#F6C453>Место</#F6C453> <#9BD48D>%lands_land_name_plain_here%</#9BD48D></font>'
