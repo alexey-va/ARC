@@ -389,9 +389,12 @@ tasks {
         // The Test worker otherwise defaults to 512 MiB, too small for the full 3,000+ case suite.
         maxHeapSize = "2g"
         systemProperty("arc.test.unit", "true")
-        // Forward the deploy helper's catalogue inputs into the forked test JVM.
-        providers.systemProperty("arc.rewardCatalogPaths").orNull?.let {
-            systemProperty("arc.rewardCatalogPaths", it)
+        // Forward the deploy helper's catalogue inputs and track their contents.
+        providers.systemProperty("arc.rewardCatalogPaths").orNull?.let { paths ->
+            systemProperty("arc.rewardCatalogPaths", paths)
+            inputs.files(paths.split(File.pathSeparatorChar).map(String::trim).filter(String::isNotEmpty))
+                .withPropertyName("rewardCatalogues")
+                .withPathSensitivity(PathSensitivity.NONE)
         }
         // MockK/ByteBuddy must self-attach inside the Java 25 test worker. Without
         // these test-only flags it can wait forever for an external attach helper.
