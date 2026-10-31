@@ -145,13 +145,10 @@ internal class ClaimBlockTool(
         }
         val item = event.item ?: return
         val radius = ClaimBlockIdentity.radius(item) ?: return
-        if (OnboardingModule.claimGuide?.isMenuTarget(player) == true) {
-            event.isCancelled = true
-            return
-        }
         if (event.useItemInHand() == Event.Result.DENY) return
-        // Stop vanilla placement (and Lands' consuming BlockPlace handler) before it occurs.
+        // Deny native consumption before optional HUD calls, including incompatible providers.
         event.isCancelled = true
+        if (OnboardingModule.claimGuide?.isMenuTarget(player) == true) return
         if (player.gameMode == GameMode.SPECTATOR || player.gameMode == GameMode.ADVENTURE || player.isDead) return
         if (lands.configuration.mainConfig.getBoolean("land.claimblock.only-owner") && !ClaimBlockIdentity.usableBy(item, player)) {
             player.sendMessage(TextUtil.mm(settings.text("claim-place-owner")))

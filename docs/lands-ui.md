@@ -9,10 +9,10 @@ logical pixels). The instruction block has an opaque filled background at 400
 pixels; a thin shared-library rule without decorative end caps separates the two
 groups using the native body spacing, without extra blank bodies.
 Opening any settlement card preserves the selected land for subsequent Lands commands;
-The explicit «Выбрать для расширения» action and `/lands edit НАЗВАНИЕ` change
-that selection. Outside protected land the current-land inspection action is omitted.
+The explicit «Выбрать для расширения» action changes that selection.
+Outside protected land the current-land inspection action is omitted.
 
-Holding a native Lands claim block while standing inside a land you own or belong to shows a
+Holding an ARC claim block or a previously issued native Lands block inside a land you own or belong to shows a
 personal six-button world menu: add a player, members, rules, territory, settings
 and overview. Left and right click select the actual visible control without
 Shift; clicks outside the panel keep the existing reusable claim-block behavior.
@@ -77,10 +77,19 @@ admin button remains available to authorized viewers; simply opening a card neve
 enters admin mode.
 
 «Выдать блок привата» is the same action on the root and overview, including
-public inspection. Both use the existing gateway to issue the native item and
-report duplicate-item, full-inventory, cooldown and unavailable results; opening
-a page never issues an item. The dialogs no longer offer «Показать границы».
+public inspection. Both use the existing gateway to issue the ARC tool and
+report duplicate-item, full-inventory and unavailable results. Issuance has no
+cooldown; opening a page never issues an item. The dialogs no longer offer
+«Показать границы».
 Native boundary rendering and the held-block grid/wall guide remain unchanged.
+
+The menu, `/arc claimblock give` and kits using that command share `ClaimBlockItem`.
+New grass-block tools carry only `arc:claim_block`, `arc:claim_block_radius` and
+`arc:claim_block_owner` metadata, so Lands does not recognize them as consumable
+claim items. `ClaimBlockIdentity` still accepts the previously supported native
+`lands:type=CLAIM_BLOCK` plus radius format. Claims retain the public Lands
+`Selection.claim` path and its permission and limit checks. Item name and lore
+use `text.claim-block-*` in `modules/lands-ui.yml`.
 
 The root and settlement card no longer expose claim-radius or guide-display
 settings. Their screen handlers (`lands.claim-radius`, `lands.claim-display`) and

@@ -96,7 +96,6 @@ class LandsUiInspectionTest : StringSpec({
                     LandsUiClaimBlockResult.GIVEN to "claim-get-given",
                     LandsUiClaimBlockResult.ALREADY_PRESENT to "claim-get-already-present",
                     LandsUiClaimBlockResult.INVENTORY_FULL to "claim-get-inventory-full",
-                    LandsUiClaimBlockResult.COOLDOWN to "claim-get-cooldown",
                     LandsUiClaimBlockResult.UNAVAILABLE to "claim-get-unavailable",
                 ).forEach { (result, key) ->
                     every { gateway.giveClaimBlock(player) } returns result
@@ -106,7 +105,7 @@ class LandsUiInspectionTest : StringSpec({
                         .decoration(TextDecoration.ITALIC, false)
                     verify(exactly = 2) { player.sendMessage(feedback) }
                 }
-                verify(exactly = 10) { gateway.giveClaimBlock(player) }
+                verify(exactly = 8) { gateway.giveClaimBlock(player) }
 
                 inspection.buttons.single { it.id.value == "members" }.onClick.handle(context)
                 val firstPage = checkNotNull(screen)

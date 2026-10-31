@@ -37,7 +37,7 @@ commands:
     aliases: []
     permission: arc.give-claim-block
     player-only: false
-    description: Выдать блок привата
+    description: Выдать многоразовый блок привата
     usage: /arc claimblock give <player> [amount]
   contracts:
     name: contracts

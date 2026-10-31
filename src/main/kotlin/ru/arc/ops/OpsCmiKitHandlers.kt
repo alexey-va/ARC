@@ -52,7 +52,18 @@ object OpsCmiKitHandlers {
         body: JsonObject,
     ): Map<String, Any?> =
         OpsBukkitSync.call {
-            manager()
+            val commands = parseCommandsOnly(name, body)
+            val manager = manager()
+            if (commands != null) {
+                val kit = manager.getKit(name, true) ?: throw NoSuchElementException("CMI kit not found: $name")
+                return@call kitToMap(kit) + mapOf(
+                    "commands" to commands,
+                    "updatedFields" to listOf("commands"),
+                    "preview" to true,
+                    "persisted" to false,
+                    "source" to "cmi-api",
+                )
+            }
             val definition = parseDefinition(name, body)
             applyDefinition(Kit(name), definition)
             definitionToMap(definition) +
@@ -68,6 +79,20 @@ object OpsCmiKitHandlers {
         body: JsonObject,
     ): Map<String, Any?> =
         OpsBukkitSync.call {
+            val commands = parseCommandsOnly(name, body)
+            if (commands != null) {
+                val manager = manager()
+                val kit = manager.getKit(name, true) ?: throw NoSuchElementException("CMI kit not found: $name")
+                kit.commands = commands
+                manager.safeSave()
+                return@call mapOf(
+                    "source" to "cmi-api",
+                    "created" to false,
+                    "saved" to true,
+                    "updatedFields" to listOf("commands"),
+                    "kit" to kitToMap(kit),
+                )
+            }
             val definition = parseDefinition(name, body)
             val manager = manager()
             val existing = manager.getKit(name, true)
@@ -86,6 +111,26 @@ object OpsCmiKitHandlers {
                 "kit" to kitToMap(kit),
             )
         }
+
+    private fun parseCommandsOnly(name: String, body: JsonObject): List<String>? {
+        if (!body.has("commandsOnly")) return null
+        require(name.matches(Regex("[A-Za-z0-9_]+"))) { "kit name must be alphanumeric/underscore" }
+        val content = body.deepCopy()
+        content.remove("name")?.let { transportName ->
+            require(transportName.isJsonPrimitive && transportName.asJsonPrimitive.isString && transportName.asString == name) {
+                "name must match the selected kit"
+            }
+        }
+        val flag = content.get("commandsOnly")
+        require(flag.isJsonPrimitive && flag.asJsonPrimitive.isBoolean && flag.asBoolean) {
+            "commandsOnly must be true"
+        }
+        require(content.keySet().all { it == "commandsOnly" || it == "commands" }) {
+            "commandsOnly update accepts only commandsOnly and commands"
+        }
+        require(content.get("commands")?.isJsonArray == true) { "commands must be an array of strings" }
+        return stringList(content, "commands", maxEntries = 64, maxLength = 512)
+    }
 
     internal fun parseDefinition(
         name: String,

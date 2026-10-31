@@ -146,7 +146,6 @@ class LandsUiController(
                 LandsUiClaimBlockResult.GIVEN -> "claim-get-given"
                 LandsUiClaimBlockResult.ALREADY_PRESENT -> "claim-get-already-present"
                 LandsUiClaimBlockResult.INVENTORY_FULL -> "claim-get-inventory-full"
-                LandsUiClaimBlockResult.COOLDOWN -> "claim-get-cooldown"
                 LandsUiClaimBlockResult.UNAVAILABLE -> "claim-get-unavailable"
             }
             player.sendMessage(text(message))

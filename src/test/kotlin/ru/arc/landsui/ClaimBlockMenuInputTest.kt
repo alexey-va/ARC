@@ -1,5 +1,6 @@
 package ru.arc.landsui
 
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
@@ -25,6 +26,7 @@ import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 import ru.arc.core.TaskScheduler
 import ru.arc.core.Tasks
+import ru.arc.onboarding.ClaimBlockGuide
 import ru.arc.onboarding.ClaimBlockIdentity
 import ru.arc.onboarding.OnboardingModule
 import ru.arc.paper.testing.MockBukkitTestRuntime
@@ -164,9 +166,10 @@ class ClaimBlockMenuInputTest : StringSpec({
         }
     }
 
-    "a menu miss leaves the native off-hand claim-block placement path active" {
+    "a menu miss starts the reusable off-hand claim without changing the held stack" {
         withFixture(action = null) { fixture ->
             OnboardingModule.claimGuide shouldBe null
+            val original = fixture.player.inventory.itemInOffHand.clone()
             val block = fixture.player.world.getBlockAt(
                 fixture.player.location.blockX,
                 fixture.player.location.blockY,
@@ -184,8 +187,60 @@ class ClaimBlockMenuInputTest : StringSpec({
             fixture.tool.interact(event)
 
             event.isCancelled shouldBe true
+            event.useItemInHand() shouldBe Event.Result.DENY
+            fixture.player.inventory.itemInOffHand shouldBe original
             verify(exactly = 1) { fixture.scheduler.runSync(any()) }
             verify(exactly = 0) { fixture.lands.getLandPlayer(fixture.player.uniqueId) }
+        }
+    }
+
+    "native claim-block placement is denied before a broken HUD provider is called" {
+        withFixture(action = null) { fixture ->
+            val original = nativeClaimBlock().apply { amount = 5 }
+            fixture.player.inventory.setItemInMainHand(original.clone())
+            val event = interact(fixture.player, EquipmentSlot.HAND, fixture.player.inventory.itemInMainHand)
+                .apply { setUseItemInHand(Event.Result.ALLOW) }
+            val guide = mockk<ClaimBlockGuide>()
+            mockkObject(OnboardingModule)
+            try {
+                every { OnboardingModule.claimGuide } returns guide
+                every { guide.isMenuTarget(fixture.player) } answers {
+                    event.useItemInHand() shouldBe Event.Result.DENY
+                    event.useInteractedBlock() shouldBe Event.Result.DENY
+                    throw AbstractMethodError("isClaimTarget")
+                }
+
+                shouldThrow<AbstractMethodError> { fixture.tool.interact(event) }
+
+                event.useItemInHand() shouldBe Event.Result.DENY
+                fixture.player.inventory.itemInMainHand shouldBe original
+                verify(exactly = 1) { guide.isMenuTarget(fixture.player) }
+                verify(exactly = 0) { fixture.scheduler.runSync(any()) }
+            } finally {
+                unmockkObject(OnboardingModule)
+            }
+        }
+    }
+
+    "an existing item-use denial skips the HUD and claim request" {
+        withFixture(action = null) { fixture ->
+            val original = fixture.player.inventory.itemInOffHand.clone()
+            val event = interact(fixture.player, EquipmentSlot.OFF_HAND, original)
+                .apply { setUseItemInHand(Event.Result.DENY) }
+            val guide = mockk<ClaimBlockGuide>()
+            mockkObject(OnboardingModule)
+            try {
+                every { OnboardingModule.claimGuide } returns guide
+
+                fixture.tool.interact(event)
+
+                event.useItemInHand() shouldBe Event.Result.DENY
+                fixture.player.inventory.itemInOffHand shouldBe original
+                verify(exactly = 0) { guide.isMenuTarget(any()) }
+                verify(exactly = 0) { fixture.scheduler.runSync(any()) }
+            } finally {
+                unmockkObject(OnboardingModule)
+            }
         }
     }
 })
@@ -220,7 +275,7 @@ private fun withFixture(
         val ulid = mockk<ULID>()
         val land = mockk<Land>(relaxed = true)
         val landState = LandLookupState(land, player.uniqueId)
-        val claimBlock = nativeClaimBlock()
+        val claimBlock = ClaimBlockItem.create(player.uniqueId, LandsUiConfig.defaults())
         val menu = mockk<ClaimLandMenu>(relaxed = true)
 
         every { ulid.toString() } returns landId

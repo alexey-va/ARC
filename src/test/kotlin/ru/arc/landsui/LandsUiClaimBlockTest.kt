@@ -19,27 +19,36 @@ import org.bukkit.persistence.PersistentDataType
 import ru.arc.paper.testing.MockBukkitTestRuntime
 
 class LandsUiClaimBlockTest : StringSpec({
-    "claim block grant uses the native owner item and rejects duplicates or a full inventory" {
+    "claim block command cannot issue a tool without its active placement handler" {
+        MockBukkitTestRuntime.open().use { runtime ->
+            runtime.createSimplePlugin("Lands")
+            LandsUiModule.shutdown()
+            LandsUiModule.createClaimBlockItem(runtime.server.addPlayer()) shouldBe null
+        }
+    }
+
+    "ARC claim block grant ignores old cooldowns and rejects duplicates or a full inventory" {
         MockBukkitTestRuntime.open().use { runtime ->
             val player = runtime.server.addPlayer()
             val integration = mockk<LandsIntegration>()
             val landPlayer = mockk<LandPlayer>()
             val factory = mockk<LandsIntegrationFactory>()
             every { integration.getLandPlayer(player.uniqueId) } returns landPlayer
-            val block = ItemStack(Material.MAGENTA_GLAZED_TERRACOTTA).apply {
-                editMeta {
-                    it.persistentDataContainer.set(NamespacedKey("lands", "type"), PersistentDataType.STRING, "CLAIM_BLOCK")
-                    it.persistentDataContainer.set(NamespacedKey("lands", "radius"), PersistentDataType.INTEGER, 0)
-                    it.persistentDataContainer.set(NamespacedKey("lands", "o"), PersistentDataType.STRING, player.uniqueId.toString())
-                }
-            }
             mockkStatic(APIHandler::class)
             try {
                 every { APIHandler.getLandsIntegrationFactory() } returns factory
-                every { factory.buildItemStack(ItemType.CLAIM_BLOCK, landPlayer) } returns block
                 val gateway = BukkitLandsUiGateway(integration)
+                val cooldownKey = NamespacedKey("arc", "lands_claim_block_next_at")
                 gateway.giveClaimBlock(player) shouldBe LandsUiClaimBlockResult.GIVEN
-                player.inventory.getItem(0) shouldBe block
+                val block = checkNotNull(player.inventory.getItem(0))
+                block.type shouldBe Material.GRASS_BLOCK
+                block.amount shouldBe 1
+                val itemData = block.itemMeta.persistentDataContainer
+                itemData.get(NamespacedKey("arc", "claim_block"), PersistentDataType.BYTE) shouldBe 1.toByte()
+                itemData.get(NamespacedKey("arc", "claim_block_radius"), PersistentDataType.INTEGER) shouldBe 0
+                itemData.get(NamespacedKey("arc", "claim_block_owner"), PersistentDataType.STRING) shouldBe player.uniqueId.toString()
+                itemData.keys.none { it.namespace == "lands" } shouldBe true
+                player.persistentDataContainer.get(cooldownKey, PersistentDataType.LONG) shouldBe null
                 gateway.giveClaimBlock(player) shouldBe LandsUiClaimBlockResult.ALREADY_PRESENT
                 player.inventory.clear()
                 player.inventory.setItemInOffHand(block)
@@ -48,11 +57,14 @@ class LandsUiClaimBlockTest : StringSpec({
                 for (slot in 0..35) player.inventory.setItem(slot, ItemStack(Material.STONE, 64))
                 gateway.giveClaimBlock(player) shouldBe LandsUiClaimBlockResult.INVENTORY_FULL
                 player.inventory.clear()
-                // Reopening the menu or recreating its gateway does not reset the grant cooldown.
-                BukkitLandsUiGateway(integration).giveClaimBlock(player) shouldBe LandsUiClaimBlockResult.COOLDOWN
+                player.persistentDataContainer.set(cooldownKey, PersistentDataType.LONG, Long.MAX_VALUE)
+                BukkitLandsUiGateway(integration).giveClaimBlock(player) shouldBe LandsUiClaimBlockResult.GIVEN
+                player.inventory.getItem(0) shouldBe block
+                player.persistentDataContainer.get(cooldownKey, PersistentDataType.LONG) shouldBe Long.MAX_VALUE
                 every { integration.getLandPlayer(player.uniqueId) } returns null
                 gateway.giveClaimBlock(player) shouldBe LandsUiClaimBlockResult.UNAVAILABLE
-                verify(exactly = 1) { factory.buildItemStack(ItemType.CLAIM_BLOCK, landPlayer) }
+                verify(exactly = 0) { APIHandler.getLandsIntegrationFactory() }
+                verify(exactly = 0) { factory.buildItemStack(ItemType.CLAIM_BLOCK, landPlayer) }
             } finally {
                 unmockkStatic(APIHandler::class)
             }

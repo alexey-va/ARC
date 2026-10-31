@@ -4,9 +4,11 @@ import org.bukkit.NamespacedKey
 import org.bukkit.entity.Player
 import net.kyori.adventure.text.Component
 import org.bukkit.inventory.ItemStack
+import org.bukkit.persistence.PersistentDataContainer
 import org.bukkit.persistence.PersistentDataType
+import ru.arc.landsui.ClaimBlockItem
 
-/** Lands special-item markers, not the display name or the block material. */
+/** ARC tools and previously issued native Lands blocks, never names or materials. */
 internal object ClaimBlockIdentity {
     private val type = NamespacedKey("lands", "type")
     private val ownerKey = NamespacedKey("lands", "o")
@@ -15,7 +17,8 @@ internal object ClaimBlockIdentity {
     fun matches(item: ItemStack): Boolean = radius(item) != null
 
     fun usableBy(item: ItemStack, player: Player): Boolean {
-        val owner = item.itemMeta?.persistentDataContainer?.get(ownerKey, PersistentDataType.STRING)
+        val data = item.itemMeta?.persistentDataContainer ?: return false
+        val owner = data.get(if (isArc(data)) ClaimBlockItem.ownerKey else ownerKey, PersistentDataType.STRING)
         return owner == null || owner == player.uniqueId.toString()
     }
 
@@ -30,7 +33,8 @@ internal object ClaimBlockIdentity {
             else if (matches(inventory.itemInOffHand)) 40 else return false
         val item = inventory.getItem(slot)?.clone() ?: return false
         item.editMeta { meta ->
-            meta.persistentDataContainer.set(radiusKey, PersistentDataType.INTEGER, radius)
+            val data = meta.persistentDataContainer
+            data.set(if (isArc(data)) ClaimBlockItem.radiusKey else radiusKey, PersistentDataType.INTEGER, radius)
             meta.lore(lore)
         }
         inventory.setItem(slot, item)
@@ -41,7 +45,11 @@ internal object ClaimBlockIdentity {
     fun radius(item: ItemStack): Int? {
         if (!item.hasItemMeta()) return null
         val data = item.itemMeta.persistentDataContainer
+        if (isArc(data)) return data.get(ClaimBlockItem.radiusKey, PersistentDataType.INTEGER)?.takeIf { it in 0..4 }
         if (data.get(type, PersistentDataType.STRING) != "CLAIM_BLOCK") return null
         return data.get(radiusKey, PersistentDataType.INTEGER)?.takeIf { it in 0..4 }
     }
+
+    private fun isArc(data: PersistentDataContainer): Boolean =
+        data.get(ClaimBlockItem.markerKey, PersistentDataType.BYTE) == 1.toByte()
 }

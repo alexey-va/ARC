@@ -1,7 +1,6 @@
 package ru.arc.landsui
 
 import me.angeschossen.lands.api.LandsIntegration
-import me.angeschossen.lands.api.items.ItemType
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.entity.Player
@@ -56,12 +55,12 @@ object LandsUiModule : PluginModule {
         claimQuote?.quote(player, target, radius)
 
     fun createClaimBlockItem(player: Player): ItemStack? {
-        if (!Bukkit.getPluginManager().isPluginEnabled("Lands")) return null
+        if (claimTool == null || !Bukkit.getPluginManager().isPluginEnabled("Lands")) return null
+        val activeSettings = settings ?: return null
         return runCatching {
-            val landPlayer = LandsIntegration.of(ARC.instance).getLandPlayer(player.uniqueId) ?: return null
-            ItemType.CLAIM_BLOCK.build(landPlayer)
+            ClaimBlockItem.create(player.uniqueId, activeSettings)
         }.onFailure { failure ->
-            warn("Could not create Lands claim block for {}: {}", player.name, failure.message)
+            warn("Could not create ARC claim block for {}: {}", player.name, failure.message)
         }.getOrNull()
     }
 
@@ -154,7 +153,11 @@ object LandsUiModule : PluginModule {
         }
         regionAreaLimits = RegionAreaLimits.install()
         claimQuote = LandsClaimExpansionQuote(LandsIntegration.of(ARC.instance), lands)
-        val gateway = BukkitLandsUiGateway(roleName = loaded::roleName, roleEditing = LandsRoleEditing.bind(lands))
+        val gateway = BukkitLandsUiGateway(
+            roleName = loaded::roleName,
+            roleEditing = LandsRoleEditing.bind(lands),
+            claimBlockSettings = loaded,
+        )
         controller = LandsUiController(loaded, gateway)
         regionTool = RegionTool(loaded, gateway).also { it.start() }
         claimTool = ClaimBlockTool(loaded).also { it.start() }

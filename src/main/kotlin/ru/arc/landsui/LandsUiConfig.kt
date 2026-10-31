@@ -41,6 +41,8 @@ class LandsUiConfig(private val config: Config) {
     companion object {
         private const val RESOURCE = "lands-ui.yml"
 
+        fun defaults(): LandsUiSettings = LandsUiSettings(true, 12, DEFAULT_TEXT)
+
         fun load(dataPath: Path): LandsUiConfig {
             val source = ConfigManager.ofModule(dataPath, RESOURCE)
             source.mergeMissingFromBundled("modules/$RESOURCE")
@@ -95,13 +97,12 @@ class LandsUiConfig(private val config: Config) {
             "panel-territory" to "<#92bed8>Территория",
             "panel-settings" to "<#c4a7e7>Настройки",
             "panel-overview" to "<#92bed8>О привате",
-            "claim-get-cooldown" to "<#e8dfd2>Новый блок можно получить раз в 30 минут. Попробуй позже.",
             "claim-get-given" to "<#9bd48d>Блок привата добавлен в инвентарь.",
             "claim-get-already-present" to "<#e8dfd2>У тебя уже есть блок привата в инвентаре.",
             "claim-get-inventory-full" to "<#ff8178>Освободи место в инвентаре для блока привата.",
             "claim-get-unavailable" to "<#ff8178>Сейчас блок привата недоступен. Попробуй ещё раз позже.",
             "claim-get-label" to "<#9bd48d>Выдать блок привата",
-            "claim-get-tooltip" to "<#e8dfd2>Блок привата для расширения территории. Получение — раз в 30 минут.",
+            "claim-get-tooltip" to "<#e8dfd2>Многоразовый блок привата для расширения территории.",
             "root-command-heading" to "Команда",
             "root-command-help-heading" to "Действие",
             "root-command-create" to "<white>/lands create НАЗВАНИЕ",
@@ -263,8 +264,9 @@ class LandsUiConfig(private val config: Config) {
             "claim-display-reset" to "<#e8dfd2>Сбросить всё",
             "claim-display-default" to "обычная высота",
             "claim-display-blocks" to "блока",
+            "claim-block-name" to "<#9bd48d>Блок привата",
             "claim-block-size" to "<#e8dfd2>Захват: <size>×<size> · чанков: <chunks>",
-            "claim-block-reusable" to "<#e8dfd2>Поставь блок привата на свободной земле.",
+            "claim-block-reusable" to "<#e8dfd2>Многоразовый. ПКМ по свободной земле.",
             "claim-block-shortcut" to "<#92bed8>[▶] Shift + F <#e8dfd2>— меню приватов",
             "claim-block-missing" to "<#ff8178>Возьми блок привата в руку.",
             "close-label" to "<#ffffff>Закрыть",

@@ -13,7 +13,7 @@ object ClaimBlockSubCommand : SubCommand {
     override val configKey = "claimblock"
     override val defaultName = "claimblock"
     override val defaultPermission = "arc.give-claim-block"
-    override val defaultDescription = "Выдать блок привата Lands"
+    override val defaultDescription = "Выдать многоразовый блок привата"
     override val defaultUsage = "/arc claimblock give <player> [amount]"
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
