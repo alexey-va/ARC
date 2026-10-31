@@ -4,8 +4,12 @@ import com.google.gson.JsonParser
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.doubles.plusOrMinus
 import io.kotest.matchers.shouldBe
+import org.bukkit.Material
 import ru.arc.bschests.PersonalLootPoolSettings
 import ru.arc.enchanting.AdvancedEnchantmentLootSettings
+import ru.arc.enchanting.EnchantmentMiningLootSettings
+import ru.arc.enchanting.EnchantmentFarmingLootSettings
+import ru.arc.enchanting.EnchantmentWorldCacheSettings
 import ru.arc.ops.BundleDefinition
 import ru.arc.ops.BundleEntry
 import ru.arc.ops.ItemDefinition
@@ -148,6 +152,30 @@ class HelpCenterEnchantmentSourcesTest : StringSpec({
             personalLoot = snapshot.personalLoot?.copy(bonusChance = 0.0),
         ))
         changed.single("personal-loot-source").values["chance"] shouldBe "75"
+    }
+
+    "mining farming and exploration sources use the registered settings and disappear when inactive" {
+        val mining = EnchantmentMiningLootSettings(true, setOf("survival"), setOf(Material.STONE, Material.DEEPSLATE), 0.05)
+        val surface = EnchantmentWorldCacheSettings(true, true, setOf("survival"), 128)
+        val farming = EnchantmentFarmingLootSettings(true, setOf("survival"), setOf(Material.WHEAT, Material.CARROTS), 0.05, 86_400)
+        val snapshot = sources(emptyList(), emptyList()).copy(miningCache = mining, worldCache = surface, farmingCache = farming)
+        val current = HelpCenterEnchantmentSources.describe("ae_lootbox", snapshot)
+        current.single("mining-cache").values["chance"] shouldBe "0,05"
+        current.single("mining-cache-materials").values["materials"] shouldBe "DEEPSLATE,STONE"
+        current.single("world-cache").values["chance"] shouldBe "0,7813"
+        current.single("world-cache").values["one_in"] shouldBe "128"
+        current.single("farming-cache").values["chance"] shouldBe "0,05"
+        current.single("farming-cache").values["cooldown"] shouldBe "1d"
+        current.single("farming-cache-materials").values["materials"] shouldBe "CARROTS,WHEAT"
+
+        val changed = HelpCenterEnchantmentSources.describe("ae_lootbox", snapshot.copy(
+            miningCache = EnchantmentMiningLootSettings(true, setOf("vanilla"), setOf(Material.STONE), 0.1),
+            worldCache = EnchantmentWorldCacheSettings(true, true, setOf("vanilla"), 64),
+        ))
+        changed.single("mining-cache").values["chance"] shouldBe "0,1"
+        changed.single("world-cache").values["chance"] shouldBe "1,5625"
+        val inactive = HelpCenterEnchantmentSources.describe("ae_lootbox", snapshot.copy(miningCache = null, worldCache = null, farmingCache = null))
+        inactive.facts.none { it.key in setOf("mining-cache", "world-cache", "farming-cache") } shouldBe true
     }
 
     "missing or cyclic sources are unavailable instead of fabricated no-drop conclusions" {

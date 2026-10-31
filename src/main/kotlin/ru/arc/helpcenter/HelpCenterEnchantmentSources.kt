@@ -8,6 +8,9 @@ import ru.arc.bschests.PersonalLootPoolSettings
 import ru.arc.config.ConfigManager
 import ru.arc.core.dataPath
 import ru.arc.enchanting.AdvancedEnchantmentLootSettings
+import ru.arc.enchanting.EnchantmentMiningLootSettings
+import ru.arc.enchanting.EnchantmentFarmingLootSettings
+import ru.arc.enchanting.EnchantmentWorldCacheSettings
 import ru.arc.enchanting.EnchantingModule
 import ru.arc.enchanting.advancedEnchantmentWildDustPotency
 import ru.arc.ops.BundleDefinition
@@ -51,6 +54,10 @@ internal data class HelpCenterEnchantmentSourceSnapshot(
     val bossReward: HelpCenterEnchantmentBossReward? = null,
     val serverName: String = "",
     val personalLoot: PersonalLootPoolSettings? = null,
+    val miningCache: EnchantmentMiningLootSettings? = null,
+    val worldCache: EnchantmentWorldCacheSettings? = null,
+    val survivalDiscoveryUnavailable: Boolean = false,
+    val farmingCache: EnchantmentFarmingLootSettings? = null,
 )
 
 internal data class HelpCenterEnchantmentRewardOutcome(val topicId: String, val probability: Double, val amount: Int)
@@ -125,15 +132,21 @@ internal object HelpCenterEnchantmentSources {
                 )
             }
         } else null
+        val discovery = EnchantingModule.survivalDiscoverySnapshot()
         return HelpCenterEnchantmentSourceSnapshot(
             pools, presets, EnchantingModule.activeLootSettings(), boss, ARC.serverName.orEmpty(), PersonalLootModule.activePoolLootSettings(),
+            discovery?.mining, discovery?.worldCaches, discovery == null, discovery?.farming,
         )
     }
 
     private fun describeLoaded(topicId: String, snapshot: HelpCenterEnchantmentSourceSnapshot): HelpCenterEnchantmentAcquisition {
         val result = describe(topicId, snapshot)
         val native = if (topicId.lowercase(Locale.ROOT) in ITEM_TOPICS) HelpCenterAeNativeSources.describe(topicId) else emptyList()
-        return result.copy(facts = result.facts + native + HelpCenterDenizenSources.describe(topicId))
+        val additional = native + HelpCenterDenizenSources.describe(topicId) + HelpCenterCmiKitSources.describe(topicId, snapshot)
+        val local = if (additional.any { it.key in setOf("gkit-source", "cmi-kit-source", "native-mob") }) {
+            result.facts.filterNot { it.key == "no-drop" }
+        } else result.facts
+        return result.copy(facts = local + additional)
     }
 
     internal fun describe(topicId: String, snapshot: HelpCenterEnchantmentSourceSnapshot): HelpCenterEnchantmentAcquisition {
@@ -147,6 +160,30 @@ internal object HelpCenterEnchantmentSources {
         val facts = mutableListOf<HelpCenterEnchantmentSourceFact>()
         val related = linkedSetOf<String>()
         if (snapshot.serverName.isNotBlank()) facts += fact("scope", "server" to snapshot.serverName)
+
+        if (topic == "overview" || topic == "ae_lootbox") {
+            if (snapshot.survivalDiscoveryUnavailable) facts += unavailable("survival-sources")
+            snapshot.miningCache?.takeIf { it.survivalBackend && it.worldNames.isNotEmpty() && it.materials.isNotEmpty() && it.chancePercent > 0.0 }?.let {
+                facts += fact("mining-cache", "chance" to number(it.chancePercent), "worlds" to it.worldNames.sorted().joinToString(", "))
+                it.materials.map { material -> material.name }.sorted().chunked(4).forEach { materials ->
+                    facts += fact("mining-cache-materials", "materials" to materials.joinToString(","))
+                }
+                if (topic == "overview") related += "ae_lootbox"
+            }
+            snapshot.worldCache?.takeIf { it.enabled && it.survivalBackend && it.worldNames.isNotEmpty() }?.let {
+                facts += fact("world-cache", "chance" to number(100.0 / it.chanceDenominator),
+                    "one_in" to it.chanceDenominator.toString(), "worlds" to it.worldNames.sorted().joinToString(", "))
+                if (topic == "overview") related += "ae_lootbox"
+            }
+            snapshot.farmingCache?.takeIf { it.survivalBackend && it.worldNames.isNotEmpty() && it.materials.isNotEmpty() && it.chancePercent > 0.0 }?.let {
+                facts += fact("farming-cache", "chance" to number(it.chancePercent), "worlds" to it.worldNames.sorted().joinToString(", "),
+                    "cooldown" to helpCooldown(it.cooldownSeconds))
+                it.materials.map { material -> material.name }.sorted().chunked(4).forEach { materials ->
+                    facts += fact("farming-cache-materials", "materials" to materials.joinToString(","))
+                }
+                if (topic == "overview") related += "ae_lootbox"
+            }
+        }
 
         if (topic == "overview" || topic == "magic") {
             val settings = snapshot.naturalLoot

@@ -1,10 +1,12 @@
 package ru.arc.helpcenter
 
+import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Bukkit
+import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -15,6 +17,8 @@ import org.junit.jupiter.api.Test
 import ru.arc.config.ConfigManager
 import ru.arc.core.BukkitTaskScheduler
 import ru.arc.core.Tasks
+import ru.arc.hooks.HookRegistry
+import ru.arc.hooks.ztranslator.TranslatorHook
 import ru.arc.paper.menu.PaperDialogClickContext
 import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.paper.testing.MockBukkitTestRuntime
@@ -201,6 +205,46 @@ class HelpCenterEnchantmentsControllerTest {
     }
 
     @Test
+    fun `source overview opens all five boxes through one catalogue and restores the original source page`() {
+        sourceResult = CompletableFuture.completedFuture(HelpCenterEnchantmentAcquisition(enchantmentDiscoveryPreviewFacts()))
+        open()
+        click("acquisition")
+
+        assertEquals(listOf("boxes", "next"), screen.buttons.map { it.id.value })
+        assertEquals("Шкатулки", plain(screen.buttons.single { it.id.value == "boxes" }.label))
+        assertFalse(screen.buttons.single { it.id.value == "boxes" }.closeDialogBeforeAction)
+        click("next")
+        val originalBody = body()
+        val originalButtons = screen.buttons.map { it.id.value }
+        assertTrue(originalBody.contains("Шкатулки за урожай"))
+        click("boxes")
+
+        val expected = listOf("ae_lootbox", "ae_lootbox_enchanted", "ae_lootbox_master", "enchant_supply", "enchant_boss_supply")
+        assertEquals("help.enchantments.boxes", screen.id)
+        assertEquals(expected.map { "item_$it" }, screen.buttons.map { it.id.value })
+        assertEquals(2, screen.columns)
+        expected.forEach { topic ->
+            click("item_$topic")
+            assertEquals("help.enchantments.topic.$topic", screen.id)
+            assertTrue(body().contains("Как использовать"))
+            click("sources")
+            assertEquals("help.enchantments.sources.$topic", screen.id)
+            click("back")
+            assertEquals("help.enchantments.topic.$topic", screen.id)
+            click("back")
+            assertEquals("help.enchantments.boxes", screen.id)
+            assertEquals(5, screen.buttons.size)
+        }
+
+        click("back")
+        assertEquals("help.enchantments.acquisition", screen.id)
+        assertEquals(originalBody, body())
+        assertEquals(originalButtons, screen.buttons.map { it.id.value })
+        click("back")
+        assertEquals("help.enchantments", screen.id)
+    }
+
+    @Test
     fun `source refresh uses new data and late completion cannot replace another page`() {
         controller.search(player, "увеличитель слотов")
         paper.performTicks(2)
@@ -239,6 +283,205 @@ class HelpCenterEnchantmentsControllerTest {
         sourceResult.complete(sourceReport("55"))
         paper.performTicks(2)
         assertEquals(beforeClose, screenDisplays)
+    }
+
+    @Test
+    fun `survival discovery sources precede box contents and preserve the current server scope`() {
+        val previousTranslator = HookRegistry.translatorHook
+        HookRegistry.translatorHook = mockk<TranslatorHook>().also { translator ->
+            every { translator.translate(Material.STONE) } returns "Камень"
+            every { translator.translate(Material.DEEPSLATE) } returns "Глубинный сланец"
+        }
+        try {
+            sourceResult = CompletableFuture.completedFuture(HelpCenterEnchantmentAcquisition(listOf(
+                HelpCenterEnchantmentSourceFact("box-content", mapOf("item" to "slotincreaser", "per_roll" to "3,31", "amount" to "1")),
+                HelpCenterEnchantmentSourceFact("scope", mapOf("server" to "spawn")),
+                HelpCenterEnchantmentSourceFact("box-rolls", mapOf("min" to "1", "max" to "2", "pool" to "ae")),
+                HelpCenterEnchantmentSourceFact("mining-cache-materials", mapOf("materials" to "STONE,DEEPSLATE")),
+                HelpCenterEnchantmentSourceFact("mining-cache", mapOf("chance" to "0,02", "worlds" to "world")),
+                HelpCenterEnchantmentSourceFact("world-cache", mapOf("chance" to "0,78125", "one_in" to "128", "worlds" to "world")),
+            )))
+            open()
+            click("acquisition")
+
+            body().contains("Вы на сервере: Спавн") shouldBe true
+            body().contains("Исследование мира · добыча киркой") shouldBe true
+            body().contains("сбор урожая") shouldBe false
+            body().contains("Тайники на поверхности · Выживание") shouldBe true
+            body().contains("Находки при добыче · Выживание") shouldBe true
+            body().contains("Шанс выбрать чанк для проверки: 0,78125% (1 из 128)") shouldBe true
+            body().contains("не гарантия сундука") shouldBe true
+            body().contains("не возрождается") shouldBe true
+            body().contains("киркой шанс шкатулки — 0,02%") shouldBe true
+            body().contains("Одна находка на чанк для всех игроков") shouldBe true
+            body().contains("«Удача» не увеличивает шанс") shouldBe true
+            body().contains("Обычные блоки, поставленные игроками, исключаются") shouldBe true
+            body().contains("не больше одного шанса за тик") shouldBe true
+            body().contains("не подтверждает природное происхождение") shouldBe false
+            body().contains("Добыча киркой · подходящие блоки") shouldBe false
+            body().contains("Шанс за одну награду") shouldBe false
+            body().contains("Награды на сервере") shouldBe false
+
+            click("next")
+            body().contains("Добыча киркой · подходящие блоки: Камень, Глубинный сланец") shouldBe true
+            body().contains("1–2 независимых наград") shouldBe true
+            body().contains("Шанс за одну награду: 3,31%") shouldBe true
+        } finally {
+            HookRegistry.translatorHook = previousTranslator
+        }
+    }
+
+    @Test
+    fun `discovery index keeps farming with all six crops ahead of eighteen mining materials`() {
+        val previousTranslator = HookRegistry.translatorHook
+        HookRegistry.translatorHook = mockk<TranslatorHook>().also { translator ->
+            every { translator.translate(any<Material>()) } answers {
+                (enchantmentDiscoveryMiningNames + enchantmentDiscoveryCropNames).getValue(firstArg())
+            }
+        }
+        try {
+            enchantmentDiscoveryMiningNames.size shouldBe 18
+            enchantmentDiscoveryCropNames.size shouldBe 6
+            sourceResult = CompletableFuture.completedFuture(HelpCenterEnchantmentAcquisition(listOf(
+                HelpCenterEnchantmentSourceFact("unavailable", mapOf("source" to "ae-native")),
+                HelpCenterEnchantmentSourceFact("box-content", mapOf("item" to "slotincreaser", "per_roll" to "3,31", "amount" to "1")),
+            ) + enchantmentDiscoveryPreviewFacts()))
+            open()
+            click("acquisition")
+
+            body().contains("Исследование мира · добыча киркой · сбор урожая") shouldBe true
+            body().contains("Тайники на поверхности · Выживание") shouldBe true
+            body().contains("Находки при добыче · Выживание") shouldBe true
+            (body().indexOf("Исследование мира") < body().indexOf("Тайники на поверхности")) shouldBe true
+            body().contains("Шкатулки за урожай") shouldBe false
+            body().contains("подходящие блоки") shouldBe false
+            body().contains("Шанс за одну награду") shouldBe false
+
+            click("next")
+            val harvest = body()
+            harvest.contains("Вы на сервере: Спавн") shouldBe true
+            harvest.contains("Шкатулки за урожай · Выживание") shouldBe true
+            harvest.contains("При ручном сборе полностью выросших культур") shouldBe true
+            harvest.contains("шанс шкатулки на подходящую попытку — 0,05%") shouldBe true
+            harvest.contains("Миры: survival, survival_nether, vanilla, vanilla_nether, world, world_nether") shouldBe true
+            harvest.contains("У игрока не больше одного шанса за тик") shouldBe true
+            harvest.contains("новый шанс в этом чанке появится через 1 дн.") shouldBe true
+            harvest.contains("ожидание общее для всех игроков") shouldBe true
+            harvest.contains("Костная мука разрешена") shouldBe true
+            harvest.contains("Сбор урожая · подходящие культуры: Свёкла, Морковь, Какао, Незерский нарост") shouldBe true
+            harvest.contains("Сбор урожая · подходящие культуры: Картофель, Ростки пшеницы") shouldBe true
+            (harvest.indexOf("Шкатулки за урожай") < harvest.indexOf("Сбор урожая · подходящие культуры")) shouldBe true
+            harvest.contains("Находки при добыче") shouldBe false
+            harvest.contains("подходящие блоки") shouldBe false
+            harvest.contains("Исследование мира") shouldBe false
+            harvest.contains("Одна находка на чанк для всех игроков") shouldBe false
+            harvest.contains("Шанс за одну награду") shouldBe false
+
+            click("next")
+            val firstOres = body()
+            (firstOres.split("Добыча киркой · подходящие блоки").size - 1) shouldBe 3
+            firstOres.contains("Шкатулки за урожай") shouldBe false
+            firstOres.contains("Исследование мира") shouldBe false
+            firstOres.contains("Шанс за одну награду") shouldBe false
+
+            click("next")
+            val lastOres = body()
+            (lastOres.split("Добыча киркой · подходящие блоки").size - 1) shouldBe 2
+            enchantmentDiscoveryMiningNames.values.forEach { (firstOres + lastOres).contains(it) shouldBe true }
+            lastOres.contains("Шанс за одну награду: 3,31%") shouldBe true
+            (lastOres.lastIndexOf("Добыча киркой") < lastOres.indexOf("Шанс за одну награду")) shouldBe true
+            lastOres.contains("недоступны") shouldBe false
+
+            click("next")
+            body().contains("недоступны") shouldBe true
+            body().contains("Исследование мира") shouldBe false
+        } finally {
+            HookRegistry.translatorHook = previousTranslator
+        }
+    }
+
+    @Test
+    fun `discovery index includes only present sources and stays absent for unknown or disabled discovery`() {
+        for (facts in listOf(emptyList(), listOf(HelpCenterEnchantmentSourceFact("unavailable", mapOf("source" to "survival-sources"))))) {
+            sourceResult = CompletableFuture.completedFuture(HelpCenterEnchantmentAcquisition(facts))
+            open()
+            click("acquisition")
+
+            body().contains("Исследование мира") shouldBe false
+            body().contains("Добыча киркой") shouldBe false
+            body().contains("Сбор урожая") shouldBe false
+        }
+
+        sourceResult = CompletableFuture.completedFuture(HelpCenterEnchantmentAcquisition(listOf(
+            HelpCenterEnchantmentSourceFact("mining-cache", mapOf("chance" to "0,05", "worlds" to "survival")),
+        )))
+        open()
+        click("acquisition")
+        body().contains("Добыча киркой") shouldBe true
+        body().contains("Исследование мира") shouldBe false
+        body().contains("сбор урожая") shouldBe false
+    }
+
+    @Test
+    fun `kit sources state the access condition for both commands without promising a permission`() {
+        sourceResult = CompletableFuture.completedFuture(HelpCenterEnchantmentAcquisition(listOf(
+            HelpCenterEnchantmentSourceFact("box-content", mapOf("item" to "slotincreaser", "per_roll" to "3,31", "amount" to "1")),
+            HelpCenterEnchantmentSourceFact("cmi-kit-source", mapOf("kit" to "aelootbox", "item" to "ae_lootbox", "amount" to "1", "cooldown" to "24h")),
+            HelpCenterEnchantmentSourceFact("gkit-source", mapOf("kit" to "enchant", "amount" to "2", "chance" to "10", "cooldown" to "168h")),
+        )))
+        open()
+        click("acquisition")
+
+        val visible = body()
+        visible.contains("/kit aelootbox") shouldBe true
+        visible.contains("/gkit") shouldBe true
+        visible.contains("Отдельный розыгрыш при получении набора: 10%.") shouldBe true
+        visible.contains("Интервал: 24 ч") shouldBe true
+        visible.contains("Интервал: 168 ч") shouldBe true
+        (visible.split("Только при наличии доступа к этому набору").size - 1) shouldBe 2
+        (visible.split("могут действовать другие условия").size - 1) shouldBe 2
+        (visible.indexOf("Набор чар") < visible.indexOf("Шанс за одну награду")) shouldBe true
+        visible.contains("VIP") shouldBe false
+        executed.isEmpty() shouldBe true
+    }
+
+    @Test
+    fun `unavailable cross server and kit sources have readable names and do not imply a zero chance`() {
+        sourceResult = CompletableFuture.completedFuture(HelpCenterEnchantmentAcquisition(
+            listOf("cmi-kits", "ae-gkits", "survival-sources").map {
+                HelpCenterEnchantmentSourceFact("unavailable", mapOf("source" to it))
+            },
+        ))
+        open()
+        click("acquisition")
+
+        body().contains("Наборы /kit") shouldBe true
+        body().contains("Наборы чар /gkit") shouldBe true
+        body().contains("Находки на Выживании") shouldBe true
+        body().contains("Это не означает нулевой шанс") shouldBe true
+        body().contains("cmi-kits") shouldBe false
+        body().contains("ae-gkits") shouldBe false
+        body().contains("survival-sources") shouldBe false
+    }
+
+    @Test
+    fun `material names safely fall back when the loaded translator is unavailable`() {
+        val previousTranslator = HookRegistry.translatorHook
+        HookRegistry.translatorHook = mockk<TranslatorHook>().also { translator ->
+            every { translator.translate(any<Material>()) } throws IllegalStateException("translator unavailable")
+        }
+        try {
+            sourceResult = CompletableFuture.completedFuture(HelpCenterEnchantmentAcquisition(listOf(
+                HelpCenterEnchantmentSourceFact("mining-cache-materials", mapOf("materials" to "STONE, DEEPSLATE,FUTURE_ORE")),
+            )))
+            open()
+            click("acquisition")
+
+            body().contains("Добыча киркой · подходящие блоки: Stone, Deepslate, FUTURE_ORE") shouldBe true
+            body().contains("translator unavailable") shouldBe false
+        } finally {
+            HookRegistry.translatorHook = previousTranslator
+        }
     }
 
     @Test

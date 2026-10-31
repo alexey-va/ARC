@@ -928,6 +928,7 @@ open class ARC : JavaPlugin() {
         }
         ConfigManager.of(root, "modules/personalloot.yml").mergeMissingFromBundled("modules/personalloot.yml")
         ConfigManager.of(root, "modules/item-presets.yml").mergeMissingFromBundled("modules/item-presets.yml")
+        ConfigManager.of(root, "modules/enchanting.yml").mergeMissingFromBundled("modules/enchanting.yml")
         ConfigManager.of(root.resolve("config"), "commands.yml").mergeMissingFromBundled("config/commands.yml")
     }
 

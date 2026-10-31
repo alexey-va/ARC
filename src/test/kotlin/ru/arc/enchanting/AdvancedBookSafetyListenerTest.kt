@@ -5,6 +5,8 @@ import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
 import io.mockk.unmockkStatic
 import io.mockk.verify
 import net.advancedplugins.ae.api.AEAPI
@@ -21,6 +23,7 @@ import org.bukkit.persistence.PersistentDataType
 import ru.arc.core.Tasks
 import ru.arc.core.TestTaskScheduler
 import ru.arc.paper.testing.MockBukkitTestRuntime
+import ru.arc.listeners.CreativeRewardItemGuard
 
 class AdvancedBookSafetyListenerTest : StringSpec({
     "missing provider bridge blocks application and preserves the proposed creative book" {
@@ -43,11 +46,16 @@ class AdvancedBookSafetyListenerTest : StringSpec({
             val config = mockk<EnchantingConfig>()
             every { config.text("messages.unavailable") } returns Component.text("Unavailable")
             val listener = AdvancedBookSafetyListener(config)
+            // This test isolates the missing AE presentation bridge. MockBukkit cannot
+            // read real NBT; the separate reward guard tests cover fail-closed denial.
+            mockkObject(CreativeRewardItemGuard.Companion)
+            every { CreativeRewardItemGuard.isProtected(book) } returns false
             try {
                 listener.onBookClick(event)
                 verify { event.isCancelled = true }
                 player.inventory.storageContents.filterNotNull().single() shouldBe book
             } finally {
+                unmockkObject(CreativeRewardItemGuard.Companion)
                 listener.close()
                 Tasks.reset()
             }

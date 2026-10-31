@@ -1,7 +1,9 @@
 package ru.arc.helpcenter
 
 import org.bukkit.configuration.ConfigurationSection
+import org.bukkit.command.PluginCommand
 import org.bukkit.plugin.Plugin
+import java.util.Locale
 import java.util.logging.Level
 
 /**
@@ -57,6 +59,8 @@ internal object HelpCenterAeNativeSources {
         private val mobs = requireNotNull(yaml.getField("MOBS").get(null))
         private val main = requireNotNull(yaml.getField("CONFIG").get(null))
         private val tinkerer = requireNotNull(yaml.getField("TINKERER").get(null))
+        private val gkits = requireNotNull(yaml.getField("GKITS").get(null))
+        private val gkitsEnabled = type("net.advancedplugins.ae.features.gkits.GKits").getMethod("isEnabled")
         private val yamlConfig = yaml.getMethod("getConfig")
         private val groupsType = type("net.advancedplugins.ae.enchanthandler.enchantments.AdvancedGroup")
         private val groups = groupsType.getMethod("getGroups")
@@ -95,6 +99,13 @@ internal object HelpCenterAeNativeSources {
                 }
                 val loadedMobs = yamlConfig.invoke(mobs) as ConfigurationSection
                 addAll(nativeMobFacts(topicId, loadedMobs))
+                if (gkitsEnabled.invoke(null) == true) {
+                    // GKit commands use bare "ae"; another plugin can own that alias.
+                    if (gkitCommandResolvesTo(plugin, plugin.server.getPluginCommand("ae"))) {
+                        val groupIds = loadedGroups.map { groupName.invoke(it) as String }.toSet()
+                        addAll(nativeGkitFacts(topicId, yamlConfig.invoke(gkits) as ConfigurationSection, groupIds))
+                    } else add(fact("unavailable", "source" to "ae-gkits"))
+                }
                 val handler = population.invoke(null)
                 if (handler != null) {
                     val loot = populationConfig.invoke(populationFile.invoke(handler)) as ConfigurationSection
@@ -104,6 +115,60 @@ internal object HelpCenterAeNativeSources {
                     }
                 }
             }
+        }
+    }
+
+    internal fun gkitCommandResolvesTo(plugin: Plugin, command: PluginCommand?): Boolean = command?.plugin === plugin
+
+    /** Read only native giveitem selectors understood by the installed AE command. */
+    internal fun nativeGkitFacts(topicId: String, config: ConfigurationSection, groups: Set<String>): List<HelpCenterEnchantmentSourceFact> {
+        if (!config.getBoolean("gkits-enabled")) return emptyList()
+        val kits = config.getConfigurationSection("kits") ?: return emptyList()
+        val ids = kits.getKeys(false)
+        if (ids.size > 256) return listOf(fact("unavailable", "source" to "ae-gkits"))
+        return ids.sorted().flatMap { id ->
+            val kit = kits.getConfigurationSection(id) ?: return@flatMap emptyList()
+            val permission = kit.getString("permission").orEmpty()
+            val content = kit.getConfigurationSection("content") ?: return@flatMap emptyList()
+            if (content.getKeys(false).size > 128 || permission.isBlank()) return@flatMap emptyList()
+            val delay = kit.getLong("delay").coerceAtLeast(0)
+            content.getKeys(false).sorted().mapNotNull { slot ->
+                val words = content.getString("$slot.command").orEmpty().trim().split(Regex("\\s+"))
+                if (words.size < 5 || !words[0].equals("ae", true) || !words[1].equals("giveitem", true) || words[2] != "%player%") return@mapNotNull null
+                val raw = words[3].lowercase(Locale.ROOT)
+                if (raw !in GKIT_ITEM_SELECTORS) return@mapNotNull null
+                val name = when (raw) {
+                    "renametag" -> "itemnametag"
+                    "orb" -> "orb_${words.getOrNull(5).orEmpty().lowercase(Locale.ROOT)}"
+                    else -> raw
+                }
+                if (name != topicId || !validGkitArguments(raw, words, groups)) return@mapNotNull null
+                val amount = words[4].toIntOrNull()?.takeIf { it in 1..64 } ?: return@mapNotNull null
+                // AE 9.24.15 rolls each content slot independently, only when chance exists.
+                val chance = if (content.contains("$slot.chance")) content.getInt("$slot.chance").coerceIn(0, 100) else 100
+                if (chance == 0) return@mapNotNull null
+                fact("gkit-source", "kit" to id, "slot" to slot, "amount" to amount.toString(),
+                    "chance" to chance.toString(), "cooldown" to helpCooldown(delay))
+            }
+        }
+    }
+
+    private val GKIT_ITEM_SELECTORS = setOf(
+        "whitescroll", "blackscroll", "holywhitescroll", "magic", "secret", "mystery", "randomizer", "transmog",
+        "soulgem", "soultracker", "slotincreaser", "blocktrak", "stattrak", "mobtrak", "fishtrak", "renametag", "orb",
+    )
+
+    private fun validGkitArguments(raw: String, words: List<String>, groups: Set<String>): Boolean {
+        val extra = words.getOrNull(5)
+        return when (raw) {
+            "magic", "secret", "randomizer", "slotincreaser" ->
+                groups.isNotEmpty() && (extra == null || extra.uppercase(Locale.ROOT) in groups)
+            "soulgem" -> extra?.toIntOrNull() != null
+            "blocktrak", "fishtrak", "stattrak", "mobtrak" ->
+                extra == null || extra.replace(Regex("[^0-9]"), "").toIntOrNull() != null
+            "orb" -> words.size >= 8 && extra?.lowercase(Locale.ROOT) in setOf("weapon", "armor", "tool") &&
+                words[6].toIntOrNull() != null && words[7].toIntOrNull() != null
+            else -> true
         }
     }
 

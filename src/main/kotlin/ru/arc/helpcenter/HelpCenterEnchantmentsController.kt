@@ -6,10 +6,12 @@ import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import org.bukkit.Material
 import org.bukkit.entity.Player
 import ru.arc.enchanting.EnchantingModule
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.whenCompleteSync
+import ru.arc.hooks.HookRegistry
 import ru.arc.paper.menu.DialogTables
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
@@ -65,6 +67,10 @@ internal class HelpCenterEnchantmentsController(
             })
             add(button("acquisition", "ui.acquisition-label", "ui.acquisition-tooltip") {
                 openAcquisition(player, snapshot, returnTo)
+            })
+            if (canOpenEnchanter(player, snapshot)) add(button("enchanter", "ui.enchanter-label", "ui.enchanter-tooltip") {
+                if (canOpenEnchanter(player, snapshot)) executeInventory(player, "enchanter")
+                else openOverview(player, returnTo, snapshot)
             })
             add(button("recycle", "ui.recycle-label", "ui.recycle-tooltip") {
                 executeInventory(player, "tinkerer")
@@ -250,7 +256,7 @@ internal class HelpCenterEnchantmentsController(
         returnTo: () -> Unit,
         backTo: () -> Unit = { openOverview(player, returnTo, snapshot) },
     ) {
-        openSources(player, null, backTo, overviewSnapshot = snapshot)
+        openSources(player, null, backTo)
     }
 
     private fun openSpecialItems(
@@ -284,6 +290,20 @@ internal class HelpCenterEnchantmentsController(
         ))
     }
 
+    private fun openBoxes(player: Player, returnTo: () -> Unit) {
+        navigation.visit(player) { openBoxes(player, returnTo) }
+        show(player, PaperDialogScreen(
+            id = "help.enchantments.boxes",
+            title = text("ui.boxes-title"),
+            body = listOf(PaperDialogBody(text("ui.boxes-body"), 468)),
+            buttons = HelpCenterEnchantmentGuideTopic.entries.filter { it.container }.map { topic ->
+                topicButton(player, topic) { openBoxes(player, returnTo) }
+            },
+            exitButton = back(returnTo),
+            columns = 2,
+        ))
+    }
+
     fun openTopic(player: Player, topic: HelpCenterEnchantmentGuideTopic, returnTo: () -> Unit) {
         navigation.visit(player) { openTopic(player, topic, returnTo) }
         val related = when (topic) {
@@ -310,9 +330,8 @@ internal class HelpCenterEnchantmentsController(
         topic: HelpCenterEnchantmentGuideTopic?,
         returnTo: () -> Unit,
         requestedPage: Int = 0,
-        overviewSnapshot: HelpCenterEnchantmentsCatalog? = null,
     ) {
-        val token = navigation.visit(player) { openSources(player, topic, returnTo, requestedPage, overviewSnapshot) }
+        val token = navigation.visit(player) { openSources(player, topic, returnTo, requestedPage) }
         val screenId = if (topic == null) "help.enchantments.acquisition" else "help.enchantments.sources.${topic.id}"
         val title = text(topic?.labelKey ?: "ui.acquisition-title")
         show(player, PaperDialogScreen(
@@ -327,25 +346,40 @@ internal class HelpCenterEnchantmentsController(
             val sources = if (failure == null && result != null) result else HelpCenterEnchantmentAcquisition(
                 listOf(HelpCenterEnchantmentSourceFact("unavailable", mapOf("source" to "rewards"))),
             )
-            val facts = sources.facts.filterNot { fact ->
+            val detailFacts = sources.facts.filterNot { fact ->
                 fact.key == "scope" || (fact.key == "pool-item-value" &&
                     fact.values["valueKind"] in setOf(null, "", "none") &&
                     fact.values["group"].isNullOrBlank() && fact.values["level"].isNullOrBlank())
             }.sortedBy { fact ->
                 when (fact.key) {
-                    "box-rolls" -> 0
+                    "world-cache" -> 0
+                    "mining-cache" -> 1
+                    "farming-cache" -> 2
+                    "farming-cache-materials" -> 3
+                    "mining-cache-materials" -> 4
                     "pool-item", "personal-loot-source", "crate-source", "quest-source", "denizen-monsters",
-                    "denizen-bosses", "tinkerer-source", "native-mob", "natural-books", "natural-dust", "boss-source" -> 1
-                    "box-content", "pool-item-value", "slot-settings", "secret-result" -> 2
-                    "pool-source" -> 3
-                    else -> 4
+                    "denizen-bosses", "tinkerer-source", "native-mob", "natural-books", "natural-dust", "boss-source" -> 5
+                    "cmi-kit-source", "gkit-source" -> 6
+                    "box-rolls" -> 7
+                    "box-content", "pool-item-value", "slot-settings", "secret-result" -> 8
+                    "pool-source" -> 9
+                    "unavailable" -> 11
+                    else -> 10
                 }
             }.ifEmpty { listOf(HelpCenterEnchantmentSourceFact("no-drop")) }
+            val discoveryActivities = listOf("world-cache", "mining-cache", "farming-cache")
+                .filter { key -> detailFacts.any { it.key == key } }
+                .map { plainText.serialize(text("ui.source-discovery-$it")) }
+            val facts = if (discoveryActivities.isEmpty()) detailFacts else listOf(
+                HelpCenterEnchantmentSourceFact("discovery-index", mapOf(
+                    "activities" to discoveryActivities.joinToString(" · ").replaceFirstChar { it.uppercaseChar() },
+                )),
+            ) + detailFacts
             val pages = ((facts.size + SOURCE_PAGE_SIZE - 1) / SOURCE_PAGE_SIZE).coerceAtLeast(1)
             val page = requestedPage.coerceIn(0, pages - 1)
             val pageFacts = facts.drop(page * SOURCE_PAGE_SIZE).take(SOURCE_PAGE_SIZE)
             val onPage = pageFacts.flatMap { it.values.values }.toSet()
-            val related = if (topic == null) HelpCenterEnchantmentGuideTopic.entries.filter { it.container }
+            val related = if (topic == null) emptyList()
             else sources.relatedTopics.distinct().mapNotNull(HelpCenterEnchantmentGuideTopic.byId::get)
                 .filter { it != topic && (!topic.container || it.id in onPage || ("orb" in onPage && it.id.startsWith("orb_"))) }
             show(player, PaperDialogScreen(
@@ -361,20 +395,17 @@ internal class HelpCenterEnchantmentsController(
                     if (topic?.id in setOf("secret", "magic", "mystery") && facts.any { it.key == "tinkerer-source" }) {
                         add(button("tinkerer", "ui.tinkerer-label", "ui.tinkerer-tooltip") { executeInventory(player, "tinkerer") })
                     }
-                    if (overviewSnapshot != null && canOpenEnchanter(player, overviewSnapshot)) add(
-                        button("enchanter", "ui.enchanter-label", "ui.enchanter-tooltip") {
-                            if (canOpenEnchanter(player, overviewSnapshot)) executeInventory(player, "enchanter")
-                            else openSources(player, topic, returnTo, page, overviewSnapshot)
-                        },
-                    )
+                    if (topic == null) add(button("boxes", "ui.boxes-label", "ui.boxes-tooltip") {
+                        openBoxes(player) { openSources(player, null, returnTo, page) }
+                    })
                     related.forEach { target -> add(topicButton(player, target) {
-                        openSources(player, topic, returnTo, page, overviewSnapshot)
+                        openSources(player, topic, returnTo, page)
                     }) }
                     if (page > 0) add(button("previous", "ui.page-previous") {
-                        openSources(player, topic, returnTo, page - 1, overviewSnapshot)
+                        openSources(player, topic, returnTo, page - 1)
                     })
                     if (page + 1 < pages) add(button("next", "ui.page-next") {
-                        openSources(player, topic, returnTo, page + 1, overviewSnapshot)
+                        openSources(player, topic, returnTo, page + 1)
                     })
                 },
                 exitButton = back(returnTo),
@@ -417,6 +448,8 @@ internal class HelpCenterEnchantmentsController(
     }
 
     private fun sourceValue(key: String, value: String): String = when (key) {
+        "materials" -> value.split(',').asSequence().map(String::trim).filter(String::isNotEmpty).take(4)
+            .joinToString(", ", transform = ::sourceMaterialName)
         "cooldown" -> DURATION.matchEntire(value)?.let { match ->
             val unit = when (match.groupValues[2].lowercase(Locale.ROOT)) {
                 "t" -> "тиков"
@@ -436,6 +469,17 @@ internal class HelpCenterEnchantmentsController(
                 ?.let { plainText.serialize(miniMessage.deserialize(it)) } ?: value
         }
         else -> value
+    }
+
+    /** Uses only the already loaded translation map; unknown or unavailable translations stay literal. */
+    private fun sourceMaterialName(id: String): String {
+        val material = try { Material.valueOf(id.uppercase(Locale.ROOT)) }
+        catch (_: IllegalArgumentException) { return id }
+        val translated = try { HookRegistry.translatorHook?.translate(material) }
+        catch (_: Exception) { null }
+        catch (_: LinkageError) { null }
+        return translated?.trim()?.takeIf(String::isNotEmpty)
+            ?: material.name.lowercase(Locale.ROOT).replace('_', ' ').replaceFirstChar { it.uppercaseChar() }
     }
 
     private fun materialSummary(enchantment: HelpCenterEnchantment): String {

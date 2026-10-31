@@ -42,6 +42,7 @@ softdepend:
   - YamipaPlugin
   - LootChest
   - Jobs
+  - eco
   - EcoJobs
   - AuraSkills
   - BetterStructures

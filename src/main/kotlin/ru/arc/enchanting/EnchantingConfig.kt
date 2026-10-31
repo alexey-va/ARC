@@ -3,6 +3,7 @@ package ru.arc.enchanting
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
+import org.bukkit.Material
 import ru.arc.config.Config
 import java.nio.file.Path
 import java.util.Locale
@@ -30,6 +31,36 @@ internal class EnchantingConfig(private val config: Config) {
         openWaterBookPercent = config.double("loot.open-water-fishing.book-percent"),
         openWaterDustPercent = config.double("loot.open-water-fishing.dust-percent"),
         groupWeights = config.keys("loot.group-weights").associateWith { config.int("loot.group-weights.$it") },
+    )
+
+    val miningCacheEnabled get() = config.bool("loot.mining-cache.enabled", false)
+
+    val miningCacheSettings get() = EnchantmentMiningLootSettings(
+        survivalBackend = ru.arc.ARC.serverName == config.string("loot.server", "survival"),
+        worldNames = config.stringList("loot.mining-cache.worlds").toSet(),
+        materials = config.stringList("loot.mining-cache.materials").map { name ->
+            requireNotNull(Material.matchMaterial(name.trim())) { "Unknown mining cache material: $name" }
+        }.toSet(),
+        chancePercent = config.double("loot.mining-cache.chance-percent"),
+    )
+
+    val farmingCacheEnabled get() = config.bool("loot.farming-cache.enabled", false)
+
+    val farmingCacheSettings get() = EnchantmentFarmingLootSettings(
+        survivalBackend = ru.arc.ARC.serverName == config.string("loot.server", "survival"),
+        worldNames = config.stringList("loot.farming-cache.worlds").toSet(),
+        materials = config.stringList("loot.farming-cache.materials").map { name ->
+            requireNotNull(Material.matchMaterial(name.trim())) { "Unknown farming cache material: $name" }
+        }.toSet(),
+        chancePercent = config.double("loot.farming-cache.chance-percent"),
+        cooldownSeconds = config.long("loot.farming-cache.cooldown-seconds"),
+    )
+
+    val worldCacheSettings get() = EnchantmentWorldCacheSettings(
+        survivalBackend = ru.arc.ARC.serverName == config.string("loot.server", "survival"),
+        enabled = config.bool("loot.world-cache.enabled", false),
+        worldNames = config.stringList("loot.world-cache.worlds").toSet(),
+        chanceDenominator = config.int("loot.world-cache.one-in"),
     )
 
     fun text(key: String, vararg resolvers: TagResolver): Component =

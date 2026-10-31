@@ -8,6 +8,7 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer
+import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -19,6 +20,8 @@ import org.junit.jupiter.api.Test
 import ru.arc.config.ConfigManager
 import ru.arc.core.BukkitTaskScheduler
 import ru.arc.core.Tasks
+import ru.arc.hooks.HookRegistry
+import ru.arc.hooks.ztranslator.TranslatorHook
 import ru.arc.paper.menu.PaperDialogClickContext
 import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.paper.testing.MockBukkitTestRuntime
@@ -36,12 +39,14 @@ class HelpCenterEnchantmentsJourneyTest {
     private var canPurchase = true
     private var fixtureGroup = "UNIQUE"
     private var purchaseReturn: (() -> Unit)? = null
+    private var previousTranslator: TranslatorHook? = null
     private val executed = mutableListOf<String>()
     private val purchases = mutableListOf<String>()
 
     @BeforeEach
     fun setup() {
         fixtureGroup = "UNIQUE"
+        previousTranslator = HookRegistry.translatorHook
         paper = MockBukkitTestRuntime.open()
         val plugin = paper.createSimplePlugin("EnchantmentsJourneyTest")
         Tasks.install(BukkitTaskScheduler(plugin))
@@ -68,6 +73,7 @@ class HelpCenterEnchantmentsJourneyTest {
 
     @AfterEach
     fun cleanup() {
+        HookRegistry.translatorHook = previousTranslator
         controller.close()
         navigation.close()
         Tasks.reset()
@@ -81,7 +87,7 @@ class HelpCenterEnchantmentsJourneyTest {
         open()
 
         assertEquals(
-            listOf("equipment", "search", "special", "acquisition", "recycle", "alchemy"),
+            listOf("equipment", "search", "special", "acquisition", "enchanter", "recycle", "alchemy"),
             screen.buttons.map { it.id.value },
         )
         assertEquals(2, screen.columns)
@@ -132,12 +138,20 @@ class HelpCenterEnchantmentsJourneyTest {
 
         canPurchase = true
         open()
-        click("acquisition")
         assertTrue(screen.buttons.any { it.id.value == "enchanter" })
+        click("acquisition")
+        assertFalse(screen.buttons.any { it.id.value == "enchanter" })
+        assertEquals(listOf("boxes"), screen.buttons.map { it.id.value })
+        click("back")
         canPurchase = false
         click("enchanter")
         assertTrue(executed.isEmpty())
         assertFalse(screen.buttons.any { it.id.value == "enchanter" })
+
+        canPurchase = true
+        open()
+        click("enchanter")
+        assertEquals(listOf("enchanter"), executed)
     }
 
     @Test
@@ -170,14 +184,26 @@ class HelpCenterEnchantmentsJourneyTest {
         controller.openTopic(player, HelpCenterEnchantmentGuideTopic.SECRET_DUST) {}
         click("sources")
         assertTrue(body().indexOf("Тинкер") < body().indexOf("Магическая пыль"), body())
+        assertTrue(body().contains("Магическая пыль"), body())
         assertTrue(body().contains("один расчёт за 1 с."), body())
         assertFalse(body().contains("1s с"))
+        assertFalse(body().contains("недоступны"), body())
+        click("next")
+        assertTrue(body().contains("недоступны"), body())
+        click("previous")
         click("tinkerer")
         assertEquals(listOf("tinkerer"), executed)
     }
 
     @Test
     fun `representative long usage and dynamic source cards export their actual decorated components`() {
+        var discoveryOverview = false
+        canPurchase = true
+        HookRegistry.translatorHook = mockk<TranslatorHook>().also { translator ->
+            every { translator.translate(any<Material>()) } answers {
+                (enchantmentDiscoveryMiningNames + enchantmentDiscoveryCropNames).getValue(firstArg())
+            }
+        }
         controller.close()
         controller = HelpCenterEnchantmentsController(
             settings = HelpCenterConfig.load(directory).snapshot().copy(decorationFont = "arc:dialog_ui"),
@@ -185,13 +211,18 @@ class HelpCenterEnchantmentsJourneyTest {
             navigation = navigation,
             show = { _, value -> screen = value },
             executeInventory = { _, _ -> true },
-            catalog = { HelpCenterEnchantmentsCatalog.unavailable() },
-            acquisition = { topicId -> CompletableFuture.completedFuture(if (topicId == "overview") HelpCenterEnchantmentAcquisition(listOf(
+            catalog = { fixtureCatalog() },
+            canPurchase = { _, _ -> canPurchase },
+            acquisition = { topicId -> CompletableFuture.completedFuture(if (topicId == "overview" && discoveryOverview) HelpCenterEnchantmentAcquisition(
+                enchantmentDiscoveryPreviewFacts(),
+            ) else if (topicId == "overview") HelpCenterEnchantmentAcquisition(listOf(
                 HelpCenterEnchantmentSourceFact("scope", mapOf("server" to "survival")),
                 HelpCenterEnchantmentSourceFact("crate-source", mapOf("source" to "case_daily", "crate" to "Ежедневный тайник", "item" to "ae_lootbox", "chance" to "9,5", "amount" to "1")),
                 HelpCenterEnchantmentSourceFact("crate-source", mapOf("source" to "case_daily", "crate" to "Ежедневный тайник", "item" to "ae_lootbox_enchanted", "chance" to "5,7", "amount" to "1")),
                 HelpCenterEnchantmentSourceFact("quest-source", mapOf("source" to "daily_fishing", "quest" to "Улов дня", "item" to "enchant_supply", "amount" to "1")),
-            )) else HelpCenterEnchantmentAcquisition(
+            )) else if (topicId == "ae_lootbox") HelpCenterEnchantmentAcquisition(
+                enchantmentDiscoveryPreviewFacts(),
+            ) else HelpCenterEnchantmentAcquisition(
                 facts = listOf(
                     HelpCenterEnchantmentSourceFact("scope", mapOf("server" to "survival")),
                     HelpCenterEnchantmentSourceFact("pool-item", mapOf("box" to "ae_lootbox", "pool" to "ae", "per_roll" to "3,31", "per_box" to "4,90", "amount" to "1")),
@@ -212,8 +243,10 @@ class HelpCenterEnchantmentsJourneyTest {
         screens["ae-slot-sources"] = screen
         assertTrue(body().contains("3,31%"), body())
         assertTrue(body().contains("11"), body())
+        assertFalse(body().contains("недоступны"), body())
         click("next")
         screens["ae-sources-last"] = screen
+        assertTrue(body().contains("недоступны"), body())
         assertTrue(screen.buttons.any { it.id.value == "previous" })
         assertFalse(screen.buttons.any { it.id.value == "next" })
 
@@ -225,6 +258,45 @@ class HelpCenterEnchantmentsJourneyTest {
         assertTrue(body().contains("Припасы чародея"), body())
         assertTrue(body().contains("9,5%"), body())
         assertTrue(body().contains("5,7%"), body())
+
+        discoveryOverview = true
+        controller.open(player) {}
+        screens["ae-overview-with-enchanter"] = screen
+        assertEquals(7, screen.buttons.size)
+        assertTrue(screen.buttons.any { it.id.value == "enchanter" })
+        click("acquisition")
+        screens["ae-discovery-overview"] = screen
+        assertTrue(body().contains("Исследование мира · добыча киркой · сбор урожая"), body())
+        assertEquals(listOf("boxes", "next"), screen.buttons.map { it.id.value })
+        click("boxes")
+        screens["ae-boxes-catalog"] = screen
+        assertEquals("help.enchantments.boxes", screen.id)
+        assertEquals(5, screen.buttons.size)
+        assertEquals(HelpCenterEnchantmentGuideTopic.entries.filter { it.container }.map { "item_${it.id}" }, screen.buttons.map { it.id.value })
+        click("back")
+        assertEquals("help.enchantments.acquisition", screen.id)
+        assertTrue(body().contains("Исследование мира · добыча киркой · сбор урожая"), body())
+
+        controller.openTopic(player, HelpCenterEnchantmentGuideTopic.BASE_BOX) {}
+        click("sources")
+        screens["ae-discovery-summary"] = screen
+        assertTrue(body().contains("Исследование мира · добыча киркой · сбор урожая"), body())
+        assertTrue(body().contains("Тайники на поверхности"), body())
+        assertTrue(body().contains("Находки при добыче"), body())
+        assertFalse(body().contains("Шкатулки за урожай"))
+
+        click("next")
+        screens["ae-discovery-farming"] = screen
+        assertTrue(body().contains("Шкатулки за урожай"), body())
+        enchantmentDiscoveryCropNames.values.forEach { assertTrue(body().contains(it), body()) }
+        assertFalse(body().contains("Добыча киркой · подходящие блоки"))
+
+        click("next")
+        screens["ae-discovery-mining-continuation"] = screen
+        assertTrue(body().contains("Добыча киркой · подходящие блоки"), body())
+        assertFalse(body().contains("Шкатулки за урожай"))
+        assertTrue(screen.buttons.any { it.id.value == "previous" })
+        assertTrue(screen.buttons.any { it.id.value == "next" })
 
         val legacy = LegacyComponentSerializer.builder().character('&').hexColors().build()
         val gson = GsonComponentSerializer.gson()
@@ -254,7 +326,7 @@ class HelpCenterEnchantmentsJourneyTest {
     private fun click(id: String, input: String = "") {
         val context = mockk<PaperDialogClickContext>()
         every { context.text(any()) } returns input
-        screen.buttons.single { it.id.value == id }.onClick.handle(context)
+        (screen.buttons + listOfNotNull(screen.exitButton)).single { it.id.value == id }.onClick.handle(context)
         paper.performTicks(2)
     }
 
@@ -274,5 +346,51 @@ class HelpCenterEnchantmentsJourneyTest {
             baseDisplayName = "<#d6a5ff>%group-color%Акватический хват",
         )
         return HelpCenterEnchantmentsCatalog(available = true, entries = listOf(entry))
+    }
+}
+
+/** Mirrors the configured 18 mining materials and six crops, in the source builder's four-item groups. */
+internal val enchantmentDiscoveryMiningNames = linkedMapOf(
+    Material.STONE to "Камень",
+    Material.DEEPSLATE to "Глубинный сланец",
+    Material.COAL_ORE to "Угольная руда",
+    Material.DEEPSLATE_COAL_ORE to "Угленосный глубинный сланец",
+    Material.IRON_ORE to "Железная руда",
+    Material.DEEPSLATE_IRON_ORE to "Железоносный глубинный сланец",
+    Material.COPPER_ORE to "Медная руда",
+    Material.DEEPSLATE_COPPER_ORE to "Меденосный глубинный сланец",
+    Material.GOLD_ORE to "Золотая руда",
+    Material.DEEPSLATE_GOLD_ORE to "Золотоносный глубинный сланец",
+    Material.REDSTONE_ORE to "Редстоуновая руда",
+    Material.DEEPSLATE_REDSTONE_ORE to "Редстоуноносный глубинный сланец",
+    Material.LAPIS_ORE to "Лазуритовая руда",
+    Material.DEEPSLATE_LAPIS_ORE to "Лазуритоносный глубинный сланец",
+    Material.DIAMOND_ORE to "Алмазная руда",
+    Material.DEEPSLATE_DIAMOND_ORE to "Алмазоносный глубинный сланец",
+    Material.EMERALD_ORE to "Изумрудная руда",
+    Material.DEEPSLATE_EMERALD_ORE to "Изумрудоносный глубинный сланец",
+)
+
+internal val enchantmentDiscoveryCropNames = linkedMapOf(
+    Material.WHEAT to "Ростки пшеницы",
+    Material.CARROTS to "Морковь",
+    Material.POTATOES to "Картофель",
+    Material.BEETROOTS to "Свёкла",
+    Material.COCOA to "Какао",
+    Material.NETHER_WART to "Незерский нарост",
+)
+
+internal fun enchantmentDiscoveryPreviewFacts(): List<HelpCenterEnchantmentSourceFact> = buildList {
+    add(HelpCenterEnchantmentSourceFact("scope", mapOf("server" to "spawn")))
+    add(HelpCenterEnchantmentSourceFact("mining-cache", mapOf("chance" to "0,05", "worlds" to "mining, survival, vanilla")))
+    enchantmentDiscoveryMiningNames.keys.map { it.name }.sorted().chunked(4).forEach {
+        add(HelpCenterEnchantmentSourceFact("mining-cache-materials", mapOf("materials" to it.joinToString(","))))
+    }
+    add(HelpCenterEnchantmentSourceFact("world-cache", mapOf("chance" to "0,78125", "one_in" to "128", "worlds" to "survival, vanilla")))
+    add(HelpCenterEnchantmentSourceFact("farming-cache", mapOf(
+        "chance" to "0,05", "worlds" to "survival, survival_nether, vanilla, vanilla_nether, world, world_nether", "cooldown" to "1d",
+    )))
+    enchantmentDiscoveryCropNames.keys.map { it.name }.sorted().chunked(4).forEach {
+        add(HelpCenterEnchantmentSourceFact("farming-cache-materials", mapOf("materials" to it.joinToString(","))))
     }
 }

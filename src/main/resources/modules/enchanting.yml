@@ -67,6 +67,27 @@ loot:
   open-water-fishing:
     book-percent: 0.5
     dust-percent: 1.5
+  # One shared find per chunk; Fortune and repeat placements do not multiply the reward.
+  mining-cache:
+    enabled: true
+    chance-percent: 0.05
+    worlds: [survival, vanilla, mining]
+    materials: [STONE, DEEPSLATE, COAL_ORE, DEEPSLATE_COAL_ORE, IRON_ORE, DEEPSLATE_IRON_ORE,
+      COPPER_ORE, DEEPSLATE_COPPER_ORE, GOLD_ORE, DEEPSLATE_GOLD_ORE, REDSTONE_ORE,
+      DEEPSLATE_REDSTONE_ORE, LAPIS_ORE, DEEPSLATE_LAPIS_ORE, DIAMOND_ORE,
+      DEEPSLATE_DIAMOND_ORE, EMERALD_ORE, DEEPSLATE_EMERALD_ORE]
+  # A selected explored chunk gets one bounded surface placement attempt.
+  world-cache:
+    enabled: true
+    one-in: 128
+    worlds: [survival, vanilla]
+  # Manual harvest of fully grown crops; a find reserves its chunk for all players for one day.
+  farming-cache:
+    enabled: true
+    chance-percent: 0.05
+    cooldown-seconds: 86400
+    worlds: [survival, vanilla, world, survival_nether, vanilla_nether, world_nether]
+    materials: [WHEAT, CARROTS, POTATOES, BEETROOTS, COCOA, NETHER_WART]
   group-weights:
     SIMPLE: 55
     UNIQUE: 25
