@@ -141,6 +141,7 @@ internal enum class HelpCenterEnchantmentsEquipment(val configKey: String) {
     AXE("equipment-axe"),
     MACE("equipment-mace"),
     TRIDENT("equipment-trident"),
+    SPEAR("equipment-spear"),
     PICKAXE("equipment-pickaxe"),
     SHOVEL("equipment-shovel"),
     HOE("equipment-hoe"),
@@ -161,6 +162,7 @@ internal enum class HelpCenterEnchantmentsEquipment(val configKey: String) {
         AXE -> materials.any { it.endsWith("_AXE") }
         MACE -> "MACE" in materials
         TRIDENT -> "TRIDENT" in materials
+        SPEAR -> materials.any { it.endsWith("_SPEAR") }
         PICKAXE -> materials.any { it.endsWith("_PICKAXE") }
         SHOVEL -> materials.any { it.endsWith("_SHOVEL") }
         HOE -> materials.any { it.endsWith("_HOE") }
@@ -452,6 +454,7 @@ internal class HelpCenterEnchantmentsGuideConfig(private val config: Config) {
             "ui.equipment-axe" to "<#ffb277>Топоры",
             "ui.equipment-mace" to "<#ffb277>Булавы",
             "ui.equipment-trident" to "<#ffb277>Трезубцы",
+            "ui.equipment-spear" to "<#ffb277>Копья",
             "ui.equipment-pickaxe" to "<#9bd48d>Кирки",
             "ui.equipment-shovel" to "<#9bd48d>Лопаты",
             "ui.equipment-hoe" to "<#9bd48d>Мотыги",

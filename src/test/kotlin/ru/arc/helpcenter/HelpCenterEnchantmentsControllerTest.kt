@@ -32,6 +32,7 @@ class HelpCenterEnchantmentsControllerTest {
     private lateinit var screen: PaperDialogScreen
     private var screenDisplays = 0
     private lateinit var inventoryReturn: HelpCenterInventoryReturnRuntime
+    private lateinit var fixtureCatalog: HelpCenterEnchantmentsCatalog
     private val executed = mutableListOf<String>()
     private val directory = Files.createTempDirectory("enchantments-controller")
     private var sourceResult = CompletableFuture.completedFuture(sourceReport("3,31"))
@@ -54,7 +55,7 @@ class HelpCenterEnchantmentsControllerTest {
 
         inventoryReturn = HelpCenterInventoryReturnRuntime(plugin, returnOnClose = { true })
         val navigation = HelpCenterNavigation(plugin, inventoryReturn::cancel)
-        val fixtureCatalog = HelpCenterEnchantmentsCatalog(
+        fixtureCatalog = HelpCenterEnchantmentsCatalog(
             available = true,
             entries = (1..9).map { number ->
                 enchantment(
@@ -96,6 +97,71 @@ class HelpCenterEnchantmentsControllerTest {
         ConfigManager.clear()
         paper.close()
         directory.toFile().deleteRecursively()
+    }
+
+    @Test
+    fun `spears show all thirteen compatible enchantments across pages and preserve navigation`() {
+        val ids = listOf(
+            "forcefield", "berserk", "ravenous", "permafrost", "blind", "poison", "infernal",
+            "vampire", "iceaspect", "lifesteal", "disarm", "strife", "magnet",
+        ).sorted()
+        val materials = setOf(
+            "WOODEN_SPEAR", "STONE_SPEAR", "COPPER_SPEAR", "IRON_SPEAR",
+            "GOLDEN_SPEAR", "DIAMOND_SPEAR", "NETHERITE_SPEAR",
+            "DIAMOND_SWORD", "DIAMOND_AXE", "TRIDENT",
+        )
+        fixtureCatalog = HelpCenterEnchantmentsCatalog(
+            available = true,
+            entries = ids.map { id ->
+                HelpCenterEnchantmentsCatalog.fromApiData(
+                    id = id,
+                    displayLore = listOf(id),
+                    description = "Описание $id",
+                    maxLevelDescription = "Описание $id",
+                    materials = materials,
+                    group = "SIMPLE",
+                    maxLevel = 3,
+                )
+            } + enchantment("bow_only", "Только лук", "BOW", "Для лука"),
+        )
+
+        open()
+        click("equipment")
+        val equipmentButtons = screen.buttons.map { it.id.value }
+        val spearButton = screen.buttons.single { plain(it.label) == "Копья" }
+        spearButton.label.color()?.value() shouldBe 0xffb277
+        assertEquals(2, screen.columns)
+        assertEquals(10, equipmentButtons.count { it.startsWith("equip_") })
+        click("next")
+        assertTrue(body().contains("Страница 2/2"))
+        assertEquals(
+            listOf("Кирки", "Лопаты", "Мотыги", "Удочки", "Луки", "Арбалеты", "Щиты", "Элитры", "Прочие предметы"),
+            screen.buttons.filter { it.id.value.startsWith("equip_") }.map { plain(it.label) },
+        )
+        click("previous")
+        assertEquals(equipmentButtons, screen.buttons.map { it.id.value })
+        click(spearButton.id.value)
+
+        assertEquals("help.enchantments.results", screen.id)
+        assertTrue(body().contains("Найдено зачарований: 13"))
+        assertTrue(body().contains("страница 1/2"))
+        assertEquals(ids.take(8), screen.buttons.filter { it.id.value.startsWith("enchant_") }.map { plain(it.label) })
+        click("next")
+        assertTrue(body().contains("страница 2/2"))
+        assertEquals(ids.drop(8), screen.buttons.filter { it.id.value.startsWith("enchant_") }.map { plain(it.label) })
+        assertFalse(screen.buttons.any { it.id.value == "next" })
+        click("enchant_4")
+        assertEquals("help.enchantments.details", screen.id)
+        assertEquals(ids.last(), plain(screen.title))
+        listOf("Мечи", "Топоры", "Трезубцы", "Копья").forEach { assertTrue(body().contains(it), body()) }
+        click("back")
+        assertTrue(body().contains("страница 2/2"))
+        assertEquals(ids.drop(8), screen.buttons.filter { it.id.value.startsWith("enchant_") }.map { plain(it.label) })
+        click("previous")
+        assertEquals(ids.take(8), screen.buttons.filter { it.id.value.startsWith("enchant_") }.map { plain(it.label) })
+        click("back")
+        assertEquals("help.enchantments.equipment", screen.id)
+        assertEquals(equipmentButtons, screen.buttons.map { it.id.value })
     }
 
     @Test

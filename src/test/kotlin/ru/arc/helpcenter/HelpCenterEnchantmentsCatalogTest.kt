@@ -2,6 +2,8 @@ package ru.arc.helpcenter
 
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import net.kyori.adventure.text.minimessage.MiniMessage
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import ru.arc.config.ConfigManager
 import java.nio.file.Files
 
@@ -40,6 +42,10 @@ class HelpCenterEnchantmentsCatalogTest : StringSpec({
     }
 
     "equipment filters separate weapon and tool-specific enchantments" {
+        val spearMaterials = listOf(
+            "wooden_spear", "stone_spear", "copper_spear", "iron_spear",
+            "golden_spear", "diamond_spear", "netherite_spear",
+        )
         val entries = listOf(
             enchantment("sword_only", "DIAMOND_SWORD"),
             enchantment("axe_only", "DIAMOND_AXE"),
@@ -48,16 +54,18 @@ class HelpCenterEnchantmentsCatalogTest : StringSpec({
             enchantment("crossbow_only", "CROSSBOW"),
             enchantment("fishing_only", "FISHING_ROD"),
             enchantment("hoe_only", "DIAMOND_HOE"),
-        )
+        ) + spearMaterials.map { enchantment(it, "minecraft:$it") }
         val catalog = HelpCenterEnchantmentsCatalog(available = true, entries = entries)
 
         catalog.search("", HelpCenterEnchantmentsEquipment.SWORD).map { it.id } shouldBe listOf("sword_only")
         catalog.search("", HelpCenterEnchantmentsEquipment.AXE).map { it.id } shouldBe listOf("axe_only")
         catalog.search("", HelpCenterEnchantmentsEquipment.MACE).map { it.id } shouldBe listOf("mace_only")
         catalog.search("", HelpCenterEnchantmentsEquipment.TRIDENT).map { it.id } shouldBe listOf("trident_only")
+        catalog.search("", HelpCenterEnchantmentsEquipment.SPEAR).map { it.id } shouldBe spearMaterials.sorted()
         catalog.search("", HelpCenterEnchantmentsEquipment.CROSSBOW).map { it.id } shouldBe listOf("crossbow_only")
         catalog.search("", HelpCenterEnchantmentsEquipment.FISHING_ROD).map { it.id } shouldBe listOf("fishing_only")
         catalog.search("seed", HelpCenterEnchantmentsEquipment.HOE).map { it.id } shouldBe listOf("hoe_only")
+        catalog.search("", HelpCenterEnchantmentsEquipment.OTHER) shouldBe emptyList()
     }
 
     "bundled guide explains special items and active enchantment routes" {
@@ -65,8 +73,11 @@ class HelpCenterEnchantmentsCatalogTest : StringSpec({
         try {
             ConfigManager.clear()
             val guide = HelpCenterEnchantmentsGuideConfig.load(root).snapshot()
+            val spearLabel = MiniMessage.miniMessage().deserialize(guide.text("ui.equipment-spear"))
 
             guide.text("ui.title").contains("Зачарования") shouldBe true
+            PlainTextComponentSerializer.plainText().serialize(spearLabel) shouldBe "Копья"
+            spearLabel.color()?.value() shouldBe 0xffb277
             guide.text("ui.special-black-body").contains("шансом успешного применения этой книги") shouldBe true
             guide.text("ui.special-black-body").contains("ЛКМ") shouldBe true
             guide.text("ui.special-soul-gem-body").contains("/withdrawsouls число") shouldBe true
