@@ -1,21 +1,23 @@
 package ru.arc.homemarkers
 
-import com.olziedev.playerwarps.api.PlayerWarpsAPI
 import net.william278.huskhomes.api.HuskHomesAPI
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import org.bukkit.plugin.java.JavaPlugin
 import ru.arc.helpcenter.HelpCenterHome
 import ru.arc.helpcenter.HelpCenterModule
+import ru.arc.hooks.CachedPlayerWarps
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import kotlin.math.floor
 
 /** Reads owner-verified point snapshots while leaving persistence and actions to each provider. */
 internal class HomeMarkerGateway {
+    private val playerWarps = CachedPlayerWarps()
+
     fun load(player: Player): CompletableFuture<List<HomeMarker>> {
         return try {
-            // PlayerWarps exposes a synchronous API, so capture it before starting the async home read.
+            // Capture the native warp cache on main; hydrating a WPlayer can perform synchronous JDBC.
             val warps = loadPlayerWarps(player)
             loadHuskHomes(player).thenApply { homes -> homes + warps }
         } catch (failure: Throwable) {
@@ -69,11 +71,9 @@ internal class HomeMarkerGateway {
         val plugin = playerWarpsPlugin()
         val server = playerWarpsServer(plugin)
         val ownerId = player.uniqueId
-        val api = checkNotNull(PlayerWarpsAPI.getInstance()) { "PlayerWarps API is not ready" }
-        val owner = checkNotNull(api.getWarpPlayer(ownerId)) { "PlayerWarps owner is not ready" }
+        val api = playerWarps.readyApi()
 
-        return owner.getWarps(false).asSequence()
-            // `getWarps(false)` is the owner list, but retain an explicit UUID boundary as well.
+        return api.getPlayerWarps(false).asSequence()
             .filter { warp -> warp.uuid == ownerId }
             .mapNotNull { warp ->
                 val location = warp.warpLocation
@@ -118,9 +118,8 @@ internal class HomeMarkerGateway {
         val plugin = playerWarpsPlugin()
         val server = playerWarpsServer(plugin)
         val warpId = marker.id.toLongOrNull() ?: return false
-        val api = checkNotNull(PlayerWarpsAPI.getInstance()) { "PlayerWarps API is not ready" }
-        val owner = checkNotNull(api.getWarpPlayer(player.uniqueId)) { "PlayerWarps owner is not ready" }
-        val warp = owner.getWarps(false).firstOrNull { candidate ->
+        val api = playerWarps.readyApi()
+        val warp = api.getPlayerWarps(false).firstOrNull { candidate ->
             candidate.id == warpId && candidate.uuid == player.uniqueId
         } ?: return false
         val location = warp.warpLocation

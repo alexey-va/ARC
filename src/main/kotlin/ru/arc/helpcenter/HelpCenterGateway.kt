@@ -15,6 +15,7 @@ import ru.arc.config.ArcRuntimeProfile
 import ru.arc.chat.ChatModeService
 import ru.arc.core.modules.EconomyModule
 import ru.arc.hooks.HookRegistry
+import ru.arc.hooks.CachedPlayerWarps
 import ru.arc.lands.currentLands
 import ru.arc.slimefunmenu.SlimefunMenuModule
 import ru.arc.util.TextUtil
@@ -57,17 +58,26 @@ interface HelpCenterGateway {
 }
 
 class BukkitHelpCenterGateway : HelpCenterGateway {
+    private val playerWarps = CachedPlayerWarps()
+
     override fun loadWarps(player: Player): List<HelpCenterWarp> {
         check(Bukkit.getPluginManager().isPluginEnabled("PlayerWarps")) { "PlayerWarps is unavailable" }
-        val api = checkNotNull(PlayerWarpsAPI.getInstance()) { "PlayerWarps is not ready" }
-        val viewer = api.getWarpPlayer(player.uniqueId)
+        val api = playerWarps.readyApi()
+        val owners = playerWarps.playersById(api)
+        val viewer = checkNotNull(owners[player.uniqueId]) { "PlayerWarps viewer is not ready" }
+        val consoleId = api.consoleUUID
         return api.getPlayerWarps(false, player).map { warp ->
             val location = warp.warpLocation
+            // Warp.getWarpPlayer() can hydrate an offline owner; getName retains its native fallback.
+            val ownerId = warp.uuid
+            val ownerName = if (ownerId == null || ownerId == consoleId) api.consoleName else {
+                checkNotNull(owners[ownerId]) { "PlayerWarps warp owner is not ready" }.name ?: api.consoleName
+            }
             val price = warp.getTeleportPrice(viewer, java.util.function.Function.identity())
             HelpCenterWarp(
                 id = warp.id,
                 name = warp.warpName,
-                owner = warp.warpPlayer?.name ?: api.consoleName,
+                owner = ownerName,
                 server = location.warpServer,
                 world = location.world,
                 x = location.x, y = location.y, z = location.z,
@@ -100,6 +110,14 @@ class BukkitHelpCenterGateway : HelpCenterGateway {
             val api = HuskHomesAPI.getInstance()
             val user = api.adaptUser(player)
             val maxSlots = api.getMaxHomeSlots(user).coerceAtLeast(0)
+            val warpSlots = runCatching {
+                if (!Bukkit.getPluginManager().isPluginEnabled("PlayerWarps")) return@runCatching null
+                val warpsApi = playerWarps.readyApi()
+                val warpPlayer = checkNotNull(playerWarps.playersById(warpsApi)[player.uniqueId]) {
+                    "PlayerWarps viewer is not ready"
+                }
+                warpPlayer.getUsedWarps(player) to warpPlayer.maximumWarps
+            }.getOrNull()
             api.getUserHomes(user)
                 .orTimeout(timeoutSeconds, TimeUnit.SECONDS)
                 .thenApply { homes ->
@@ -114,11 +132,6 @@ class BukkitHelpCenterGateway : HelpCenterGateway {
                             isPublic = home.isPublic,
                         )
                     }
-                    val warpSlots = runCatching {
-                        if (!Bukkit.getPluginManager().isPluginEnabled("PlayerWarps")) return@runCatching null
-                        val warpPlayer = PlayerWarpsAPI.getInstance().getWarpPlayer(player.uniqueId)
-                        warpPlayer.getUsedWarps(player) to warpPlayer.maximumWarps
-                    }.getOrNull()
                     HelpCenterHomes(
                         snapshots,
                         snapshots.size,
