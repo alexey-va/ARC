@@ -87,6 +87,7 @@ internal class StaffSpellHud(
         var bounds: StaffSpellHudBounds,
         var guidanceSource: QuestGuidanceHudService.Source? = null,
         var frozenOrigin: Location? = null,
+        var lastMountedOrigin: Location? = null,
     )
     private data class TrackedBossBar(
         val bar: BossBar,
@@ -284,6 +285,7 @@ internal class StaffSpellHud(
                     card.display.transformation = card.placement.transformation
                 }
                 card.frozenOrigin = null
+                card.lastMountedOrigin = null
                 card.display.attachTo(player)
             }
             card.guidanceSource = hint?.source
@@ -320,8 +322,10 @@ internal class StaffSpellHud(
         }
         val replacement = Card(display, player.world.uid, state, text, placement, placementChoice, bounds, hint?.source)
         cards[player.uniqueId] = replacement
-        if (hint?.source == QuestGuidanceHudService.Source.CLAIM && player.isSneaking) {
-            syncCard(player, replacement, placementChoice, hint)
+        if (hint?.source == QuestGuidanceHudService.Source.CLAIM) {
+            replacement.lastMountedOrigin = guidanceCardOrigin(player.eyeLocation, player.height - player.eyeHeight,
+                placement.transformation.translation)
+            if (player.isSneaking) syncCard(player, replacement, placementChoice, hint)
         }
     }
 
@@ -357,8 +361,9 @@ internal class StaffSpellHud(
     private fun syncCard(player: Player, card: Card, placementChoice: StaffHudPlacement, hint: Guidance? = null) {
         if (hint?.source == QuestGuidanceHudService.Source.CLAIM && player.isSneaking) {
             if (card.frozenOrigin == null) {
-                val origin = guidanceCardOrigin(player.eyeLocation, player.height - player.eyeHeight,
-                    card.placement.transformation.translation)
+                // Crouching already lowered the passenger origin; retain the preceding mounted pose.
+                val origin = card.lastMountedOrigin?.clone() ?: guidanceCardOrigin(player.eyeLocation,
+                    player.height - player.eyeHeight, card.placement.transformation.translation)
                 card.frozenOrigin = origin
                 card.display.interpolationDuration = 0
                 card.display.teleportDuration = 0
@@ -388,6 +393,11 @@ internal class StaffSpellHud(
             card.placement = placement
         }
         card.preference = placementChoice
+        if (hint?.source == QuestGuidanceHudService.Source.CLAIM) {
+            // Body movement needs no metadata write, but the next Shift must freeze the current place.
+            card.lastMountedOrigin = guidanceCardOrigin(player.eyeLocation, player.height - player.eyeHeight,
+                card.placement.transformation.translation)
+        }
     }
 
     private fun removeCard(playerId: UUID) { cards.remove(playerId)?.display?.remove() }

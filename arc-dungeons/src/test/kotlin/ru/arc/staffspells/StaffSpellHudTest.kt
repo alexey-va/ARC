@@ -110,6 +110,69 @@ class StaffSpellHudTest : FreeSpec({
         }
     }
 
+    "claim Shift retains the mounted origin across crouch height changes and keeps aiming on the frozen card" {
+        withHudHarness { h ->
+            val player = spyk(h.player("claim-pose", StaffSpell.EMBER))
+            player.inventory.setItemInMainHand(ItemStack(Material.STONE))
+            var crouching = false
+            // MockBukkit's sneak flag alone does not model the native posture dimensions.
+            every { player.isValid } returns true
+            every { player.isDead } returns false
+            every { player.isSneaking } answers { crouching }
+            every { player.height } answers { if (crouching) 1.5 else 1.8 }
+            every { player.eyeHeight } answers { if (crouching) 1.27 else 1.62 }
+            every { player.eyeLocation } answers { player.location.add(0.0, player.eyeHeight, 0.0) }
+            val initial = Location(h.world, 5.0, 64.0, 6.0, 25f, 15f)
+            player.teleport(initial)
+            val message = Component.text("Расширить «Judass»\nПоставь блок на ничейной земле\nShift + F — меню")
+            fun refresh() { h.hud.showClaim(player, message, 0.0) shouldBe true }
+            refresh()
+            val card = h.recorder.records.single()
+            val initialTranslation = Vector3f(card.translation)
+            val initialWrites = card.transformWrites
+            val standing = initial.clone().add(1.0, 0.0, 0.5)
+            player.teleport(standing)
+            refresh()
+            card.translation shouldBe initialTranslation
+            card.transformWrites shouldBe initialWrites
+            val mounted = guidanceCardOrigin(player.eyeLocation, player.height - player.eyeHeight, card.translation)
+            val scale = card.scale
+
+            crouching = true
+            player.height shouldBe 1.5
+            player.eyeLocation.y shouldBe 65.27
+            refresh()
+            card.attachedPlayerId shouldBe null
+            val frozen = card.teleports.single()
+            frozen.distance(mounted) shouldBe 0.0
+            card.translation shouldBe Vector3f()
+            card.scale shouldBe scale
+            card.teleportTicks shouldBe 0
+            card.transformTicks shouldBe 0
+
+            player.teleport(player.location.add(0.25, 0.0, 0.0))
+            refresh()
+            card.teleports.single() shouldBe frozen
+            h.hud.isClaimTarget(player) shouldBe false
+            val target = frozen.toVector().add(Vector(0.0, 0.15, 0.0))
+            player.teleport(player.location.setDirection(target.subtract(player.eyeLocation.toVector())))
+            h.hud.isClaimTarget(player) shouldBe true
+            card.teleports.single() shouldBe frozen
+            player.teleport(player.location.apply { yaw += 180f })
+            h.hud.isClaimTarget(player) shouldBe false
+
+            crouching = false
+            player.teleport(standing)
+            refresh()
+            card.attachedPlayerId shouldBe player.uniqueId
+            guidanceCardOrigin(player.eyeLocation, player.height - player.eyeHeight, card.translation)
+                .distance(mounted) shouldBe 0.0
+            card.teleports.size shouldBe 1
+            h.recorder.records.single() shouldBe card
+            card.removals shouldBe 0
+        }
+    }
+
     "claim and independently leased foreground surfaces hide quests without losing their latest content" {
         withHudHarness { h ->
             val player = h.player("quest-priority", StaffSpell.EMBER)
