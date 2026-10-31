@@ -132,20 +132,44 @@ checks with `python3 -m unittest discover -s src/test/python -v` and the existin
 
 On the production spawn node it also treats spawn ItemsAdder as the only
 content authority. A completed `iazip` stages and checksum-verifies exact copies
-of `contents/` and the active `storage/` cache, publishes the shared client ZIP,
-then atomically swaps those two trees into the sibling survival runtime and
-sends `iareload` to its tmux console. The script waits for ItemsAdder's
+of `contents/` and seven root `storage/*_cache.yml` ID metadata files, publishes
+the shared client ZIP, then replaces those paths on each configured sibling
+runtime and sends `iareload` to its tmux console. The shared metadata is limited
+to `custom_fires_ids_cache.yml`, `font_images_unicode_cache.yml`,
+`items_ids_cache.yml`, `real_blocks_ids_cache.yml`,
+`real_blocks_note_ids_cache.yml`, `real_transparent_blocks_ids_cache.yml`, and
+`real_wire_ids_cache.yml`. Destination-local players, mobs, disposable caches,
+and other storage files remain untouched; source-local state is never copied.
+The script waits for ItemsAdder's
 `Reload completed.` log marker, verifies `contents/` byte-for-byte, and verifies
 the active cache mappings semantically because ItemsAdder may reorder YAML
-entries while loading them. A changed key or value still fails the publication.
-The previous survival trees are retained below the repository-ignored
-`.mc-ops/itemsadder-mirror/` root; `survival-mirror.backup-keep` controls bounded
-retention.
+entries while loading them. Empty YAML and an empty mapping both represent no
+assigned IDs. A changed key or value still fails the publication. Previous
+contents and ID files are retained below the repository-ignored
+`.mc-ops/itemsadder-mirror/<target-directory>/` root;
+`survival-mirror.backup-keep` controls retention separately for each target.
+Replacement failures restore that target's previous paths. Reload failures
+retain the backup and stop without rolling back native writes made by ItemsAdder.
 
 The mirror is disabled by default and enabled only in the private spawn
-`resourcepack-sync.yml`. Source/target directory names and the tmux session are
-strictly bounded, the target must remain below the same network root, and a
-directory lock rejects concurrent mirror attempts.
+`resourcepack-sync.yml`. Optional `survival-mirror.targets` entries use
+`directory=session` strings, for example `classic_survival=survival` and
+`parkour=parkour`. The complete list is passed as newline-separated
+`IA_MIRROR_TARGETS`. An absent or empty list retains the legacy
+`target-server-dir` / `target-tmux-session` pair. Every target is validated and
+staged before activating the first one. Directory and session names are
+strictly bounded, duplicate directories or sessions are rejected, targets must
+remain below the same network root, and a directory lock rejects concurrent
+mirror attempts.
+
+For a first consumer installation, the same script supports `IA_MIRROR_ONLY=1`
+with `IA_MIRROR_ENABLED=1`, `RP_SOURCE` pointing into the canonical spawn
+ItemsAdder `output/` directory, and `IA_MIRROR_TARGETS` limited to the new
+consumer. This mode seeds `contents/` and the seven ID files without generating
+or reading a ZIP, AWS credentials or uploads, Redis notifications, or `iareload`.
+The destination server and its `plugins/` directory must already exist; its
+ItemsAdder directory and mirrored paths may be absent. Normal publication
+continues to require installed target paths, tmux sessions and server logs.
 
 After the complete ZIP set upload succeeds, the script publishes a versioned event
 containing the SHA-256 of the complete checksum manifest and a random request ID to

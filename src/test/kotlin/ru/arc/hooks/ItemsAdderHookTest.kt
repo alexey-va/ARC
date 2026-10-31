@@ -1,6 +1,7 @@
 package ru.arc.hooks
 
 import com.google.gson.JsonParser
+import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
@@ -10,6 +11,7 @@ import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.shouldBe
 import ru.arc.core.TestTaskScheduler
 import java.nio.file.Files
+import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.util.zip.CRC32
 import java.util.zip.ZipEntry
@@ -179,7 +181,25 @@ class ItemsAdderHookTest :
                 environment["S3_BUCKET"] shouldBe "ruscraftinresources"
                 environment.containsKey("S3_RP_ARCHIVE_PREFIX").shouldBeFalse()
                 environment["IA_MIRROR_ENABLED"] shouldBe "0"
+                environment["IA_MIRROR_TARGETS"] shouldBe ""
                 environment["IA_MIRROR_BACKUP_KEEP"] shouldBe "3"
+            }
+
+            "passes configured mirror targets as separate directory-session lines" {
+                val dataFolder = Files.createTempDirectory("arc-resourcepack-config-targets")
+                val module = dataFolder.resolve("modules/resourcepack-sync.yml")
+                Files.createDirectories(module.parent)
+                module.writeText(
+                    """
+                    survival-mirror:
+                      targets:
+                        - classic_survival=survival
+                        - parkour=parkour
+                    """.trimIndent(),
+                )
+
+                ResourcePackSyncConfig.load(dataFolder).processEnvironment()["IA_MIRROR_TARGETS"] shouldBe
+                    "classic_survival=survival\nparkour=parkour"
             }
         }
 
@@ -578,41 +598,56 @@ class ItemsAdderHookTest :
                 }
             }
 
-            "mirrors spawn content and caches to survival before reloading it" {
-                val directory = Files.createTempDirectory("arc-resourcepack-sync-survival-mirror")
+            "mirrors spawn contents and stable IDs to two consumers without copying local state" {
+                val directory = Files.createTempDirectory("arc-resourcepack-sync-consumer-mirrors")
                 val networkRoot = directory.resolve("network")
                 val sourceItemsAdder = networkRoot.resolve("classic/plugins/ItemsAdder")
-                val targetItemsAdder = networkRoot.resolve("classic_survival/plugins/ItemsAdder")
+                val targets = listOf("classic_survival" to "survival", "parkour" to "parkour")
                 val resourcePackZip = sourceItemsAdder.resolve("output/generated.zip")
                 val uploadedZip = directory.resolve("uploaded.zip")
                 val fakeAws = directory.resolve("fake-aws.sh")
                 val fakeTmux = directory.resolve("fake-tmux.sh")
                 val capturedTmux = directory.resolve("tmux-command.txt")
-                val targetLog = networkRoot.resolve("classic_survival/logs/latest.log")
                 val script = BundledResourcePackSyncScript.install(directory.resolve("arc-data"))
+                val localState = listOf(
+                    "storage/players/local.yml",
+                    "storage/mobs/local.yml",
+                    "storage/cache/local.bin",
+                    "cache/local.bin",
+                    "storage/unrelated_cache.yml",
+                )
 
                 sourceItemsAdder.resolve("contents/demo").let { path ->
                     Files.createDirectories(path)
                     path.resolve("source.txt").writeText("spawn-content")
                 }
-                sourceItemsAdder.resolve("storage").let { path ->
-                    Files.createDirectories(path)
-                    path.resolve("items_ids_cache.yml").writeText("PAPER:\n  demo:item: 42\n")
-                    path.resolve("font_images_unicode_cache.yml").writeText(
-                        "demo:first: \ndemo:second: \n",
-                    )
+                writeMirrorIdMetadata(sourceItemsAdder)
+                (localState + "storage/players/source-only.yml").forEach { relative ->
+                    val path = sourceItemsAdder.resolve(relative)
+                    Files.createDirectories(path.parent)
+                    path.writeText("spawn-private-state")
                 }
-                targetItemsAdder.resolve("contents/legacy").let { path ->
-                    Files.createDirectories(path)
-                    path.resolve("survival-only.txt").writeText("legacy-content")
-                }
-                targetItemsAdder.resolve("storage").let { path ->
-                    Files.createDirectories(path)
-                    path.resolve("items_ids_cache.yml").writeText("PAPER:\n  legacy:item: 99\n")
+                targets.forEach { (name, _) ->
+                    val targetItemsAdder = networkRoot.resolve("${name}/plugins/ItemsAdder")
+                    targetItemsAdder.resolve("contents/legacy").let { path ->
+                        Files.createDirectories(path)
+                        path.resolve("target-only.txt").writeText("legacy-${name}-content")
+                    }
+                    writeMirrorIdMetadata(targetItemsAdder)
+                    itemsAdderIdMetadataFiles.forEach { filename ->
+                        targetItemsAdder.resolve("storage/${filename}").writeText("legacy: 99\n")
+                    }
+                    targetItemsAdder.resolve("storage/items_ids_cache.yml").writeText("PAPER:\n  legacy:item: 99\n")
+                    localState.forEach { relative ->
+                        val path = targetItemsAdder.resolve(relative)
+                        Files.createDirectories(path.parent)
+                        path.writeText("${name}-local-state")
+                    }
+                    val targetLog = networkRoot.resolve("${name}/logs/latest.log")
+                    Files.createDirectories(targetLog.parent)
+                    targetLog.writeText("[00:00:00] server ready\n")
                 }
                 Files.createDirectories(resourcePackZip.parent)
-                Files.createDirectories(targetLog.parent)
-                targetLog.writeText("[00:00:00] server ready\n")
                 ZipOutputStream(Files.newOutputStream(resourcePackZip)).use { output ->
                     output.putNextEntry(ZipEntry("pack.mcmeta"))
                     output.write(
@@ -628,12 +663,21 @@ class ItemsAdderHookTest :
                     |#!/bin/sh
                     |case "${'$'}1" in
                     |  list-sessions)
-                    |    printf '%s\n' survival
+                    |    printf '%s\n' survival parkour
                     |    ;;
                     |  send-keys)
-                    |    printf '%s\n' "${'$'}*" > "${'$'}CAPTURED_TMUX"
-                    |    printf '%s\n' 'demo:second: ' 'demo:first: ' > "${'$'}FAKE_TARGET_STORAGE/font_images_unicode_cache.yml"
-                    |    printf '%s\n' '[00:00:01] [Server thread/WARN]: Ресурсы • Reload completed.' >> "${'$'}FAKE_TARGET_LOG"
+                    |    printf '%s\n' "${'$'}*" >> "${'$'}CAPTURED_TMUX"
+                    |    case "${'$'}3" in
+                    |      survival) server=classic_survival ;;
+                    |      parkour) server=parkour ;;
+                    |      *) exit 3 ;;
+                    |    esac
+                    |    target="${'$'}FAKE_NETWORK_ROOT/${'$'}server"
+                    |    storage="${'$'}target/plugins/ItemsAdder/storage"
+                    |    printf '%s\n' 'demo:second: ' 'demo:first: ' > "${'$'}storage/font_images_unicode_cache.yml"
+                    |    printf '%s\n' '{}' > "${'$'}storage/custom_fires_ids_cache.yml"
+                    |    printf '%s\n' native-write > "${'$'}storage/players/new-during-reload.yml"
+                    |    printf '%s\n' '[00:00:01] [Server thread/WARN]: Ресурсы • Reload completed.' >> "${'$'}target/logs/latest.log"
                     |    ;;
                     |  *)
                     |    exit 2
@@ -652,33 +696,50 @@ class ItemsAdderHookTest :
                                 "CAPTURED_UPLOAD" to uploadedZip.toAbsolutePath().toString(),
                                 "RP_NOTIFY_ENABLED" to "0",
                                 "IA_MIRROR_ENABLED" to "1",
+                                "IA_MIRROR_TARGETS" to targets.joinToString("\n") { (name, session) -> "${name}=${session}" },
                                 "IA_MIRROR_TMUX_CLI" to fakeTmux.toAbsolutePath().toString(),
                                 "CAPTURED_TMUX" to capturedTmux.toAbsolutePath().toString(),
-                                "FAKE_TARGET_LOG" to targetLog.toAbsolutePath().toString(),
-                                "FAKE_TARGET_STORAGE" to
-                                    targetItemsAdder.resolve("storage").toAbsolutePath().toString(),
+                                "FAKE_NETWORK_ROOT" to networkRoot.toAbsolutePath().toString(),
                             )
                     },
                 ).publish(resourcePackZip).shouldBeTrue()
 
-                targetItemsAdder.resolve("contents/demo/source.txt").readText() shouldBe "spawn-content"
-                Files.exists(targetItemsAdder.resolve("contents/legacy")).shouldBeFalse()
-                targetItemsAdder.resolve("storage/items_ids_cache.yml").readText() shouldBe
-                    "PAPER:\n  demo:item: 42\n"
-                targetItemsAdder.resolve("storage/font_images_unicode_cache.yml").readLines() shouldBe
-                    listOf("demo:second: ", "demo:first: ")
-                capturedTmux.readText() shouldContain "send-keys -t survival iareload Enter"
-
                 val backupRoot = networkRoot.resolve(".mc-ops/itemsadder-mirror")
-                val backups = Files.list(backupRoot).use { paths ->
-                    paths.iterator().asSequence()
-                        .filter { Files.isDirectory(it) && it.fileName.toString() != ".lock" }
-                        .toList()
+                targets.forEach { (name, session) ->
+                    val targetItemsAdder = networkRoot.resolve("${name}/plugins/ItemsAdder")
+                    targetItemsAdder.resolve("contents/demo/source.txt").readText() shouldBe "spawn-content"
+                    Files.exists(targetItemsAdder.resolve("contents/legacy")).shouldBeFalse()
+                    targetItemsAdder.resolve("storage/items_ids_cache.yml").readText() shouldBe
+                        "PAPER:\n  demo:item: 42\n"
+                    targetItemsAdder.resolve("storage/font_images_unicode_cache.yml").readLines() shouldBe
+                        listOf("demo:second: ", "demo:first: ")
+                    targetItemsAdder.resolve("storage/custom_fires_ids_cache.yml").readText() shouldBe "{}\n"
+                    targetItemsAdder.resolve("storage/real_wire_ids_cache.yml").readText() shouldBe ""
+                    itemsAdderIdMetadataFiles.filterNot { filename ->
+                        filename in setOf("font_images_unicode_cache.yml", "custom_fires_ids_cache.yml")
+                    }.forEach { filename ->
+                        targetItemsAdder.resolve("storage/${filename}").readText() shouldBe
+                            sourceItemsAdder.resolve("storage/${filename}").readText()
+                    }
+                    localState.forEach { relative ->
+                        targetItemsAdder.resolve(relative).readText() shouldBe "${name}-local-state"
+                    }
+                    Files.exists(targetItemsAdder.resolve("storage/players/source-only.yml")).shouldBeFalse()
+                    targetItemsAdder.resolve("storage/players/new-during-reload.yml").readText() shouldBe "native-write\n"
+                    capturedTmux.readText() shouldContain "send-keys -t ${session} iareload Enter"
+
+                    val backups = Files.list(backupRoot.resolve(name)).use { paths ->
+                        paths.iterator().asSequence().filter { Files.isDirectory(it) }.toList()
+                    }
+                    backups.size shouldBeExactly 1
+                    backups.single().resolve("contents/legacy/target-only.txt").readText() shouldBe
+                        "legacy-${name}-content"
+                    backups.single().resolve("storage/items_ids_cache.yml").readText() shouldBe
+                        "PAPER:\n  legacy:item: 99\n"
+                    Files.exists(backups.single().resolve("storage/players")).shouldBeFalse()
                 }
-                backups.size shouldBeExactly 1
-                backups.single().resolve("contents/legacy/survival-only.txt").readText() shouldBe
-                    "legacy-content"
                 Files.exists(backupRoot.resolve(".lock")).shouldBeFalse()
+                uploadedZip.shouldExist()
             }
 
             "rejects semantic ItemsAdder cache drift after the survival reload" {
@@ -694,10 +755,7 @@ class ItemsAdderHookTest :
                 val script = BundledResourcePackSyncScript.install(directory.resolve("arc-data"))
 
                 sourceItemsAdder.resolve("contents").let { Files.createDirectories(it) }
-                sourceItemsAdder.resolve("storage").let { path ->
-                    Files.createDirectories(path)
-                    path.resolve("items_ids_cache.yml").writeText("PAPER:\n  demo:item: 42\n")
-                }
+                writeMirrorIdMetadata(sourceItemsAdder)
                 targetItemsAdder.resolve("contents").let { Files.createDirectories(it) }
                 targetItemsAdder.resolve("storage").let { Files.createDirectories(it) }
                 Files.createDirectories(resourcePackZip.parent)
@@ -750,6 +808,194 @@ class ItemsAdderHookTest :
                 ).publish(resourcePackZip).shouldBeFalse()
             }
 
+            "seeds an empty consumer without a generated ZIP, credentials, upload, notification or reload" {
+                val directory = Files.createTempDirectory("arc-resourcepack-sync-mirror-only")
+                val networkRoot = directory.resolve("network")
+                val sourceItemsAdder = networkRoot.resolve("classic/plugins/ItemsAdder")
+                val targetItemsAdder = networkRoot.resolve("parkour/plugins/ItemsAdder")
+                val resourcePackZip = sourceItemsAdder.resolve("output/generated.zip")
+                val forbiddenCall = directory.resolve("forbidden-call.txt")
+                val fakeExternal = directory.resolve("forbidden-external.sh")
+                val script = BundledResourcePackSyncScript.install(directory.resolve("arc-data"))
+                Files.createDirectories(sourceItemsAdder.resolve("contents/demo"))
+                sourceItemsAdder.resolve("contents/demo/source.txt").writeText("spawn-content")
+                writeMirrorIdMetadata(sourceItemsAdder)
+                listOf("players", "mobs", "cache").forEach { tree ->
+                    val path = sourceItemsAdder.resolve("storage/${tree}/source-only.yml")
+                    Files.createDirectories(path.parent)
+                    path.writeText("spawn-private-state")
+                }
+                Files.createDirectories(resourcePackZip.parent)
+                Files.createDirectories(targetItemsAdder.parent)
+                fakeExternal.writeText(
+                    """
+                    |#!/bin/sh
+                    |printf '%s\n' "${'$'}*" >> "${'$'}FORBIDDEN_CALL"
+                    |exit 9
+                    """.trimMargin(),
+                )
+                fakeExternal.toFile().setExecutable(true).shouldBeTrue()
+
+                val (exitCode, output) = runMirrorOnlyScript(
+                    script,
+                    resourcePackZip,
+                    mapOf(
+                        "IA_MIRROR_TARGETS" to "parkour=parkour",
+                        "AWS_CLI" to fakeExternal.toString(),
+                        "REDIS_CLI" to fakeExternal.toString(),
+                        "IA_MIRROR_TMUX_CLI" to fakeExternal.toString(),
+                        "FORBIDDEN_CALL" to forbiddenCall.toString(),
+                        "RP_NOTIFY_ENABLED" to "1",
+                        "RP_VARIANTS_ENABLED" to "1",
+                    ),
+                )
+
+                withClue(output) { exitCode shouldBeExactly 0 }
+                targetItemsAdder.resolve("contents/demo/source.txt").readText() shouldBe "spawn-content"
+                itemsAdderIdMetadataFiles.forEach { filename ->
+                    targetItemsAdder.resolve("storage/${filename}").readText() shouldBe
+                        sourceItemsAdder.resolve("storage/${filename}").readText()
+                }
+                Files.list(targetItemsAdder.resolve("storage")).use { paths ->
+                    paths.iterator().asSequence().map { it.fileName.toString() }.toSet() shouldBe
+                        itemsAdderIdMetadataFiles.toSet()
+                }
+                Files.exists(resourcePackZip).shouldBeFalse()
+                Files.exists(forbiddenCall).shouldBeFalse()
+                Files.exists(networkRoot.resolve(".mc-ops/itemsadder-mirror/.lock")).shouldBeFalse()
+            }
+
+            "rejects the complete target set before changing any consumer" {
+                val invalidTargets = listOf(
+                    Triple("traversal", "../outside=parkour", "server-directory=tmux-session"),
+                    Triple("duplicate-server", "classic_survival=other", "Duplicate ItemsAdder mirror target server"),
+                    Triple("duplicate-session", "parkour=survival", "Duplicate ItemsAdder mirror target tmux session"),
+                    Triple("missing-server", "missing=parkour", "Missing mirror target server directory"),
+                    Triple("escaped-server", "parkour=parkour", "escapes the network root"),
+                    Triple("symlinked-storage", "parkour=parkour", "Invalid target ItemsAdder tree"),
+                )
+                invalidTargets.forEach { (caseName, invalidTarget, expectedError) ->
+                    val directory = Files.createTempDirectory("arc-resourcepack-sync-${caseName}")
+                    val networkRoot = directory.resolve("network")
+                    val sourceItemsAdder = networkRoot.resolve("classic/plugins/ItemsAdder")
+                    val firstTarget = networkRoot.resolve("classic_survival/plugins/ItemsAdder")
+                    val secondTarget = networkRoot.resolve("parkour/plugins/ItemsAdder")
+                    val resourcePackZip = sourceItemsAdder.resolve("output/generated.zip")
+                    val script = BundledResourcePackSyncScript.install(directory.resolve("arc-data"))
+                    Files.createDirectories(sourceItemsAdder.resolve("contents"))
+                    writeMirrorIdMetadata(sourceItemsAdder)
+                    Files.createDirectories(resourcePackZip.parent)
+                    listOf(firstTarget, secondTarget).forEach { target ->
+                        Files.createDirectories(target.resolve("contents"))
+                        target.resolve("contents/legacy.txt").writeText("previous-content")
+                        writeMirrorIdMetadata(target)
+                        target.resolve("storage/items_ids_cache.yml").writeText("legacy: 99\n")
+                    }
+                    if (caseName == "escaped-server") {
+                        val outside = Files.createDirectories(directory.resolve("outside"))
+                        networkRoot.resolve("parkour").toFile().deleteRecursively().shouldBeTrue()
+                        Files.createSymbolicLink(networkRoot.resolve("parkour"), outside)
+                    }
+                    if (caseName == "symlinked-storage") {
+                        val outside = Files.createDirectories(directory.resolve("outside-storage"))
+                        secondTarget.resolve("storage").toFile().deleteRecursively().shouldBeTrue()
+                        Files.createSymbolicLink(secondTarget.resolve("storage"), outside)
+                    }
+
+                    val (exitCode, output) = runMirrorOnlyScript(
+                        script,
+                        resourcePackZip,
+                        mapOf("IA_MIRROR_TARGETS" to "classic_survival=survival\n${invalidTarget}"),
+                    )
+
+                    withClue("${caseName}: ${output}") {
+                        exitCode shouldBeExactly 1
+                        output shouldContain expectedError
+                        firstTarget.resolve("contents/legacy.txt").readText() shouldBe "previous-content"
+                        firstTarget.resolve("storage/items_ids_cache.yml").readText() shouldBe "legacy: 99\n"
+                        Files.exists(networkRoot.resolve(".mc-ops")).shouldBeFalse()
+                    }
+                }
+            }
+
+            "leaves another mirror's lock and consumer files intact" {
+                val directory = Files.createTempDirectory("arc-resourcepack-sync-mirror-lock")
+                val networkRoot = directory.resolve("network")
+                val sourceItemsAdder = networkRoot.resolve("classic/plugins/ItemsAdder")
+                val targetItemsAdder = networkRoot.resolve("classic_survival/plugins/ItemsAdder")
+                val resourcePackZip = sourceItemsAdder.resolve("output/generated.zip")
+                val lock = networkRoot.resolve(".mc-ops/itemsadder-mirror/.lock")
+                val script = BundledResourcePackSyncScript.install(directory.resolve("arc-data"))
+                Files.createDirectories(sourceItemsAdder.resolve("contents"))
+                writeMirrorIdMetadata(sourceItemsAdder)
+                Files.createDirectories(resourcePackZip.parent)
+                Files.createDirectories(targetItemsAdder.resolve("contents"))
+                targetItemsAdder.resolve("contents/legacy.txt").writeText("previous-content")
+                writeMirrorIdMetadata(targetItemsAdder)
+                Files.createDirectories(lock)
+
+                val (exitCode, output) = runMirrorOnlyScript(script, resourcePackZip)
+
+                withClue(output) {
+                    exitCode shouldBeExactly 1
+                    output shouldContain "Another ItemsAdder mirror is already running"
+                }
+                lock.shouldExist()
+                targetItemsAdder.resolve("contents/legacy.txt").readText() shouldBe "previous-content"
+            }
+
+            "restores the consumer contents and seven metadata files when replacement fails" {
+                val directory = Files.createTempDirectory("arc-resourcepack-sync-mirror-rollback")
+                val networkRoot = directory.resolve("network")
+                val sourceItemsAdder = networkRoot.resolve("classic/plugins/ItemsAdder")
+                val targetItemsAdder = networkRoot.resolve("classic_survival/plugins/ItemsAdder")
+                val resourcePackZip = sourceItemsAdder.resolve("output/generated.zip")
+                val fakeBin = Files.createDirectories(directory.resolve("bin"))
+                val fakeMove = fakeBin.resolve("mv")
+                val script = BundledResourcePackSyncScript.install(directory.resolve("arc-data"))
+                Files.createDirectories(sourceItemsAdder.resolve("contents"))
+                sourceItemsAdder.resolve("contents/new.txt").writeText("new-content")
+                writeMirrorIdMetadata(sourceItemsAdder)
+                Files.createDirectories(resourcePackZip.parent)
+                Files.createDirectories(targetItemsAdder.resolve("contents"))
+                targetItemsAdder.resolve("contents/legacy.txt").writeText("previous-content")
+                writeMirrorIdMetadata(targetItemsAdder)
+                val previousMetadata = itemsAdderIdMetadataFiles.associateWith { filename -> "legacy-${filename}: 99\n" }
+                previousMetadata.forEach { (filename, value) ->
+                    targetItemsAdder.resolve("storage/${filename}").writeText(value)
+                }
+                Files.createDirectories(targetItemsAdder.resolve("storage/players"))
+                targetItemsAdder.resolve("storage/players/local.yml").writeText("local-player-data")
+                fakeMove.writeText(
+                    """
+                    |#!/bin/sh
+                    |case "${'$'}2" in
+                    |  */.arc-mirror-staging.*/storage/items_ids_cache.yml) exit 33 ;;
+                    |esac
+                    |exec /bin/mv "${'$'}@"
+                    """.trimMargin(),
+                )
+                fakeMove.toFile().setExecutable(true).shouldBeTrue()
+
+                val (exitCode, output) = runMirrorOnlyScript(
+                    script,
+                    resourcePackZip,
+                    mapOf("PATH" to "${fakeBin}:${System.getenv("PATH")}"),
+                )
+
+                withClue(output) {
+                    exitCode shouldBeExactly 1
+                    output shouldContain "Unable to activate classic_survival ItemsAdder storage/items_ids_cache.yml"
+                }
+                targetItemsAdder.resolve("contents/legacy.txt").readText() shouldBe "previous-content"
+                Files.exists(targetItemsAdder.resolve("contents/new.txt")).shouldBeFalse()
+                previousMetadata.forEach { (filename, value) ->
+                    targetItemsAdder.resolve("storage/${filename}").readText() shouldBe value
+                }
+                targetItemsAdder.resolve("storage/players/local.yml").readText() shouldBe "local-player-data"
+                Files.exists(networkRoot.resolve(".mc-ops/itemsadder-mirror/.lock")).shouldBeFalse()
+            }
+
             "rejects a survival mirror target that is not a server directory name" {
                 val directory = Files.createTempDirectory("arc-resourcepack-sync-mirror-traversal")
                 val sourceItemsAdder = directory.resolve("network/classic/plugins/ItemsAdder")
@@ -760,7 +1006,7 @@ class ItemsAdderHookTest :
                 val script = BundledResourcePackSyncScript.install(directory.resolve("arc-data"))
 
                 Files.createDirectories(sourceItemsAdder.resolve("contents"))
-                Files.createDirectories(sourceItemsAdder.resolve("storage"))
+                writeMirrorIdMetadata(sourceItemsAdder)
                 Files.createDirectories(targetItemsAdder.resolve("contents"))
                 Files.createDirectories(targetItemsAdder.resolve("storage"))
                 Files.createDirectories(resourcePackZip.parent)
@@ -924,6 +1170,53 @@ class ItemsAdderHookTest :
             }
         }
     })
+
+private val itemsAdderIdMetadataFiles = listOf(
+    "custom_fires_ids_cache.yml",
+    "font_images_unicode_cache.yml",
+    "items_ids_cache.yml",
+    "real_blocks_ids_cache.yml",
+    "real_blocks_note_ids_cache.yml",
+    "real_transparent_blocks_ids_cache.yml",
+    "real_wire_ids_cache.yml",
+)
+
+private fun writeMirrorIdMetadata(itemsAdder: Path) {
+    val storage = Files.createDirectories(itemsAdder.resolve("storage"))
+    itemsAdderIdMetadataFiles.forEach { filename ->
+        storage.resolve(filename).writeText(
+            when (filename) {
+                "custom_fires_ids_cache.yml", "real_wire_ids_cache.yml" -> ""
+                "items_ids_cache.yml" -> "PAPER:\n  demo:item: 42\n"
+                "font_images_unicode_cache.yml" -> "demo:first: \ndemo:second: \n"
+                else -> "demo:entry: 42\n"
+            },
+        )
+    }
+}
+
+private fun runMirrorOnlyScript(
+    script: Path,
+    resourcePackZip: Path,
+    environment: Map<String, String> = emptyMap(),
+): Pair<Int, String> {
+    val processBuilder = ProcessBuilder("bash", script.toString()).redirectErrorStream(true)
+    processBuilder.environment().putAll(
+        mapOf(
+            "RP_SOURCE" to resourcePackZip.toAbsolutePath().toString(),
+            "AWS_ACCESS_KEY_ID" to "",
+            "AWS_SECRET_ACCESS_KEY" to "",
+            "IA_MIRROR_ENABLED" to "1",
+            "IA_MIRROR_ONLY" to "1",
+            "IA_MIRROR_TARGETS" to "",
+            "IA_MIRROR_TARGET_SERVER" to "classic_survival",
+            "IA_MIRROR_TARGET_SESSION" to "survival",
+        ) + environment,
+    )
+    val process = processBuilder.start()
+    val output = process.inputStream.bufferedReader().use { it.readText() }
+    return process.waitFor() to output
+}
 
 private fun testEnvironment(): Map<String, String> =
     mapOf(

@@ -10,8 +10,6 @@ LOG_TAG="resourcepack_sync"
 log() { echo "[$(date -Iseconds)] ${LOG_TAG}: $*"; }
 die() { log "ERROR: $*"; exit 1; }
 
-: "${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID not set}"
-: "${AWS_SECRET_ACCESS_KEY:?AWS_SECRET_ACCESS_KEY not set}"
 : "${RP_SOURCE:?RP_SOURCE not set}"
 
 S3_ENDPOINT="${S3_ENDPOINT:-https://storage.yandexcloud.net}"
@@ -22,34 +20,62 @@ AWS="${AWS_CLI:-aws}"
 S3_KEY="${S3_RP_KEY:-${RP_UPLOAD_NAME}}"
 S3_MANIFEST_KEY="${S3_RP_MANIFEST_KEY:-${RP_UPLOAD_NAME}.sha256}"
 IA_MIRROR_ENABLED="${IA_MIRROR_ENABLED:-0}"
+IA_MIRROR_ONLY="${IA_MIRROR_ONLY:-0}"
 IA_MIRROR_SOURCE_SERVER="${IA_MIRROR_SOURCE_SERVER:-classic}"
+IA_MIRROR_TARGETS="${IA_MIRROR_TARGETS:-}"
 IA_MIRROR_TARGET_SERVER="${IA_MIRROR_TARGET_SERVER:-classic_survival}"
 IA_MIRROR_TARGET_SESSION="${IA_MIRROR_TARGET_SESSION:-survival}"
 IA_MIRROR_BACKUP_KEEP="${IA_MIRROR_BACKUP_KEEP:-3}"
 IA_MIRROR_RELOAD_TIMEOUT_SECONDS="${IA_MIRROR_RELOAD_TIMEOUT_SECONDS:-120}"
 
-[[ -f "${RP_SOURCE}" ]] || die "Missing ${RP_SOURCE} — regenerate ItemsAdder pack first"
+[[ "${IA_MIRROR_ONLY}" == "0" || "${IA_MIRROR_ONLY}" == "1" ]] ||
+  die "IA_MIRROR_ONLY must be 0 or 1"
+if [[ "${IA_MIRROR_ONLY}" == "1" ]]; then
+  [[ "${IA_MIRROR_ENABLED}" == "1" ]] || die "IA_MIRROR_ONLY requires IA_MIRROR_ENABLED=1"
+else
+  : "${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID not set}"
+  : "${AWS_SECRET_ACCESS_KEY:?AWS_SECRET_ACCESS_KEY not set}"
+  [[ -f "${RP_SOURCE}" ]] || die "Missing ${RP_SOURCE} — regenerate ItemsAdder pack first"
+fi
 
 REDIS="${REDIS_CLI:-redis-cli}"
 
-for required_command in python3 unzip zip; do
-  command -v "${required_command}" >/dev/null 2>&1 || die "Missing required command: ${required_command}"
-done
-if [[ "${RP_NOTIFY_ENABLED:-1}" == "1" ]]; then
-  command -v "${REDIS}" >/dev/null 2>&1 || die "Missing required command: ${REDIS}"
+command -v python3 >/dev/null 2>&1 || die "Missing required command: python3"
+if [[ "${IA_MIRROR_ONLY}" == "0" ]]; then
+  for required_command in unzip zip; do
+    command -v "${required_command}" >/dev/null 2>&1 || die "Missing required command: ${required_command}"
+  done
+  if [[ "${RP_NOTIFY_ENABLED:-1}" == "1" ]]; then
+    command -v "${REDIS}" >/dev/null 2>&1 || die "Missing required command: ${REDIS}"
+  fi
 fi
 
-mirror_staging_dir=""
+mirror_staging_dirs=()
 mirror_lock_dir=""
 mirror_source_itemsadder=""
-mirror_target_server=""
-mirror_target_itemsadder=""
 mirror_backup_root=""
+mirror_target_servers=()
+mirror_target_itemsadders=()
+mirror_target_sessions=()
+mirror_target_names=()
+mirror_target_count=0
+mirror_cache_files=(
+  custom_fires_ids_cache.yml
+  font_images_unicode_cache.yml
+  items_ids_cache.yml
+  real_blocks_ids_cache.yml
+  real_blocks_note_ids_cache.yml
+  real_transparent_blocks_ids_cache.yml
+  real_wire_ids_cache.yml
+)
 
 cleanup() {
-  if [[ -n "${mirror_staging_dir}" && -d "${mirror_staging_dir}" ]]; then
-    rm -rf -- "${mirror_staging_dir}"
-  fi
+  local mirror_staging_dir
+  for mirror_staging_dir in "${mirror_staging_dirs[@]:-}"; do
+    if [[ -n "${mirror_staging_dir}" && -d "${mirror_staging_dir}" ]]; then
+      rm -rf -- "${mirror_staging_dir}"
+    fi
+  done
   if [[ -n "${mirror_lock_dir}" && -d "${mirror_lock_dir}" ]]; then
     rmdir -- "${mirror_lock_dir}" 2>/dev/null || true
   fi
@@ -59,14 +85,25 @@ cleanup() {
 }
 trap cleanup EXIT
 
+verify_itemsadder_contents() {
+  local changes
+  changes="$("${IA_MIRROR_RSYNC_CLI:-rsync}" -rlcni --delete \
+    "${mirror_source_itemsadder}/contents/" "$1/contents/")" ||
+    die "Unable to verify ItemsAdder contents in $1"
+  [[ -z "${changes}" ]]
+}
+
+verify_itemsadder_cache_bytes() {
+  local cache
+  for cache in "${mirror_cache_files[@]}"; do
+    cmp -s "${mirror_source_itemsadder}/storage/${cache}" "$1/storage/${cache}" || return 1
+  done
+}
+
 prepare_itemsadder_mirror() {
   [[ "${IA_MIRROR_ENABLED}" == "1" ]] || return 0
   [[ "${IA_MIRROR_SOURCE_SERVER}" =~ ^[A-Za-z0-9_-]+$ ]] ||
     die "IA_MIRROR_SOURCE_SERVER must be a server directory name"
-  [[ "${IA_MIRROR_TARGET_SERVER}" =~ ^[A-Za-z0-9_-]+$ ]] ||
-    die "IA_MIRROR_TARGET_SERVER must be a server directory name"
-  [[ "${IA_MIRROR_TARGET_SESSION}" =~ ^[A-Za-z0-9_-]+$ ]] ||
-    die "IA_MIRROR_TARGET_SESSION must be a tmux session name"
   [[ "${IA_MIRROR_BACKUP_KEEP}" =~ ^[1-9][0-9]*$ ]] &&
     (( IA_MIRROR_BACKUP_KEEP <= 20 )) ||
     die "IA_MIRROR_BACKUP_KEEP must be between 1 and 20"
@@ -74,7 +111,8 @@ prepare_itemsadder_mirror() {
     (( IA_MIRROR_RELOAD_TIMEOUT_SECONDS <= 600 )) ||
     die "IA_MIRROR_RELOAD_TIMEOUT_SECONDS must be between 1 and 600"
 
-  local source_output source_server network_root target_server rsync_bin
+  local source_output source_server network_root target_server target_plugins target_itemsadder
+  local target_name target_session entry index previous tree cache rsync_bin tmux_sessions lock_dir staging_path
   source_output="$(cd "$(dirname "${RP_SOURCE}")" && pwd -P)"
   mirror_source_itemsadder="$(cd "${source_output}/.." && pwd -P)"
   source_server="$(cd "${mirror_source_itemsadder}/../.." && pwd -P)"
@@ -83,28 +121,82 @@ prepare_itemsadder_mirror() {
   [[ "$(basename "${source_server}")" == "${IA_MIRROR_SOURCE_SERVER}" ]] ||
     die "ItemsAdder mirror can run only from ${IA_MIRROR_SOURCE_SERVER}, got ${source_server}"
 
-  target_server="${network_root}/${IA_MIRROR_TARGET_SERVER}"
-  [[ -d "${target_server}" ]] || die "Missing mirror target server directory: ${target_server}"
-  mirror_target_server="$(cd "${target_server}" && pwd -P)"
-  [[ "$(dirname "${mirror_target_server}")" == "${network_root}" ]] ||
-    die "Mirror target server escapes the network root: ${mirror_target_server}"
-  mirror_target_itemsadder="${mirror_target_server}/plugins/ItemsAdder"
-  [[ -d "${mirror_target_itemsadder}" ]] ||
-    die "Missing mirror target ItemsAdder directory: ${mirror_target_itemsadder}"
-  mirror_target_itemsadder="$(cd "${mirror_target_itemsadder}" && pwd -P)"
-  case "${mirror_target_itemsadder}/" in
-    "${mirror_target_server}/"*) ;;
-    *) die "Mirror target ItemsAdder directory escapes ${mirror_target_server}" ;;
-  esac
-  [[ "${mirror_source_itemsadder}" != "${mirror_target_itemsadder}" ]] ||
-    die "ItemsAdder mirror source and target resolve to the same directory"
-
   for tree in contents storage; do
-    [[ -d "${mirror_source_itemsadder}/${tree}" ]] ||
+    [[ -d "${mirror_source_itemsadder}/${tree}" && ! -L "${mirror_source_itemsadder}/${tree}" ]] ||
       die "Missing source ItemsAdder tree: ${mirror_source_itemsadder}/${tree}"
-    [[ -d "${mirror_target_itemsadder}/${tree}" ]] ||
-      die "Missing target ItemsAdder tree: ${mirror_target_itemsadder}/${tree}"
   done
+  for cache in "${mirror_cache_files[@]}"; do
+    [[ -f "${mirror_source_itemsadder}/storage/${cache}" && ! -L "${mirror_source_itemsadder}/storage/${cache}" ]] ||
+      die "Missing regular source ItemsAdder ID metadata: ${cache}"
+  done
+
+  if [[ -z "${IA_MIRROR_TARGETS}" ]]; then
+    IA_MIRROR_TARGETS="${IA_MIRROR_TARGET_SERVER}=${IA_MIRROR_TARGET_SESSION}"
+  fi
+  while IFS= read -r entry || [[ -n "${entry}" ]]; do
+    [[ "${entry}" =~ ^([A-Za-z0-9_-]+)=([A-Za-z0-9_-]+)$ ]] ||
+      die "ItemsAdder mirror target must be a server-directory=tmux-session pair: ${entry}"
+    target_name="${BASH_REMATCH[1]}"
+    target_session="${BASH_REMATCH[2]}"
+    target_server="${network_root}/${target_name}"
+    [[ -d "${target_server}" ]] || die "Missing mirror target server directory: ${target_server}"
+    target_server="$(cd "${target_server}" && pwd -P)"
+    [[ "$(dirname "${target_server}")" == "${network_root}" ]] ||
+      die "Mirror target server escapes the network root: ${target_server}"
+    [[ -d "${target_server}/plugins" ]] || die "Missing mirror target plugins directory: ${target_server}/plugins"
+    target_plugins="$(cd "${target_server}/plugins" && pwd -P)"
+    target_itemsadder="${target_plugins}/ItemsAdder"
+    if [[ -e "${target_itemsadder}" || -L "${target_itemsadder}" ]]; then
+      [[ -d "${target_itemsadder}" ]] || die "Invalid mirror target ItemsAdder directory: ${target_itemsadder}"
+      target_itemsadder="$(cd "${target_itemsadder}" && pwd -P)"
+    else
+      [[ "${IA_MIRROR_ONLY}" == "1" ]] || die "Missing mirror target ItemsAdder directory: ${target_itemsadder}"
+    fi
+    case "${target_itemsadder}/" in
+      "${target_server}/"*) ;;
+      *) die "Mirror target ItemsAdder directory escapes ${target_server}" ;;
+    esac
+    [[ "${mirror_source_itemsadder}" != "${target_itemsadder}" ]] ||
+      die "ItemsAdder mirror source and target resolve to the same directory"
+    for ((previous = 0; previous < mirror_target_count; previous++)); do
+      [[ "${mirror_target_servers[$previous]}" != "${target_server}" ]] ||
+        die "Duplicate ItemsAdder mirror target server: ${target_name}"
+      [[ "${mirror_target_sessions[$previous]}" != "${target_session}" ]] ||
+        die "Duplicate ItemsAdder mirror target tmux session: ${target_session}"
+    done
+    for tree in contents storage; do
+      if [[ -e "${target_itemsadder}/${tree}" || -L "${target_itemsadder}/${tree}" ]]; then
+        [[ -d "${target_itemsadder}/${tree}" && ! -L "${target_itemsadder}/${tree}" ]] ||
+          die "Invalid target ItemsAdder tree: ${target_itemsadder}/${tree}"
+      else
+        [[ "${IA_MIRROR_ONLY}" == "1" ]] || die "Missing target ItemsAdder tree: ${target_itemsadder}/${tree}"
+      fi
+    done
+    for cache in "${mirror_cache_files[@]}"; do
+      if [[ -e "${target_itemsadder}/storage/${cache}" || -L "${target_itemsadder}/storage/${cache}" ]]; then
+        [[ -f "${target_itemsadder}/storage/${cache}" && ! -L "${target_itemsadder}/storage/${cache}" ]] ||
+          die "Invalid target ItemsAdder ID metadata: ${target_itemsadder}/storage/${cache}"
+      fi
+    done
+    mirror_target_servers+=("${target_server}")
+    mirror_target_itemsadders+=("${target_itemsadder}")
+    mirror_target_sessions+=("${target_session}")
+    mirror_target_names+=("${target_name}")
+    mirror_target_count=$((mirror_target_count + 1))
+  done <<< "${IA_MIRROR_TARGETS}"
+
+  if [[ "${IA_MIRROR_ONLY}" == "0" ]]; then
+    command -v "${IA_MIRROR_TMUX_CLI:-tmux}" >/dev/null 2>&1 ||
+      die "Missing required command: ${IA_MIRROR_TMUX_CLI:-tmux}"
+    tmux_sessions="$("${IA_MIRROR_TMUX_CLI:-tmux}" list-sessions -F '#{session_name}')" ||
+      die "Unable to list target tmux sessions"
+    for ((index = 0; index < mirror_target_count; index++)); do
+      grep -Fxq -- "${mirror_target_sessions[$index]}" <<< "${tmux_sessions}" ||
+        die "Missing target tmux session: ${mirror_target_sessions[$index]}"
+      [[ -f "${mirror_target_servers[$index]}/logs/latest.log" ]] ||
+        die "Missing target server log: ${mirror_target_servers[$index]}/logs/latest.log"
+    done
+  fi
 
   rsync_bin="${IA_MIRROR_RSYNC_CLI:-rsync}"
   command -v "${rsync_bin}" >/dev/null 2>&1 || die "Missing required command: ${rsync_bin}"
@@ -112,78 +204,94 @@ prepare_itemsadder_mirror() {
   mirror_backup_root="${network_root}/.mc-ops/itemsadder-mirror"
   [[ ! -L "${network_root}/.mc-ops" ]] || die "Refusing symlinked backup parent: ${network_root}/.mc-ops"
   [[ ! -L "${mirror_backup_root}" ]] || die "Refusing symlinked backup root: ${mirror_backup_root}"
+  for ((index = 0; index < mirror_target_count; index++)); do
+    [[ ! -L "${mirror_backup_root}/${mirror_target_names[$index]}" ]] ||
+      die "Refusing symlinked target backup root: ${mirror_target_names[$index]}"
+    [[ ! -e "${mirror_backup_root}/${mirror_target_names[$index]}" || -d "${mirror_backup_root}/${mirror_target_names[$index]}" ]] ||
+      die "Invalid target backup root: ${mirror_target_names[$index]}"
+  done
   mkdir -p -- "${mirror_backup_root}"
   chmod 700 "${mirror_backup_root}"
-  mirror_lock_dir="${mirror_backup_root}/.lock"
-  mkdir -- "${mirror_lock_dir}" 2>/dev/null ||
-    die "Another ItemsAdder mirror is already running (${mirror_lock_dir})"
+  lock_dir="${mirror_backup_root}/.lock"
+  mkdir -- "${lock_dir}" 2>/dev/null || die "Another ItemsAdder mirror is already running (${lock_dir})"
+  mirror_lock_dir="${lock_dir}"
 
-  mirror_staging_dir="$(mktemp -d "${mirror_target_itemsadder}/.arc-mirror-staging.XXXXXX")"
-  for tree in contents storage; do
-    mkdir -p -- "${mirror_staging_dir}/${tree}"
+  for ((index = 0; index < mirror_target_count; index++)); do
+    target_itemsadder="${mirror_target_itemsadders[$index]}"
+    mkdir -p -- "${target_itemsadder}"
+    staging_path="$(mktemp -d "${target_itemsadder}/.arc-mirror-staging.XXXXXX")"
+    mirror_staging_dirs+=("${staging_path}")
+    mkdir -p -- "${mirror_staging_dirs[$index]}/contents" "${mirror_staging_dirs[$index]}/storage"
     "${rsync_bin}" -a --delete \
-      "${mirror_source_itemsadder}/${tree}/" "${mirror_staging_dir}/${tree}/"
-    if [[ -n "$("${rsync_bin}" -rlcni --delete \
-      "${mirror_source_itemsadder}/${tree}/" "${mirror_staging_dir}/${tree}/")" ]]; then
-      die "Staged ItemsAdder ${tree} failed checksum verification"
-    fi
+      "${mirror_source_itemsadder}/contents/" "${mirror_staging_dirs[$index]}/contents/"
+    for cache in "${mirror_cache_files[@]}"; do
+      cp -p -- "${mirror_source_itemsadder}/storage/${cache}" "${mirror_staging_dirs[$index]}/storage/${cache}"
+    done
+    verify_itemsadder_contents "${mirror_staging_dirs[$index]}" || die "Staged ItemsAdder contents failed checksum verification"
+    verify_itemsadder_cache_bytes "${mirror_staging_dirs[$index]}" || die "Staged ItemsAdder ID metadata failed checksum verification"
+    log "Prepared verified ${IA_MIRROR_SOURCE_SERVER} → ${mirror_target_names[$index]} mirror for contents and seven ID metadata files"
   done
-  log "Prepared verified spawn → survival mirror for contents and storage"
 }
 
-activate_itemsadder_mirror() {
-  [[ "${IA_MIRROR_ENABLED}" == "1" ]] || return 0
-  [[ -n "${mirror_staging_dir}" && -d "${mirror_staging_dir}" ]] ||
-    die "ItemsAdder mirror staging directory is unavailable"
-
+activate_itemsadder_target() {
+  local index="$1"
+  local target_itemsadder="${mirror_target_itemsadders[$index]}"
+  local target_name="${mirror_target_names[$index]}"
+  local target_session="${mirror_target_sessions[$index]}"
+  local mirror_staging_dir="${mirror_staging_dirs[$index]}"
   local backup_id backup_dir target_log before_lines before_inode current_inode current_lines
-  local tmux_bin deadline reload_complete tree installed
-  local -a moved_trees=()
-  local -a installed_trees=()
+  local tmux_bin deadline reload_complete path installed cache
+  local -a paths=(contents)
+  local -a moved_paths=()
+  local -a installed_paths=()
+  for cache in "${mirror_cache_files[@]}"; do paths+=("storage/${cache}"); done
   backup_id="$(date +%Y%m%d-%H%M%S)-$$"
-  backup_dir="${mirror_backup_root}/${backup_id}"
-  mkdir -p -- "${backup_dir}"
+  backup_dir="${mirror_backup_root}/${target_name}/${backup_id}"
+  mkdir -p -- "${backup_dir}/storage" "${backup_dir}/failed/storage" "${target_itemsadder}/storage"
 
-  for tree in contents storage; do
-    if mv -- "${mirror_target_itemsadder}/${tree}" "${backup_dir}/${tree}"; then
-      moved_trees+=("${tree}")
+  for path in "${paths[@]}"; do
+    [[ -e "${target_itemsadder}/${path}" ]] || continue
+    if mv -- "${target_itemsadder}/${path}" "${backup_dir}/${path}"; then
+      moved_paths+=("${path}")
     else
-      for installed in "${moved_trees[@]}"; do
-        mv -- "${backup_dir}/${installed}" "${mirror_target_itemsadder}/${installed}" || true
+      for installed in "${moved_paths[@]:-}"; do
+        [[ -n "${installed}" ]] || continue
+        mv -- "${backup_dir}/${installed}" "${target_itemsadder}/${installed}" || true
       done
-      die "Unable to back up survival ItemsAdder ${tree}; restored the previous trees"
+      die "Unable to back up ${target_name} ItemsAdder ${path}; restored the previous paths from ${backup_dir}"
     fi
   done
-  for tree in contents storage; do
-    if mv -- "${mirror_staging_dir}/${tree}" "${mirror_target_itemsadder}/${tree}"; then
-      installed_trees+=("${tree}")
+  for path in "${paths[@]}"; do
+    if mv -- "${mirror_staging_dir}/${path}" "${target_itemsadder}/${path}"; then
+      installed_paths+=("${path}")
     else
-      for installed in "${installed_trees[@]}"; do
-        mv -- "${mirror_target_itemsadder}/${installed}" \
-          "${backup_dir}/failed-${installed}" || true
+      for installed in "${installed_paths[@]:-}"; do
+        [[ -n "${installed}" ]] || continue
+        mv -- "${target_itemsadder}/${installed}" "${backup_dir}/failed/${installed}" || true
       done
-      for installed in "${moved_trees[@]}"; do
-        mv -- "${backup_dir}/${installed}" "${mirror_target_itemsadder}/${installed}" || true
+      for installed in "${moved_paths[@]:-}"; do
+        [[ -n "${installed}" ]] || continue
+        mv -- "${backup_dir}/${installed}" "${target_itemsadder}/${installed}" || true
       done
-      die "Unable to activate mirrored ItemsAdder ${tree}; restored the previous trees"
+      die "Unable to activate ${target_name} ItemsAdder ${path}; restored the previous paths from ${backup_dir}"
     fi
   done
-  rmdir -- "${mirror_staging_dir}"
-  mirror_staging_dir=""
-  log "Activated ItemsAdder mirror; previous survival trees saved in ${backup_dir}"
+  rmdir -- "${mirror_staging_dir}/storage" "${mirror_staging_dir}"
+  log "Activated ItemsAdder mirror on ${target_name}; previous contents and ID metadata saved in ${backup_dir}"
+
+  if [[ "${IA_MIRROR_ONLY}" == "1" ]]; then
+    verify_itemsadder_contents "${target_itemsadder}" || die "Seeded ItemsAdder contents differ on ${target_name}"
+    verify_itemsadder_cache_bytes "${target_itemsadder}" || die "Seeded ItemsAdder ID metadata differ on ${target_name}"
+    log "Seeded ${target_name} without resource-pack publication or ItemsAdder reload"
+    return 0
+  fi
 
   tmux_bin="${IA_MIRROR_TMUX_CLI:-tmux}"
-  command -v "${tmux_bin}" >/dev/null 2>&1 || die "Missing required command: ${tmux_bin}"
-  "${tmux_bin}" list-sessions -F '#{session_name}' 2>/dev/null |
-    grep -Fxq "${IA_MIRROR_TARGET_SESSION}" ||
-    die "Missing target tmux session: ${IA_MIRROR_TARGET_SESSION}"
-
-  target_log="${mirror_target_server}/logs/latest.log"
-  [[ -f "${target_log}" ]] || die "Missing target server log: ${target_log}"
+  target_log="${mirror_target_servers[$index]}/logs/latest.log"
   before_lines="$(wc -l < "${target_log}" | tr -d '[:space:]')"
   before_inode="$(stat -c %i "${target_log}" 2>/dev/null || stat -f %i "${target_log}")"
-  "${tmux_bin}" send-keys -t "${IA_MIRROR_TARGET_SESSION}" "iareload" Enter
-  log "Sent iareload to ${IA_MIRROR_TARGET_SESSION}; waiting for completion"
+  "${tmux_bin}" send-keys -t "${target_session}" "iareload" Enter
+  log "Sent iareload to ${target_session}; waiting for completion"
 
   deadline=$((SECONDS + IA_MIRROR_RELOAD_TIMEOUT_SECONDS))
   reload_complete=0
@@ -202,15 +310,11 @@ activate_itemsadder_mirror() {
     sleep 1
   done
   [[ "${reload_complete}" == "1" ]] ||
-    die "ItemsAdder reload did not complete on ${IA_MIRROR_TARGET_SESSION} within ${IA_MIRROR_RELOAD_TIMEOUT_SECONDS}s"
+    die "ItemsAdder reload did not complete on ${target_session} within ${IA_MIRROR_RELOAD_TIMEOUT_SECONDS}s; backup=${backup_dir}"
 
-  if [[ -n "$("${IA_MIRROR_RSYNC_CLI:-rsync}" -rlcni --delete \
-    "${mirror_source_itemsadder}/contents/" "${mirror_target_itemsadder}/contents/")" ]]; then
-    die "Survival ItemsAdder contents drifted during reload"
-  fi
-  if [[ -n "$("${IA_MIRROR_RSYNC_CLI:-rsync}" -rlcni --delete \
-    "${mirror_source_itemsadder}/storage/" "${mirror_target_itemsadder}/storage/")" ]]; then
-    if ! python3 - "${mirror_source_itemsadder}/storage" "${mirror_target_itemsadder}/storage" <<'PY'
+  verify_itemsadder_contents "${target_itemsadder}" || die "ItemsAdder contents drifted during reload on ${target_name}"
+  if ! verify_itemsadder_cache_bytes "${target_itemsadder}"; then
+    if ! python3 - "${mirror_source_itemsadder}/storage" "${target_itemsadder}/storage" "${mirror_cache_files[@]}" <<'PY'
 import sys
 from pathlib import Path
 
@@ -223,38 +327,41 @@ source_root = Path(sys.argv[1]).resolve()
 target_root = Path(sys.argv[2]).resolve()
 
 
-def files(root):
-    return {
-        path.relative_to(root)
-        for path in root.rglob("*")
-        if path.is_file() and not path.is_symlink()
-    }
-
-
-source_files = files(source_root)
-target_files = files(target_root)
-if source_files != target_files:
-    raise RuntimeError("ItemsAdder storage file sets differ after reload")
-
-for relative_path in sorted(source_files):
-    source = source_root / relative_path
-    target = target_root / relative_path
-    if relative_path.suffix.lower() in {".yml", ".yaml"}:
-        source_value = yaml.safe_load(source.read_text(encoding="utf-8"))
-        target_value = yaml.safe_load(target.read_text(encoding="utf-8"))
-        if source_value != target_value:
-            raise RuntimeError(f"ItemsAdder YAML cache differs: {relative_path}")
-    elif source.read_bytes() != target.read_bytes():
-        raise RuntimeError(f"ItemsAdder cache differs: {relative_path}")
+for filename in sys.argv[3:]:
+    source = source_root / filename
+    target = target_root / filename
+    if any(path.is_symlink() or not path.is_file() for path in (source, target)):
+        raise RuntimeError(f"ItemsAdder ID metadata is not a regular file: {filename}")
+    source_value = yaml.safe_load(source.read_text(encoding="utf-8"))
+    target_value = yaml.safe_load(target.read_text(encoding="utf-8"))
+    if source_value is None:
+        source_value = {}
+    if target_value is None:
+        target_value = {}
+    if source_value != target_value:
+        raise RuntimeError(f"ItemsAdder YAML cache differs: {filename}")
 PY
     then
-      die "Survival ItemsAdder storage drifted semantically during reload"
+      die "ItemsAdder ID metadata drifted semantically during reload on ${target_name}; backup=${backup_dir}"
     fi
-    log "ItemsAdder storage was reordered during reload; semantic cache mappings remain identical"
+    log "ItemsAdder ID metadata was reordered during reload on ${target_name}; semantic mappings remain identical"
   fi
-  log "ItemsAdder reload completed on ${IA_MIRROR_TARGET_SESSION}"
+  log "ItemsAdder reload completed on ${target_session}"
+}
 
-  python3 - "${mirror_backup_root}" "${IA_MIRROR_BACKUP_KEEP}" <<'PY'
+activate_itemsadder_mirror() {
+  [[ "${IA_MIRROR_ENABLED}" == "1" ]] || return 0
+  local index
+  # Check the complete staged set again before replacing the first consumer.
+  for ((index = 0; index < mirror_target_count; index++)); do
+    [[ -d "${mirror_staging_dirs[$index]}" ]] || die "ItemsAdder mirror staging directory is unavailable"
+    verify_itemsadder_contents "${mirror_staging_dirs[$index]}" || die "Source ItemsAdder contents changed after staging"
+    verify_itemsadder_cache_bytes "${mirror_staging_dirs[$index]}" || die "Source ItemsAdder ID metadata changed after staging"
+  done
+  for ((index = 0; index < mirror_target_count; index++)); do
+    activate_itemsadder_target "${index}"
+
+    python3 - "${mirror_backup_root}/${mirror_target_names[$index]}" "${IA_MIRROR_BACKUP_KEEP}" <<'PY'
 import shutil
 import sys
 from pathlib import Path
@@ -275,9 +382,16 @@ for path in backups[keep:]:
         raise RuntimeError(f"refusing to remove backup outside {root}: {path}")
     shutil.rmtree(path)
 PY
+  done
   rmdir -- "${mirror_lock_dir}" 2>/dev/null || true
   mirror_lock_dir=""
 }
+
+prepare_itemsadder_mirror
+if [[ "${IA_MIRROR_ONLY}" == "1" ]]; then
+  activate_itemsadder_mirror
+  exit 0
+fi
 
 staging_dir="$(mktemp -d)"
 upload_path="${staging_dir}/${RP_UPLOAD_NAME}"
@@ -293,8 +407,6 @@ if [[ -s "${excluded_files}" ]]; then
   zip -q -d "${upload_path}" -@ < "${excluded_files}" || die "Unable to remove non-Java pack files"
   log "Excluded non-Java/editor files=$(wc -l < "${excluded_files}" | tr -d ' ')"
 fi
-
-prepare_itemsadder_mirror
 
 # Minecraft 1.21.9+ reads min_format, max_format, and supported_formats from the
 # pack object. ItemsAdder 4.0.17 still emits supported_formats at the JSON root,

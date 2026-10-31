@@ -22,6 +22,9 @@ publish-notification:
 survival-mirror:
   enabled: false
   source-server-dir: classic
+  # Optional directory=session entries, e.g. classic_survival=survival and parkour=parkour.
+  # Empty keeps the legacy target-server-dir/target-tmux-session pair below.
+  targets: []
   target-server-dir: classic_survival
   target-tmux-session: survival
   backup-keep: 3

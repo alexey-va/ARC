@@ -259,6 +259,7 @@ internal class ResourcePackSyncConfig(
             "FORCE_UPLOAD" to if (config.bool("force-upload", false)) "1" else "0",
             "IA_MIRROR_ENABLED" to if (config.bool("survival-mirror.enabled", false)) "1" else "0",
             "IA_MIRROR_SOURCE_SERVER" to config.string("survival-mirror.source-server-dir", "classic"),
+            "IA_MIRROR_TARGETS" to config.stringList("survival-mirror.targets").joinToString("\n"),
             "IA_MIRROR_TARGET_SERVER" to
                 config.string("survival-mirror.target-server-dir", "classic_survival"),
             "IA_MIRROR_TARGET_SESSION" to config.string("survival-mirror.target-tmux-session", "survival"),
