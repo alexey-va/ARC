@@ -20,6 +20,7 @@ import ru.arc.ops.ItemPresets
 import ru.arc.itemcatalog.RewardCatalogSource
 import ru.arc.treasure.core.AeArg
 import ru.arc.treasure.core.AeKind
+import ru.arc.treasure.core.AeLoot
 import ru.arc.treasure.core.Treasure
 import ru.arc.treasure.core.TreasurePool
 import ru.arc.treasure.core.TreasureRollRange
@@ -58,6 +59,7 @@ internal data class HelpCenterEnchantmentSourceSnapshot(
     val worldCache: EnchantmentWorldCacheSettings? = null,
     val survivalDiscoveryUnavailable: Boolean = false,
     val farmingCache: EnchantmentFarmingLootSettings? = null,
+    val visibleFinds: Boolean = false,
 )
 
 internal data class HelpCenterEnchantmentRewardOutcome(val topicId: String, val probability: Double, val amount: Int)
@@ -115,7 +117,7 @@ internal object HelpCenterEnchantmentSources {
         )
     }
 
-    private fun snapshot(): HelpCenterEnchantmentSourceSnapshot {
+    internal fun snapshot(): HelpCenterEnchantmentSourceSnapshot {
         check(Bukkit.isPrimaryThread()) { "Enchantment acquisition snapshots require the main thread" }
         val pools = Treasures.loadedPools()?.takeIf { pools ->
             pools.size <= MAX_POOLS && pools.sumOf { it.treasures.size.toLong() } <= MAX_ROWS
@@ -135,7 +137,7 @@ internal object HelpCenterEnchantmentSources {
         val discovery = EnchantingModule.survivalDiscoverySnapshot()
         return HelpCenterEnchantmentSourceSnapshot(
             pools, presets, EnchantingModule.activeLootSettings(), boss, ARC.serverName.orEmpty(), PersonalLootModule.activePoolLootSettings(),
-            discovery?.mining, discovery?.worldCaches, discovery == null, discovery?.farming,
+            discovery?.mining, discovery?.worldCaches, discovery == null, discovery?.farming, discovery?.visibleFinds == true,
         )
     }
 
@@ -164,7 +166,9 @@ internal object HelpCenterEnchantmentSources {
         if (topic == "overview" || topic == "ae_lootbox") {
             if (snapshot.survivalDiscoveryUnavailable) facts += unavailable("survival-sources")
             snapshot.miningCache?.takeIf { it.survivalBackend && it.worldNames.isNotEmpty() && it.materials.isNotEmpty() && it.chancePercent > 0.0 }?.let {
-                facts += fact("mining-cache", "chance" to number(it.chancePercent), "worlds" to it.worldNames.sorted().joinToString(", "))
+                facts += fact(if (snapshot.visibleFinds) "mining-find" else "mining-cache",
+                    mapOf("chance" to number(it.chancePercent), "worlds" to it.worldNames.sorted().joinToString(", ")) +
+                        if (snapshot.visibleFinds) mapOf("key_chance" to number(it.keyChancePercent)) else emptyMap())
                 it.materials.map { material -> material.name }.sorted().chunked(4).forEach { materials ->
                     facts += fact("mining-cache-materials", "materials" to materials.joinToString(","))
                 }
@@ -176,8 +180,10 @@ internal object HelpCenterEnchantmentSources {
                 if (topic == "overview") related += "ae_lootbox"
             }
             snapshot.farmingCache?.takeIf { it.survivalBackend && it.worldNames.isNotEmpty() && it.materials.isNotEmpty() && it.chancePercent > 0.0 }?.let {
-                facts += fact("farming-cache", "chance" to number(it.chancePercent), "worlds" to it.worldNames.sorted().joinToString(", "),
-                    "cooldown" to helpCooldown(it.cooldownSeconds))
+                facts += fact(if (snapshot.visibleFinds) "farming-find" else "farming-cache",
+                    mapOf("chance" to number(it.chancePercent), "worlds" to it.worldNames.sorted().joinToString(", "),
+                        "cooldown" to helpCooldown(it.cooldownSeconds)) +
+                        if (snapshot.visibleFinds) mapOf("key_chance" to number(it.keyChancePercent)) else emptyMap())
                 it.materials.map { material -> material.name }.sorted().chunked(4).forEach { materials ->
                     facts += fact("farming-cache-materials", "materials" to materials.joinToString(","))
                 }
@@ -359,9 +365,12 @@ internal object HelpCenterEnchantmentSources {
     }
 
     private fun aeOutcomes(treasure: Treasure.Ae): List<Pair<Shape, Double>> {
-        if (treasure.kind == AeKind.RANDOM_BOOK) return listOf(Shape("book", treasure.amount,
-            group = treasure.group ?: "random", level = treasure.maxLevel,
-        ) to 1.0)
+        if (treasure.kind == AeKind.RANDOM_BOOK) {
+            val groups = treasure.group?.let { listOf(it to 1.0) } ?: AeLoot.tierProbabilities()
+            return groups.map { (group, probability) ->
+                Shape("book", treasure.amount, group = group, level = treasure.maxLevel) to probability
+            }
+        }
         val nativeId = treasure.itemName?.lowercase(Locale.ROOT) ?: return emptyList()
         val id = if (nativeId == "renametag") "itemnametag" else nativeId
         val value = treasure.args.filterIsInstance<AeArg.IntRange>().firstOrNull()

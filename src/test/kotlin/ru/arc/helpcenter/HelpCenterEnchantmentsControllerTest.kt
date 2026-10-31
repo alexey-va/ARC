@@ -282,7 +282,7 @@ class HelpCenterEnchantmentsControllerTest {
         click("next")
         val originalBody = body()
         val originalButtons = screen.buttons.map { it.id.value }
-        assertTrue(originalBody.contains("Шкатулки за урожай"))
+        assertTrue(originalBody.contains("Находки на урожае"))
         click("boxes")
 
         val expected = listOf("ae_lootbox", "ae_lootbox_enchanted", "ae_lootbox_master", "enchant_supply", "enchant_boss_supply")
@@ -352,7 +352,7 @@ class HelpCenterEnchantmentsControllerTest {
     }
 
     @Test
-    fun `survival discovery sources precede box contents and preserve the current server scope`() {
+    fun `survival discovery sources precede box contents without technical server or world names`() {
         val previousTranslator = HookRegistry.translatorHook
         HookRegistry.translatorHook = mockk<TranslatorHook>().also { translator ->
             every { translator.translate(Material.STONE) } returns "Камень"
@@ -370,7 +370,8 @@ class HelpCenterEnchantmentsControllerTest {
             open()
             click("acquisition")
 
-            body().contains("Вы на сервере: Спавн") shouldBe true
+            body().contains("Вы на сервере") shouldBe false
+            body().contains("world") shouldBe false
             body().contains("Исследование мира · добыча киркой") shouldBe true
             body().contains("сбор урожая") shouldBe false
             body().contains("Тайники на поверхности · Выживание") shouldBe true
@@ -417,27 +418,35 @@ class HelpCenterEnchantmentsControllerTest {
 
             body().contains("Исследование мира · добыча киркой · сбор урожая") shouldBe true
             body().contains("Тайники на поверхности · Выживание") shouldBe true
-            body().contains("Находки при добыче · Выживание") shouldBe true
+            body().contains("Шкатулки в камне · Выживание") shouldBe true
+            body().contains("в соседнем камне") shouldBe true
+            body().contains("Сломайте этот блок киркой, чтобы забрать находку") shouldBe true
+            body().contains("Шкатулка — 0,02%; ключ от «Ежедневного тайника» — 0,001%") shouldBe true
+            body().contains("за тик") shouldBe false
             (body().indexOf("Исследование мира") < body().indexOf("Тайники на поверхности")) shouldBe true
-            body().contains("Шкатулки за урожай") shouldBe false
+            body().contains("Находки на урожае") shouldBe false
             body().contains("подходящие блоки") shouldBe false
             body().contains("Шанс за одну награду") shouldBe false
 
             click("next")
             val harvest = body()
-            harvest.contains("Вы на сервере: Спавн") shouldBe true
-            harvest.contains("Шкатулки за урожай · Выживание") shouldBe true
-            harvest.contains("При ручном сборе полностью выросших культур") shouldBe true
-            harvest.contains("шанс шкатулки на подходящую попытку — 0,05%") shouldBe true
-            harvest.contains("Миры: survival, survival_nether, vanilla, vanilla_nether, world, world_nether") shouldBe true
-            harvest.contains("У игрока не больше одного шанса за тик") shouldBe true
-            harvest.contains("новый шанс в этом чанке появится через 1 дн.") shouldBe true
-            harvest.contains("ожидание общее для всех игроков") shouldBe true
+            harvest.contains("Вы на сервере") shouldBe false
+            harvest.contains("Находки на урожае · Выживание") shouldBe true
+            harvest.contains("Собирайте полностью выросшие культуры вручную") shouldBe true
+            harvest.contains("Шкатулка — 0,01%; ключ от «Ежедневного тайника» — 0,0005%") shouldBe true
+            harvest.contains("Миры:") shouldBe false
+            harvest.contains("survival_nether") shouldBe false
+            harvest.contains("vanilla") shouldBe false
+            harvest.contains("за тик") shouldBe false
+            harvest.contains("Ожидание в чанке после появления находки — 1 дн.; оно общее для всех игроков, шкатулок и ключей") shouldBe true
+            harvest.contains("1 дн..") shouldBe false
             harvest.contains("Костная мука разрешена") shouldBe true
+            harvest.contains("на соседнем зрелом растении") shouldBe true
+            harvest.contains("Соберите это растение, чтобы забрать находку") shouldBe true
             harvest.contains("Сбор урожая · подходящие культуры: Свёкла, Морковь, Какао, Незерский нарост") shouldBe true
             harvest.contains("Сбор урожая · подходящие культуры: Картофель, Ростки пшеницы") shouldBe true
-            (harvest.indexOf("Шкатулки за урожай") < harvest.indexOf("Сбор урожая · подходящие культуры")) shouldBe true
-            harvest.contains("Находки при добыче") shouldBe false
+            (harvest.indexOf("Находки на урожае") < harvest.indexOf("Сбор урожая · подходящие культуры")) shouldBe true
+            harvest.contains("Шкатулки в камне") shouldBe false
             harvest.contains("подходящие блоки") shouldBe false
             harvest.contains("Исследование мира") shouldBe false
             harvest.contains("Одна находка на чанк для всех игроков") shouldBe false
@@ -446,7 +455,7 @@ class HelpCenterEnchantmentsControllerTest {
             click("next")
             val firstOres = body()
             (firstOres.split("Добыча киркой · подходящие блоки").size - 1) shouldBe 3
-            firstOres.contains("Шкатулки за урожай") shouldBe false
+            firstOres.contains("Находки на урожае") shouldBe false
             firstOres.contains("Исследование мира") shouldBe false
             firstOres.contains("Шанс за одну награду") shouldBe false
 
@@ -458,9 +467,7 @@ class HelpCenterEnchantmentsControllerTest {
             (lastOres.lastIndexOf("Добыча киркой") < lastOres.indexOf("Шанс за одну награду")) shouldBe true
             lastOres.contains("недоступны") shouldBe false
 
-            click("next")
-            body().contains("недоступны") shouldBe true
-            body().contains("Исследование мира") shouldBe false
+            screen.buttons.any { it.id.value == "next" } shouldBe false
         } finally {
             HookRegistry.translatorHook = previousTranslator
         }
@@ -512,7 +519,7 @@ class HelpCenterEnchantmentsControllerTest {
     }
 
     @Test
-    fun `unavailable cross server and kit sources have readable names and do not imply a zero chance`() {
+    fun `unavailable sources produce one short message without provider diagnostics or an invented chance`() {
         sourceResult = CompletableFuture.completedFuture(HelpCenterEnchantmentAcquisition(
             listOf("cmi-kits", "ae-gkits", "survival-sources").map {
                 HelpCenterEnchantmentSourceFact("unavailable", mapOf("source" to it))
@@ -521,13 +528,42 @@ class HelpCenterEnchantmentsControllerTest {
         open()
         click("acquisition")
 
-        body().contains("Наборы /kit") shouldBe true
-        body().contains("Наборы чар /gkit") shouldBe true
-        body().contains("Находки на Выживании") shouldBe true
-        body().contains("Это не означает нулевой шанс") shouldBe true
+        body().split("Способы получения пока не удалось загрузить.").size shouldBe 2
+        body().contains("Наборы /kit") shouldBe false
+        body().contains("Наборы чар /gkit") shouldBe false
+        body().contains("Находки на Выживании") shouldBe false
+        body().contains("нулевой шанс") shouldBe false
+        body().contains("%") shouldBe false
         body().contains("cmi-kits") shouldBe false
         body().contains("ae-gkits") shouldBe false
         body().contains("survival-sources") shouldBe false
+    }
+
+    @Test
+    fun `known contents do not count as a way to obtain the box and remain visible without acquisition data`() {
+        for (unavailable in listOf(false, true)) {
+            sourceResult = CompletableFuture.completedFuture(HelpCenterEnchantmentAcquisition(buildList {
+                add(HelpCenterEnchantmentSourceFact("scope", mapOf("server" to "survival")))
+                add(HelpCenterEnchantmentSourceFact("pool-source", mapOf("pool" to "private_recipe", "per_roll" to "4,2", "amount" to "1")))
+                add(HelpCenterEnchantmentSourceFact("box-rolls", mapOf("min" to "2", "max" to "3", "pool" to "ae_enchanted")))
+                add(HelpCenterEnchantmentSourceFact("box-content", mapOf("item" to "random_book", "per_roll" to "100", "amount" to "1", "group" to "random")))
+                if (unavailable) add(HelpCenterEnchantmentSourceFact("unavailable", mapOf("source" to "crate-rewards")))
+            }))
+            open()
+            click("acquisition")
+
+            val visible = body()
+            val expected = if (unavailable) "Способы получения пока не удалось загрузить." else "Способ получения пока не указан."
+            visible.contains(expected) shouldBe true
+            (visible.indexOf(expected) < visible.indexOf("Содержимое и параметры")) shouldBe true
+            visible.contains("2–3 независимых наград") shouldBe true
+            visible.contains("Случайная книга AE") shouldBe true
+            visible.contains("Шанс за одну награду: 100%") shouldBe true
+            listOf("survival", "private_recipe", "ae_enchanted", "crate-rewards", "Вы на сервере", "нулевой шанс").forEach {
+                visible.contains(it) shouldBe false
+            }
+            screen.buttons.any { it.id.value == "next" } shouldBe false
+        }
     }
 
     @Test

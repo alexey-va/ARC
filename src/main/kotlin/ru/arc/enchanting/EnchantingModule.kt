@@ -7,10 +7,14 @@ import org.bukkit.entity.Player
 import org.bukkit.event.HandlerList
 import ru.arc.ARC
 import ru.arc.core.PluginModule
+import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.Tasks
+import ru.arc.core.whenCompleteSync
 import ru.arc.ops.ItemDefinition
 import ru.arc.ops.ItemPresets
 import java.util.Locale
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentHashMap
 
 /** AdvancedEnchantments presentation, shop and gameplay integration. */
 object EnchantingModule : PluginModule {
@@ -25,12 +29,18 @@ object EnchantingModule : PluginModule {
     private var miningLoot: EnchantmentMiningLoot? = null
     private var farmingLoot: EnchantmentFarmingLoot? = null
     private var worldCaches: EnchantmentWorldCaches? = null
+    private var visibleFinds: EnchantmentVisibleFinds? = null
+    private var nativeDrain: CompletableFuture<Void> = CompletableFuture.completedFuture(null)
+    private var startupScope: LifecycleTaskScope? = null
+    private val retiringFinds = ConcurrentHashMap.newKeySet<EnchantmentVisibleFinds>()
     private var discoveryRelay: EnchantmentDiscoveryRelay? = null
     private var lastDiscoveryPublishedAt = 0L
 
     override fun init() {
         val config = EnchantingConfig.load(ARC.instance.dataPath)
         shutdown()
+        val startup = LifecycleTaskScope(Tasks.scheduler).also { startupScope = it }
+        val startupToken = startup.token()
         bindAdvancedBookPresentation()
         if (Bukkit.getPluginManager().isPluginEnabled("AdvancedEnchantments")) {
             try {
@@ -57,7 +67,11 @@ object EnchantingModule : PluginModule {
             } catch (failure: IllegalArgumentException) {
                 ARC.instance.logger.warning("AE gameplay loot disabled: invalid modules/enchanting.yml loot settings: ${failure.message}")
             }
-            startDiscoveryPart("sources") { startDiscovery(config) }
+            nativeDrain.whenCompleteSync(startup, startupToken) { _, failure ->
+                if (failure != null) {
+                    ARC.instance.logger.log(java.util.logging.Level.WARNING, "AE discovery predecessor did not drain; replacement sources remain inactive", failure)
+                } else startDiscoveryPart("sources") { startDiscovery(config) }
+            }
         }
         startDiscoveryRelay()
     }
@@ -78,10 +92,13 @@ object EnchantingModule : PluginModule {
 
     internal fun activeWorldCacheSettings(): EnchantmentWorldCacheSettings? = worldCaches?.settingsSnapshot()
 
+    fun drained(): CompletableFuture<Void> = nativeDrain
+
     /** Unknown remote state is distinct from a fresh report of inactive Survival sources. */
     internal fun survivalDiscoverySnapshot(): EnchantmentDiscoverySnapshot? =
         if (ARC.serverName.orEmpty().lowercase(Locale.ROOT) == "survival") {
-            EnchantmentDiscoverySnapshot(System.currentTimeMillis(), activeMiningCacheSettings(), activeWorldCacheSettings(), activeFarmingCacheSettings())
+            EnchantmentDiscoverySnapshot(System.currentTimeMillis(), activeMiningCacheSettings(), activeWorldCacheSettings(), activeFarmingCacheSettings(),
+                visibleFinds = visibleFinds != null)
         } else discoveryRelay?.snapshot()
 
     private fun startDiscoveryRelay() {
@@ -105,12 +122,20 @@ object EnchantingModule : PluginModule {
             ARC.instance.logger.warning("AE discovery sources disabled: ae_lootbox preset is missing or has no AE treasure key")
             return
         }
+        startDiscoveryPart("visible finds") {
+            if (config.isLootBackend && (config.miningCacheEnabled || config.farmingCacheEnabled)) {
+                val finds = EnchantmentVisibleFinds(ARC.instance, EnchantmentFindRewards::resolve)
+                try { Bukkit.getPluginManager().registerEvents(finds, ARC.instance) }
+                catch (failure: Throwable) { finds.closeAsync(); throw failure }
+                visibleFinds = finds
+            }
+        }
         startDiscoveryPart("mining") {
             // Without the owner of placement markers, unknown blocks cannot mint mining rewards.
             if (config.miningCacheEnabled && Bukkit.getPluginManager().isPluginEnabled("eco")) {
                 val settings = config.miningCacheSettings
                 if (settings.survivalBackend) {
-                    val listener = EnchantmentMiningLoot(settings, isNaturalBlock = ::isUnmarkedBlock)
+                    val listener = EnchantmentMiningLoot(settings, checkNotNull(visibleFinds), isNaturalBlock = ::isUnmarkedBlock)
                     try { Bukkit.getPluginManager().registerEvents(listener, ARC.instance) }
                     catch (failure: Throwable) { listener.close(); throw failure }
                     miningLoot = listener
@@ -133,7 +158,7 @@ object EnchantingModule : PluginModule {
                     require(settings.materials.all { it.createBlockData() is Ageable }) {
                         "Every farming-cache material must have an ageable crop state"
                     }
-                    val listener = EnchantmentFarmingLoot(settings)
+                    val listener = EnchantmentFarmingLoot(settings, checkNotNull(visibleFinds))
                     try { Bukkit.getPluginManager().registerEvents(listener, ARC.instance) }
                     catch (failure: Throwable) { listener.close(); throw failure }
                     farmingLoot = listener
@@ -165,6 +190,8 @@ object EnchantingModule : PluginModule {
     }
 
     override fun shutdown() {
+        startupScope?.close()
+        startupScope = null
         discoveryRelay?.let {
             it.close()
             lastDiscoveryPublishedAt = maxOf(lastDiscoveryPublishedAt, it.lastPublishedAt)
@@ -174,6 +201,21 @@ object EnchantingModule : PluginModule {
         miningLoot = null
         farmingLoot?.let { HandlerList.unregisterAll(it); it.close() }
         farmingLoot = null
+        visibleFinds?.let {
+            HandlerList.unregisterAll(it)
+            retiringFinds += it
+            val retiredDrain = try { it.closeAsync() }
+            catch (failure: Exception) { CompletableFuture.failedFuture<Void>(failure) }
+            catch (failure: LinkageError) { CompletableFuture.failedFuture<Void>(failure) }
+            retiredDrain.whenComplete { _, failure -> if (failure == null) retiringFinds.remove(it) }
+            nativeDrain = CompletableFuture.allOf(nativeDrain, retiredDrain)
+        }
+        visibleFinds = null
+        if (ARC.instance.server.isStopping) retiringFinds.toList().forEach { retired ->
+            try { retired.flushRetiredClaimsForServerStop() }
+            catch (failure: Exception) { nativeDrain = CompletableFuture.allOf(nativeDrain, CompletableFuture.failedFuture<Void>(failure)) }
+            catch (failure: LinkageError) { nativeDrain = CompletableFuture.allOf(nativeDrain, CompletableFuture.failedFuture<Void>(failure)) }
+        }
         worldCaches?.let { HandlerList.unregisterAll(it); it.close() }
         worldCaches = null
         creativeWhiteScrollGuard?.close()

@@ -76,7 +76,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.517"
+version = "1.4.518"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.81"
@@ -87,7 +87,7 @@ if (landsJar != null) require(landsJar.isFile) { "Lands JAR does not exist: $lan
 val landsCompileDependency: Any = landsJar?.let { files(it) } ?: libs.com.github.angeschossen.landsapi
 val crateApiJar = providers.gradleProperty("crateApiJar").orNull?.let(::file)
 if (crateApiJar != null) require(crateApiJar.isFile) { "Crate API JAR does not exist: $crateApiJar" }
-val crateApiDependency: Any = crateApiJar?.let { files(it) } ?: "ru.ruscrafting.arc:arc-crate-api:0.1.1"
+val crateApiDependency: Any = crateApiJar?.let { files(it) } ?: "ru.ruscrafting.arc:arc-crate-api:0.1.2"
 
 // Compile against the host facade only. Its fat runtime JAR embeds older consumer
 // implementation classes; allowing those onto compileClasspath can mask the explicitly

@@ -468,6 +468,7 @@ open class ARC : JavaPlugin() {
             nativeDrains += ru.arc.investigation.InvestigationModule.drained()
             nativeDrains += HooksModule.drained()
             nativeDrains += ru.arc.backwings.BackWingsModule.drained()
+            nativeDrains += ru.arc.enchanting.EnchantingModule.drained()
             moduleDrains += ru.arc.scheduled.ScheduledCommandsManager.drained()
             attempt { sharedServiceMetrics?.close() }
             sharedServiceMetrics = null

@@ -13,6 +13,8 @@ object HelpCenterModule : PluginModule {
     override val priority = 86
 
     @Volatile private var controller: HelpCenterController? = null
+    @Volatile internal var enchantmentAcquisitionNetwork: HelpCenterEnchantmentAcquisitionNetwork? = null
+        private set
 
     override fun init() = start(HelpCenterConfig.load(ARC.instance.dataPath).snapshot())
 
@@ -23,6 +25,7 @@ object HelpCenterModule : PluginModule {
         ArcMenus.configureDialogDecoration("")
         controller?.close()
         controller = null
+        closeEnchantmentNetwork()
     }
 
     fun isAvailable(): Boolean = controller != null
@@ -63,10 +66,22 @@ object HelpCenterModule : PluginModule {
         HelpCenterAeNativeSources.start(org.bukkit.Bukkit.getPluginManager().getPlugin("AdvancedEnchantments"))
         controller?.close()
         controller = null
+        closeEnchantmentNetwork()
         ArcMenus.configureDialogDecoration(if (settings.enabled) settings.decorationFont else "")
         if (!settings.enabled) {
             info("Help center module disabled by configuration")
             return
+        }
+        val redis = ARC.redisManager
+        val server = ARC.serverName
+        if (redis != null && server != null) {
+            try {
+                enchantmentAcquisitionNetwork = HelpCenterEnchantmentAcquisitionNetwork(redis, server, { topic ->
+                    HelpCenterEnchantmentExternalSources.describeLocal(topic, HelpCenterEnchantmentSources.snapshot())
+                })
+            } catch (failure: RuntimeException) {
+                error("Could not start help center external acquisition network; local facts remain available", failure)
+            }
         }
         controller = HelpCenterController(
             settings = settings,
@@ -79,5 +94,11 @@ object HelpCenterModule : PluginModule {
             particlesGateway = ru.arc.cosmetics.PlayerParticlesGateway(ARC.instance),
         )
         info("Help center module initialized")
+    }
+
+    private fun closeEnchantmentNetwork() {
+        val previous = enchantmentAcquisitionNetwork
+        enchantmentAcquisitionNetwork = null
+        previous?.close()
     }
 }

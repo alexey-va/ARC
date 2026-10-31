@@ -35,6 +35,15 @@ internal object HelpCenterEnchantmentExternalSources {
     private val reportedFailures = ConcurrentHashMap.newKeySet<String>()
 
     fun describe(topicId: String, local: HelpCenterEnchantmentSourceSnapshot): CompletableFuture<HelpCenterEnchantmentAcquisition> {
+        val fallback = describeLocal(topicId, local)
+        val network = HelpCenterModule.enchantmentAcquisitionNetwork
+        return if (network == null || network.isSourceServer) fallback
+        else network.describe(topicId).thenCompose { remote ->
+            if (remote != null) CompletableFuture.completedFuture(remote) else fallback
+        }
+    }
+
+    internal fun describeLocal(topicId: String, local: HelpCenterEnchantmentSourceSnapshot): CompletableFuture<HelpCenterEnchantmentAcquisition> {
         check(Bukkit.isPrimaryThread())
         val ranks = if (provider("ArcRanks", "ru.ruscrafting.ranks.api.RankQuestApi\$ItemRewardSourceSnapshot") != null) {
             try { Ranks.capture() } catch (failure: Exception) { report("rank-quests", failure); QuestSnapshot(false, emptyList()) }
@@ -123,26 +132,28 @@ internal object HelpCenterEnchantmentExternalSources {
 
     private object Crates {
         fun capture(owner: Plugin, catalog: Map<Pair<String, String>, List<HelpCenterEnchantmentRewardOutcome>>): CompletableFuture<CrateSnapshot> {
+            // The catalogue recipes below belong to this ARC instance. Never resolve remote crate
+            // references through a different backend's catalogue; remote callers request final facts.
+            if (!Bukkit.getPluginManager().isPluginEnabled("ExcellentCrates")) {
+                return CompletableFuture.completedFuture(CrateSnapshot(emptyList(), listOf("crate-rewards")))
+            }
             val registration = Bukkit.getServicesManager().getRegistration(CrateLocationService::class.java)
                 ?.takeIf { it.plugin === owner } ?: return CompletableFuture.completedFuture(CrateSnapshot(emptyList(), listOf("crate-rewards")))
-            val service = registration.provider
-            val ids = service.acquisitionCrateIds().distinct()
-            if (ids.isEmpty() || ids.size > MAX_CRATES) return CompletableFuture.completedFuture(CrateSnapshot(emptyList(), listOf("crate-rewards")))
-            var combined = CompletableFuture.completedFuture(CrateSnapshot(emptyList(), emptyList()))
-            for (id in ids) {
-                val captured = service.acquisitionSnapshotAsync(id).handle { snapshot, failure ->
-                    if (failure != null) {
-                        report("crate-rewards", failure)
-                        CrateSnapshot(emptyList(), listOf("crate-rewards"))
-                    } else if (snapshot == null || !snapshot.available()) CrateSnapshot(emptyList(), listOf("crate:$id"))
-                    else CrateSnapshot(snapshot.rewards().map { reward ->
+            return registration.provider.acquisitionSnapshotsAsync().handle { snapshots, failure ->
+                if (failure != null) {
+                    report("crate-rewards", failure)
+                    CrateSnapshot(emptyList(), listOf("crate-rewards"))
+                } else if (snapshots.isNullOrEmpty() || snapshots.size > MAX_CRATES ||
+                    snapshots.map { it.crateId() }.distinct().size != snapshots.size ||
+                    snapshots.sumOf { it.rewards().size.toLong() } > MAX_CATALOG_ENTRIES
+                ) CrateSnapshot(emptyList(), listOf("crate-rewards"))
+                else CrateSnapshot(snapshots.filter { it.available() }.flatMap { snapshot ->
+                    snapshot.rewards().map { reward ->
                         HelpCenterExternalEnchantmentReward("crate", snapshot.crateId(), plain(snapshot.displayName()), reward.probability(),
                             catalog[reward.catalogCategoryId() to reward.catalogEntryId()].orEmpty())
-                    }, emptyList())
-                }.completeOnTimeout(CrateSnapshot(emptyList(), listOf("crate:$id")), 10, TimeUnit.SECONDS)
-                combined = combined.thenCombine(captured) { before, next -> CrateSnapshot(before.rewards + next.rewards, before.unavailable + next.unavailable) }
-            }
-            return combined
+                    }
+                }, snapshots.filterNot { it.available() }.map { "crate:${it.crateId()}" })
+            }.completeOnTimeout(CrateSnapshot(emptyList(), listOf("crate-rewards")), 10, TimeUnit.SECONDS)
         }
     }
 

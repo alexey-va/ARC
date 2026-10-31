@@ -347,14 +347,14 @@ internal class HelpCenterEnchantmentsController(
                 listOf(HelpCenterEnchantmentSourceFact("unavailable", mapOf("source" to "rewards"))),
             )
             val detailFacts = sources.facts.filterNot { fact ->
-                fact.key == "scope" || (fact.key == "pool-item-value" &&
+                fact.key in HIDDEN_SOURCE_FACTS || (fact.key == "pool-item-value" &&
                     fact.values["valueKind"] in setOf(null, "", "none") &&
                     fact.values["group"].isNullOrBlank() && fact.values["level"].isNullOrBlank())
             }.sortedBy { fact ->
                 when (fact.key) {
                     "world-cache" -> 0
-                    "mining-cache" -> 1
-                    "farming-cache" -> 2
+                    "mining-cache", "mining-find" -> 1
+                    "farming-cache", "farming-find" -> 2
                     "farming-cache-materials" -> 3
                     "mining-cache-materials" -> 4
                     "pool-item", "personal-loot-source", "crate-source", "quest-source", "denizen-monsters",
@@ -362,19 +362,22 @@ internal class HelpCenterEnchantmentsController(
                     "cmi-kit-source", "gkit-source" -> 6
                     "box-rolls" -> 7
                     "box-content", "pool-item-value", "slot-settings", "secret-result" -> 8
-                    "pool-source" -> 9
-                    "unavailable" -> 11
-                    else -> 10
+                    else -> 9
                 }
-            }.ifEmpty { listOf(HelpCenterEnchantmentSourceFact("no-drop")) }
+            }
+            val hasKnownSource = detailFacts.any { it.key in ACQUISITION_FACTS } ||
+                (topic?.id in setOf("magic", "mystery") && detailFacts.any { it.key == "secret-result" })
+            val acquisitionFacts = if (hasKnownSource) detailFacts else listOf(
+                HelpCenterEnchantmentSourceFact(if (sources.facts.any { it.key == "unavailable" }) "unavailable" else "no-drop"),
+            ) + detailFacts
             val discoveryActivities = listOf("world-cache", "mining-cache", "farming-cache")
-                .filter { key -> detailFacts.any { it.key == key } }
+                .filter { key -> detailFacts.any { it.key == key || it.key == key.replace("-cache", "-find") } }
                 .map { plainText.serialize(text("ui.source-discovery-$it")) }
-            val facts = if (discoveryActivities.isEmpty()) detailFacts else listOf(
+            val facts = if (discoveryActivities.isEmpty()) acquisitionFacts else listOf(
                 HelpCenterEnchantmentSourceFact("discovery-index", mapOf(
                     "activities" to discoveryActivities.joinToString(" · ").replaceFirstChar { it.uppercaseChar() },
                 )),
-            ) + detailFacts
+            ) + acquisitionFacts
             val pages = ((facts.size + SOURCE_PAGE_SIZE - 1) / SOURCE_PAGE_SIZE).coerceAtLeast(1)
             val page = requestedPage.coerceIn(0, pages - 1)
             val pageFacts = facts.drop(page * SOURCE_PAGE_SIZE).take(SOURCE_PAGE_SIZE)
@@ -386,7 +389,6 @@ internal class HelpCenterEnchantmentsController(
                 id = screenId,
                 title = title,
                 body = buildList {
-                    sources.facts.firstOrNull { it.key == "scope" }?.let { add(PaperDialogBody(sourceFact(it), 468)) }
                     add(sourcePanel(pageFacts))
                     if (pages > 1) add(PaperDialogBody(text("ui.sources-page",
                         "page" to (page + 1).toString(), "pages" to pages.toString()), 468))
@@ -419,10 +421,20 @@ internal class HelpCenterEnchantmentsController(
             .let { it.copy(label = it.label.append(Component.text(" ›"))) }
 
     private fun sourcePanel(facts: List<HelpCenterEnchantmentSourceFact>): PaperDialogBody {
-        val rows = facts.flatMap { fact ->
-            listOf(Component.newline(), Component.newline(), sourceFact(fact))
+        val rows = buildList {
+            var previousHeading: String? = null
+            facts.forEach { fact ->
+                val heading = if (fact.key in CONTENT_FACTS) "ui.sources-content-heading" else "ui.sources-heading"
+                if (heading != previousHeading) {
+                    if (isNotEmpty()) add(Component.newline().append(Component.newline()))
+                    add(text(heading))
+                    previousHeading = heading
+                }
+                add(Component.newline().append(Component.newline()))
+                add(sourceFact(fact))
+            }
         }
-        return presentation.panel(Component.empty().children(listOf(text("ui.sources-heading")) + rows), 468)
+        return presentation.panel(Component.empty().children(rows), 468)
     }
 
     private fun sourceFact(fact: HelpCenterEnchantmentSourceFact): Component {
@@ -462,7 +474,7 @@ internal class HelpCenterEnchantmentsController(
             "${match.groupValues[1].replace('.', ',')} $unit"
         } ?: value
         "group" -> if (value.isBlank()) value else if (value == "random") plainText.serialize(text("ui.source-name-random")) else groupLabel(value)
-        "box", "item", "source", "pool", "common_pool", "bonus_pool", "server" -> {
+        "box", "item", "source" -> {
             val topic = HelpCenterEnchantmentGuideTopic.byId[value]
             if (topic != null) plainText.serialize(text(topic.labelKey))
             else guide.optionalText("ui.source-name-${value.removePrefix("crate:").lowercase(Locale.ROOT).replace('_', '-')}")
@@ -557,6 +569,14 @@ internal class HelpCenterEnchantmentsController(
         private const val SPECIAL_PAGE_SIZE = 10
         private const val SOURCE_PAGE_SIZE = 3
         private const val EQUIPMENT_PAGE_SIZE = 10
+        private val HIDDEN_SOURCE_FACTS = setOf("scope", "pool-source", "unavailable", "no-drop", "native-disabled", "natural-inactive")
+        private val CONTENT_FACTS = setOf("box-rolls", "box-content", "pool-item-value", "slot-settings", "secret-result")
+        private val ACQUISITION_FACTS = setOf(
+            "world-cache", "mining-cache", "farming-cache", "mining-find", "farming-find",
+            "pool-item", "personal-loot-source", "crate-source", "quest-source",
+            "denizen-monsters", "denizen-bosses", "tinkerer-source", "native-mob", "natural-books", "natural-dust", "boss-source",
+            "cmi-kit-source", "gkit-source",
+        )
         private val DURATION = Regex("([0-9]+(?:\\.[0-9]+)?)([tsmhd])", RegexOption.IGNORE_CASE)
         private val ENCHANTER_GROUPS = setOf("SIMPLE", "UNIQUE", "ELITE", "ULTIMATE", "LEGENDARY", "FABLED")
     }

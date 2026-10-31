@@ -128,7 +128,7 @@ class EnchantmentDiscoveryRelayTest : FreeSpec({
                 worldCaches = null
                 source.time += 5_000L
                 source.scheduler.tick(100L)
-                source.redis.getPublishedMessages().size shouldBe 2
+                source.discoveryMessages().size shouldBe 2
                 source.lastPublished().mining?.chancePercent shouldBe 0.125
                 source.lastPublished().worldCaches shouldBe null
 
@@ -140,7 +140,7 @@ class EnchantmentDiscoveryRelayTest : FreeSpec({
                 source.scheduler.timerCount() shouldBe 0
                 source.redis.listenerCount(EnchantmentDiscoveryRelay.CHANNEL) shouldBe 0
                 original.close()
-                source.redis.getPublishedMessages().size shouldBe 3
+                source.discoveryMessages().size shouldBe 3
 
                 source.relay(mining = { mining }, initialLastSentAt = original.lastPublishedAt).use { replacement ->
                     source.scheduler.executeImmediate()
@@ -187,10 +187,55 @@ class EnchantmentDiscoveryRelayTest : FreeSpec({
             fixture.scheduler.tick(100L)
             fixture.lastPublished().mining shouldBe null
             fixture.lastPublished().worldCaches shouldBe null
-            relay.snapshot() shouldBe EnchantmentDiscoverySnapshot(fixture.time, null, null)
+            relay.snapshot() shouldBe EnchantmentDiscoverySnapshot(fixture.time, null, null, visibleFinds = true)
         }
         fixture.scheduler.timerCount() shouldBe 0
         fixture.redis.listenerCount(EnchantmentDiscoveryRelay.CHANNEL) shouldBe 0
+    }
+
+    "visible find metadata joins only the matching fresh generation while legacy messages stay unchanged" {
+        val fixture = DiscoveryRelayFixture()
+        fixture.relay().use { relay ->
+            val base = message()
+            fixture.deliver(base)
+            relay.snapshot()?.visibleFinds shouldBe false
+            relay.snapshot()?.mining?.keyChancePercent shouldBe 0.0
+            val metadata = EnchantmentFindDiscoveryMetadata("survival", base.sentAtMillis, 0.001, 0.0005)
+            fixture.deliverMetadata(metadata, origin = "spawn")
+            relay.snapshot()?.visibleFinds shouldBe false
+            fixture.deliverMetadata(metadata)
+            relay.snapshot()?.visibleFinds shouldBe true
+            relay.snapshot()?.mining?.keyChancePercent shouldBe 0.001
+            relay.snapshot()?.farming?.keyChancePercent shouldBe 0.0005
+            EnchantmentDiscoveryCodec.codec.encode(base).contains("keyChance") shouldBe false
+
+            fixture.time++
+            fixture.deliver(base.copy(sentAtMillis = fixture.time))
+            relay.snapshot()?.visibleFinds shouldBe false
+            fixture.deliverMetadata(metadata) // An old annotation cannot certify a newer source generation.
+            relay.snapshot()?.visibleFinds shouldBe false
+            fixture.deliverMetadata(metadata.copy(sentAtMillis = fixture.time))
+            relay.snapshot()?.visibleFinds shouldBe true
+            fixture.time += EnchantmentDiscoveryRelay.STALE_MILLIS
+            relay.snapshot() shouldBe null
+        }
+        fixture.redis.listenerCount(EnchantmentDiscoveryRelay.FIND_CHANNEL) shouldBe 0
+    }
+
+    "find metadata rejects unsafe values and resource coercions" {
+        val codec = EnchantmentFindDiscoveryMetadataCodec.codec
+        val valid = EnchantmentFindDiscoveryMetadata("survival", 50_000L, 0.001, 0.0005)
+        val encoded = codec.encode(valid)
+        codec.decode(encoded) shouldBe valid
+        for (raw in listOf(
+            encoded.replace("\"miningKeyChancePercent\":0.001", "\"miningKeyChancePercent\":\"0.001\""),
+            encoded.replace("\"farmingKeyChancePercent\":5.0E-4", "\"farmingKeyChancePercent\":1e999"),
+            encoded.replace("\"sentAtMillis\":50000", "\"sentAtMillis\":50000.5"),
+            encoded.dropLast(1) + ",\"command\":\"stop\"}",
+        )) shouldThrowAny { codec.decode(raw) }
+        shouldThrowAny { codec.encode(valid.copy(source = "spawn")) }
+        shouldThrowAny { codec.encode(valid.copy(miningKeyChancePercent = Double.NaN)) }
+        shouldThrowAny { codec.encode(valid.copy(farmingKeyChancePercent = -1.0)) }
     }
 
     "the wire contract rejects coercions non-finite chances unknown fields and resource overflows" {
@@ -241,5 +286,12 @@ private class DiscoveryRelayFixture(val server: String = "spawn") {
         if (execute) scheduler.executeImmediate()
     }
 
-    fun lastPublished(): EnchantmentDiscoveryMessage = EnchantmentDiscoveryCodec.codec.decode(redis.getPublishedMessages().last().message)
+    fun deliverMetadata(message: EnchantmentFindDiscoveryMetadata, origin: String = "survival") {
+        redis.simulateExternalMessage(EnchantmentDiscoveryRelay.FIND_CHANNEL, EnchantmentFindDiscoveryMetadataCodec.codec.encode(message), origin)
+        scheduler.executeImmediate()
+    }
+
+    fun discoveryMessages() = redis.getPublishedMessages().filter { it.channel == EnchantmentDiscoveryRelay.CHANNEL }
+
+    fun lastPublished(): EnchantmentDiscoveryMessage = EnchantmentDiscoveryCodec.codec.decode(discoveryMessages().last().message)
 }

@@ -25,6 +25,7 @@ internal data class EnchantmentDiscoverySnapshot(
     val mining: EnchantmentMiningLootSettings?,
     val worldCaches: EnchantmentWorldCacheSettings?,
     val farming: EnchantmentFarmingLootSettings? = null,
+    val visibleFinds: Boolean = false,
 )
 
 internal data class EnchantmentMiningDiscoveryState(
@@ -166,6 +167,7 @@ internal class EnchantmentDiscoveryRelay(
     private val tasks = LifecycleTaskScope(scheduler)
     private val remote = LeasedNetworkDirectory<String, EnchantmentDiscoverySnapshot>(STALE_MILLIS, 1, now)
     private var lastReceivedAt = 0L
+    private var findMetadata: EnchantmentFindDiscoveryMetadata? = null
     var lastPublishedAt: Long = initialLastSentAt.also { require(it >= 0L && it < Long.MAX_VALUE) }
         private set
     private var closed = false
@@ -179,6 +181,15 @@ internal class EnchantmentDiscoveryRelay(
         onMessage = { message, origin -> tasks.runSync { receive(message, origin) } },
         onHandlerFailure = { failure -> tasks.runSync { reportFailure("receive", failure) } },
     )
+    private val findTopic = ValidatedRedisTopic.open(
+        redis = redis,
+        channel = FIND_CHANNEL,
+        codec = EnchantmentFindDiscoveryMetadataCodec.codec,
+        originAllowed = { it == SOURCE && localServer != SOURCE },
+        embeddedOrigin = EnchantmentFindDiscoveryMetadata::source,
+        onMessage = { message, origin -> tasks.runSync { receiveFindMetadata(message, origin) } },
+        onHandlerFailure = { failure -> tasks.runSync { reportFailure("receive-find-metadata", failure) } },
+    )
 
     init {
         if (localServer == SOURCE) {
@@ -190,8 +201,15 @@ internal class EnchantmentDiscoveryRelay(
     /** Null means unavailable/expired; a fresh snapshot with all null settings means inactive. */
     fun snapshot(): EnchantmentDiscoverySnapshot? {
         if (closed) return null
-        if (localServer != SOURCE) return remote.get(SOURCE)?.value
-        return runCatching { capture(now()).toSnapshot() }
+        if (localServer != SOURCE) {
+            val base = remote.get(SOURCE)?.value ?: return null
+            val metadata = findMetadata?.takeIf { it.sentAtMillis == base.sentAtMillis } ?: return base
+            return withFindMetadata(base, metadata)
+        }
+        return runCatching {
+            val message = capture(now())
+            withFindMetadata(message.toSnapshot(), captureFindMetadata(message.sentAtMillis))
+        }
             .onFailure { reportFailure("capture", it) }.getOrNull()
     }
 
@@ -203,8 +221,36 @@ internal class EnchantmentDiscoveryRelay(
             val message = capture(maxOf(now(), lastPublishedAt + 1L))
             lastPublishedAt = message.sentAtMillis
             topic.publish(message)
+            findTopic.publish(captureFindMetadata(message.sentAtMillis))
         }.onFailure { reportFailure("publish", it) }
     }
+
+    private fun captureFindMetadata(sentAtMillis: Long) = EnchantmentFindDiscoveryMetadata(
+        SOURCE, sentAtMillis, activeMiningSettings()?.keyChancePercent, activeFarmingSettings()?.keyChancePercent,
+    )
+
+    private fun receiveFindMetadata(message: EnchantmentFindDiscoveryMetadata, origin: String) {
+        if (closed || origin != SOURCE || message.sentAtMillis <= (findMetadata?.sentAtMillis ?: 0L)) return
+        val currentTime = now()
+        if (message.sentAtMillis > currentTime && message.sentAtMillis - currentTime > MAX_FUTURE_SKEW_MILLIS) return
+        if (currentTime >= message.sentAtMillis && currentTime - message.sentAtMillis >= STALE_MILLIS) return
+        findMetadata = message
+    }
+
+    private fun withFindMetadata(base: EnchantmentDiscoverySnapshot, metadata: EnchantmentFindDiscoveryMetadata): EnchantmentDiscoverySnapshot =
+        runCatching {
+            base.copy(
+                mining = base.mining?.let {
+                    EnchantmentMiningLootSettings(it.survivalBackend, it.worldNames, it.materials, it.chancePercent,
+                        metadata.miningKeyChancePercent ?: 0.0)
+                },
+                farming = base.farming?.let {
+                    EnchantmentFarmingLootSettings(it.survivalBackend, it.worldNames, it.materials, it.chancePercent, it.cooldownSeconds,
+                        metadata.farmingKeyChancePercent ?: 0.0)
+                },
+                visibleFinds = true,
+            )
+        }.getOrDefault(base)
 
     private fun capture(sentAtMillis: Long): EnchantmentDiscoveryMessage {
         val mining = activeMiningSettings()?.let {
@@ -256,13 +302,17 @@ internal class EnchantmentDiscoveryRelay(
                 val sentAt = maxOf(now(), lastPublishedAt + 1L)
                 lastPublishedAt = sentAt
                 topic.publish(EnchantmentDiscoveryMessage(SOURCE, sentAt, null, null))
+                findTopic.publish(EnchantmentFindDiscoveryMetadata(SOURCE, sentAt, null, null))
             }.onFailure { reportFailure("close", it) }
         }
         closed = true
         try { tasks.close() }
         finally {
             try { topic.close() }
-            finally { remote.clear() }
+            finally {
+                try { findTopic.close() }
+                finally { remote.clear(); findMetadata = null }
+            }
         }
     }
 
@@ -275,6 +325,7 @@ internal class EnchantmentDiscoveryRelay(
     companion object {
         const val SOURCE = "survival"
         const val CHANNEL = "arc:enchantment-discovery:v1"
+        const val FIND_CHANNEL = "arc:enchantment-find-metadata:v1"
         const val STALE_MILLIS = 20_000L
         const val MAX_FUTURE_SKEW_MILLIS = 5_000L
     }

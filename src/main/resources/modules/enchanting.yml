@@ -70,7 +70,8 @@ loot:
   # One shared find per chunk; Fortune and repeat placements do not multiply the reward.
   mining-cache:
     enabled: true
-    chance-percent: 0.05
+    chance-percent: 0.02
+    key-chance-percent: 0.001
     worlds: [survival, vanilla, mining]
     materials: [STONE, DEEPSLATE, COAL_ORE, DEEPSLATE_COAL_ORE, IRON_ORE, DEEPSLATE_IRON_ORE,
       COPPER_ORE, DEEPSLATE_COPPER_ORE, GOLD_ORE, DEEPSLATE_GOLD_ORE, REDSTONE_ORE,
@@ -84,7 +85,8 @@ loot:
   # Manual harvest of fully grown crops; a find reserves its chunk for all players for one day.
   farming-cache:
     enabled: true
-    chance-percent: 0.05
+    chance-percent: 0.01
+    key-chance-percent: 0.0005
     cooldown-seconds: 86400
     worlds: [survival, vanilla, world, survival_nether, vanilla_nether, world_nether]
     materials: [WHEAT, CARROTS, POTATOES, BEETROOTS, COCOA, NETHER_WART]

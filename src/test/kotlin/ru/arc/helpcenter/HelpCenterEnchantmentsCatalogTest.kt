@@ -89,6 +89,17 @@ class HelpCenterEnchantmentsCatalogTest : StringSpec({
             }
             guide.text("ui.source-pool-item").contains("<per_roll>") shouldBe true
             guide.text("ui.source-natural-dust").contains("<kill>") shouldBe true
+            guide.optionalText("ui.source-scope") shouldBe null
+            guide.optionalText("ui.source-pool-source") shouldBe null
+            PlainTextComponentSerializer.plainText().serialize(MiniMessage.miniMessage().deserialize(
+                guide.text("ui.source-no-drop"),
+            )) shouldBe "Способ получения пока не указан."
+            PlainTextComponentSerializer.plainText().serialize(MiniMessage.miniMessage().deserialize(
+                guide.text("ui.source-unavailable"),
+            )) shouldBe "Способы получения пока не удалось загрузить."
+            listOf("world-cache", "mining-cache", "farming-cache", "natural-books", "natural-dust", "denizen-monsters").forEach { source ->
+                guide.text("ui.source-$source").contains("<world") shouldBe false
+            }
             guide.text("ui.special-orb-tool-body").contains("Для топора нужна сфера оружия") shouldBe true
             guide.text("ui.special-soul-tracker-body").contains("Запас принадлежит предмету") shouldBe true
             guide.text("ui.acquisition-services").lowercase().contains("алхимик") shouldBe true

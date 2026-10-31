@@ -19,6 +19,11 @@ object AeLoot {
 
     private val SLOT_VALUES = listOf("ARMOR", "TOOL", "WEAPON")
 
+    /** The same cumulative table used by [randomTier], exposed as one-book probabilities for help. */
+    internal fun tierProbabilities(): List<Pair<String, Double>> = TIER_THRESHOLDS.mapIndexed { index, (limit, group) ->
+        group to (limit - (TIER_THRESHOLDS.getOrNull(index - 1)?.first ?: 0.0))
+    }
+
     fun randomTier(): String {
         val roll = ThreadLocalRandom.current().nextDouble()
         return TIER_THRESHOLDS.first { roll < it.first }.second

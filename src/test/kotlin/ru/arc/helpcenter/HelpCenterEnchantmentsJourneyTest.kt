@@ -187,10 +187,10 @@ class HelpCenterEnchantmentsJourneyTest {
         assertTrue(body().contains("Магическая пыль"), body())
         assertTrue(body().contains("один расчёт за 1 с."), body())
         assertFalse(body().contains("1s с"))
+        assertFalse(body().contains("spawn_end"))
+        assertTrue(body().contains("Для эндерменов в Краю"))
         assertFalse(body().contains("недоступны"), body())
-        click("next")
-        assertTrue(body().contains("недоступны"), body())
-        click("previous")
+        assertFalse(screen.buttons.any { it.id.value == "next" })
         click("tinkerer")
         assertEquals(listOf("tinkerer"), executed)
     }
@@ -198,6 +198,7 @@ class HelpCenterEnchantmentsJourneyTest {
     @Test
     fun `representative long usage and dynamic source cards export their actual decorated components`() {
         var discoveryOverview = false
+        var boxSourceAvailable = true
         canPurchase = true
         HookRegistry.translatorHook = mockk<TranslatorHook>().also { translator ->
             every { translator.translate(any<Material>()) } answers {
@@ -220,7 +221,20 @@ class HelpCenterEnchantmentsJourneyTest {
                 HelpCenterEnchantmentSourceFact("crate-source", mapOf("source" to "case_daily", "crate" to "Ежедневный тайник", "item" to "ae_lootbox", "chance" to "9,5", "amount" to "1")),
                 HelpCenterEnchantmentSourceFact("crate-source", mapOf("source" to "case_daily", "crate" to "Ежедневный тайник", "item" to "ae_lootbox_enchanted", "chance" to "5,7", "amount" to "1")),
                 HelpCenterEnchantmentSourceFact("quest-source", mapOf("source" to "daily_fishing", "quest" to "Улов дня", "item" to "enchant_supply", "amount" to "1")),
-            )) else if (topicId == "ae_lootbox") HelpCenterEnchantmentAcquisition(
+            )) else if (topicId == "ae_lootbox_enchanted") HelpCenterEnchantmentAcquisition(listOf(
+                HelpCenterEnchantmentSourceFact("scope", mapOf("server" to "survival")),
+                HelpCenterEnchantmentSourceFact("box-rolls", mapOf("min" to "2", "max" to "3", "pool" to "ae_enchanted")),
+                HelpCenterEnchantmentSourceFact("pool-source", mapOf("pool" to "private_recipe", "per_roll" to "5,7", "amount" to "1")),
+                HelpCenterEnchantmentSourceFact("no-drop"),
+                HelpCenterEnchantmentSourceFact("unavailable", mapOf("source" to "cmi-kits")),
+                if (boxSourceAvailable) HelpCenterEnchantmentSourceFact("crate-source", mapOf(
+                    "source" to "case_daily", "crate" to "Ежедневный тайник", "item" to "ae_lootbox_enchanted", "chance" to "5,7", "amount" to "1",
+                )) else HelpCenterEnchantmentSourceFact("unavailable", mapOf("source" to "crate-rewards")),
+            ) + if (boxSourceAvailable) listOf(
+                HelpCenterEnchantmentSourceFact("box-content", mapOf("item" to "random_book", "per_roll" to "100", "amount" to "1", "group" to "random")),
+            ) else listOf("SIMPLE" to "50", "UNIQUE" to "15", "ELITE" to "14", "ULTIMATE" to "9", "LEGENDARY" to "9", "FABLED" to "3").map { (group, chance) ->
+                HelpCenterEnchantmentSourceFact("box-content", mapOf("item" to "random_book", "per_roll" to chance, "amount" to "1", "group" to group))
+            }) else if (topicId == "ae_lootbox") HelpCenterEnchantmentAcquisition(
                 enchantmentDiscoveryPreviewFacts(),
             ) else HelpCenterEnchantmentAcquisition(
                 facts = listOf(
@@ -234,6 +248,41 @@ class HelpCenterEnchantmentsJourneyTest {
             )) },
         )
         val screens = linkedMapOf<String, PaperDialogScreen>()
+        controller.openTopic(player, HelpCenterEnchantmentGuideTopic.ENCHANTED_BOX) {}
+        click("sources")
+        screens["ae-enchanted-box-synthetic-source"] = screen
+        val boxSources = body()
+        assertTrue(boxSources.contains("Ежедневный тайник"), boxSources)
+        assertTrue(boxSources.contains("Шанс одного розыгрыша этой награды: 5,7%"), boxSources)
+        assertTrue(boxSources.indexOf("Кейс") < boxSources.indexOf("Содержимое и параметры"), boxSources)
+        assertTrue(boxSources.contains("2–3 независимых наград"), boxSources)
+        assertTrue(boxSources.contains("Шанс за одну награду: 100%"), boxSources)
+        assertFalse(boxSources.contains("Способ получения пока не указан"), boxSources)
+        assertFalse(boxSources.contains("не удалось загрузить"), boxSources)
+        listOf("Вы на сервере", "survival", "private_recipe", "ae_enchanted", "cmi-kits", "crate-rewards").forEach {
+            assertFalse(boxSources.contains(it), boxSources)
+        }
+
+        boxSourceAvailable = false
+        controller.openTopic(player, HelpCenterEnchantmentGuideTopic.ENCHANTED_BOX) {}
+        click("sources")
+        screens["ae-enchanted-box-source-unavailable"] = screen
+        assertTrue(body().contains("Способы получения пока не удалось загрузить."), body())
+        assertTrue(body().indexOf("не удалось загрузить") < body().indexOf("Содержимое и параметры"), body())
+        assertTrue(body().contains("2–3 независимых наград"), body())
+        assertTrue(body().contains("Шанс за одну награду: 50%"), body())
+        assertTrue(body().contains("Редкость: Обычная"), body())
+        assertFalse(body().contains("Тайники с ключами"), body())
+        assertFalse(body().contains("нулевой шанс"), body())
+        assertTrue(screen.buttons.any { it.id.value == "next" })
+        click("next")
+        screens["ae-enchanted-box-contents-2"] = screen
+        listOf("15%", "14%", "9%", "Необычная", "Редкая", "Эпическая").forEach { assertTrue(body().contains(it), body()) }
+        click("next")
+        screens["ae-enchanted-box-contents-3"] = screen
+        listOf("9%", "3%", "Легендарная", "Мифическая").forEach { assertTrue(body().contains(it), body()) }
+        assertFalse(screen.buttons.any { it.id.value == "next" })
+
         controller.openTopic(player, HelpCenterEnchantmentGuideTopic.TOOL_ORB) {}
         screens["ae-orb-usage"] = screen
         assertFalse(screen.buttons.single { it.id.value == "sources" }.closeDialogBeforeAction)
@@ -244,10 +293,6 @@ class HelpCenterEnchantmentsJourneyTest {
         assertTrue(body().contains("3,31%"), body())
         assertTrue(body().contains("11"), body())
         assertFalse(body().contains("недоступны"), body())
-        click("next")
-        screens["ae-sources-last"] = screen
-        assertTrue(body().contains("недоступны"), body())
-        assertTrue(screen.buttons.any { it.id.value == "previous" })
         assertFalse(screen.buttons.any { it.id.value == "next" })
 
         controller.open(player) {}
@@ -282,19 +327,19 @@ class HelpCenterEnchantmentsJourneyTest {
         screens["ae-discovery-summary"] = screen
         assertTrue(body().contains("Исследование мира · добыча киркой · сбор урожая"), body())
         assertTrue(body().contains("Тайники на поверхности"), body())
-        assertTrue(body().contains("Находки при добыче"), body())
-        assertFalse(body().contains("Шкатулки за урожай"))
+        assertTrue(body().contains("Шкатулки в камне"), body())
+        assertFalse(body().contains("Находки на урожае"))
 
         click("next")
         screens["ae-discovery-farming"] = screen
-        assertTrue(body().contains("Шкатулки за урожай"), body())
+        assertTrue(body().contains("Находки на урожае"), body())
         enchantmentDiscoveryCropNames.values.forEach { assertTrue(body().contains(it), body()) }
         assertFalse(body().contains("Добыча киркой · подходящие блоки"))
 
         click("next")
         screens["ae-discovery-mining-continuation"] = screen
         assertTrue(body().contains("Добыча киркой · подходящие блоки"), body())
-        assertFalse(body().contains("Шкатулки за урожай"))
+        assertFalse(body().contains("Находки на урожае"))
         assertTrue(screen.buttons.any { it.id.value == "previous" })
         assertTrue(screen.buttons.any { it.id.value == "next" })
 
@@ -382,13 +427,13 @@ internal val enchantmentDiscoveryCropNames = linkedMapOf(
 
 internal fun enchantmentDiscoveryPreviewFacts(): List<HelpCenterEnchantmentSourceFact> = buildList {
     add(HelpCenterEnchantmentSourceFact("scope", mapOf("server" to "spawn")))
-    add(HelpCenterEnchantmentSourceFact("mining-cache", mapOf("chance" to "0,05", "worlds" to "mining, survival, vanilla")))
+    add(HelpCenterEnchantmentSourceFact("mining-find", mapOf("chance" to "0,02", "key_chance" to "0,001", "worlds" to "mining, survival, vanilla")))
     enchantmentDiscoveryMiningNames.keys.map { it.name }.sorted().chunked(4).forEach {
         add(HelpCenterEnchantmentSourceFact("mining-cache-materials", mapOf("materials" to it.joinToString(","))))
     }
     add(HelpCenterEnchantmentSourceFact("world-cache", mapOf("chance" to "0,78125", "one_in" to "128", "worlds" to "survival, vanilla")))
-    add(HelpCenterEnchantmentSourceFact("farming-cache", mapOf(
-        "chance" to "0,05", "worlds" to "survival, survival_nether, vanilla, vanilla_nether, world, world_nether", "cooldown" to "1d",
+    add(HelpCenterEnchantmentSourceFact("farming-find", mapOf(
+        "chance" to "0,01", "key_chance" to "0,0005", "worlds" to "survival, survival_nether, vanilla, vanilla_nether, world, world_nether", "cooldown" to "1d",
     )))
     enchantmentDiscoveryCropNames.keys.map { it.name }.sorted().chunked(4).forEach {
         add(HelpCenterEnchantmentSourceFact("farming-cache-materials", mapOf("materials" to it.joinToString(","))))

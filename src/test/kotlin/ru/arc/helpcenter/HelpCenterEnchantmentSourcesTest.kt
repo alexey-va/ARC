@@ -58,6 +58,20 @@ class HelpCenterEnchantmentSourcesTest : StringSpec({
         contents.count { it.values["item"] == "magic" } shouldBe 1
     }
 
+    "unrestricted physical books expose the rarity selection used by their materializer" {
+        val snapshot = sources(
+            listOf(TreasurePool("ae_enchanted", listOf(Treasure.Ae(AeKind.RANDOM_BOOK, weight = 1)))),
+            listOf(box("ae_lootbox_enchanted", "ae_enchanted", 2, 3)),
+        )
+        val contents = HelpCenterEnchantmentSources.describe("ae_lootbox_enchanted", snapshot).facts
+            .filter { it.key == "box-content" }
+        contents.associate { it.values.getValue("group") to it.values.getValue("per_roll") } shouldBe linkedMapOf(
+            "SIMPLE" to "50", "UNIQUE" to "15", "ELITE" to "14", "ULTIMATE" to "9", "LEGENDARY" to "9", "FABLED" to "3",
+        )
+        contents.all { it.values["amount"] == "1" && it.values["item"] == "book" } shouldBe true
+        HelpCenterEnchantmentSources.describe("book", snapshot).single("pool-item").values["per_roll"] shouldBe "100"
+    }
+
     "supply contents and boss acquisition follow the active pool and configured preset" {
         val snapshot = sources(
             listOf(TreasurePool("enchant_boss_supply", listOf(
