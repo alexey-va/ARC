@@ -37,6 +37,8 @@ internal class EnchantingConfig(private val config: Config) {
 
     val isLootBackend get() = ru.arc.ARC.serverName == config.string("loot.server", "survival")
 
+    private val findTestOverrides get() = EnchantmentFindTestOverrides.parse(config.map<Any?>("loot")["test-overrides"])
+
     val miningCacheSettings get() = EnchantmentMiningLootSettings(
         survivalBackend = isLootBackend,
         worldNames = config.stringList("loot.mining-cache.worlds").toSet(),
@@ -45,6 +47,7 @@ internal class EnchantingConfig(private val config: Config) {
         }.toSet(),
         chancePercent = config.double("loot.mining-cache.chance-percent"),
         keyChancePercent = config.double("loot.mining-cache.key-chance-percent", 0.0),
+        testOverrides = findTestOverrides.mining,
     )
 
     val farmingCacheEnabled get() = config.bool("loot.farming-cache.enabled", false)
@@ -58,6 +61,7 @@ internal class EnchantingConfig(private val config: Config) {
         chancePercent = config.double("loot.farming-cache.chance-percent"),
         cooldownSeconds = config.long("loot.farming-cache.cooldown-seconds"),
         keyChancePercent = config.double("loot.farming-cache.key-chance-percent", 0.0),
+        testOverrides = findTestOverrides.farming,
     )
 
     val worldCacheSettings get() = EnchantmentWorldCacheSettings(

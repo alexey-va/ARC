@@ -23,18 +23,22 @@ internal class EnchantmentMiningLootSettings(
     materials: Set<Material>,
     val chancePercent: Double,
     val keyChancePercent: Double = 0.0,
+    testOverrides: Map<String, EnchantmentFindChances> = emptyMap(),
 ) {
     val worldNames: Set<String> = Collections.unmodifiableSet(worldNames.mapTo(mutableSetOf()) { it.trim().lowercase(Locale.ROOT) })
     val materials: Set<Material> = Collections.unmodifiableSet(materials.toSet())
+    val testOverrides: Map<String, EnchantmentFindChances> = immutableEnchantmentFindTestOverrides(testOverrides)
+    private val baseChances = EnchantmentFindChances(chancePercent, keyChancePercent)
 
     init {
         require(worldNames.none(String::isBlank)) { "Mining loot world names must not be blank" }
         require(this.worldNames.size == worldNames.size) { "Mining loot world names must be unique ignoring case" }
         require(materials.all { it.isBlock && !it.isAir }) { "Mining loot materials must be non-air blocks" }
-        validateEnchantmentFindChances(chancePercent, keyChancePercent)
     }
 
     fun allowsWorld(worldName: String): Boolean = survivalBackend && worldName.lowercase(Locale.ROOT) in worldNames
+
+    fun chancesFor(playerName: String): EnchantmentFindChances = testOverrides[playerName.lowercase(Locale.ROOT)] ?: baseChances
 }
 
 internal val enchantmentMiningChunkClaimKey = NamespacedKey("arc", "ae_mining_lootbox_claim_v1")
@@ -67,10 +71,12 @@ internal class EnchantmentMiningLoot(
                 finds.captureBreak(event, EnchantmentFindSource.MINING, eligible)
                 return@safely
             }
-            if (!eligible || !event.isDropItems || settings.chancePercent + settings.keyChancePercent == 0.0 ||
+            if (!eligible || !event.isDropItems) return@safely
+            val chances = settings.chancesFor(player.name)
+            if (chances.chancePercent + chances.keyChancePercent == 0.0 ||
                 !finds.available(block, EnchantmentFindSource.MINING)) return@safely
             if (!finds.admitRoll(player.uniqueId, currentTick())) return@safely
-            val reward = enchantmentFindReward(nextDouble(), settings.chancePercent, settings.keyChancePercent) ?: return@safely
+            val reward = enchantmentFindReward(nextDouble(), chances.chancePercent, chances.keyChancePercent) ?: return@safely
             finds.captureBreak(event, EnchantmentFindSource.MINING, true) {
                 safely {
                     if (closed || !block.world.isChunkLoaded(block.x shr 4, block.z shr 4) || !block.type.isAir) return@safely

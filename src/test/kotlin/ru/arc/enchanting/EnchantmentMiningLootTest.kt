@@ -115,4 +115,43 @@ class EnchantmentMiningLootTest : StringSpec({
             }
         }
     }
+
+    "named mining test odds work with a zero base and preserve native claims and chunk quota" {
+        for (chances in listOf(EnchantmentFindChances(100.0, 0.0), EnchantmentFindChances(0.0, 100.0))) {
+            MockBukkitTestRuntime.open().use { paper ->
+                EnchantmentFindFixture(paper).use { f ->
+                    f.mining.close()
+                    f.mining = f.newMining(EnchantmentMiningLootSettings(true, setOf("survival"), setOf(Material.STONE), 0.0, 0.0,
+                        mapOf("AnotherPlayer" to chances)))
+                    f.player.isOp = true
+                    f.breakMining()
+                    f.rolls shouldBe 0
+                    f.resolved.size shouldBe 0
+                    f.origin.type = Material.STONE
+                    f.mining.close()
+                    f.mining = f.newMining(EnchantmentMiningLootSettings(true, setOf("survival"), setOf(Material.STONE), 0.0, 0.0,
+                        mapOf("fInDeR" to chances)))
+                    f.natural = false
+                    f.breakMining()
+                    f.rolls shouldBe 0
+                    f.origin.type = Material.STONE
+                    f.natural = true
+                    f.breakMining()
+                    val reward = if (chances.chancePercent == 100.0) EnchantmentFindReward.LOOTBOX else EnchantmentFindReward.KEY
+                    f.resolved shouldBe listOf(reward)
+                    f.rolls shouldBe 1
+                    f.miningClaim() shouldBe 1.toByte()
+                    f.items().size shouldBe 0
+                    f.breakMining(f.host)
+                    f.items().single().itemStack.isSimilar(if (reward == EnchantmentFindReward.KEY) f.key else f.box) shouldBe true
+                    f.rolls shouldBe 1
+                    f.origin.type = Material.STONE
+                    f.host.type = Material.STONE
+                    f.breakMining()
+                    f.resolved shouldBe listOf(reward)
+                    f.rolls shouldBe 1
+                }
+            }
+        }
+    }
 })

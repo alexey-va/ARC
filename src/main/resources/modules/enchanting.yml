@@ -67,6 +67,21 @@ loot:
   open-water-fishing:
     book-percent: 0.5
     dust-percent: 1.5
+  # Personal operator QA odds; apply changes with /arc reload, without a server restart.
+  # Only listed names are matched (case-insensitive). Omitted activities use ordinary odds.
+  # Chunk quotas, cooldowns, natural-block and mature-crop requirements still apply.
+  test-overrides:
+    enabled: false
+    players: {}
+    # Replace {} with a named profile, for example:
+    #   CodexQA_728:
+    #     mining-cache:
+    #       chance-percent: 100
+    #       key-chance-percent: 0
+    #     farming-cache:
+    #       chance-percent: 100
+    #       key-chance-percent: 0
+    # 100/0 selects boxes; use 0/100 for native case_daily keys. Disable after QA.
   # One shared find per chunk; Fortune and repeat placements do not multiply the reward.
   mining-cache:
     enabled: true
