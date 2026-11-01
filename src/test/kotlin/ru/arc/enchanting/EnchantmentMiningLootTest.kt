@@ -154,4 +154,40 @@ class EnchantmentMiningLootTest : StringSpec({
             }
         }
     }
+
+    "only a named Creative mining profile reveals and claims each native reward with normal tool naturalness and quota guards" {
+        for (chances in listOf(EnchantmentFindChances(100.0, 0.0), EnchantmentFindChances(0.0, 100.0))) {
+            MockBukkitTestRuntime.open().use { paper ->
+                EnchantmentFindFixture(paper).use { f ->
+                    f.player.gameMode = GameMode.CREATIVE
+                    f.mining.close()
+                    f.mining = f.newMining(EnchantmentMiningLootSettings(true, setOf("survival"), setOf(Material.STONE), 0.0, 0.0,
+                        mapOf("fInDeR" to chances), setOf("FINDER")))
+                    f.player.inventory.setItemInMainHand(ItemStack(Material.DIAMOND_AXE))
+                    f.breakMining()
+                    f.origin.type = Material.STONE
+                    f.player.inventory.setItemInMainHand(ItemStack(Material.DIAMOND_PICKAXE))
+                    f.natural = false
+                    f.breakMining()
+                    f.rolls shouldBe 0
+                    f.miningClaim() shouldBe null
+                    f.origin.type = Material.STONE
+                    f.natural = true
+                    f.breakMining()
+                    val reward = if (chances.keyChancePercent == 100.0) EnchantmentFindReward.KEY else EnchantmentFindReward.LOOTBOX
+                    f.resolved shouldBe listOf(reward)
+                    f.items().size shouldBe 0
+                    f.miningClaim() shouldBe 1.toByte()
+                    // The exact native event still dispatches an empty drop list in Creative.
+                    f.breakMining(f.host)
+                    f.items().single().itemStack.isSimilar(if (reward == EnchantmentFindReward.KEY) f.key else f.box) shouldBe true
+                    f.origin.type = Material.STONE
+                    f.host.type = Material.STONE
+                    f.breakMining()
+                    f.rolls shouldBe 1
+                    f.items().size shouldBe 1
+                }
+            }
+        }
+    }
 })

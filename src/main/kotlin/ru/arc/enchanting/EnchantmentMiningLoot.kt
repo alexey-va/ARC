@@ -24,10 +24,12 @@ internal class EnchantmentMiningLootSettings(
     val chancePercent: Double,
     val keyChancePercent: Double = 0.0,
     testOverrides: Map<String, EnchantmentFindChances> = emptyMap(),
+    creativeTestPlayers: Set<String> = emptySet(),
 ) {
     val worldNames: Set<String> = Collections.unmodifiableSet(worldNames.mapTo(mutableSetOf()) { it.trim().lowercase(Locale.ROOT) })
     val materials: Set<Material> = Collections.unmodifiableSet(materials.toSet())
     val testOverrides: Map<String, EnchantmentFindChances> = immutableEnchantmentFindTestOverrides(testOverrides)
+    val creativeTestPlayers: Set<String> = immutableEnchantmentFindCreativePlayers(creativeTestPlayers, this.testOverrides.keys)
     private val baseChances = EnchantmentFindChances(chancePercent, keyChancePercent)
 
     init {
@@ -39,6 +41,9 @@ internal class EnchantmentMiningLootSettings(
     fun allowsWorld(worldName: String): Boolean = survivalBackend && worldName.lowercase(Locale.ROOT) in worldNames
 
     fun chancesFor(playerName: String): EnchantmentFindChances = testOverrides[playerName.lowercase(Locale.ROOT)] ?: baseChances
+
+    fun allowsGameMode(playerName: String, gameMode: GameMode): Boolean =
+        allowsEnchantmentFindGameMode(playerName, gameMode, creativeTestPlayers)
 }
 
 internal val enchantmentMiningChunkClaimKey = NamespacedKey("arc", "ae_mining_lootbox_claim_v1")
@@ -65,10 +70,11 @@ internal class EnchantmentMiningLoot(
             val player = event.player
             val block = event.block
             if (!block.world.isChunkLoaded(block.x shr 4, block.z shr 4)) return@safely
-            val eligible = player.isOnline && player.gameMode == GameMode.SURVIVAL && player.world.uid == block.world.uid &&
+            val eligible = player.isOnline && settings.allowsGameMode(player.name, player.gameMode) && player.world.uid == block.world.uid &&
                 Tag.ITEMS_PICKAXES.isTagged(player.inventory.itemInMainHand.type) && isNaturalBlock(block)
+            val creativeTestBreak = eligible && player.gameMode == GameMode.CREATIVE
             if (finds.isFind(block, EnchantmentFindSource.MINING)) {
-                finds.captureBreak(event, EnchantmentFindSource.MINING, eligible)
+                finds.captureBreak(event, EnchantmentFindSource.MINING, eligible, creativeTestBreak)
                 return@safely
             }
             if (!eligible || !event.isDropItems) return@safely
@@ -77,7 +83,7 @@ internal class EnchantmentMiningLoot(
                 !finds.available(block, EnchantmentFindSource.MINING)) return@safely
             if (!finds.admitRoll(player.uniqueId, currentTick())) return@safely
             val reward = enchantmentFindReward(nextDouble(), chances.chancePercent, chances.keyChancePercent) ?: return@safely
-            finds.captureBreak(event, EnchantmentFindSource.MINING, true) {
+            finds.captureBreak(event, EnchantmentFindSource.MINING, true, creativeTestBreak) {
                 safely {
                     if (closed || !block.world.isChunkLoaded(block.x shr 4, block.z shr 4) || !block.type.isAir) return@safely
                     val candidates = FACES.mapNotNull { direction ->

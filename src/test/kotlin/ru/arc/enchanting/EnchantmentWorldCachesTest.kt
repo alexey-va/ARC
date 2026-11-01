@@ -281,6 +281,94 @@ class EnchantmentWorldCachesTest : StringSpec({
             }
         }
     }
+
+    "a named personal denominator admits Creative exploration without changing ordinary chunk selection or refilling" {
+        MockBukkitTestRuntime.open().use {
+            CacheFixture(EnchantmentWorldCacheSettings(true, true, setOf("survival"), 128,
+                mapOf("GrocerMC" to 1), setOf("GROCermc"))).use { f ->
+                val chunkX = (0..1024).first { enchantmentWorldCacheColumn(f.worldId, it, 0, 128) == null }
+                f.enter(f.player(chunkX, 0, name = "OrdinaryPlayer"))
+                val unlisted = f.player(chunkX, 0, name = "OtherAdmin")
+                every { unlisted.gameMode } returns GameMode.CREATIVE
+                every { unlisted.isOp } returns true
+                f.enter(unlisted)
+                f.scheduler.tick()
+                f.heights shouldBe 0
+                val player = f.player(chunkX, 0, name = "gRoCeRmC")
+                every { player.gameMode } returns GameMode.CREATIVE
+                f.enter(player)
+                f.scheduler.tick()
+                f.applied.size shouldBe 1
+                f.applied.single().location.blockX shouldBe f.column(chunkX, 0).x
+                f.applied.single().location.blockZ shouldBe f.column(chunkX, 0).z
+                f.controller.settingsSnapshot().chanceDenominator shouldBe 128
+                f.controller.close()
+                f.controller = f.newController()
+                f.enter(player)
+                f.scheduler.tick()
+                f.applied.size shouldBe 1
+                f.rewardCalls shouldBe 1
+            }
+        }
+    }
+
+    "Creative exploration rechecks the same named mode policy before terrain work and final placement" {
+        MockBukkitTestRuntime.open().use {
+            for (case in listOf("admission", "queued", "preparation")) {
+                CacheFixture(EnchantmentWorldCacheSettings(true, true, setOf("survival"), 128,
+                    mapOf("GrocerMC" to 1), setOf("GrocerMC"))).use { f ->
+                    val player = f.player(0, 0, name = "GrocerMC")
+                    every { player.gameMode } returns GameMode.CREATIVE
+                    if (case == "admission") every { player.gameMode } returns GameMode.ADVENTURE
+                    if (case == "preparation") f.resolve = {
+                        every { player.gameMode } returns GameMode.SPECTATOR
+                        listOf(f.reward)
+                    }
+                    f.enter(player)
+                    if (case == "queued") every { player.gameMode } returns GameMode.ADVENTURE
+                    f.scheduler.tick()
+                    f.applied.size shouldBe 0
+                    f.heights shouldBe if (case == "preparation") 1 else 0
+                }
+            }
+        }
+    }
+
+    "Creative world override keeps loaded natural protected and surface height guards" {
+        MockBukkitTestRuntime.open().use {
+            for (case in listOf("unloaded", "placed", "protected", "underground")) {
+                CacheFixture(EnchantmentWorldCacheSettings(true, true, setOf("survival"), 128,
+                    mapOf("GrocerMC" to 1), setOf("GrocerMC"))).use { f ->
+                    val player = f.player(0, 0, y = if (case == "underground") 20.0 else 65.0, name = "GrocerMC")
+                    every { player.gameMode } returns GameMode.CREATIVE
+                    when (case) {
+                        "unloaded" -> f.loaded = false
+                        "placed" -> f.natural = false
+                        "protected" -> f.unclaimed = { false }
+                    }
+                    f.enter(player)
+                    f.scheduler.tick()
+                    f.applied.size shouldBe 0
+                    f.rewardCalls shouldBe 0
+                }
+            }
+        }
+    }
+
+    "world override maps and Creative names cannot mutate a running settings generation" {
+        MockBukkitTestRuntime.open().use {
+            val overrides = mutableMapOf("GrocerMC" to 1)
+            val names = mutableSetOf("GrocerMC")
+            CacheFixture(EnchantmentWorldCacheSettings(true, true, setOf("survival"), 128, overrides, names)).use { f ->
+                overrides.clear(); names.clear()
+                val snapshot = f.controller.settingsSnapshot()
+                snapshot.denominatorFor("GROCermc") shouldBe 1
+                snapshot.allowsGameMode("GROCermc", GameMode.CREATIVE) shouldBe true
+                shouldThrow<UnsupportedOperationException> { (snapshot.testOverrides as MutableMap<String, Int>).clear() }
+                shouldThrow<UnsupportedOperationException> { (snapshot.creativeTestPlayers as MutableSet<String>).clear() }
+            }
+        }
+    }
 })
 
 /** Records the verified Paper snapshot-copy boundary; MockBukkit 4.116.1 does not implement copy(Location). */
@@ -331,13 +419,14 @@ private class CacheFixture(
 
     fun column(x: Int, z: Int): EnchantmentWorldCacheColumn = requireNotNull(enchantmentWorldCacheColumn(worldId, x, z, 1))
 
-    fun player(chunkX: Int, chunkZ: Int, y: Double = 65.0): Player {
+    fun player(chunkX: Int, chunkZ: Int, y: Double = 65.0, name: String = "Finder"): Player {
         val player = mockk<Player>()
         val id = UUID.randomUUID()
         val column = column(chunkX, chunkZ)
         locations[id] = Location(world, column.x + 0.5, y, column.z + 0.5)
         players[id] = player
         every { player.uniqueId } returns id
+        every { player.name } returns name
         every { player.location } answers { locations.getValue(id).clone() }
         every { player.gameMode } returns GameMode.SURVIVAL
         every { player.isOnline } returns true

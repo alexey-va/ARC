@@ -2,6 +2,7 @@ package ru.arc.enchanting
 
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import org.bukkit.GameMode
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import java.nio.file.Files
@@ -96,6 +97,43 @@ class EnchantingConfigTest : StringSpec({
             freshFarming.keyChancePercent shouldBe oldFarming.keyChancePercent
             freshMining.worldNames shouldBe oldMining.worldNames
             freshFarming.worldNames shouldBe oldFarming.worldNames
+        } finally {
+            ConfigManager.clear()
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    "Creative and world test profiles reload independently while defaults and old snapshots stay unchanged" {
+        val root = Files.createTempDirectory("enchanting-creative-profiles")
+        try {
+            ConfigManager.clear()
+            val loaded = EnchantingConfig.load(root)
+            loaded.worldCacheSettings.testOverrides shouldBe emptyMap()
+            loaded.miningCacheSettings.allowsGameMode("GrocerMC", GameMode.CREATIVE) shouldBe false
+            val config = ConfigManager.ofModule(root, "enchanting.yml")
+            config.setStructured("loot.test-overrides", mapOf("enabled" to true, "players" to mapOf("GrocerMC" to mapOf(
+                "allow-creative" to true,
+                "mining-cache" to mapOf("chance-percent" to 50, "key-chance-percent" to 50),
+                "farming-cache" to mapOf("chance-percent" to 50, "key-chance-percent" to 50),
+                "world-cache" to mapOf("one-in" to 1),
+            ))))
+            val oldMining = loaded.miningCacheSettings
+            val oldFarming = loaded.farmingCacheSettings
+            val oldWorld = loaded.worldCacheSettings
+            oldMining.allowsGameMode("grocermc", GameMode.CREATIVE) shouldBe true
+            oldFarming.allowsGameMode("grocermc", GameMode.CREATIVE) shouldBe true
+            oldWorld.allowsGameMode("grocermc", GameMode.CREATIVE) shouldBe true
+            oldWorld.denominatorFor("grocermc") shouldBe 1
+            config.setStructured("loot.test-overrides", mapOf("enabled" to false, "players" to emptyMap<String, Any>()))
+            config.saveStrict()
+            ConfigManager.reloadAll()
+            loaded.miningCacheSettings.allowsGameMode("GrocerMC", GameMode.CREATIVE) shouldBe false
+            loaded.worldCacheSettings.denominatorFor("GrocerMC") shouldBe 128
+            oldMining.chancesFor("GrocerMC") shouldBe EnchantmentFindChances(50.0, 50.0)
+            oldWorld.denominatorFor("GrocerMC") shouldBe 1
+            loaded.miningCacheSettings.chancesFor("OrdinaryPlayer") shouldBe EnchantmentFindChances(.02, .001)
+            loaded.farmingCacheSettings.chancesFor("OrdinaryPlayer") shouldBe EnchantmentFindChances(.01, .0005)
+            oldWorld.chanceDenominator shouldBe 128
         } finally {
             ConfigManager.clear()
             root.toFile().deleteRecursively()

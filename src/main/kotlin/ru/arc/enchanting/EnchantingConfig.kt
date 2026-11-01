@@ -48,6 +48,7 @@ internal class EnchantingConfig(private val config: Config) {
         chancePercent = config.double("loot.mining-cache.chance-percent"),
         keyChancePercent = config.double("loot.mining-cache.key-chance-percent", 0.0),
         testOverrides = findTestOverrides.mining,
+        creativeTestPlayers = findTestOverrides.miningCreativePlayers,
     )
 
     val farmingCacheEnabled get() = config.bool("loot.farming-cache.enabled", false)
@@ -62,6 +63,7 @@ internal class EnchantingConfig(private val config: Config) {
         cooldownSeconds = config.long("loot.farming-cache.cooldown-seconds"),
         keyChancePercent = config.double("loot.farming-cache.key-chance-percent", 0.0),
         testOverrides = findTestOverrides.farming,
+        creativeTestPlayers = findTestOverrides.farmingCreativePlayers,
     )
 
     val worldCacheSettings get() = EnchantmentWorldCacheSettings(
@@ -69,6 +71,8 @@ internal class EnchantingConfig(private val config: Config) {
         enabled = config.bool("loot.world-cache.enabled", false),
         worldNames = config.stringList("loot.world-cache.worlds").toSet(),
         chanceDenominator = config.int("loot.world-cache.one-in"),
+        testOverrides = findTestOverrides.worldCaches,
+        creativeTestPlayers = findTestOverrides.worldCacheCreativePlayers,
     )
 
     fun text(key: String, vararg resolvers: TagResolver): Component =

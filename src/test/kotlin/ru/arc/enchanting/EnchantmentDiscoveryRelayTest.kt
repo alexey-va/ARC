@@ -158,6 +158,24 @@ class EnchantmentDiscoveryRelayTest : FreeSpec({
         viewer.scheduler.timerCount() shouldBe 0
     }
 
+    "public discovery only relays ordinary chances and never named Creative test profiles" {
+        val source = DiscoveryRelayFixture("survival")
+        val odds = mapOf("GrocerMC" to EnchantmentFindChances(50.0, 50.0))
+        source.relay(
+            mining = { EnchantmentMiningLootSettings(true, setOf("survival"), setOf(Material.STONE), .02, .001, odds, setOf("GrocerMC")) },
+            worldCaches = { EnchantmentWorldCacheSettings(true, true, setOf("survival"), 128, mapOf("GrocerMC" to 1), setOf("GrocerMC")) },
+            farming = { EnchantmentFarmingLootSettings(true, setOf("survival"), setOf(Material.WHEAT), .01, 86_400, .0005, odds, setOf("GrocerMC")) },
+        ).use {
+            source.scheduler.executeImmediate()
+            val public = source.lastPublished()
+            public.mining?.chancePercent shouldBe .02
+            public.farming?.chancePercent shouldBe .01
+            public.worldCaches?.chanceDenominator shouldBe 128
+            source.redis.getPublishedMessages().toString().lowercase().contains("grocermc") shouldBe false
+            source.redis.getPublishedMessages().toString().contains("creative") shouldBe false
+        }
+    }
+
     "closing fences queued delivery and a new lifecycle starts unknown" {
         val fixture = DiscoveryRelayFixture()
         val relay = fixture.relay()

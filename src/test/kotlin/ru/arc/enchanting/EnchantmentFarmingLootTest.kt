@@ -3,6 +3,7 @@ package ru.arc.enchanting
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import org.bukkit.GameMode
 import org.bukkit.Material
 import org.bukkit.block.data.Ageable
 import org.bukkit.persistence.PersistentDataType
@@ -145,6 +146,35 @@ class EnchantmentFarmingLootTest : StringSpec({
                         f.breakBlock(f.host, farm::onBlockBreak)
                         f.items().single().itemStack.isSimilar(if (reward == EnchantmentFindReward.KEY) f.key else f.box) shouldBe true
                         f.rolls shouldBe 1
+                        f.mature(f.origin); f.mature(f.host)
+                        f.breakBlock(f.origin, farm::onBlockBreak)
+                        f.resolved shouldBe listOf(reward)
+                        f.rolls shouldBe 1
+                    }
+                }
+            }
+        }
+    }
+
+    "named Creative farming still requires maturity and reserves one daily find for either native reward" {
+        for (chances in listOf(EnchantmentFindChances(100.0, 0.0), EnchantmentFindChances(0.0, 100.0))) {
+            MockBukkitTestRuntime.open().use { paper ->
+                EnchantmentFindFixture(paper).use { f ->
+                    f.player.gameMode = GameMode.CREATIVE
+                    f.mature(f.origin); f.mature(f.host)
+                    f.farming(EnchantmentFarmingLootSettings(true, setOf("survival"), setOf(Material.WHEAT), 0.0, 86_400, 0.0,
+                        mapOf("fInDeR" to chances), setOf("FINDER"))).use { farm ->
+                        f.origin.blockData = (f.origin.blockData as Ageable).apply { age = 1 }
+                        f.breakBlock(f.origin, farm::onBlockBreak)
+                        f.rolls shouldBe 0
+                        f.mature(f.origin)
+                        f.breakBlock(f.origin, farm::onBlockBreak)
+                        val reward = if (chances.keyChancePercent == 100.0) EnchantmentFindReward.KEY else EnchantmentFindReward.LOOTBOX
+                        f.resolved shouldBe listOf(reward)
+                        f.farmingClaim() shouldBe f.now
+                        f.items().size shouldBe 0
+                        f.breakBlock(f.host, farm::onBlockBreak)
+                        f.items().single().itemStack.isSimilar(if (reward == EnchantmentFindReward.KEY) f.key else f.box) shouldBe true
                         f.mature(f.origin); f.mature(f.host)
                         f.breakBlock(f.origin, farm::onBlockBreak)
                         f.resolved shouldBe listOf(reward)

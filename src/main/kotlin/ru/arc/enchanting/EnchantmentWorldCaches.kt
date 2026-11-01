@@ -30,19 +30,31 @@ import java.util.UUID
 import java.util.logging.Level
 import kotlin.math.abs
 
-internal data class EnchantmentWorldCacheSettings(
+internal class EnchantmentWorldCacheSettings(
     val survivalBackend: Boolean,
     val enabled: Boolean,
-    val worldNames: Set<String>,
+    worldNames: Set<String>,
     val chanceDenominator: Int,
+    testOverrides: Map<String, Int> = emptyMap(),
+    creativeTestPlayers: Set<String> = emptySet(),
 ) {
+    val worldNames: Set<String> = Collections.unmodifiableSet(worldNames.toSet())
+    val testOverrides: Map<String, Int> = immutableEnchantmentFindTestOverrides(testOverrides)
+    val creativeTestPlayers: Set<String> = immutableEnchantmentFindCreativePlayers(creativeTestPlayers, this.testOverrides.keys)
+
     init {
         require(chanceDenominator > 0) { "World-cache chance denominator must be positive" }
+        require(testOverrides.values.all { it > 0 }) { "World-cache test chance denominators must be positive" }
         require(worldNames.none(String::isBlank)) { "World-cache world names must not be blank" }
         require(worldNames.map { it.trim().lowercase(Locale.ROOT) }.distinct().size == worldNames.size) {
             "World-cache world names must be unique ignoring case"
         }
     }
+
+    fun denominatorFor(playerName: String): Int = testOverrides[playerName.lowercase(Locale.ROOT)] ?: chanceDenominator
+
+    fun allowsGameMode(playerName: String, gameMode: GameMode): Boolean =
+        allowsEnchantmentFindGameMode(playerName, gameMode, creativeTestPlayers)
 }
 
 internal data class EnchantmentWorldCacheColumn(val x: Int, val z: Int)
@@ -107,7 +119,7 @@ internal class EnchantmentWorldCaches(
     private data class ChunkKey(val worldId: UUID, val x: Int, val z: Int)
     private data class Probe(val playerId: UUID, val column: EnchantmentWorldCacheColumn)
 
-    private val settings = settings.copy(worldNames = Collections.unmodifiableSet(settings.worldNames.toSet()))
+    private val settings = settings
     private val worlds = settings.worldNames.mapTo(mutableSetOf()) { it.trim().lowercase(Locale.ROOT) }
     private val inspectedKey = NamespacedKey(plugin, "ae_world_cache_inspected")
     private val pending = LinkedHashMap<ChunkKey, Probe>()
@@ -117,8 +129,7 @@ internal class EnchantmentWorldCaches(
     private var closed = false
     private var failureReported = false
 
-    internal fun settingsSnapshot(): EnchantmentWorldCacheSettings =
-        settings.copy(worldNames = Collections.unmodifiableSet(settings.worldNames.toSet()))
+    internal fun settingsSnapshot(): EnchantmentWorldCacheSettings = settings
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onMove(event: PlayerMoveEvent) {
@@ -130,10 +141,10 @@ internal class EnchantmentWorldCaches(
         val chunkZ = to.blockZ shr 4
         if (from.world?.uid == world.uid && (from.blockX shr 4) == chunkX && (from.blockZ shr 4) == chunkZ) return
         val player = event.player
-        if (player.gameMode != GameMode.SURVIVAL || !allowsWorld(world) || !player.isOnline || player.isDead) return
+        if (!settings.allowsGameMode(player.name, player.gameMode) || !allowsWorld(world) || !player.isOnline || player.isDead) return
         val key = ChunkKey(world.uid, chunkX, chunkZ)
         if (key in pending || pending.size >= MAX_PENDING) return
-        val column = enchantmentWorldCacheColumn(world.uid, chunkX, chunkZ, settings.chanceDenominator) ?: return
+        val column = enchantmentWorldCacheColumn(world.uid, chunkX, chunkZ, settings.denominatorFor(player.name)) ?: return
         pending[key] = Probe(player.uniqueId, column)
         scheduleNext()
     }
@@ -218,7 +229,7 @@ internal class EnchantmentWorldCaches(
     }
 
     private fun playerAtChunk(player: Player, key: ChunkKey): Boolean {
-        if (!player.isOnline || player.isDead || player.gameMode != GameMode.SURVIVAL) return false
+        if (!player.isOnline || player.isDead || !settings.allowsGameMode(player.name, player.gameMode)) return false
         val location = player.location
         return location.world?.uid == key.worldId && (location.blockX shr 4) == key.x && (location.blockZ shr 4) == key.z
     }

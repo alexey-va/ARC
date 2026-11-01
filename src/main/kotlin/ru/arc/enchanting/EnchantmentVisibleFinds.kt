@@ -88,11 +88,12 @@ internal class EnchantmentVisibleFinds(
     private data class Preparation(val find: Find, val expectedState: String)
     private data class BreakCapture(
         val event: BlockBreakEvent, val source: EnchantmentFindSource, val find: Find?,
-        val canClaim: Boolean, val afterAccepted: () -> Unit, var drop: BlockDropItemEvent? = null,
+        val canClaim: Boolean, val creativeTestBreak: Boolean, val afterAccepted: () -> Unit, var drop: BlockDropItemEvent? = null,
     )
     /** Detached native claim: no retired runtime, tasks, configuration, factories or global bindings. */
     private data class ClaimReceipt(
         val event: BlockBreakEvent, val drop: BlockDropItemEvent?, val canClaim: Boolean,
+        val creativeTestBreak: Boolean,
         val find: Find, val marker: NamespacedKey, val rewardKey: NamespacedKey, val reward: ItemStack?,
     ) {
         /** Returns true only when this exact durable find was consumed. */
@@ -100,6 +101,7 @@ internal class EnchantmentVisibleFinds(
             val block = event.block
             val world = block.world
             if (event.isCancelled || !world.isChunkLoaded(block.x shr 4, block.z shr 4)) return false
+            if (creativeTestBreak && !block.type.isAir) return false
             if (drop == null && block.type == find.material) return false
             val data = block.chunk.persistentDataContainer
             if (data.get(marker, PersistentDataType.STRING) != find.encode()) return false
@@ -159,12 +161,13 @@ internal class EnchantmentVisibleFinds(
     }
 
     /** Captures provenance before eco's deferred cleanup; final native break AND drop must succeed. */
-    fun captureBreak(event: BlockBreakEvent, source: EnchantmentFindSource, canClaim: Boolean, afterAccepted: () -> Unit = {}) {
+    fun captureBreak(event: BlockBreakEvent, source: EnchantmentFindSource, canClaim: Boolean,
+                     creativeTestBreak: Boolean = false, afterAccepted: () -> Unit = {}) {
         if (closed || event.isCancelled || !loaded(event.block) || breaks.size >= MAX_PENDING) return
         val position = position(event.block)
         if (position in breaks) return
         val find = read(event.block.chunk, source)?.takeIf { it.isAt(event.block) }
-        val capture = BreakCapture(event, source, find, canClaim, afterAccepted)
+        val capture = BreakCapture(event, source, find, canClaim, creativeTestBreak, afterAccepted)
         breaks[position] = capture
         tasks.runLater(1) {
             if (closed || breaks.remove(position) !== capture) return@runLater
@@ -228,7 +231,9 @@ internal class EnchantmentVisibleFinds(
         val drop = capture.drop
         val player = event.player
         val accepted = capture.canClaim && event.isDropItems && drop != null && !drop.isCancelled &&
-            player.isOnline && player.gameMode == GameMode.SURVIVAL && player.world.uid == block.world.uid
+            (!capture.creativeTestBreak || block.type.isAir) && player.isOnline &&
+            (player.gameMode == GameMode.SURVIVAL || capture.creativeTestBreak && player.gameMode == GameMode.CREATIVE) &&
+            player.world.uid == block.world.uid
         val find = capture.find
         if (find != null) {
             if (detachClaim(capture)?.settle() == true) active.remove(key(block.chunk, capture.source))?.handles?.forEach { it.remove() }
@@ -243,7 +248,8 @@ internal class EnchantmentVisibleFinds(
         val reward = bytes?.takeIf { it.size in 1..MAX_REWARD_BYTES }?.let { ItemStack.deserializeBytes(it) }?.takeIf {
             !it.type.isAir && it.amount == 1 && (find.reward != EnchantmentFindReward.LOOTBOX || isEnchantmentLootbox(it, readTreasureKey))
         }
-        return ClaimReceipt(capture.event, capture.drop, capture.canClaim, find, marker(capture.source), rewardKey(capture.source), reward)
+        return ClaimReceipt(capture.event, capture.drop, capture.canClaim, capture.creativeTestBreak,
+            find, marker(capture.source), rewardKey(capture.source), reward)
     }
 
     @EventHandler(priority = EventPriority.MONITOR)

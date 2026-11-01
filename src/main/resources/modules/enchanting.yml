@@ -69,15 +69,20 @@ loot:
     dust-percent: 1.5
   # Personal operator QA odds; apply changes with /arc reload, without a server restart.
   # Only listed names are matched (case-insensitive). Omitted activities use ordinary odds.
+  # Creative stays ineligible unless that named profile explicitly sets allow-creative: true
+  # and configures the activity. Adventure/Spectator are always excluded; OP grants no opt-in.
   # Chunk quotas, cooldowns, natural-block and mature-crop requirements still apply.
   test-overrides:
     enabled: false
     players: {}
     # Replace {} with a named profile, for example:
     #   CodexQA_728:
+    #     allow-creative: false
     #     mining-cache:
     #       chance-percent: 100
     #       key-chance-percent: 0
+    #     world-cache:
+    #       one-in: 1
     #     farming-cache:
     #       chance-percent: 100
     #       key-chance-percent: 0
