@@ -4,6 +4,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.mockk
+import io.mockk.every
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.command.CommandSender
@@ -19,8 +20,26 @@ import ru.arc.paper.testing.failOnUnsupportedMockBukkitOperation
 import ru.arc.text.LocaleCatalog
 import ru.arc.text.LocalizedMiniMessage
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 
 class AuroraCatalogTest : FreeSpec({
+    "reload waits for predecessor display cleanup and never activates after a failed drain" {
+        for (success in listOf(true, false)) withCatalog { fixture ->
+            val drain = CompletableFuture<Void>()
+            fixture.plugin.engine!!.close()
+            val previous = mockk<AuroraEngine>(relaxed = true)
+            every { previous.closeAsync() } returns drain
+            ArcAuroraPlugin::class.java.getDeclaredField("engine").apply { isAccessible = true }.set(fixture.plugin, previous)
+            fixture.command(fixture.admin, "reload")
+            fixture.plugin.engine shouldBe null
+            fixture.paper.server.scheduler.performTicks(2)
+            fixture.plugin.engine shouldBe null
+            if (success) drain.complete(null) else drain.completeExceptionally(IllegalStateException("cleanup failed"))
+            fixture.paper.server.scheduler.performTicks(2)
+            (fixture.plugin.engine != null) shouldBe success
+        }
+    }
+
     "catalog commands and positional completion use the current presets behind the existing admin permission" {
         withCatalog { fixture ->
             val guest = fixture.paper.addPlayer("CatalogGuest")

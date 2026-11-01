@@ -1,15 +1,16 @@
 # ArcAurora
 
 First-party biome ambience for RusCrafting. The standalone Paper plugin sends
-native particles to individual viewers through ArcCore. It uses vanilla client
-particles and needs no resource pack, display entities or terrain changes.
+native particles and client-only lantern item displays to individual viewers through
+ArcCore. Bundled defaults use vanilla materials and need no resource pack or terrain
+changes. Runtime profiles can reuse an existing custom item model.
 The build targets **Java 25**, **Paper `1.21.11-R0.1-SNAPSHOT`** and **ArcCore
 `2.7.69`**. The standalone plugin requires ArcCore and PacketEvents at runtime;
 the PacketEvents compile version comes from the repository's dependency catalog.
 
 ## Visual direction
 
-The bundled configuration contains **25 ordinary profiles** and **28 sky variants**
+The bundled configuration contains **25 ordinary profiles** and **29 sky variants**
 sampled into up to **nine retained world cells** for `treasure-hunt`. The sky
 preserves the accepted soft-lines palette: one familiar white wave, blue and
 orange waves/curls, a green spark wave, three frequent meteor variants and one
@@ -47,6 +48,32 @@ Swept admission includes every interpolated pose and its depth, roll and scale.
 Simultaneous legacy strokes and two celestial scenes still share the same cap;
 rotating scene order can reduce an individual scene's effective refresh rate at
 busy moments. An isolated preview does not establish maximum-concurrency density.
+
+The `sky_lanterns` profile adds three slowly rising lanterns to `treasure-hunt`.
+The separate `lanterns` preset previews that same procession with
+`/arcaurora preview self lanterns`. At the bundled size they rise nine blocks and
+follow three blocks of common wind over 600 ticks, starting at staggered times.
+Their anchors remain world-fixed; their gentle sway does not follow the camera.
+Initial height is 8–14 blocks above loaded terrain, admission distance is 12–48,
+and item poses update every four ticks. Lantern and celestial scenes share the
+existing aggregate limit of two retained scenes per viewer.
+
+`SKY_LANTERNS` uses 1–6 stable item identities (`sky-points`, default profile: 3).
+`sky-model` configures `material`, optional `custom-model-data`, `scale` and
+`pivot-x`, `pivot-y`, `pivot-z`. The pivot is in the item's `NONE` context after
+standard model centering; the renderer compensates it after rotation and scale.
+The portable default is `LANTERN`, scale 1, zero pivot. The existing red Chinese
+model can be selected in node configuration as `PAPER`, model data `12014`, with
+pivot `(0, 0.53125, 0.5)` and scale 1; this reuses the installed pack unchanged.
+Its full hull is 1 × 1.9375 × 1 blocks, including its mounting stem and tassel.
+
+Lanterns are private packet displays, never server entities. Core owns received-
+chunk tracking, asynchronous packet delivery and drainable cleanup. Items are
+full-bright with no ground shadow, glow outline or added flame: the red model's
+opaque paper would hide an internal flame. Birth and departure use a smooth
+scale envelope, not unsupported item-texture alpha. The model's brightness does
+not illuminate terrain or imply shader bloom. A source-driven model/motion
+preview is separate evidence from native Minecraft rendering and pack loading.
 
 The separate `particle-gallery` preset contains ready-to-use material studies.
 It is available through private admin preview and is not mixed into automatic
@@ -538,7 +565,7 @@ Run from the repository root with JDK 25:
 ```
 
 The expected local runtime artifact is
-`arc-aurora/build/libs/ArcAurora-0.1.9.jar`. The public Maven API artifact
+`arc-aurora/build/libs/ArcAurora-0.1.10.jar`. The public Maven API artifact
 `ru.ruscrafting.arc:arc-aurora-api:0.1.0` was verified on 2026-10-29 in the
 [RusCrafting repository](https://repo.rus-crafting.ru/grocermc/ru/ruscrafting/arc/arc-aurora-api/0.1.0/arc-aurora-api-0.1.0.pom).
 That API publication does not establish a runtime-plugin build, delivery,
@@ -579,5 +606,5 @@ measured performance result is claimed by this README. Publication, artifact
 delivery and runtime activation require separate operational evidence.
 
 `sky-points` overrides `points` only for sky scenes. The nightly mode and current shape catalog
-require ArcAurora 0.1.9; do not reload this configuration into an older runtime.
+require ArcAurora 0.1.10; do not reload this configuration into an older runtime.
 The 25 ordinary biome profiles and their sampling behavior are unchanged.

@@ -1,6 +1,7 @@
 package ru.arc.aurora
 
 import org.bukkit.Color
+import org.bukkit.Material
 import org.bukkit.Particle
 import org.bukkit.World
 import org.bukkit.configuration.ConfigurationSection
@@ -71,7 +72,7 @@ enum class AuroraShape {
     POINT, LINE, CUBE, RING, CIRCLE, SPHERE, WAVE, HELIX, ARC, CRYSTAL, STAR, METEOR,
     TRACK_SPIRAL, TRACK_PAIR, TRACK_SCATTER, TRACK_LENS, TRACK_KNOT,
     TRACK_FLYBY, TRACK_FLOCK, TRACK_KINK, TRACK_RIPPLE, TRACK_EYE, TRACK_SLINGSHOT, TRACK_SKIP,
-    JELLYFISH, MANTA_RAY, LIGHT_KNOT, REVERSE_LIGHTNING, SKY_CORAL, MOON_FAN;
+    JELLYFISH, MANTA_RAY, LIGHT_KNOT, REVERSE_LIGHTNING, SKY_CORAL, MOON_FAN, SKY_LANTERNS;
 
     internal val isTrack: Boolean get() = when (this) {
         TRACK_SPIRAL, TRACK_PAIR, TRACK_SCATTER, TRACK_LENS, TRACK_KNOT,
@@ -86,6 +87,13 @@ enum class AuroraShape {
 }
 
 data class AuroraParticleStyle(val particle: Particle, val data: Any?)
+
+data class AuroraSkyModel(
+    val material: Material = Material.LANTERN,
+    val customModelData: Int? = null,
+    val scale: Double = 1.0,
+    val pivot: AuroraOffset = AuroraOffset(0.0, 0.0, 0.0),
+)
 
 data class AuroraProfile(
     val id: String,
@@ -124,6 +132,7 @@ data class AuroraProfile(
     val skyOptions: AuroraSkyOptions = AuroraSkyOptions(),
     val skyHeadParticles: List<Particle> = emptyList(),
     val skyPalette: List<AuroraParticleStyle> = emptyList(),
+    val skyModel: AuroraSkyModel? = null,
 ) {
     private val biomePatterns = biomes.map(::compileGlob)
     private val worldPatterns = worlds.map(::compileGlob)
@@ -261,6 +270,11 @@ object AuroraConfig {
         val skyScene = source.boolean("sky-scene", false)
         val shape = source.enum("shape", AuroraShape.POINT)
         source.check("shape", skyScene || !shape.isCelestial, "celestial shapes require sky-scene: true")
+        val modelShape = shape == AuroraShape.SKY_LANTERNS
+        source.check("shape", skyScene || !modelShape, "SKY_LANTERNS requires sky-scene: true")
+        val modelSource = source.section("sky-model")
+        source.check("sky-model", modelShape || modelSource == null, "only SKY_LANTERNS accepts a sky model")
+        val model = if (modelShape) skyModel(modelSource) else null
         val palette = source.section("sky-palette")?.let { slots ->
             source.check("sky-palette", skyScene && shape.isCelestial, "only a celestial sky shape accepts a sky palette")
             source.check("sky-palette", "sky-head-particles" !in source.keys,
@@ -271,6 +285,8 @@ object AuroraConfig {
                 particleStyle(slots.requiredSection(slot))
             }.immutable()
         }.orEmpty()
+        source.check("sky-head-particles", !modelShape || "sky-head-particles" !in source.keys,
+            "SKY_LANTERNS does not accept head particles")
         val headParticles = source.strings("sky-head-particles", emptyList(), allowEmpty = true, unique = false).map { raw ->
             val particle = particlesByKey[normalizeBiomeKey(raw)]
                 ?: source.fail("sky-head-particles", "unknown particle '$raw'")
@@ -298,6 +314,11 @@ object AuroraConfig {
         val verticalMax = source.double("vertical-max", 6.0, if (skyScene) -32.0..64.0 else -32.0..32.0)
         source.check("vertical-max", verticalMax >= verticalMin, "must be at least vertical-min")
         val style = particleStyle(source)
+        val pointsRange = when {
+            modelShape -> 1..6
+            skyScene -> 1..192
+            else -> 1..24
+        }
         return AuroraProfile(
             id = id,
             priority = source.int("priority", 0, Int.MIN_VALUE..Int.MAX_VALUE),
@@ -317,8 +338,8 @@ object AuroraConfig {
             verticalMax = verticalMax,
             shape = shape,
             shapeSize = shapeSize,
-            points = if (skyScene) source.int("sky-points", source.int("points", 1, 1..192), 1..192)
-                else source.int("points", 1, 1..24),
+            points = if (skyScene) source.int("sky-points", source.int("points", 1, pointsRange), pointsRange)
+                else source.int("points", 1, pointsRange),
             particle = style.particle,
             count = source.int("count", 1, 0..16),
             offsetX = source.double("offset-x", 0.0, 0.0..2.0),
@@ -331,11 +352,33 @@ object AuroraConfig {
             motionPeriodTicks = source.int("motion-period-ticks", 400, 40..2400),
             updateTicks = source.int("update-ticks", 4, 1..200),
             spawnDelayTicks = source.int("spawn-delay-ticks", 60, 0..400),
-            skyTracers = source.int("sky-tracers", 1, if (shape.isCelestial) 1..12 else 1..4),
+            skyTracers = source.int("sky-tracers", 1, when {
+                modelShape -> 1..6
+                shape.isCelestial -> 1..12
+                else -> 1..4
+            }),
             skyRefreshTicks = source.int("sky-refresh-ticks", 0, 0..200),
             skyOptions = skyOptions,
             skyHeadParticles = headParticles,
             skyPalette = palette,
+            skyModel = model,
+        )
+    }
+
+    private fun skyModel(source: Fields?): AuroraSkyModel {
+        if (source == null) return AuroraSkyModel()
+        val materialName = source.string("material", "LANTERN")
+        val material = Material.matchMaterial(materialName) ?: source.fail("material", "unknown material '$materialName'")
+        source.check("material", material !in setOf(Material.AIR, Material.CAVE_AIR, Material.VOID_AIR), "expected a non-air material")
+        return AuroraSkyModel(
+            material = material,
+            customModelData = if ("custom-model-data" in source.keys) source.int("custom-model-data", 0, 0..Int.MAX_VALUE) else null,
+            scale = source.double("scale", 1.0, 0.1..4.0),
+            pivot = AuroraOffset(
+                source.double("pivot-x", 0.0, -4.0..4.0),
+                source.double("pivot-y", 0.0, -4.0..4.0),
+                source.double("pivot-z", 0.0, -4.0..4.0),
+            ),
         )
     }
 

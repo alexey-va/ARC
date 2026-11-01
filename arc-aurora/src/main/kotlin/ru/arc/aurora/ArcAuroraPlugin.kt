@@ -39,6 +39,7 @@ import java.util.logging.Level
 open class ArcAuroraPlugin : JavaPlugin(), Listener {
     private var runtime: PaperPluginRuntime? = null
     internal var engine: AuroraEngine? = null; private set
+    private var pendingEngine: AuroraEngine? = null
     private var messages: LocalizedMiniMessage? = null
     private val events = linkedMapOf<UUID, LinkedHashMap<UUID, String>>()
     private class Preview(profiles: List<AuroraProfile>) {
@@ -48,9 +49,10 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
     private val previews = mutableMapOf<UUID, Preview>()
     @Volatile private var eventCount = 0
     @Volatile private var previewCount = 0
+    private var retirement = CompletableFuture.completedFuture<Void>(null)
     private val hotload = PaperPluginHotload(this) {
         stopRuntime()
-        mapOf("particles" to CompletableFuture.completedFuture(Unit))
+        mapOf("visuals" to retirement)
     }
 
     override fun onEnable() {
@@ -71,13 +73,14 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
                     dependencies = mapOf("packet-budget" to (engine != null)),
                 )
             }
-            installEngine(prepareEngine(settings))
+            installEngine(prepareEngine(settings)) {
+                owner.ready("profiles" to settings.profiles.size, "permission" to settings.permission,
+                    "night_sky" to settings.nightSky.enabled, "night_preset" to settings.nightSky.preset)
+            }
             server.pluginManager.registerEvents(this, this)
             server.servicesManager.register(ArcAuroraService::class.java, object : ArcAuroraService {
                 override fun startWorldEvent(worldId: UUID, preset: String): AutoCloseable = beginEvent(worldId, preset)
             }, this, ServicePriority.Normal)
-            owner.ready("profiles" to settings.profiles.size, "permission" to settings.permission,
-                "night_sky" to settings.nightSky.enabled, "night_preset" to settings.nightSky.preset)
         } catch (failure: Exception) {
             logger.log(Level.SEVERE, "ArcAurora startup failed; no ambient particles will be sent", failure)
             server.pluginManager.disablePlugin(this)
@@ -103,6 +106,12 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
 
     private fun prepareEngine(settings: AuroraSettings): AuroraEngine {
         val owner = checkNotNull(runtime)
+        // Item registries belong to Paper startup/reload, never detached geometry or config parsing.
+        (settings.profiles + settings.eventPresets.values.flatten()).forEach { profile ->
+            profile.skyModel?.let { model ->
+                require(model.material.isItem) { "${profile.id}.sky-model.material must be an item material" }
+            }
+        }
         checkNotNull(server.servicesManager.load(ArcVisualPacketBudget::class.java)) {
             "ArcCore visual packet budget is not ready"
         }
@@ -120,11 +129,27 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
         return replacement
     }
 
-    private fun installEngine(replacement: AuroraEngine) {
+    private fun installEngine(replacement: AuroraEngine, ready: () -> Unit) {
         val owner = checkNotNull(runtime)
-        engine?.close()
-        engine = replacement
+        engine?.let { retirement = CompletableFuture.allOf(retirement, it.closeAsync()) }
+        engine = null
+        pendingEngine = replacement
+        fun activate() {
+            if (runtime !== owner || pendingEngine !== replacement) return
+            try {
+                retirement.join() // Already complete; failure must prevent a successor becoming ready.
+                pendingEngine = null
+                engine = replacement
+                ready()
+            } catch (failure: Exception) {
+                logger.log(Level.SEVERE, "ArcAurora visual retirement failed; successor will not start", failure)
+                stopRuntime()
+            }
+        }
+        if (retirement.isDone) activate()
+        else retirement.whenComplete { _, _ -> owner.tasks.runSync { activate() } }
         owner.tasks.runTimer(1L, 1L) {
+            if (engine !== replacement) return@runTimer
             try { replacement.tick() }
             catch (failure: Exception) {
                 logger.log(Level.SEVERE, "ArcAurora render failed; stopping its runtime to prevent repeated failures", failure)
@@ -155,9 +180,9 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
         }
     }
 
-    @EventHandler fun onJoin(event: PlayerJoinEvent) { engine?.join(event.player) }
-    @EventHandler fun onQuit(event: PlayerQuitEvent) { stopPreview(event.player.uniqueId); engine?.quit(event.player.uniqueId) }
-    @EventHandler fun onWorld(event: PlayerChangedWorldEvent) { engine?.invalidate(event.player.uniqueId) }
+    @EventHandler fun onJoin(event: PlayerJoinEvent) { (engine ?: pendingEngine)?.join(event.player) }
+    @EventHandler fun onQuit(event: PlayerQuitEvent) { stopPreview(event.player.uniqueId); (engine ?: pendingEngine)?.quit(event.player.uniqueId) }
+    @EventHandler fun onWorld(event: PlayerChangedWorldEvent) { (engine ?: pendingEngine)?.invalidate(event.player.uniqueId) }
     @EventHandler(ignoreCancelled = true) fun onTeleport(event: PlayerTeleportEvent) {
         if (event.from.world?.uid != event.to.world?.uid) engine?.invalidate(event.player.uniqueId)
     }
@@ -223,10 +248,11 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
                 val replacement = prepareEngine(candidate)
                 previews.keys.toList().forEach(::stopPreview)
                 runtime!!.reload()
-                installEngine(replacement)
                 messages = candidateMessages
-                runtime!!.ready("profiles" to candidate.profiles.size,
-                    "night_sky" to candidate.nightSky.enabled, "night_preset" to candidate.nightSky.preset)
+                installEngine(replacement) {
+                    runtime!!.ready("profiles" to candidate.profiles.size,
+                        "night_sky" to candidate.nightSky.enabled, "night_preset" to candidate.nightSky.preset)
+                }
                 return reply(sender, "reloaded")
             } catch (failure: Exception) {
                 logger.log(Level.WARNING, "ArcAurora reload rejected; existing settings remain active", failure)
@@ -284,7 +310,8 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
         runtime = null
         owner?.tasks?.close()
         previews.keys.toList().forEach(::stopPreview)
-        engine?.close(); engine = null
+        engine?.let { retirement = CompletableFuture.allOf(retirement, it.closeAsync()) }; engine = null
+        pendingEngine?.let { retirement = CompletableFuture.allOf(retirement, it.closeAsync()) }; pendingEngine = null
         events.clear(); eventCount = 0
         server.servicesManager.unregisterAll(this)
         org.bukkit.event.HandlerList.unregisterAll(this as org.bukkit.plugin.Plugin)

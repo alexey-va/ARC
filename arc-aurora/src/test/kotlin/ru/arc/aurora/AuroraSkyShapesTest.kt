@@ -8,7 +8,7 @@ import kotlin.math.sqrt
 
 class AuroraSkyShapesTest : FreeSpec({
     "sky frames retain every sample and stay finite within their rigid-rotation bound" {
-        for (shape in AuroraShape.entries.filterNot { it.isCelestial }) {
+        for (shape in AuroraShape.entries.filterNot { it.isCelestial || it == AuroraShape.SKY_LANTERNS }) {
             for (size in listOf(0.1, 8.0, 32.0)) {
                 for (points in listOf(1, 48, 192)) {
                     for (age in listOf(-1L, 0L, 199L, Long.MAX_VALUE)) {
@@ -167,7 +167,7 @@ class AuroraSkyShapesTest : FreeSpec({
     }
 
     "sky motion is deterministic and invalid requests fail before sampling" {
-        AuroraShape.entries.filterNot { it.isCelestial }.forEach { shape ->
+        AuroraShape.entries.filterNot { it.isCelestial || it == AuroraShape.SKY_LANTERNS }.forEach { shape ->
             AuroraSkyShapes.offsets(shape, 8.0, 48, 80, 600) shouldBe AuroraSkyShapes.offsets(shape, 8.0, 48, 680, 600)
         }
         listOf(Double.NaN, Double.NEGATIVE_INFINITY, 0.0, 32.01).forEach {

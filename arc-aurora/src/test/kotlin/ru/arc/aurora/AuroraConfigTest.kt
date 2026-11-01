@@ -4,6 +4,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import org.bukkit.Color
+import org.bukkit.Material
 import org.bukkit.Particle
 import org.bukkit.configuration.file.YamlConfiguration
 
@@ -23,6 +24,7 @@ class AuroraConfigTest : FreeSpec({
         profile.skyScene shouldBe false
         profile.skyOptions shouldBe AuroraSkyOptions()
         profile.skyPalette shouldBe emptyList()
+        profile.skyModel shouldBe null
         listOf(profile.sceneDurationTicks, profile.motionPeriodTicks, profile.updateTicks) shouldBe listOf(240, 400, 4)
         profile.biomes shouldBe listOf("*")
         profile.matches("iris:unknown_biome", "world", 15000, false, false, 80.0, 12, false) shouldBe true
@@ -291,6 +293,100 @@ class AuroraConfigTest : FreeSpec({
         AuroraConfig.parse(config).profiles.single().skyHeadParticles shouldBe emptyList()
         config.set("profiles.ambient.sky-head-particles", null)
         AuroraConfig.parse(config).profiles.single().skyHeadParticles shouldBe emptyList()
+    }
+
+    "sky lanterns default to a vanilla model while keeping their separate shape identity and particle DTO" {
+        val profile = AuroraConfig.parse(profileConfig("sky-scene" to true, "shape" to "SKY_LANTERNS")).profiles.single()
+        profile.shape shouldBe AuroraShape.SKY_LANTERNS
+        profile.shape.isCelestial shouldBe false
+        profile.shape.isTrack shouldBe false
+        profile.skyModel shouldBe AuroraSkyModel()
+        profile.points shouldBe 1
+        profile.skyTracers shouldBe 1
+        profile.particle shouldBe Particle.END_ROD
+        profile.particleData shouldBe null
+        val emptyMapping = profileConfig("sky-scene" to true, "shape" to "SKY_LANTERNS")
+        emptyMapping.createSection("profiles.ambient.sky-model")
+        AuroraConfig.parse(emptyMapping).profiles.single().skyModel shouldBe AuroraSkyModel()
+    }
+
+    "sky model material custom model scale and pivot form a detached snapshot with bounded values" {
+        val source = profileConfig("sky-scene" to true, "shape" to "SKY_LANTERNS",
+            "sky-model.material" to "minecraft:paper", "sky-model.custom-model-data" to 12014,
+            "sky-model.scale" to 1.5, "sky-model.pivot-x" to -1.0, "sky-model.pivot-y" to 2.0,
+            "sky-model.pivot-z" to 0.25)
+        val model = AuroraConfig.parse(source).profiles.single().skyModel
+        model shouldBe AuroraSkyModel(Material.PAPER, 12014, 1.5, AuroraOffset(-1.0, 2.0, 0.25))
+        source.set("profiles.ambient.sky-model.scale", 3.0)
+        source.set("profiles.ambient.sky-model.custom-model-data", null)
+        model!!.scale shouldBe 1.5
+        model.customModelData shouldBe 12014
+        val replacement = AuroraConfig.parse(source).profiles.single().skyModel!!
+        replacement.scale shouldBe 3.0
+        replacement.customModelData shouldBe null
+        listOf(Triple(0, 0.1, -4.0), Triple(Int.MAX_VALUE, 4.0, 4.0)).forEach { (cmd, scale, pivot) ->
+            val boundary = AuroraConfig.parse(profileConfig("sky-scene" to true, "shape" to "SKY_LANTERNS",
+                "sky-model.custom-model-data" to cmd, "sky-model.scale" to scale,
+                "sky-model.pivot-x" to pivot, "sky-model.pivot-y" to pivot, "sky-model.pivot-z" to pivot))
+                .profiles.single().skyModel
+            boundary shouldBe AuroraSkyModel(Material.LANTERN, cmd, scale, AuroraOffset(pivot, pivot, pivot))
+        }
+    }
+
+    "sky models reject unknown and air materials malformed sections and use outside the lantern shape" {
+        listOf("AIR", "CAVE_AIR", "VOID_AIR", "unknown_material", "elitecreatures:chinese_lamp_lantern", 7).forEach { material ->
+            shouldThrow<AuroraConfigException> {
+                AuroraConfig.parse(profileConfig("sky-scene" to true, "shape" to "SKY_LANTERNS", "sky-model.material" to material))
+            }.path shouldBe "profiles.ambient.sky-model.material"
+        }
+        listOf(false, emptyList<String>()).forEach { value ->
+            shouldThrow<AuroraConfigException> {
+                AuroraConfig.parse(profileConfig("sky-scene" to true, "shape" to "SKY_LANTERNS", "sky-model" to value))
+            }.path shouldBe "profiles.ambient.sky-model"
+        }
+        shouldThrow<AuroraConfigException> { AuroraConfig.parse(profileConfig("shape" to "SKY_LANTERNS")) }
+            .path shouldBe "profiles.ambient.shape"
+        listOf(AuroraShape.POINT, AuroraShape.TRACK_FLYBY, AuroraShape.MOON_FAN).forEach { shape ->
+            val source = profileConfig("sky-scene" to true, "shape" to shape.name)
+            source.createSection("profiles.ambient.sky-model")
+            shouldThrow<AuroraConfigException> { AuroraConfig.parse(source) }.path shouldBe "profiles.ambient.sky-model"
+        }
+        listOf(emptyList(), listOf("end_rod", "flame")).forEach { heads ->
+            shouldThrow<AuroraConfigException> {
+                AuroraConfig.parse(profileConfig("sky-scene" to true, "shape" to "SKY_LANTERNS", "sky-head-particles" to heads))
+            }.path shouldBe "profiles.ambient.sky-head-particles"
+        }
+        val palette = profileConfig("sky-scene" to true, "shape" to "SKY_LANTERNS")
+        palette.createSection("profiles.ambient.sky-palette")
+        shouldThrow<AuroraConfigException> { AuroraConfig.parse(palette) }.path shouldBe "profiles.ambient.sky-palette"
+    }
+
+    "sky model numeric validation and the one through six lantern count reject invalid candidates at their own paths" {
+        val invalid = listOf(
+            "custom-model-data" to -1, "custom-model-data" to 1.5, "custom-model-data" to "12014",
+            "custom-model-data" to Int.MAX_VALUE.toLong() + 1,
+            "scale" to 0.09, "scale" to 4.01, "scale" to Double.NaN, "scale" to Double.POSITIVE_INFINITY,
+            "scale" to "1.0",
+        ) + listOf("pivot-x", "pivot-y", "pivot-z").flatMap { field ->
+            listOf(-4.01, 4.01, Double.NaN, Double.NEGATIVE_INFINITY, "0").map { field to it }
+        }
+        invalid.forEach { (field, value) ->
+            shouldThrow<AuroraConfigException> {
+                AuroraConfig.parse(profileConfig("sky-scene" to true, "shape" to "SKY_LANTERNS", "sky-model.$field" to value))
+            }.path shouldBe "profiles.ambient.sky-model.$field"
+        }
+        listOf("points", "sky-points", "sky-tracers").forEach { field ->
+            listOf(1, 6).forEach { value ->
+                val profile = AuroraConfig.parse(profileConfig("sky-scene" to true, "shape" to "SKY_LANTERNS", field to value))
+                    .profiles.single()
+                (if (field == "sky-tracers") profile.skyTracers else profile.points) shouldBe value
+            }
+            listOf(0, 7, 1.5, "6").forEach { value ->
+                shouldThrow<AuroraConfigException> {
+                    AuroraConfig.parse(profileConfig("sky-scene" to true, "shape" to "SKY_LANTERNS", field to value))
+                }.path shouldBe "profiles.ambient.$field"
+            }
+        }
     }
 
     "the six celestial shapes require sky scene mode and keep separate identities from tracks" {

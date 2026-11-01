@@ -23,6 +23,77 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
 class AuroraEngineTest : FreeSpec({
+    "ordinary lanterns recheck the destination biome before refreshing their models" {
+        val base = skySettings(points = 3, shape = AuroraShape.SKY_LANTERNS, packets = 3)
+        val settings = base.copy(profiles = base.profiles.map {
+            it.copy(skyModel = AuroraSkyModel(), biomes = listOf("minecraft:plains"))
+        })
+        withEngine(settings) { fixture ->
+            fixture.permission(true)
+            fixture.player.location.block.biome = org.bukkit.block.Biome.PLAINS
+            fixture.pass()
+            repeat(32) { fixture.engine.tick() }
+            fixture.modelUpdates.isNotEmpty() shouldBe true
+            for (center in fixture.currentScenePoints()) {
+                for (x in -2..2) for (y in -2..6) for (z in -2..2)
+                    center.clone().add(x.toDouble(), y.toDouble(), z.toDouble()).block.biome = org.bukkit.block.Biome.DESERT
+            }
+            val sent = fixture.modelUpdates.size
+            repeat(8) { fixture.engine.tick() }
+            fixture.modelUpdates.size shouldBe sent
+            fixture.player.location.block.biome shouldBe org.bukkit.block.Biome.PLAINS
+        }
+    }
+
+    "lantern scenes update stable private model centers and retire on ping and invalidation" {
+        val base = skySettings(points = 3, shape = AuroraShape.SKY_LANTERNS, packets = 3)
+        val settings = base.copy(profiles = base.profiles.map { it.copy(skyModel = AuroraSkyModel(), updateTicks = 4) })
+        withEngine(settings) { fixture ->
+            fixture.event = settings.profiles
+            fixture.pass()
+            repeat(32) {
+                if (fixture.queued.isNotEmpty()) fixture.completePlanning()
+                fixture.engine.tick()
+            }
+            (fixture.modelUpdates.size >= 2) shouldBe true
+            fixture.modelUpdates.all { it.centers.size == 3 } shouldBe true
+            fixture.modelUpdates.map { it.key }.distinct().size shouldBe 1
+            (fixture.modelUpdates.last().centers[0].y > fixture.modelUpdates.first().centers[0].y) shouldBe true
+            fixture.locations shouldBe emptyList()
+            val sent = fixture.modelUpdates.size
+            fixture.currentPing = 251
+            fixture.engine.tick()
+            fixture.modelUpdates.size shouldBe sent
+            verify(atLeast = 1) { fixture.lanterns.removeViewer(fixture.player.uniqueId) }
+            fixture.engine.invalidate(fixture.player.uniqueId)
+            verify(atLeast = 2) { fixture.lanterns.removeViewer(fixture.player.uniqueId) }
+        }
+    }
+
+    "lantern updates respect the shared visit cap and asynchronous teardown barrier" {
+        val base = skySettings(points = 3, shape = AuroraShape.SKY_LANTERNS, packets = 3)
+        val settings = base.copy(profiles = base.profiles.map { it.copy(skyModel = AuroraSkyModel()) })
+        withEngine(settings) { fixture ->
+            fixture.event = settings.profiles
+            fixture.pass()
+            repeat(32) { fixture.engine.tick() }
+            fixture.modelUpdates.isNotEmpty() shouldBe true
+            fixture.modelClose = CompletableFuture()
+            val drain = fixture.engine.closeAsync()
+            drain.isDone shouldBe false
+            fixture.engine.closeAsync() shouldBe drain
+            fixture.modelClose.complete(null)
+            drain.isDone shouldBe true
+            verify(exactly = 1) { fixture.lanterns.closeAsync() }
+        }
+        withEngine(settings.copy(skyPacketsPerViewer = 2, packetsPerViewer = 2)) { fixture ->
+            fixture.event = fixture.settings.profiles
+            fixture.pass()
+            repeat(32) { fixture.engine.tick() }
+            fixture.modelUpdates shouldBe emptyList()
+        }
+    }
+
     "private preview uses only its explicit viewer callback and remains subject to the ping gate" {
         withEngine { fixture ->
             fixture.preview = fixture.settings.profiles
@@ -1080,13 +1151,21 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
     val emissions = mutableListOf<ObservedEmission>()
     val queued = ArrayDeque<Runnable>()
     val emitter = mockk<PaperViewerParticles>(relaxed = true)
+    val lanterns = mockk<AuroraLanternDisplays>(relaxed = true)
+    val modelUpdates = mutableListOf<ObservedLantern>()
+    var modelClose = CompletableFuture.completedFuture<Void>(null)
     private val scheduler = mockk<TaskScheduler>()
     private val scope = LifecycleTaskScope(scheduler)
     private val attachment = player.addAttachment(plugin, settings.permission, false)
     val engine = AuroraEngine(plugin, scope, settings, { if (it == player.world.uid) event else null }, { emitter },
-        { if (it == player.uniqueId) preview else null })
+        { if (it == player.uniqueId) preview else null }, { lanterns })
 
     init {
+        every { lanterns.update(any(), any(), any(), any(), any(), any(), any()) } answers {
+            requireMain()
+            modelUpdates += ObservedLantern(arg(0), arg<List<Location>>(3).map { it.clone() })
+        }
+        every { lanterns.closeAsync() } answers { modelClose }
         every { scheduler.runAsync(any()) } answers {
             queued.addLast(firstArg())
             mockk<ScheduledTask>(relaxed = true)
@@ -1252,6 +1331,8 @@ private class EngineWorld(highSky: Boolean) : org.mockbukkit.mockbukkit.world.Wo
 
 private data class ObservedEmission(val particle: Particle, val count: Int, val offsets: List<Double>, val force: Boolean,
     val viewer: java.util.UUID, val data: Any?)
+
+private data class ObservedLantern(val key: Any, val centers: List<Location>)
 
 /** Override the one controlled observation without spying on MockBukkit's inherited entity methods. */
 private class EnginePlayer(server: ServerMock, name: String = "AuroraViewer") : PlayerMock(server, name) {

@@ -68,7 +68,7 @@ object AuroraGeometry {
                 AuroraShape.TRACK_EYE, AuroraShape.TRACK_SLINGSHOT, AuroraShape.TRACK_SKIP ->
                     error("Tracks are sampled as complete ordered paths above")
                 AuroraShape.JELLYFISH, AuroraShape.MANTA_RAY, AuroraShape.LIGHT_KNOT,
-                AuroraShape.REVERSE_LIGHTNING, AuroraShape.SKY_CORAL, AuroraShape.MOON_FAN ->
+                AuroraShape.REVERSE_LIGHTNING, AuroraShape.SKY_CORAL, AuroraShape.MOON_FAN, AuroraShape.SKY_LANTERNS ->
                     error("Celestial animations require a sky scene")
             }
         }

@@ -29,7 +29,11 @@ class AuroraResourcesTest : FreeSpec({
         settings.permission shouldBe "arcaurora.view"
         settings.profiles.size shouldBe 25
         val sky = settings.eventPresets.getValue("treasure-hunt")
-        sky.size shouldBe 28
+        sky.size shouldBe 29
+        val lantern = sky.single { it.shape == AuroraShape.SKY_LANTERNS }
+        lantern.points shouldBe 3
+        lantern.skyModel shouldBe AuroraSkyModel()
+        settings.eventPresets.getValue("lanterns").single().shape shouldBe AuroraShape.SKY_LANTERNS
         val celestial = sky.filter { it.shape.isCelestial }
         celestial.map { it.shape }.toSet() shouldBe AuroraShape.entries.filter { it.isCelestial }.toSet()
         celestial.all { it.skyTracers in 8..12 && it.skyPalette.isNotEmpty() && it.skyRefreshTicks == 0 } shouldBe true
@@ -54,7 +58,7 @@ class AuroraResourcesTest : FreeSpec({
         settings.skyPacketsPerViewer shouldBe 36
         settings.skyField.maxScenes shouldBe 9
         settings.skyField.maxCelestialScenes shouldBe 2
-        sky.all { it.updateTicks == 1 && it.minDistance >= 28 && it.radius <= 96 } shouldBe true
+        sky.filter { it.skyModel == null }.all { it.updateTicks == 1 && it.minDistance >= 28 && it.radius <= 96 } shouldBe true
         settings.eventPresets["treasure-hunt"].orEmpty().any { it.skyScene && it.points > 24 } shouldBe true
         settings.ping shouldBe AuroraPingSettings(250, 180, 10, 20)
         (settings.profiles + settings.eventPresets.values.flatten()).forEach { profile ->

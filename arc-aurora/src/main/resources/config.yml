@@ -1,6 +1,7 @@
 # ArcAurora: original, restrained biome ambience for vanilla clients.
 # Distances are BLOCKS, times are Minecraft ticks, and colours are sRGB.
-# No resource pack, world lighting, entities, terrain edits or forced chunk loads.
+# Vanilla defaults need no resource pack. Lanterns use client-only item displays.
+# No world lighting, server entities, terrain edits or forced chunk loads.
 permission: arcaurora.view
 interval-ticks: 10
 viewers-per-tick: 32 # Keep nightly contours refreshed for a shared audience; the Main deadline still applies.
@@ -1087,6 +1088,61 @@ event-presets:
         blue: {particle: minecraft:soul_fire_flame}
       sky-options:
         roll-radians: 0.1
+
+    sky_lanterns:
+      biomes: ['*']
+      sky-scene: true
+      scene-duration-ticks: 600
+      spawn-delay-ticks: 80
+      sky-tracers: 3
+      update-ticks: 4
+      radius: 48
+      min-distance: 12
+      vertical-min: 8
+      vertical-max: 14
+      shape: SKY_LANTERNS
+      shape-size: 4
+      sky-points: 3
+      particle: minecraft:flame
+      sky-model:
+        material: LANTERN
+        scale: 1.0
+        pivot-x: 0.0
+        pivot-y: 0.0
+        pivot-z: 0.0
+      sky-options:
+        scale-min: 1.0
+        scale-max: 1.0
+        roll-radians: 0.0
+
+  # A private preview of the same three lanterns, without other sky variants.
+  # /arcaurora preview self lanterns
+  lanterns:
+    sky_lanterns:
+      biomes: ['*']
+      sky-scene: true
+      scene-duration-ticks: 600
+      spawn-delay-ticks: 80
+      sky-tracers: 3
+      update-ticks: 4
+      radius: 48
+      min-distance: 12
+      vertical-min: 8
+      vertical-max: 14
+      shape: SKY_LANTERNS
+      shape-size: 4
+      sky-points: 3
+      particle: minecraft:flame
+      sky-model:
+        material: LANTERN
+        scale: 1.0
+        pivot-x: 0.0
+        pivot-y: 0.0
+        pivot-z: 0.0
+      sky-options:
+        scale-min: 1.0
+        scale-max: 1.0
+        roll-radians: 0.0
 
   # Nearby material samples, available explicitly through catalog/preview.
   # This preset is separate from the automatic treasure-hunt night sky.
