@@ -58,6 +58,9 @@ Initial height is 8â€“14 blocks above loaded terrain, admission distance is 12â€
 and item poses update every four ticks. The bundled limit is four lantern groups
 (at most 24 lanterns), while celestial scenes retain their separate limit of two.
 All figures still share nine scene slots and 36 requests per visit.
+Admission distance only controls new groups. Approaching or flying through an
+existing lantern group preserves its item identities and remaining flight;
+terrain, unloaded chunks, viewer eligibility and normal expiry still retire it.
 
 Lanterns have eight world-cell selection shares among 28 other sky variants,
 instead of one share each: about 22% of cell assignments before distance,
@@ -567,8 +570,8 @@ can foreshorten a track when viewed edge-on, as with the existing planar figures
 The knot has modest depth to retain its loop in more views; it is still a thin
 finite trail rather than a solid object.
 
-Ranges describe anchors, not every particle. A separate two-block eye clearance
-remains: approaching an actual point can retire the entire scene. It never
+Ranges describe anchors, not every particle. Particle scenes retain a separate
+two-block eye clearance: approaching an actual point can retire the entire scene. It never
 carves out just that point. No chunks are loaded. Retired cells cool down rather
 than reviving an old partial tail. Native clouds, texture rendering and transport
 loss still require real-client observation; source playback is not that proof.
@@ -582,7 +585,7 @@ Run from the repository root with JDK 25:
 ```
 
 The expected local runtime artifact is
-`arc-aurora/build/libs/ArcAurora-0.1.12.jar`. The public Maven API artifact
+`arc-aurora/build/libs/ArcAurora-0.1.13.jar`. The public Maven API artifact
 `ru.ruscrafting.arc:arc-aurora-api:0.1.0` was verified on 2026-10-29 in the
 [RusCrafting repository](https://repo.rus-crafting.ru/grocermc/ru/ruscrafting/arc/arc-aurora-api/0.1.0/arc-aurora-api-0.1.0.pom).
 That API publication does not establish a runtime-plugin build, delivery,
@@ -624,5 +627,6 @@ delivery and runtime activation require separate operational evidence.
 
 `sky-points` overrides `points` only for sky scenes. The nightly mode and current shape catalog
 require ArcAurora 0.1.10 or newer; the preview drain behavior requires 0.1.11,
-and `sky-weight` requires 0.1.12.
+and `sky-weight` requires 0.1.12. Lantern groups remain visible during close
+approach starting with 0.1.13.
 The 25 ordinary biome profiles and their sampling behavior are unchanged.

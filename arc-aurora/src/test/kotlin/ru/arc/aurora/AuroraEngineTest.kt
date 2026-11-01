@@ -200,6 +200,68 @@ class AuroraEngineTest : FreeSpec({
         }
     }
 
+    "approaching and crossing a lantern group preserves all six members until their natural flight ends" {
+        val base = skySettings(points = 6, shape = AuroraShape.SKY_LANTERNS, packets = 6)
+        val settings = base.copy(profiles = base.profiles.map {
+            it.copy(skyModel = AuroraSkyModel(), sceneDurationTicks = 600, updateTicks = 4, minDistance = 12.0)
+        })
+        withEngine(settings) { fixture ->
+            fixture.preview = settings.profiles
+            fixture.advance(240)
+            val visible = fixture.activeModels.values.single()
+            visible.scales shouldBe List(6) { 1f }
+            val group = visible.key
+
+            for (distance in listOf(10.0, 2.0, 0.0, -2.0, -10.0)) {
+                val center = fixture.activeModels.getValue(group).centers.first()
+                fixture.player.teleport(center.clone().add(distance, -fixture.player.eyeHeight, 0.0)) shouldBe true
+                if (abs(distance) < 3.0)
+                    (fixture.player.eyeLocation.distanceSquared(center) < 9.0) shouldBe true
+                val before = fixture.modelUpdates.size
+                fixture.advance(8)
+                // Stable scene and member indices are the renderer's existing packet-handle identities.
+                fixture.activeModels.keys shouldBe setOf(group)
+                fixture.modelUpdates.drop(before).isNotEmpty() shouldBe true
+                fixture.modelUpdates.drop(before).all { it.key === group && it.scales == List(6) { 1f } } shouldBe true
+                fixture.retiredModels shouldBe emptyList()
+            }
+
+            val remaining = fixture.engine.beginPreviewDrain(fixture.player.uniqueId, settings.profiles)
+            (remaining > 0L) shouldBe true
+            fixture.advance(remaining.toInt() + settings.intervalTicks + 8)
+            fixture.activeModels shouldBe emptyMap()
+            fixture.modelUpdates.map { it.key }.toSet() shouldBe setOf(group)
+            fixture.retiredModels.single().scales.all { it < 0.01f } shouldBe true
+        }
+    }
+
+    "a close lantern group still retires as a whole when solid or liquid terrain obstructs its flight" {
+        val base = skySettings(points = 6, shape = AuroraShape.SKY_LANTERNS, packets = 6)
+        val settings = base.copy(profiles = base.profiles.map {
+            it.copy(skyModel = AuroraSkyModel(), sceneDurationTicks = 600, updateTicks = 4)
+        })
+        for (obstacle in listOf(Material.STONE, Material.WATER)) withEngine(settings) { fixture ->
+            fixture.preview = settings.profiles
+            fixture.advance(240)
+            val group = fixture.activeModels.keys.single()
+            val center = fixture.activeModels.getValue(group).centers.first()
+            fixture.player.teleport(center.clone().add(2.0, -fixture.player.eyeHeight, 0.0)) shouldBe true
+            fixture.advance(8)
+            fixture.activeModels.keys shouldBe setOf(group)
+            (fixture.engine.beginPreviewDrain(fixture.player.uniqueId, settings.profiles) > 0L) shouldBe true
+
+            val blocked = fixture.activeModels.getValue(group).centers.first()
+            for (x in -1..1) for (y in -1..1) for (z in -1..1)
+                blocked.clone().add(x.toDouble(), y.toDouble(), z.toDouble()).block.type = obstacle
+            val before = fixture.modelUpdates.size
+            fixture.advance(8)
+            fixture.activeModels shouldBe emptyMap()
+            fixture.retiredModels.single().key shouldBe group
+            fixture.retiredModels.single().scales shouldBe List(6) { 1f }
+            fixture.modelUpdates.size shouldBe before
+        }
+    }
+
     "lantern updates respect the shared visit cap and asynchronous teardown barrier" {
         val base = skySettings(points = 6, shape = AuroraShape.SKY_LANTERNS, packets = 6)
         val settings = base.copy(profiles = base.profiles.map { it.copy(skyModel = AuroraSkyModel()) })

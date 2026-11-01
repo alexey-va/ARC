@@ -368,7 +368,6 @@ internal class AuroraEngine(
                         }
                         if (centers.any { location ->
                             location.y < player.world.minHeight || location.y >= player.world.maxHeight ||
-                                location.distanceSquared(player.eyeLocation) < 9.0 ||
                                 !player.world.isChunkLoaded(location.blockX shr 4, location.blockZ shr 4) ||
                                 !location.block.isPassable || location.block.isLiquid ||
                                 sky.input.selection.source == Source.ORDINARY && scene.profile !in matching(player, location, settings.profiles)
