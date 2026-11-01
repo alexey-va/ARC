@@ -555,9 +555,13 @@ internal class AuroraEngine(
         for (candidate in candidates) {
             if (input.age < input.viewer.fieldAdmissionAfter || active.size >= field.maxScenes) break
             if (scenes.containsKey(candidate.cell) || retired.containsKey(candidate.cell) || rejected[candidate.cell] == candidate.epoch) continue
-            if (active.count { it.profile === candidate.profile } >= field.maxPerProfile) continue
-            if ((candidate.profile.shape.isCelestial || candidate.profile.skyModel != null) &&
-                active.count { it.profile.shape.isCelestial || it.profile.skyModel != null } >= field.maxCelestialScenes) continue
+            if (candidate.profile.shape == AuroraShape.SKY_LANTERNS) {
+                if (active.count { it.profile.shape == AuroraShape.SKY_LANTERNS } >= field.maxLanternScenes) continue
+            } else {
+                if (active.count { it.profile === candidate.profile } >= field.maxPerProfile) continue
+                if (candidate.profile.shape.isCelestial &&
+                    active.count { it.profile.shape.isCelestial } >= field.maxCelestialScenes) continue
+            }
             val distanceSquared = (candidate.x - input.x).let { it * it } + (candidate.z - input.z).let { it * it }
             val outer = minOf(field.viewDistance, candidate.profile.radius)
             if (distanceSquared > outer * outer || distanceSquared < candidate.profile.minDistance * candidate.profile.minDistance) continue

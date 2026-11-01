@@ -25,6 +25,7 @@ class AuroraConfigTest : FreeSpec({
         profile.skyOptions shouldBe AuroraSkyOptions()
         profile.skyPalette shouldBe emptyList()
         profile.skyModel shouldBe null
+        profile.skyWeight shouldBe 1
         listOf(profile.sceneDurationTicks, profile.motionPeriodTicks, profile.updateTicks) shouldBe listOf(240, 400, 4)
         profile.biomes shouldBe listOf("*")
         profile.matches("iris:unknown_biome", "world", 15000, false, false, 80.0, 12, false) shouldBe true
@@ -49,6 +50,21 @@ class AuroraConfigTest : FreeSpec({
             shouldThrow<AuroraConfigException> { AuroraConfig.parse(source) }
                 .path shouldBe "sky-packets-per-viewer"
         }
+    }
+
+    "sky weights accept bounded integer shares and reject ordinary profile weighting" {
+        for (weight in listOf(1, 8, 64)) {
+            AuroraConfig.parse(profileConfig("sky-scene" to true, "sky-weight" to weight))
+                .profiles.single().skyWeight shouldBe weight
+        }
+        for (weight in listOf(-1, 0, 65, 1.5, "8")) {
+            shouldThrow<AuroraConfigException> {
+                AuroraConfig.parse(profileConfig("sky-scene" to true, "sky-weight" to weight))
+            }.path shouldBe "profiles.ambient.sky-weight"
+        }
+        shouldThrow<AuroraConfigException> {
+            AuroraConfig.parse(profileConfig("sky-weight" to 8))
+        }.path shouldBe "profiles.ambient.sky-weight"
     }
 
     "the aggregate celestial scene cap defaults to two and accepts only an integer in one through sixteen" {
@@ -96,6 +112,21 @@ class AuroraConfigTest : FreeSpec({
         listOf("shape-size" to 8.01, "points" to 25).forEach { (field, value) ->
             shouldThrow<AuroraConfigException> { AuroraConfig.parse(profileConfig("sky-scene" to false, field to value)) }
                 .path shouldBe "profiles.ambient.$field"
+        }
+    }
+
+    "the lantern group cap is independent and accepts only one through sixteen" {
+        AuroraConfig.parse(YamlConfiguration()).skyField.maxLanternScenes shouldBe 2
+        for (cap in listOf(1, 4, 16)) {
+            val field = AuroraConfig.parse(yaml("sky-field:\n  max-lantern-scenes: $cap")).skyField
+            field.maxLanternScenes shouldBe cap
+            field.maxPerProfile shouldBe 2
+            field.maxCelestialScenes shouldBe 2
+            field.maxScenes shouldBe 9
+        }
+        for (value in listOf(0, 17, 1.5, "4")) {
+            val source = YamlConfiguration().apply { set("sky-field.max-lantern-scenes", value) }
+            shouldThrow<AuroraConfigException> { AuroraConfig.parse(source) }.path shouldBe "sky-field.max-lantern-scenes"
         }
     }
 

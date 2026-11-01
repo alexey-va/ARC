@@ -46,6 +46,7 @@ class AuroraReloadTest : FreeSpec({
                 candidate.set("sky-field.view-distance", 112.0)
                 candidate.set("sky-field.cull-hysteresis", 24.0)
                 candidate.set("sky-field.max-scenes", 8)
+                candidate.set("sky-field.max-lantern-scenes", 3)
                 candidate.set("night-sky.enabled", true)
                 candidate.set("night-sky.preset", "treasure-hunt")
                 candidate.set("night-sky.time-start", 12500)
@@ -74,6 +75,7 @@ class AuroraReloadTest : FreeSpec({
                     .skyHeadParticles shouldBe listOf(org.bukkit.Particle.FLAME, org.bukkit.Particle.SOUL_FIRE_FLAME)
                 val reloadedField = AuroraSkyFieldSettings(
                     cellSize = 52.0, jitter = 0.25, viewDistance = 112.0, cullHysteresis = 24.0, maxScenes = 8,
+                    maxLanternScenes = 3,
                 )
                 replacement.settings.skyField shouldBe reloadedField
                 val reloadedNight = AuroraNightSkySettings(enabled = true, timeStart = 12500,

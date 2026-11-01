@@ -1,6 +1,7 @@
 # ArcAurora: original, restrained biome ambience for vanilla clients.
 # Distances are BLOCKS, times are Minecraft ticks, and colours are sRGB.
-# Vanilla defaults need no resource pack. Lanterns use client-only item displays.
+# Particles need no resource pack. Bundled lanterns use the ARC item model from the server pack.
+# To use a vanilla lantern, select material LANTERN, omit custom-model-data and set all pivots to 0.
 # No world lighting, server entities, terrain edits or forced chunk loads.
 permission: arcaurora.view
 interval-ticks: 10
@@ -39,6 +40,7 @@ sky-field:
   cull-hysteresis: 16 # Retain active cells to 112 blocks; no nearest-slot churn.
   max-scenes: 9
   max-per-profile: 2 # Varied motion; at most two copies of one variant.
+  max-lantern-scenes: 4 # Six lanterns per group; other sky variants keep their existing caps.
   cull-cooldown-ticks: 80 # Let the previous native tail expire before a cell can restart.
 sky-defaults:
   # Fixed-world orientation, not a sector around the viewer.
@@ -1092,53 +1094,57 @@ event-presets:
     sky_lanterns:
       biomes: ['*']
       sky-scene: true
+      sky-weight: 8 # Eight shares among 28 other sky variants; shared scene limits still apply.
       scene-duration-ticks: 600
       spawn-delay-ticks: 80
-      sky-tracers: 3
+      sky-tracers: 6
       update-ticks: 4
-      radius: 48
+      radius: 72
       min-distance: 12
       vertical-min: 8
       vertical-max: 14
       shape: SKY_LANTERNS
       shape-size: 4
-      sky-points: 3
+      sky-points: 6
       particle: minecraft:flame
       sky-model:
-        material: LANTERN
+        material: PAPER
+        custom-model-data: 180001
         scale: 1.0
         pivot-x: 0.0
-        pivot-y: 0.0
-        pivot-z: 0.0
+        pivot-y: 0.53125
+        pivot-z: 0.5
       sky-options:
         scale-min: 1.0
         scale-max: 1.0
         roll-radians: 0.0
 
-  # A private preview of the same three lanterns, without other sky variants.
+  # A private preview of the same six lanterns, without other sky variants.
   # /arcaurora preview self lanterns
   lanterns:
     sky_lanterns:
       biomes: ['*']
       sky-scene: true
+      sky-weight: 8
       scene-duration-ticks: 600
       spawn-delay-ticks: 80
-      sky-tracers: 3
+      sky-tracers: 6
       update-ticks: 4
-      radius: 48
+      radius: 72
       min-distance: 12
       vertical-min: 8
       vertical-max: 14
       shape: SKY_LANTERNS
       shape-size: 4
-      sky-points: 3
+      sky-points: 6
       particle: minecraft:flame
       sky-model:
-        material: LANTERN
+        material: PAPER
+        custom-model-data: 180001
         scale: 1.0
         pivot-x: 0.0
-        pivot-y: 0.0
-        pivot-z: 0.0
+        pivot-y: 0.53125
+        pivot-z: 0.5
       sky-options:
         scale-min: 1.0
         scale-max: 1.0

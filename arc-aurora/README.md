@@ -49,22 +49,31 @@ Simultaneous legacy strokes and two celestial scenes still share the same cap;
 rotating scene order can reduce an individual scene's effective refresh rate at
 busy moments. An isolated preview does not establish maximum-concurrency density.
 
-The `sky_lanterns` profile adds three slowly rising lanterns to `treasure-hunt`.
+The `sky_lanterns` profile adds six slowly rising lanterns to `treasure-hunt`.
 The separate `lanterns` preset previews that same procession with
 `/arcaurora preview self lanterns`. At the bundled size they rise nine blocks and
 follow three blocks of common wind over 600 ticks, starting at staggered times.
 Their anchors remain world-fixed; their gentle sway does not follow the camera.
-Initial height is 8–14 blocks above loaded terrain, admission distance is 12–48,
-and item poses update every four ticks. Lantern and celestial scenes share the
-existing aggregate limit of two retained scenes per viewer.
+Initial height is 8–14 blocks above loaded terrain, admission distance is 12–72,
+and item poses update every four ticks. The bundled limit is four lantern groups
+(at most 24 lanterns), while celestial scenes retain their separate limit of two.
+All figures still share nine scene slots and 36 requests per visit.
 
-`SKY_LANTERNS` uses 1–6 stable item identities (`sky-points`, default profile: 3).
+Lanterns have eight world-cell selection shares among 28 other sky variants,
+instead of one share each: about 22% of cell assignments before distance,
+terrain and scene-budget checks. This makes them more common without attaching
+them to the camera or guaranteeing a group at every location. A cell retains
+its selected profile across lifecycles; its anchor jitter and motion seed vary.
+
+`SKY_LANTERNS` uses 1–6 stable item identities (`sky-points`, default profile: 6).
 `sky-model` configures `material`, optional `custom-model-data`, `scale` and
 `pivot-x`, `pivot-y`, `pivot-z`. The pivot is in the item's `NONE` context after
 standard model centering; the renderer compensates it after rotation and scale.
-The portable default is `LANTERN`, scale 1, zero pivot. The existing red Chinese
-model can be selected in node configuration as `PAPER`, model data `12014`, with
-pivot `(0, 0.53125, 0.5)` and scale 1; this reuses the installed pack unchanged.
+The parser's portable fallback is `LANTERN`, scale 1, zero pivot. The bundled
+profile uses `arc:aurora_sky_lantern` from the server pack: `PAPER`, model data
+`180001`, pivot `(0, 0.53125, 0.5)`, scale 1. This ARC variant retains the existing
+Chinese lantern's geometry and UVs, with lighter warm red paper. The original
+furniture model and texture remain unchanged (`PAPER`, model data `12014`).
 Its full hull is 1 × 1.9375 × 1 blocks, including its mounting stem and tassel.
 
 Lanterns are private packet displays, never server entities. Core owns received-
@@ -256,6 +265,7 @@ biome-aliases:
 | `points`, `sky-points` | Ordinary positions `1..24`; sky positions `1..192` across one finite stroke, or stable sample identities in a celestial animation |
 | `sky-scene` | `false` by default; retain a sky anchor and use posed, progressively revealed geometry |
 | `scene-duration-ticks` | Sky anchor lifetime after its delayed birth, `40..1200`; default `240`; unfinished strokes expire too |
+| `sky-weight` | World-cell selection shares for sky profiles, `1..64`; default `1` preserves the original selection. Ordinary profiles must keep `1` |
 | `spawn-delay-ticks` | Random delay before each sky scene starts, `0..400`; default `60`; selection prefers different birth times |
 | `sky-tracers` | Samples per eligible visit: celestial `1..12`, legacy `1..4`; default `1`. Ordinary sky outlines divide the path into contiguous heads. `METEOR` uses flight samples then that many fragments; `TRACK_*` preserves its authored head/phase ordering and uses this field only for pacing |
 | `sky-head-particles` | Optional ordered pair of no-data native particle keys, only for a sky `TRACK_FLYBY`; empty/omitted retains `particle` and its data. Present palettes use no data payload. Each head keeps its colour through partial budgets and spatial reversal |
@@ -322,7 +332,8 @@ previous engine and settings active. Admin previews stop on reload; run
 | `cull-hysteresis` | `16`; `0..64` blocks | Extra outer radius for retaining active cells |
 | `max-scenes` | `9`; `1..16` | Maximum retained scenes per viewer |
 | `max-celestial-scenes` | `2`; `1..16` | Aggregate celestial scene limit within `max-scenes`; the shared packet cap still applies |
-| `max-per-profile` | `2`; `1..16` | Limit on copies of one variant; promotes variety and bounds expensive contours |
+| `max-lantern-scenes` | `2` parser, `4` bundled; `1..16` | Lantern-only group limit within `max-scenes`; replaces `max-per-profile` for lanterns without raising celestial limits |
+| `max-per-profile` | `2`; `1..16` | Limit on copies of one non-lantern variant; promotes variety and bounds expensive contours |
 | `cull-cooldown-ticks` | `80`; `72..1200` | Minimum whole-cell retirement period after culling, also respecting the old lifecycle expiry |
 
 The 0.1.3 placement options `fan-degrees`, `angular-gap-degrees` and
@@ -350,7 +361,8 @@ event-presets:
 ```
 
 The profile entries define available variants; add/remove a uniquely named entry
-to change the catalogue. `sky-field.max-scenes` and `max-per-profile` control how
+to change the catalogue. `sky-weight` controls each variant's relative selection
+frequency. `sky-field.max-scenes`, `max-per-profile` and `max-lantern-scenes` control how
 many can coexist, subject to eligible loaded cells and the packet cap. Width, sampling,
 speed, range, height, birth delay, tracers and refresh already use the profile
 fields above. For a shorter wave tail, reduce `shape-size` or increase `sky-points` at the
@@ -432,7 +444,7 @@ ping and does not change networking settings.
 
 At 20 TPS, the default ordinary cadence allows at most 24 emission requests per
 second per viewer before other caps. The bundled world field has at most nine
-scenes and two of each profile. The shared ceiling stays **36 requests per visit**.
+scenes, up to four lantern groups and two of each other profile. The shared ceiling stays **36 requests per visit**.
 Two held crystals and seven four-sample tracks would use all 36 requests per
 visit. Simultaneous crystal growth/refresh can also reach the cap;
 per-viewer scene rotation retains fairness and unattempted heads stay pending.
@@ -570,7 +582,7 @@ Run from the repository root with JDK 25:
 ```
 
 The expected local runtime artifact is
-`arc-aurora/build/libs/ArcAurora-0.1.11.jar`. The public Maven API artifact
+`arc-aurora/build/libs/ArcAurora-0.1.12.jar`. The public Maven API artifact
 `ru.ruscrafting.arc:arc-aurora-api:0.1.0` was verified on 2026-10-29 in the
 [RusCrafting repository](https://repo.rus-crafting.ru/grocermc/ru/ruscrafting/arc/arc-aurora-api/0.1.0/arc-aurora-api-0.1.0.pom).
 That API publication does not establish a runtime-plugin build, delivery,
@@ -611,5 +623,6 @@ measured performance result is claimed by this README. Publication, artifact
 delivery and runtime activation require separate operational evidence.
 
 `sky-points` overrides `points` only for sky scenes. The nightly mode and current shape catalog
-require ArcAurora 0.1.10 or newer; the preview drain behavior requires 0.1.11.
+require ArcAurora 0.1.10 or newer; the preview drain behavior requires 0.1.11,
+and `sky-weight` requires 0.1.12.
 The 25 ordinary biome profiles and their sampling behavior are unchanged.

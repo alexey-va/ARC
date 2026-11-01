@@ -133,6 +133,7 @@ data class AuroraProfile(
     val skyHeadParticles: List<Particle> = emptyList(),
     val skyPalette: List<AuroraParticleStyle> = emptyList(),
     val skyModel: AuroraSkyModel? = null,
+    val skyWeight: Int = 1,
 ) {
     private val biomePatterns = biomes.map(::compileGlob)
     private val worldPatterns = worlds.map(::compileGlob)
@@ -255,6 +256,7 @@ object AuroraConfig {
                 cullCooldownTicks = field?.int("cull-cooldown-ticks", 80, 72..1200) ?: 80,
                 maxPerProfile = field?.int("max-per-profile", 2, 1..16) ?: 2,
                 maxCelestialScenes = field?.int("max-celestial-scenes", 2, 1..16) ?: 2,
+                maxLanternScenes = field?.int("max-lantern-scenes", 2, 1..16) ?: 2,
             ),
         )
     }
@@ -268,6 +270,8 @@ object AuroraConfig {
         }.immutable()
         val worlds = source.strings("worlds", listOf("*")).immutable()
         val skyScene = source.boolean("sky-scene", false)
+        val skyWeight = source.int("sky-weight", 1, 1..64)
+        source.check("sky-weight", skyScene || skyWeight == 1, "a weighted profile requires sky-scene: true")
         val shape = source.enum("shape", AuroraShape.POINT)
         source.check("shape", skyScene || !shape.isCelestial, "celestial shapes require sky-scene: true")
         val modelShape = shape == AuroraShape.SKY_LANTERNS
@@ -362,6 +366,7 @@ object AuroraConfig {
             skyHeadParticles = headParticles,
             skyPalette = palette,
             skyModel = model,
+            skyWeight = skyWeight,
         )
     }
 

@@ -31,9 +31,13 @@ class AuroraResourcesTest : FreeSpec({
         val sky = settings.eventPresets.getValue("treasure-hunt")
         sky.size shouldBe 29
         val lantern = sky.single { it.shape == AuroraShape.SKY_LANTERNS }
-        lantern.points shouldBe 3
-        lantern.skyModel shouldBe AuroraSkyModel()
-        settings.eventPresets.getValue("lanterns").single().shape shouldBe AuroraShape.SKY_LANTERNS
+        lantern.points shouldBe 6
+        lantern.skyTracers shouldBe 6
+        lantern.skyWeight shouldBe 8
+        lantern.radius shouldBe 72.0
+        lantern.skyModel shouldBe AuroraSkyModel(org.bukkit.Material.PAPER, 180001, 1.0, AuroraOffset(0.0, 0.53125, 0.5))
+        settings.eventPresets.getValue("lanterns").single() shouldBe lantern
+        sky.filter { it !== lantern }.all { it.skyWeight == 1 } shouldBe true
         val celestial = sky.filter { it.shape.isCelestial }
         celestial.map { it.shape }.toSet() shouldBe AuroraShape.entries.filter { it.isCelestial }.toSet()
         celestial.all { it.skyTracers in 8..12 && it.skyPalette.isNotEmpty() && it.skyRefreshTicks == 0 } shouldBe true
@@ -58,6 +62,7 @@ class AuroraResourcesTest : FreeSpec({
         settings.skyPacketsPerViewer shouldBe 36
         settings.skyField.maxScenes shouldBe 9
         settings.skyField.maxCelestialScenes shouldBe 2
+        settings.skyField.maxLanternScenes shouldBe 4
         sky.filter { it.skyModel == null }.all { it.updateTicks == 1 && it.minDistance >= 28 && it.radius <= 96 } shouldBe true
         settings.eventPresets["treasure-hunt"].orEmpty().any { it.skyScene && it.points > 24 } shouldBe true
         settings.ping shouldBe AuroraPingSettings(250, 180, 10, 20)

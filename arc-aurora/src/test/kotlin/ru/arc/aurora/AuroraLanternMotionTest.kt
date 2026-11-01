@@ -60,11 +60,11 @@ class AuroraLanternMotionTest : FreeSpec({
 private fun exportLanternPreview() {
     val output = System.getenv("AURORA_LANTERN_PREVIEW_DIR") ?: return
     val directory = File(output).also { it.mkdirs() }
-    val frames = AuroraLanternMotion.frames(3)
+    val frames = AuroraLanternMotion.frames(6)
     val pivot = AuroraOffset(0.0, 0.53125, 0.5)
     val samples = (0..600 step 4).joinToString(prefix = "[", postfix = "]") { tick ->
         val progress = (tick / 599.0).coerceIn(0.0, 1.0)
-        val parts = (0..2).joinToString(prefix = "[", postfix = "]") { index ->
+        val parts = frames.first().indices.joinToString(prefix = "[", postfix = "]") { index ->
             val center = AuroraCelestialShapes.pointAt(frames, progress, index).offset
             val pose = AuroraLanternMotion.displayPose(index, progress, 0.35, 1.0, pivot)
             "{\"index\":$index,\"center\":[${center.x * 4},${center.y * 4},${center.z * 4}]," +
@@ -74,5 +74,5 @@ private fun exportLanternPreview() {
         "{\"tick\":$tick,\"parts\":$parts}"
     }
     File(directory, "lantern-motion.json").writeText("{\"durationTicks\":600,\"updateTicks\":4," +
-        "\"model\":\"chinese_lamp_lantern\",\"pivot\":[0,0.53125,0.5],\"frames\":$samples}")
+        "\"model\":\"aurora_sky_lantern\",\"pivot\":[0,0.53125,0.5],\"frames\":$samples}")
 }

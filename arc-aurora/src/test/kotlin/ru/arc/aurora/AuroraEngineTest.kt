@@ -64,6 +64,35 @@ class AuroraEngineTest : FreeSpec({
         }
     }
 
+    "four six-lantern groups finish their existing flights after the sixty-second preview boundary" {
+        val base = skySettings(points = 6, shape = AuroraShape.SKY_LANTERNS, packets = 36)
+        val settings = base.copy(profiles = base.profiles.map {
+            it.copy(skyModel = AuroraSkyModel(), sceneDurationTicks = 600, spawnDelayTicks = 80, updateTicks = 4)
+        }, skyField = base.skyField.copy(maxScenes = 9, maxLanternScenes = 4))
+        withEngine(settings) { fixture ->
+            fixture.preview = settings.profiles
+            fixture.advance(1200)
+            val visible = fixture.activeModels.keys.toSet()
+            visible.size shouldBe 4
+            visible.forEach { key ->
+                fixture.modelUpdates.any { it.key === key && it.scales == List(6) { 1f } } shouldBe true
+            }
+            val boundary = fixture.modelUpdates.size
+            val remaining = fixture.engine.beginPreviewDrain(fixture.player.uniqueId, settings.profiles)
+            (remaining in 1L..600L) shouldBe true
+            fixture.activeModels.keys shouldBe visible
+            fixture.advance(remaining.toInt())
+            val tail = fixture.modelUpdates.drop(boundary)
+            tail.isNotEmpty() shouldBe true
+            tail.all { it.key in visible && it.centers.size == 6 } shouldBe true
+            visible.forEach { key -> tail.last { it.key === key }.scales.all { it < 0.01f } shouldBe true }
+            fixture.activeModels shouldBe emptyMap()
+            val finished = fixture.modelUpdates.size
+            fixture.advance(700)
+            fixture.modelUpdates.size shouldBe finished
+        }
+    }
+
     "preview drain excludes queued plans and admitted zero-size lantern groups" {
         val base = skySettings(points = 3, shape = AuroraShape.SKY_LANTERNS, packets = 3)
         val settings = base.copy(profiles = base.profiles.map { it.copy(skyModel = AuroraSkyModel(), updateTicks = 4) })
@@ -172,13 +201,14 @@ class AuroraEngineTest : FreeSpec({
     }
 
     "lantern updates respect the shared visit cap and asynchronous teardown barrier" {
-        val base = skySettings(points = 3, shape = AuroraShape.SKY_LANTERNS, packets = 3)
+        val base = skySettings(points = 6, shape = AuroraShape.SKY_LANTERNS, packets = 6)
         val settings = base.copy(profiles = base.profiles.map { it.copy(skyModel = AuroraSkyModel()) })
         withEngine(settings) { fixture ->
             fixture.event = settings.profiles
             fixture.pass()
             repeat(32) { fixture.engine.tick() }
             fixture.modelUpdates.isNotEmpty() shouldBe true
+            fixture.modelUpdates.all { it.centers.size == 6 } shouldBe true
             fixture.modelClose = CompletableFuture()
             val drain = fixture.engine.closeAsync()
             drain.isDone shouldBe false
@@ -187,7 +217,7 @@ class AuroraEngineTest : FreeSpec({
             drain.isDone shouldBe true
             verify(exactly = 1) { fixture.lanterns.closeAsync() }
         }
-        withEngine(settings.copy(skyPacketsPerViewer = 2, packetsPerViewer = 2)) { fixture ->
+        withEngine(settings.copy(skyPacketsPerViewer = 5, packetsPerViewer = 5)) { fixture ->
             fixture.event = fixture.settings.profiles
             fixture.pass()
             repeat(32) { fixture.engine.tick() }
@@ -213,6 +243,34 @@ class AuroraEngineTest : FreeSpec({
             fixture.engine.invalidate(fixture.player.uniqueId)
             fixture.engine.tick()
             fixture.locations.size shouldBe 1
+        }
+    }
+
+    "four six-lantern groups share the existing packet budget without raising other profile caps" {
+        val base = skySettings(points = 6, shape = AuroraShape.SKY_LANTERNS, packets = 36)
+        val lantern = base.profiles.single().copy(id = "lantern", skyModel = AuroraSkyModel(), skyWeight = 8, updateTicks = 4)
+        val jelly = lantern.copy(id = "jelly", shape = AuroraShape.JELLYFISH, skyModel = null, skyWeight = 1,
+            points = 80, skyTracers = 12, updateTicks = 1)
+        val wave = lantern.copy(id = "wave", shape = AuroraShape.WAVE, skyModel = null, skyWeight = 1,
+            points = 80, skyTracers = 1, updateTicks = 1)
+        val settings = base.copy(profiles = listOf(lantern, jelly, wave),
+            skyField = base.skyField.copy(maxScenes = 9, maxPerProfile = 2, maxCelestialScenes = 2, maxLanternScenes = 4))
+        withEngine(settings) { fixture ->
+            fixture.preview = settings.profiles
+            repeat(180) { tick ->
+                val models = fixture.modelUpdates.size
+                val particles = fixture.emissions.size
+                fixture.advance(1)
+                val requests = fixture.modelUpdates.drop(models).sumOf { it.centers.size } + fixture.emissions.size - particles
+                (requests <= 36) shouldBe true
+                (fixture.activeModels.size <= 4) shouldBe true
+                val counts = fixture.sceneRows(tick).groupingBy { it.split(',')[2] }.eachCount()
+                (counts.values.sum() <= 9) shouldBe true
+                (counts.getOrDefault("jelly", 0) <= 2 && counts.getOrDefault("wave", 0) <= 2) shouldBe true
+            }
+            fixture.activeModels.size shouldBe 4
+            fixture.activeModels.values.all { it.scales.size == 6 && it.scales.all { scale -> scale == 1f } } shouldBe true
+            fixture.emissions.isNotEmpty() shouldBe true
         }
     }
 
