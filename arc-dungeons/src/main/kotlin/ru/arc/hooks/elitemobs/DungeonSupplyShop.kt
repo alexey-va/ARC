@@ -55,10 +55,10 @@ internal class DungeonSupplyShop(
         SupplyQuote(offer, item, player.uniqueId)
     }.getOrElse { Logging.error("Unable to prepare dungeon supply item {}", offer.id, it); null }
 
-    fun buy(player: Player, displayed: SupplyQuote, expected: DungeonPanelView): SupplyResult {
+    fun buy(player: Player, displayed: SupplyQuote, expected: DungeonPanelView?): SupplyResult {
         if (displayed.consumed || displayed.buyer != player.uniqueId) return SupplyResult.CHANGED
         val actual = current(player)
-        if (actual == null || actual.worldId != expected.worldId || actual.visit.run != expected.visit.run) return SupplyResult.OUTSIDE
+        if (actual?.worldId != expected?.worldId || actual?.visit?.run != expected?.visit?.run) return SupplyResult.OUTSIDE
         val quote = quote(player, displayed.offer) ?: return SupplyResult.ITEM_UNAVAILABLE
         if (quote != displayed) return SupplyResult.CHANGED
         if (if (quote.offer.isCase) player.inventory.storageContents.none { it == null || it.type.isAir } else !hasRoom(player, quote.item)) return SupplyResult.NO_SPACE

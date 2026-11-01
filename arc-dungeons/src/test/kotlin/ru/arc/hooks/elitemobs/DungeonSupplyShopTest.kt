@@ -27,6 +27,37 @@ class DungeonSupplyShopTest : FreeSpec({
         DungeonSupplyShop().list() shouldBe DEFAULT_SUPPLY_OFFERS
     }
 
+    "supplies can be bought once outside a dungeon" {
+        val player = paper.addPlayer("prepared-buyer")
+        val economy = FakeSupplyEconomy(100.0)
+        val offer = SupplyOffer("food", Material.BREAD, 16, 20.0)
+        val shop = DungeonSupplyShop(offers = { listOf(offer) }, economy = economy)
+        val quote = shop.quote(player, offer)!!
+
+        shop.buy(player, quote, null) shouldBe SupplyResult.BOUGHT
+        player.inventory.storageContents.filterNotNull().single { !it.type.isAir }.amount shouldBe 16
+        economy.balance(player) shouldBe 80.0
+        shop.buy(player, quote, null) shouldBe SupplyResult.CHANGED
+        economy.withdraws shouldBe 1
+    }
+
+    "entering or leaving a dungeon invalidates an open supply purchase before charging" {
+        val player = paper.addPlayer("travelling-buyer")
+        val inside = DungeonPanelView(paper.addSimpleWorld("dungeon").uid, DungeonVisit("run"), null)
+        var current: DungeonPanelView? = null
+        val economy = FakeSupplyEconomy(100.0)
+        val offer = SupplyOffer("food", Material.BREAD, 16, 20.0)
+        val shop = DungeonSupplyShop({ listOf(offer) }, { current }, economy)
+        val quote = shop.quote(player, offer)!!
+
+        current = inside
+        shop.buy(player, quote, null) shouldBe SupplyResult.OUTSIDE
+        current = null
+        shop.buy(player, quote, inside) shouldBe SupplyResult.OUTSIDE
+        economy.withdraws shouldBe 0
+        player.inventory.storageContents.filterNotNull().filterNot { it.type.isAir } shouldBe emptyList()
+    }
+
     "healing purchase delivers one drinkable healing potion and debits its price" {
         val player = paper.addPlayer("healing-buyer")
         val expected = DungeonPanelView(paper.addSimpleWorld("dungeon").uid, DungeonVisit("run"), null)

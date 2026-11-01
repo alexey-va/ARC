@@ -42,6 +42,19 @@ unavailable. ArcDuels 0.11.9 soft-depends on ArcDungeons so its staff service is
 registered before duel integration starts. Load order is ARC, ArcDungeons,
 ArcDuels; ARC has no dependency on ArcDungeons.
 
+## Supplies navigation
+
+The dungeon main menu exposes **Припасы** both outside and inside a dungeon;
+the current-run panel retains the same entry. Both open the existing supplies,
+cases and skill XP boost catalog. Back and Escape follow the shared dialog
+history, returning to the actual entry screen.
+
+The shop captures the current dungeon context when rendering, including no
+active dungeon, and rechecks it before a supply purchase. Entering, leaving or
+changing a dungeon invalidates the displayed offer. Prices, quantities,
+case reward rules and boost duration/stacking are unchanged. This broadens access
+to the existing crystal sink; it does not add free items or XP.
+
 ## Enchantment book descriptions
 
 Verified 2026-10-16: `eliteloot/EliteEnchantmentBookPresentation.kt` owns the

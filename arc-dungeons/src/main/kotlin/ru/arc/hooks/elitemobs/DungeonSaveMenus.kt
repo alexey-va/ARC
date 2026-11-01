@@ -118,7 +118,7 @@ internal class DungeonSaveMenus(
             buttons = listOfNotNull(
                 action("quests", "quests.label", "<#c4a7e7>Задания ›", "quests.local-tooltip", "Принятые и доступные задания этого данжа") { quests(player) },
                 if (dungeon.partiesAvailable()) partyButton(player) else null,
-                action("shop", "panel.shop-label", "<#f4d87a>Припасы ›", "panel.shop-tooltip", "Припасы, кейсы и бусты опыта за кристаллы") { shop(player) },
+                shopButton(player),
                 view.saves?.let {
                     action("saves", "panel.saves-label", "<#c4a7e7>Сохранения ›", "panel.saves-tooltip", "Ваши ручные точки, автосохранения и место прошлого выхода") { open(player) }
                 },
@@ -681,6 +681,8 @@ internal class DungeonSaveMenus(
 
     private fun partyButton(player: Player) = action("party", "panel.party-label", "<#e5ba73>Группа ›", "panel.party-tooltip", "Как собрать пати и управлять группой EliteMobs") { party(player) }
 
+    internal fun shopButton(player: Player) = action("shop", "panel.shop-label", "<#f4d87a>Припасы ›", "panel.shop-tooltip", "Припасы, кейсы и бусты опыта за кристаллы") { shop(player) }
+
     private fun skillBoostButton(player: Player) = action("skill_boosts", "boosts.label", "<#9bd48d>Бусты опыта ›", "boosts.tooltip", "Временный бонус к опыту боевых навыков EliteMobs") { skillBoosts(player) }
 
     private fun skillBoosts(player: Player, feedback: Component? = null) {
@@ -813,7 +815,7 @@ internal class DungeonSaveMenus(
     private fun close() = action("close", "saves.dialog.close-label", "<#e8dfd2>Закрыть", "saves.dialog.close-tooltip", "Вернуться в игру", close = true) { }.copy(width = 200)
 
     internal fun shop(player: Player, feedback: Component? = null) {
-        val view = dungeon.panelView(player) ?: run { unavailable(player); return }
+        val view = dungeon.panelView(player)
         val body = mutableListOf(
             PaperDialogBody(text("shop.body", "<#e8dfd2>Нажмите на товар, чтобы сразу купить его за кристаллы EliteMobs. Кейс откроется и выдаст одну награду, привязанную к вам."), 468),
             PaperDialogBody(balance(player), 468),

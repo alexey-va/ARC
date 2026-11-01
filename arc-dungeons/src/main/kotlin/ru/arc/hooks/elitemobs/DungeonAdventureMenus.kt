@@ -83,6 +83,7 @@ internal class DungeonAdventureMenus(
             button("classes", "classes-label", "<#c4abff>Классы ›", "Выбор класса, пассивы и ветки развития") { local.classes(player) },
             button("skills", "progression-label", "<#c4abff>Развитие навыков ›", "Опыт, пассивные бонусы, ближайшие способности и книги прохождений") { skills(player) },
             button("gear", "gear-label", "<#86dcf1>Снаряжение ›", "Вещи, боевые параметры и выбранные перки") { gear(player) },
+            local.shopButton(player),
             button("stats", "stats-label", "<#86dcf1>Статистика ›", "Рейтинг, пройденные данжи и достижения") { statistics(player) },
             button("bosses", "bosses-label", "<#ffb277>Боссы ›", "Найти живого босса и включить отслеживание") { bosses(player) },
             local.lostLoot(player),

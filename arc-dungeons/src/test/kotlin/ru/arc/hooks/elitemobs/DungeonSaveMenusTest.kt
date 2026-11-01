@@ -18,31 +18,59 @@ class DungeonSaveMenusTest : FreeSpec({
     beforeEach { paper = MockBukkitTestRuntime.open() }
     afterEach { paper.close() }
 
-    "supply button buys directly and only successful purchases play a sound" {
-        for (outcome in listOf(SupplyResult.BOUGHT, SupplyResult.NO_MONEY)) {
-            val player = mockk<org.bukkit.entity.Player>(relaxed = true)
-            every { player.uniqueId } returns UUID.randomUUID()
-            val dungeon = mockk<EMDungeonQol>(relaxed = true)
-            val view = DungeonPanelView(UUID.randomUUID(), DungeonVisit("run"), null)
-            every { dungeon.panelView(player) } returns view
-            every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(firstArg<String>()) }
-            val offer = SupplyOffer("food", org.bukkit.Material.BREAD, 1, 1.0)
-            val quote = SupplyQuote(offer, org.bukkit.inventory.ItemStack(org.bukkit.Material.BREAD), player.uniqueId)
-            val supplies = mockk<DungeonSupplyShop>()
-            every { dungeon.supplies } returns supplies
-            every { supplies.list() } returns listOf(offer)
-            every { supplies.quote(player, offer) } returns quote
-            every { supplies.buy(player, quote, view) } returns outcome
-            val shown = mutableListOf<PaperDialogScreen>()
-            val menus = DungeonSaveMenus(dungeon) { _, screen, _ -> shown += screen }
-            menus.shop(player)
-            shown.last().buttons.map { it.id.value }.take(2) shouldBe listOf("skill_boosts", "supply_food")
-            shown.last().buttons.single { it.id.value == "supply_food" }.onClick.handle(mockk())
-            verify(exactly = 1) { supplies.buy(player, quote, view) }
-            shown.map { it.id }.distinct().size shouldBe 1
-            verify(exactly = if (outcome.success) 1 else 0) {
-                player.playSound(any<org.bukkit.Location>(), org.bukkit.Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.65f, 1.2f)
+    "supply button buys directly inside and outside a dungeon and only success plays a sound" {
+        for (view in listOf(null, DungeonPanelView(UUID.randomUUID(), DungeonVisit("run"), null))) {
+            for (outcome in listOf(SupplyResult.BOUGHT, SupplyResult.NO_MONEY)) {
+                val player = mockk<org.bukkit.entity.Player>(relaxed = true)
+                every { player.uniqueId } returns UUID.randomUUID()
+                val dungeon = mockk<EMDungeonQol>(relaxed = true)
+                every { dungeon.panelView(player) } returns view
+                every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(firstArg<String>()) }
+                val offer = SupplyOffer("food", org.bukkit.Material.BREAD, 1, 1.0)
+                val quote = SupplyQuote(offer, org.bukkit.inventory.ItemStack(org.bukkit.Material.BREAD), player.uniqueId)
+                val supplies = mockk<DungeonSupplyShop>()
+                every { dungeon.supplies } returns supplies
+                every { supplies.list() } returns listOf(offer)
+                every { supplies.quote(player, offer) } returns quote
+                every { supplies.buy(player, quote, view) } returns outcome
+                val shown = mutableListOf<PaperDialogScreen>()
+                val menus = DungeonSaveMenus(dungeon) { _, screen, _ -> shown += screen }
+                menus.shop(player)
+                shown.last().buttons.map { it.id.value }.take(2) shouldBe listOf("skill_boosts", "supply_food")
+                shown.last().buttons.single { it.id.value == "supply_food" }.onClick.handle(mockk())
+                verify(exactly = 1) { supplies.buy(player, quote, view) }
+                shown.map { it.id }.distinct().size shouldBe 1
+                verify(exactly = if (outcome.success) 1 else 0) {
+                    player.playSound(any<org.bukkit.Location>(), org.bukkit.Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.65f, 1.2f)
+                }
             }
+        }
+    }
+
+    "supplies and skill boosts return safely from the global menu and the dungeon panel" {
+        val world = paper.addSimpleWorld("supplies-navigation")
+        for (view in listOf(null, DungeonPanelView(world.uid, DungeonVisit("run"), null))) {
+            val player = paper.addPlayer("supplies-${view != null}")
+            val dungeon = mockk<EMDungeonQol>(relaxed = true)
+            every { dungeon.panelView(player) } returns view
+            every { dungeon.continuation(player) } returns null
+            every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
+            every { dungeon.supplies.list() } returns emptyList()
+            every { dungeon.skillBoosts.currentExpiry(player) } returns null
+            every { dungeon.skillBoosts.list() } returns emptyList()
+            val shown = mutableListOf<PaperDialogScreen>()
+            val menus = DungeonSaveMenus(dungeon, crystals = { "27" }, adventure = mockk(relaxed = true)) { _, screen, _ -> shown += screen }
+
+            if (view == null) menus.main(player) else menus.panel(player)
+            shown.last().buttons.single { it.id.value == "shop" }.onClick.handle(mockk())
+            shown.last().id shouldBe "dungeon.shop"
+            shown.last().buttons.single { it.id.value == "skill_boosts" }.onClick.handle(mockk())
+            shown.last().id shouldBe "dungeon.skill-boosts"
+            shown.last().exitButton!!.onClick.handle(mockk())
+            shown.last().id shouldBe "dungeon.shop"
+            shown.last().exitButton!!.closeDialogBeforeAction shouldBe false
+            shown.last().exitButton!!.onClick.handle(mockk())
+            shown.last().id shouldBe if (view == null) "dungeon.main" else "dungeon.panel"
         }
     }
 
@@ -196,7 +224,7 @@ class DungeonSaveMenusTest : FreeSpec({
         shown.single().id shouldBe "dungeon.main"
         shown.single().columns shouldBe 3
         shown.single().buttons.map { it.id.value } shouldBe listOf(
-            "catalog", "quests", "party", "classes", "skills", "gear", "stats", "bosses", "lost_loot", "travel", "guide", "share", "current",
+            "catalog", "quests", "party", "classes", "skills", "gear", "shop", "stats", "bosses", "lost_loot", "travel", "guide", "share", "current",
         )
         shown.single().exitButton!!.closeDialogBeforeAction shouldBe false
         val unavailableRun = shown.single().buttons.single { it.id.value == "current" }
