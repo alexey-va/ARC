@@ -173,7 +173,7 @@ bypass. At dawn, new submissions stop and native tails finish fading.
 | `/arcaurora biome` | Player with the configured view permission | Show the exact biome key at the player's block |
 | `/arcaurora status` | `arcaurora.admin` | Configured ordinary profile count, active event leases and tracked players |
 | `/arcaurora reload` | `arcaurora.admin` | Validate a candidate configuration, then replace the active engine |
-| `/arcaurora preview [player]` | `arcaurora.admin` | Toggle a private, automatically expiring 60-second sky preview; console names an online player |
+| `/arcaurora preview [player]` | `arcaurora.admin` | Toggle a private sky preview: 60 seconds of new scenes, then visible lanterns finish; console names an online player |
 | `/arcaurora catalog [preset]` | `arcaurora.admin` | List preset IDs, or the profile IDs in one preset |
 | `/arcaurora preview <player\|self> <preset> [profile]` | `arcaurora.admin` | Replace private preview with a selected preset or one selected profile |
 
@@ -190,8 +190,13 @@ retains the running engine and settings.
 
 The default admin preview displays the hunt's sky preset only to its target. It does
 not start a treasure hunt, change rewards, grant permissions or create a
-world-wide event. It ends after 60 seconds or when toggled again, and still
-obeys both ping gates. Look above the horizon to inspect the silhouettes.
+world-wide event. After 60 seconds, it stops admitting new scenes. Lantern
+groups already visible finish their original flight and smooth scale-out before
+the preview selection is released; this adds at most one configured lantern
+lifetime (30 seconds by default). Queued or unborn groups cannot start during
+this drain. Manual stop/replacement, quit, world changes, ping rejection and
+reload still remove the displays immediately. Both ping gates remain enforced.
+Look above the horizon to inspect the silhouettes.
 For example, `/arcaurora preview self treasure-hunt lunar_jellyfish` selects the
 jellyfish; `/arcaurora catalog particle-gallery` lists material studies, and
 `/arcaurora preview self particle-gallery <profile>` isolates one of them nearby.
@@ -565,7 +570,7 @@ Run from the repository root with JDK 25:
 ```
 
 The expected local runtime artifact is
-`arc-aurora/build/libs/ArcAurora-0.1.10.jar`. The public Maven API artifact
+`arc-aurora/build/libs/ArcAurora-0.1.11.jar`. The public Maven API artifact
 `ru.ruscrafting.arc:arc-aurora-api:0.1.0` was verified on 2026-10-29 in the
 [RusCrafting repository](https://repo.rus-crafting.ru/grocermc/ru/ruscrafting/arc/arc-aurora-api/0.1.0/arc-aurora-api-0.1.0.pom).
 That API publication does not establish a runtime-plugin build, delivery,
@@ -606,5 +611,5 @@ measured performance result is claimed by this README. Publication, artifact
 delivery and runtime activation require separate operational evidence.
 
 `sky-points` overrides `points` only for sky scenes. The nightly mode and current shape catalog
-require ArcAurora 0.1.10; do not reload this configuration into an older runtime.
+require ArcAurora 0.1.10 or newer; the preview drain behavior requires 0.1.11.
 The 25 ordinary biome profiles and their sampling behavior are unchanged.

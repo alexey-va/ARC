@@ -229,7 +229,15 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
                 previewCount = previews.size
                 current.invalidate(targetId)
                 preview.timer = runtime!!.tasks.runLater(1200L) {
-                    if (previews[targetId] === preview) stopPreview(targetId)
+                    if (previews[targetId] !== preview) return@runLater
+                    val remaining = engine?.beginPreviewDrain(targetId, preview.profiles) ?: 0L
+                    if (remaining <= 0L) stopPreview(targetId)
+                    else {
+                        preview.timer?.cancel()
+                        preview.timer = runtime!!.tasks.runLater(remaining) {
+                            if (previews[targetId] === preview) stopPreview(targetId)
+                        }
+                    }
                 }
                 if (sender !== target) reply(sender, "preview-on")
                 return reply(target, "preview-on")

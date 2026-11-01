@@ -46,6 +46,7 @@ internal class AuroraEngine(
                 profiles.indices.all { profiles[it] === other.profiles[it] }
             else profiles === other.profiles
     }
+    private data class PreviewDrain(val profiles: List<AuroraProfile>, val scenes: Set<SkyScene>)
     private class Viewer(val id: UUID, var world: UUID, val particles: PaperViewerParticles, window: Int) {
         val ping = AuroraPingWindow(window)
         var sampleAt = 0L
@@ -53,6 +54,7 @@ internal class AuroraEngine(
         var revision = 0L
         var pass = 0L
         var selection: Selection? = null
+        var previewDrain: PreviewDrain? = null // Main-owned; immutable snapshot copied into worker inputs.
         // Worker owns scene creation; Main retains immutable strokes and acknowledges attempted points.
         var sky: SkyInput? = null
         var skyTurn = 0L
@@ -86,12 +88,13 @@ internal class AuroraEngine(
         var repairIndex = -1
         var repairAt = Long.MIN_VALUE
         var animationCursor = 0
+        var renderedLanterns = false // The latest Main submission has a nonzero-size member and has not been retired.
     }
     private enum class Delivery { SUBMITTED, SKIPPED, OBSTRUCTED }
     private data class Input(
         val viewer: Viewer, val world: UUID, val x: Double, val y: Double, val z: Double,
         val yaw: Float, val selection: Selection, val age: Long,
-        val revision: Long, val pass: Long,
+        val revision: Long, val pass: Long, val previewDrain: PreviewDrain?,
     ) {
         val profiles get() = selection.profiles
     }
@@ -136,8 +139,27 @@ internal class AuroraEngine(
     }
 
     fun invalidate(id: UUID) {
-        viewers[id]?.let { it.revision++; it.sky = null; it.particles.invalidatePending() }
+        viewers[id]?.let {
+            it.sky?.scenes?.forEach { scene -> scene.renderedLanterns = false }
+            it.revision++; it.sky = null; it.particles.invalidatePending()
+            it.previewDrain = it.previewDrain?.copy(scenes = emptySet())
+        }
         lanterns?.removeViewer(id)
+    }
+
+    /** Stop preview admission now; only these already-visible groups may finish their original lifetime. */
+    fun beginPreviewDrain(id: UUID, profiles: List<AuroraProfile>): Long {
+        if (closed.get() || previewProfiles(id) !== profiles) return 0L
+        val viewer = viewers[id] ?: return 0L
+        val scenes = viewer.sky?.takeIf { it.input.revision == viewer.revision && it.input.selection.profiles === profiles }
+            ?.scenes.orEmpty().filter { scene ->
+                scene.renderedLanterns && !scene.culled.get() && !scene.rejected.get() &&
+                    scene.startsAt != Long.MAX_VALUE && age - scene.startsAt < scene.profile.sceneDurationTicks
+            }.toSet()
+        viewer.previewDrain = PreviewDrain(profiles, scenes)
+        viewer.particles.invalidatePending()
+        lanterns?.retain(id, scenes)
+        return scenes.maxOfOrNull { it.startsAt + it.profile.sceneDurationTicks - age } ?: 0L
     }
     fun invalidateWorld(worldId: UUID) {
         viewers.values.filter { it.world == worldId }.map { it.id }.forEach(::invalidate)
@@ -183,7 +205,7 @@ internal class AuroraEngine(
             val at = player.location
             if (!player.world.isChunkLoaded(at.blockX shr 4, at.blockZ shr 4)) return@forEach
             if (selection.profiles.isNotEmpty()) {
-                inputs += Input(viewer, player.world.uid, at.x, at.y, at.z, at.yaw, selection, age, viewer.revision, viewer.pass++)
+                inputs += Input(viewer, player.world.uid, at.x, at.y, at.z, at.yaw, selection, age, viewer.revision, viewer.pass++, viewer.previewDrain)
             }
         }
         if (inputs.isEmpty() || !planning.compareAndSet(false, true)) return
@@ -205,7 +227,9 @@ internal class AuroraEngine(
     /** Reconcile Main-owned source changes before consuming a point or dispatching captured work. */
     private fun select(player: Player, viewer: Viewer): Selection {
         val world = player.world
-        val event = previewProfiles(viewer.id) ?: eventProfiles(world.uid)
+        val preview = previewProfiles(viewer.id)
+        if (viewer.previewDrain?.profiles !== preview) viewer.previewDrain = null
+        val event = preview ?: eventProfiles(world.uid)
         val selected = when {
             event != null -> Selection(Source.EVENT, event)
             settings.nightSky.enabled && settings.nightSky.matches(world.name, world.environment, world.time) ->
@@ -227,7 +251,7 @@ internal class AuroraEngine(
     }
 
     private fun eligible(player: Player, viewer: Viewer, source: Source): Boolean {
-        if (!player.isOnline || player.isDead) { lanterns?.removeViewer(viewer.id); return false }
+        if (!player.isOnline || player.isDead) { retireLanterns(viewer); return false }
         viewer.world = player.world.uid
         val current = player.ping
         if (age >= viewer.sampleAt) {
@@ -236,17 +260,23 @@ internal class AuroraEngine(
         }
         if (!viewer.ping.admits(current, settings.ping)) {
             viewer.particles.invalidatePending()
-            lanterns?.removeViewer(viewer.id)
+            retireLanterns(viewer)
             pingSkipped++
             return false
         }
         if (source != Source.EVENT && (!personallyEnabled(player) ||
             source == Source.ORDINARY && !player.hasPermission(settings.permission))) {
             viewer.particles.invalidatePending()
-            lanterns?.removeViewer(viewer.id)
+            retireLanterns(viewer)
             return false
         }
         return true
+    }
+
+    private fun retireLanterns(viewer: Viewer) {
+        lanterns?.removeViewer(viewer.id)
+        viewer.sky?.scenes?.forEach { it.renderedLanterns = false }
+        viewer.previewDrain = viewer.previewDrain?.copy(scenes = emptySet())
     }
 
     private fun matching(player: Player, at: Location, candidates: List<AuroraProfile>): List<AuroraProfile> {
@@ -276,6 +306,7 @@ internal class AuroraEngine(
         }
         if (sky.isEmpty()) input.viewer.rejectedCells.clear()
         if (sky.isEmpty()) return Planned(planOrdinary(input, ordinary, settings.packetsPerViewer), SkyInput(input, emptyList(), 0))
+        if (input.previewDrain != null) return Planned(emptyList(), SkyInput(input, planSky(input, sky), settings.skyPacketsPerViewer))
         val budget = if (ordinary.isEmpty()) settings.skyPacketsPerViewer else maxOf(settings.packetsPerViewer, settings.skyPacketsPerViewer)
         val ordinaryBudget = when {
             ordinary.isEmpty() -> 0
@@ -295,28 +326,30 @@ internal class AuroraEngine(
             if (viewers[viewer.id] !== viewer) continue
             if (System.nanoTime() >= deadline) return
             val player = Bukkit.getPlayer(viewer.id)
-            if (player == null) { lanterns?.removeViewer(viewer.id); continue }
+            if (player == null) { retireLanterns(viewer); continue }
             val selection = select(player, viewer)
             val sky = viewer.sky
             if (sky == null || player.world.uid != sky.input.world || viewer.revision != sky.input.revision ||
                 !selection.sameAs(sky.input.selection) || !eligible(player, viewer, selection.source)) {
-                lanterns?.removeViewer(viewer.id)
+                retireLanterns(viewer)
                 continue
             }
-            lanterns?.retain(viewer.id, sky.scenes.filter { !it.culled.get() && !it.rejected.get() &&
+            // A pre-expiry worker batch may arrive late; it cannot introduce another scene during drain.
+            val scenes = viewer.previewDrain?.let { drain -> sky.scenes.filter { it in drain.scenes } } ?: sky.scenes
+            lanterns?.retain(viewer.id, scenes.filter { !it.culled.get() && !it.rejected.get() &&
                 (it.startsAt == Long.MAX_VALUE || age - it.startsAt < it.profile.sceneDurationTicks) }.toSet())
             var remaining = sky.budget
-            if (sky.scenes.isEmpty() || remaining == 0) continue
-            val start = Math.floorMod(viewer.skyTurn++, sky.scenes.size.toLong()).toInt()
-            for (index in sky.scenes.indices) {
+            if (scenes.isEmpty() || remaining == 0) continue
+            val start = Math.floorMod(viewer.skyTurn++, scenes.size.toLong()).toInt()
+            for (index in scenes.indices) {
                 if (System.nanoTime() >= deadline) return
                 if (remaining == 0) break
-                val scene = sky.scenes[(start + index) % sky.scenes.size]
+                val scene = scenes[(start + index) % scenes.size]
                 val current = player.location
                 val limit = settings.skyField.viewDistance + settings.skyField.cullHysteresis
                 if ((scene.x - current.x).let { it * it } + (scene.z - current.z).let { it * it } > limit * limit) {
                     scene.culled.set(true) // Stop the whole figure; its existing native tail expires naturally.
-                    lanterns?.retain(viewer.id, sky.scenes.filter { !it.culled.get() && !it.rejected.get() }.toSet())
+                    lanterns?.retain(viewer.id, scenes.filter { !it.culled.get() && !it.rejected.get() }.toSet())
                 }
                 if (scene.culled.get() || scene.rejected.get() || !admitSky(scene, player, deadline) || age < scene.startsAt) continue
                 val sceneAge = age - scene.startsAt
@@ -341,12 +374,13 @@ internal class AuroraEngine(
                                 sky.input.selection.source == Source.ORDINARY && scene.profile !in matching(player, location, settings.profiles)
                         }) {
                             scene.rejected.set(true)
-                            lanterns?.retain(viewer.id, sky.scenes.filter { it !== scene && !it.rejected.get() && !it.culled.get() }.toSet())
+                            lanterns?.retain(viewer.id, scenes.filter { it !== scene && !it.rejected.get() && !it.culled.get() }.toSet())
                             continue
                         }
                         val displays = lanterns ?: lanternFactory().also { lanterns = it }
                         displays.update(scene, player, checkNotNull(scene.profile.skyModel), centers, progress,
                             atan2(scene.normalX, scene.normalZ), scene.profile.updateTicks)
+                        scene.renderedLanterns = progress > 0.0 && progress < 1.0
                         scene.nextAt = age + scene.profile.updateTicks
                         remaining -= centers.size
                         continue
@@ -498,7 +532,8 @@ internal class AuroraEngine(
         retired.entries.removeIf { it.value <= input.age }
         rejected.entries.removeIf { (cell, epoch) -> byCell[cell]?.epoch != epoch }
         for ((cell, scene) in scenes.toMap()) {
-            val keep = (scene.x - input.x).let { it * it } + (scene.z - input.z).let { it * it } <=
+            val keep = (input.previewDrain == null || scene in input.previewDrain.scenes) &&
+                (scene.x - input.x).let { it * it } + (scene.z - input.z).let { it * it } <=
                 (field.viewDistance + field.cullHysteresis).let { it * it } && !scene.culled.get() && !scene.rejected.get() &&
                 (scene.startsAt == Long.MAX_VALUE || input.age - scene.startsAt < scene.profile.sceneDurationTicks)
             if (keep && active.size < field.maxScenes) active += scene
@@ -515,6 +550,7 @@ internal class AuroraEngine(
             input.viewer.fieldAdmissionAfter = maxOf(input.viewer.fieldAdmissionAfter, retired.values.max())
             retired.clear() // The viewer-wide gate now preserves every unexpired tail protection.
         }
+        if (input.previewDrain != null) return active
         // Preserve admitted scenes across cell/epoch boundaries; fill vacancies without nearest-slot churn.
         for (candidate in candidates) {
             if (input.age < input.viewer.fieldAdmissionAfter || active.size >= field.maxScenes) break
@@ -567,6 +603,7 @@ internal class AuroraEngine(
         if (player.world.uid != input.world) { viewer.particles.invalidatePending(); return Delivery.SKIPPED }
         val selection = select(player, viewer)
         if (!selection.sameAs(input.selection) || viewer.revision != input.revision) return Delivery.SKIPPED
+        if (viewer.previewDrain != null) return Delivery.SKIPPED
         if (!eligible(player, viewer, selection.source)) return Delivery.SKIPPED
         val at = player.location
         if (!emission.profile.skyScene && at.distanceSquared(Location(player.world, input.x, input.y, input.z)) > 16.0)

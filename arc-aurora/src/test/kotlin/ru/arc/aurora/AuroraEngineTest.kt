@@ -23,6 +23,107 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
 class AuroraEngineTest : FreeSpec({
+    "a full sixty-second preview drains the visible lantern group through its tiny final pose without admitting another" {
+        val base = skySettings(points = 3, shape = AuroraShape.SKY_LANTERNS, packets = 3)
+        val settings = base.copy(profiles = base.profiles.map {
+            it.copy(skyModel = AuroraSkyModel(), sceneDurationTicks = 600, spawnDelayTicks = 80, updateTicks = 4)
+        })
+        withEngine(settings) { fixture ->
+            fixture.preview = settings.profiles
+            fixture.advance(1200)
+            val visible = fixture.activeModels.keys.toSet()
+            visible.isNotEmpty() shouldBe true
+            // The fixed field seed puts this group into scale-out before tick 1200 (about 0.67 scale).
+            // It must have reached full size and still be plainly visible when admissions stop.
+            visible.forEach { key ->
+                fixture.modelUpdates.any { it.key === key && it.scales == listOf(1f, 1f, 1f) } shouldBe true
+            }
+            fixture.activeModels.values.all { it.scales.size == 3 && it.scales.all { scale -> scale > 0.5f } } shouldBe true
+            val boundary = fixture.modelUpdates.size
+            val remaining = fixture.engine.beginPreviewDrain(fixture.player.uniqueId, settings.profiles)
+            (remaining in 1L..600L) shouldBe true
+            fixture.activeModels.keys shouldBe visible
+            fixture.advance(remaining.toInt())
+            val tail = fixture.modelUpdates.drop(boundary)
+            tail.isNotEmpty() shouldBe true
+            tail.all { it.key in visible && it.centers.size == 3 } shouldBe true
+            visible.forEach { key ->
+                val last = tail.last { it.key === key }
+                last.scales.all { it < 0.01f } shouldBe true
+            }
+            fixture.activeModels shouldBe emptyMap()
+            fixture.retiredModels.filter { it.key in visible }.all { it.scales.all { scale -> scale < 0.01f } } shouldBe true
+            val finished = fixture.modelUpdates.size
+            // Even if the callback is delayed, the frozen admission set cannot restart the preview.
+            fixture.advance(700)
+            fixture.modelUpdates.size shouldBe finished
+            fixture.preview = null
+            fixture.engine.invalidate(fixture.player.uniqueId)
+            fixture.advance(12)
+            fixture.modelUpdates.size shouldBe finished
+        }
+    }
+
+    "preview drain excludes queued plans and admitted zero-size lantern groups" {
+        val base = skySettings(points = 3, shape = AuroraShape.SKY_LANTERNS, packets = 3)
+        val settings = base.copy(profiles = base.profiles.map { it.copy(skyModel = AuroraSkyModel(), updateTicks = 4) })
+        for (planned in listOf(false, true)) withEngine(settings) { fixture ->
+            fixture.preview = settings.profiles
+            fixture.capture()
+            if (planned) { fixture.completePlanning(); fixture.engine.tick() }
+            fixture.activeModels shouldBe emptyMap()
+            fixture.engine.beginPreviewDrain(fixture.player.uniqueId, settings.profiles) shouldBe 0L
+            fixture.advance(80)
+            fixture.activeModels shouldBe emptyMap()
+            fixture.modelUpdates.all { it.scales.all { scale -> scale == 0f } } shouldBe true
+        }
+    }
+
+    "draining lanterns retire immediately on actor exits and never reappear after eligibility recovers" {
+        val base = skySettings(points = 3, shape = AuroraShape.SKY_LANTERNS, packets = 3)
+        val settings = base.copy(profiles = base.profiles.map { it.copy(skyModel = AuroraSkyModel(), updateTicks = 4) })
+        for (exit in listOf("ping", "world", "quit", "toggle")) withEngine(settings) { fixture ->
+            fixture.preview = settings.profiles
+            fixture.advance(80)
+            fixture.activeModels.isNotEmpty() shouldBe true
+            (fixture.engine.beginPreviewDrain(fixture.player.uniqueId, settings.profiles) > 0L) shouldBe true
+            val beforeExit = fixture.modelUpdates.size
+            when (exit) {
+                "ping" -> fixture.currentPing = 251
+                "world" -> fixture.player.teleport(Location(fixture.paper.server.addSimpleWorld("other"), 0.5, 80.0, 0.5))
+                "quit" -> fixture.engine.quit(fixture.player.uniqueId)
+                else -> fixture.engine.setPersonallyEnabled(fixture.player, false)
+            }
+            fixture.advance(1)
+            fixture.activeModels shouldBe emptyMap()
+            fixture.currentPing = 50
+            fixture.advance(300)
+            fixture.modelUpdates.size shouldBe beforeExit
+            fixture.activeModels shouldBe emptyMap()
+        }
+    }
+
+    "a replacement preview cannot be drained by the old selection generation" {
+        val base = skySettings(points = 3, shape = AuroraShape.SKY_LANTERNS, packets = 3)
+        val settings = base.copy(profiles = base.profiles.map { it.copy(skyModel = AuroraSkyModel(), updateTicks = 4) })
+        withEngine(settings) { fixture ->
+            fixture.preview = settings.profiles
+            fixture.advance(80)
+            fixture.engine.beginPreviewDrain(fixture.player.uniqueId, settings.profiles)
+            val replacement = settings.profiles.map { it.copy() }
+            fixture.preview = replacement
+            fixture.engine.invalidate(fixture.player.uniqueId)
+            fixture.advance(80)
+            val visible = fixture.activeModels.keys.toSet()
+            visible.isNotEmpty() shouldBe true
+            fixture.engine.beginPreviewDrain(fixture.player.uniqueId, settings.profiles) shouldBe 0L
+            fixture.activeModels.keys shouldBe visible
+            val before = fixture.modelUpdates.size
+            fixture.advance(8)
+            (fixture.modelUpdates.size > before) shouldBe true
+        }
+    }
+
     "ordinary lanterns recheck the destination biome before refreshing their models" {
         val base = skySettings(points = 3, shape = AuroraShape.SKY_LANTERNS, packets = 3)
         val settings = base.copy(profiles = base.profiles.map {
@@ -1153,6 +1254,8 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
     val emitter = mockk<PaperViewerParticles>(relaxed = true)
     val lanterns = mockk<AuroraLanternDisplays>(relaxed = true)
     val modelUpdates = mutableListOf<ObservedLantern>()
+    val activeModels = mutableMapOf<Any, ObservedLantern>()
+    val retiredModels = mutableListOf<ObservedLantern>()
     var modelClose = CompletableFuture.completedFuture<Void>(null)
     private val scheduler = mockk<TaskScheduler>()
     private val scope = LifecycleTaskScope(scheduler)
@@ -1163,7 +1266,27 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
     init {
         every { lanterns.update(any(), any(), any(), any(), any(), any(), any()) } answers {
             requireMain()
-            modelUpdates += ObservedLantern(arg(0), arg<List<Location>>(3).map { it.clone() })
+            val model = arg<AuroraSkyModel>(2)
+            val progress = arg<Double>(4)
+            val centers = arg<List<Location>>(3)
+            val observed = ObservedLantern(arg(0), centers.map { it.clone() }, arg<Player>(1).uniqueId,
+                centers.indices.map { AuroraLanternMotion.displayPose(it, progress, arg(5), model.scale, model.pivot).scale })
+            modelUpdates += observed
+            if (observed.scales.any { it > 0f }) activeModels[observed.key] = observed
+            else activeModels.remove(observed.key)?.let(retiredModels::add)
+        }
+        every { lanterns.retain(any(), any()) } answers {
+            requireMain()
+            val viewer = arg<java.util.UUID>(0)
+            val retained = arg<Set<Any>>(1)
+            activeModels.values.filter { it.viewer == viewer && it.key !in retained }.forEach {
+                activeModels.remove(it.key); retiredModels += it
+            }
+        }
+        every { lanterns.removeViewer(any()) } answers {
+            requireMain()
+            val viewer = arg<java.util.UUID>(0)
+            activeModels.values.filter { it.viewer == viewer }.forEach { activeModels.remove(it.key); retiredModels += it }
         }
         every { lanterns.closeAsync() } answers { modelClose }
         every { scheduler.runAsync(any()) } answers {
@@ -1307,6 +1430,13 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
         engine.tick()
     }
 
+    fun advance(ticks: Int) {
+        repeat(ticks) {
+            if (queued.isNotEmpty()) completePlanning()
+            engine.tick()
+        }
+    }
+
     /** Only the captured Runnable runs on the worker; Paper capture/delivery stays on this test thread. */
     fun completePlanning() {
         val work = queued.removeFirst()
@@ -1332,7 +1462,7 @@ private class EngineWorld(highSky: Boolean) : org.mockbukkit.mockbukkit.world.Wo
 private data class ObservedEmission(val particle: Particle, val count: Int, val offsets: List<Double>, val force: Boolean,
     val viewer: java.util.UUID, val data: Any?)
 
-private data class ObservedLantern(val key: Any, val centers: List<Location>)
+private data class ObservedLantern(val key: Any, val centers: List<Location>, val viewer: java.util.UUID, val scales: List<Float>)
 
 /** Override the one controlled observation without spying on MockBukkit's inherited entity methods. */
 private class EnginePlayer(server: ServerMock, name: String = "AuroraViewer") : PlayerMock(server, name) {

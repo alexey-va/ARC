@@ -4,7 +4,7 @@ players-only: '<prefix><#E6FFF3>Эта команда доступна толь�
 player-not-found: '<prefix><#E58A88>Игрок <player> сейчас не в сети.'
 enabled: '<prefix><#E6FFF3>Фоновые эффекты включены.'
 disabled: '<prefix><#E6FFF3>Фоновые эффекты выключены.'
-preview-on: '<prefix><#E6FFF3>Предпросмотр включён на 60 секунд. Эффекты появятся рядом или в небе.'
+preview-on: '<prefix><#E6FFF3>Предпросмотр включён: новые эффекты появляются 60 секунд, а уже летящие фонарики завершают полёт.'
 preview-off: '<prefix><#E6FFF3>Предпросмотр выключен.'
 preview-missing: '<prefix><#E58A88>Эффекты для предпросмотра не настроены.'
 catalog-presets: '<prefix><#E6FFF3>Наборы эффектов: <#93C9D8><presets>'

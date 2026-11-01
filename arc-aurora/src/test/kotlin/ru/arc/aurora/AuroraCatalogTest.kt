@@ -5,6 +5,7 @@ import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.mockk
 import io.mockk.every
+import io.mockk.verify
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.command.CommandSender
@@ -159,6 +160,45 @@ class AuroraCatalogTest : FreeSpec({
             fixture.plugin.preview(fixture.target) shouldBe null
             fixture.plugin.engine shouldBe null
             beforeDisable.previewTimer().isCancelled shouldBe true
+        }
+    }
+
+    "automatic preview expiry owns a bounded drain timer and cannot stop a replacement" {
+        for (replace in listOf(false, true)) withCatalog { fixture ->
+            val settings = fixture.plugin.engine!!.settings
+            fixture.plugin.engine!!.close()
+            val engine = mockk<AuroraEngine>(relaxed = true)
+            every { engine.settings } returns settings
+            every { engine.closeAsync() } returns CompletableFuture.completedFuture(null)
+            every { engine.beginPreviewDrain(fixture.target.uniqueId, any()) } returns 80L
+            ArcAuroraPlugin::class.java.getDeclaredField("engine").apply { isAccessible = true }.set(fixture.plugin, engine)
+            fixture.command(fixture.admin, "preview ${fixture.target.name} test-gallery jelly")
+            val preview = checkNotNull(fixture.plugin.preview(fixture.target))
+            val admissionTimer = preview.previewTimer()
+            fixture.paper.server.scheduler.performTicks(1199)
+            (fixture.plugin.preview(fixture.target) === preview) shouldBe true
+            verify(exactly = 0) { engine.beginPreviewDrain(any(), any()) }
+            fixture.paper.server.scheduler.performTicks(1)
+            verify(exactly = 1) { engine.beginPreviewDrain(fixture.target.uniqueId, match { it === preview.selectedProfiles() }) }
+            (fixture.plugin.preview(fixture.target) === preview) shouldBe true
+            admissionTimer.isCancelled shouldBe true
+            val drainTimer = preview.previewTimer()
+            (drainTimer === admissionTimer) shouldBe false
+            fixture.paper.server.scheduler.performTicks(60)
+            if (replace) {
+                fixture.command(fixture.admin, "preview ${fixture.target.name} test-gallery coral")
+                val replacement = checkNotNull(fixture.plugin.preview(fixture.target))
+                drainTimer.isCancelled shouldBe true
+                fixture.paper.server.scheduler.performTicks(20)
+                (fixture.plugin.preview(fixture.target) === replacement) shouldBe true
+                replacement.previewTimer().isCancelled shouldBe false
+            } else {
+                fixture.paper.server.scheduler.performTicks(19)
+                (fixture.plugin.preview(fixture.target) === preview) shouldBe true
+                fixture.paper.server.scheduler.performTicks(1)
+                fixture.plugin.preview(fixture.target) shouldBe null
+                drainTimer.isCancelled shouldBe true
+            }
         }
     }
 })
