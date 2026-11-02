@@ -105,7 +105,7 @@ internal class GravesRuntime(private val settings: GravesSettings) : Listener, A
         if (native != null) nativeListener = GravesNativeListener(this).also {
             Bukkit.getPluginManager().registerEvents(it, plugin)
         }
-        if (waitsForInventorySync) syncListener = GravesSyncListener(::afterInventorySync, playerPersistence as HuskSyncGravePersistence).also {
+        if (waitsForInventorySync) syncListener = GravesSyncListener(::afterInventorySync).also {
             Bukkit.getPluginManager().registerEvents(it, plugin)
         }
         plugin.getCommand("graves")?.setExecutor { sender, _, _, _ ->

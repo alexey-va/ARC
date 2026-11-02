@@ -26,6 +26,7 @@ import net.william278.husksync.database.Database
 import net.william278.husksync.event.BukkitDataSaveEvent
 import net.william278.husksync.user.BukkitUser
 import org.bukkit.Material
+import org.bukkit.event.HandlerList
 import org.bukkit.inventory.ItemStack
 import org.mockbukkit.mockbukkit.entity.PlayerMock
 import ru.arc.core.BoundedAsyncExecutor
@@ -117,13 +118,40 @@ class NativeGravePlayerPersistenceTest : FunSpec({
             val newerWorldSave = f.saveEvent(DataSnapshot.SaveCause.WORLD_SAVE, after)
             val disconnect = f.saveEvent(DataSnapshot.SaveCause.DISCONNECT, before)
 
-            f.adapter.beforeSave(oldWorldSave)
-            f.adapter.beforeSave(newerWorldSave)
-            f.adapter.beforeSave(disconnect)
+            f.paper.callEvent(oldWorldSave)
+            f.paper.callEvent(newerWorldSave)
+            f.paper.callEvent(disconnect)
 
             oldWorldSave.isCancelled shouldBe true
             newerWorldSave.isCancelled shouldBe false
             disconnect.isCancelled shouldBe false
+        }
+    }
+
+    test("a delayed world save remains fenced after ARC stop and the next adapter reuses one vendor-owned listener") {
+        withHuskGravePersistence { f ->
+            val arc = f.paper.createSimplePlugin("ArcGraveOwner")
+            val delayed = f.saveEvent(DataSnapshot.SaveCause.WORLD_SAVE, OffsetDateTime.now().minusMinutes(1))
+            f.adapter.persist(f.player, 32).get(5, TimeUnit.SECONDS)
+            fun fenceCount() = BukkitDataSaveEvent.getHandlerList().registeredListeners.count { it.plugin === f.huskOwner }
+            fenceCount() shouldBe 1
+
+            f.adapter.close()
+            HandlerList.unregisterAll(arc)
+            f.paper.server.pluginManager.disablePlugin(arc)
+            f.paper.callEvent(delayed)
+
+            delayed.isCancelled shouldBe true
+            f.huskOwner.isEnabled shouldBe true
+            fenceCount() shouldBe 1
+            f.nextAdapter().use {
+                fenceCount() shouldBe 1
+                val priorCapture = f.saveEvent(DataSnapshot.SaveCause.WORLD_SAVE, delayed.data.timestamp)
+                f.paper.callEvent(priorCapture)
+                priorCapture.isCancelled shouldBe true
+            }
+            f.paper.server.pluginManager.disablePlugin(f.huskOwner)
+            fenceCount() shouldBe 0
         }
     }
 
@@ -225,6 +253,7 @@ private fun withHuskGravePersistence(body: (HuskGravePersistenceFixture) -> Unit
 private class HuskGravePersistenceFixture(val paper: MockBukkitTestRuntime) : AutoCloseable {
     val owner: Thread = Thread.currentThread()
     val player = paper.addPlayer("GraveReceipt")
+    val huskOwner = paper.createSimplePlugin("HuskSync")
     val api = mockk<BukkitHuskSyncAPI>()
     val husk = mockk<HuskSync>()
     val user = mockk<BukkitUser>()
@@ -280,6 +309,8 @@ private class HuskGravePersistenceFixture(val paper: MockBukkitTestRuntime) : Au
     }
 
     fun setReceipt(value: Long) { customData[GRAVE_RECEIPT] = serializer.deserialize(value.toString()) }
+
+    fun nextAdapter() = HuskSyncGravePersistence(worker, api, scheduler)
 
     fun candidate(receipt: Long): DataSnapshot.Unpacked = mockk<DataSnapshot.Unpacked>().also {
         every { it.data } returns mapOf(GRAVE_RECEIPT to serializer.deserialize(receipt.toString()))

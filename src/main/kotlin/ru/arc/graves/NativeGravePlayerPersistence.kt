@@ -15,7 +15,11 @@ import org.bukkit.Bukkit
 import org.bukkit.NamespacedKey
 import org.bukkit.persistence.PersistentDataType
 import org.bukkit.entity.Player
-import ru.arc.ARC
+import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority
+import org.bukkit.event.HandlerList
+import org.bukkit.event.Listener
+import org.bukkit.plugin.Plugin
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.BoundedAsyncExecutor
 import ru.arc.core.TaskScheduler
@@ -73,6 +77,9 @@ internal class HuskSyncGravePersistence(
         // stateless serializer remains registered while ARC is absent, and is replaced
         // on the next generation. It captures no runtime, tasks, player or database.
         api.registerDataSerializer(RECEIPT, ReceiptSerializer)
+        NativeGraveSaveFence.install(requireNotNull(Bukkit.getPluginManager().getPlugin("HuskSync")) {
+            "Grave save fencing requires the enabled HuskSync plugin"
+        })
     }
     override fun isSynchronized(player: Player) = !api.getUser(player).isLocked
     override fun sequence(player: Player): Long = receipt(api.getUser(player).customDataStore[RECEIPT])
@@ -127,7 +134,7 @@ internal class HuskSyncGravePersistence(
         require(sequence > 0) { "A grave snapshot requires an allocated operation receipt" }
         // Caller applied and verified AFTER. Receipt and snapshot capture are in this
         // same Paper turn; no snapshot can advertise the receipt with BEFORE items.
-        saveFences[player.uniqueId] = OffsetDateTime.now()
+        NativeGraveSaveFence.captured(player.uniqueId)
         user.customDataStore[RECEIPT] = ReceiptData(sequence)
         val snapshot = user.createSnapshot(DataSnapshot.SaveCause.API)
         val database = api.plugin.database
@@ -150,18 +157,6 @@ internal class HuskSyncGravePersistence(
         pending.clear()
     }
 
-    /**
-     * Exact HuskSync WORLD_SAVE captures live fields asynchronously, then fires this
-     * event on Paper before SQL/Redis publication. Discard a snapshot begun before
-     * our verified AFTER capture; it may otherwise mix BEFORE items with the new
-     * receipt. Later normal saves and the disconnect checkout path remain native.
-     */
-    fun beforeSave(event: BukkitDataSaveEvent) {
-        if (event.saveCause != DataSnapshot.SaveCause.WORLD_SAVE) return
-        val fence = saveFences[event.user.uuid] ?: return
-        if (event.data.timestamp.isBefore(fence)) event.isCancelled = true
-    }
-
     private fun payload(value: DataSnapshot.Packed): JsonObject {
         val root = JsonParser.parseString(value.asJson(api.plugin)).asJsonObject
         check(root.has("data") && root["data"].isJsonObject) { "HuskSync snapshot has no serialized data" }
@@ -179,14 +174,37 @@ internal class HuskSyncGravePersistence(
     companion object {
         private val RECEIPT = Identifier.from("arc", "grave_receipt")
         private const val PREFIX = "arc-grave-receipt:"
-        // ponytail: one scalar fence per grave owner for this JVM; expire after drained
-        // vendor snapshots if that footprint ever matters. No native handle is retained.
-        private val saveFences = mutableMapOf<UUID, OffsetDateTime>()
         private fun parse(value: String): Long = value.toLong().also { require(it >= 0 && it.toString() == value) { "Invalid grave receipt" } }
         private fun receipt(value: Data?): Long = value?.let {
             val raw = it.toString()
             require(raw.startsWith(PREFIX)) { "Unexpected grave receipt type" }
             parse(raw.removePrefix(PREFIX))
         } ?: 0
+    }
+}
+
+/**
+ * Husk owns in-flight WORLD_SAVE captures beyond ARC stop. This fence therefore
+ * belongs to Husk's Bukkit lifecycle and retains only UUID/timestamp values.
+ * ARC/module generations reuse it; vendor disable removes its registration.
+ * Full JAR/classloader replacement is unsupported and requires a server restart.
+ */
+private object NativeGraveSaveFence : Listener {
+    private val captures = mutableMapOf<UUID, OffsetDateTime>()
+
+    fun install(owner: Plugin) {
+        check(owner.isEnabled) { "Grave save fencing requires the enabled HuskSync plugin" }
+        if (HandlerList.getRegisteredListeners(owner).none { it.listener === this }) {
+            owner.server.pluginManager.registerEvents(this, owner)
+        }
+    }
+
+    fun captured(playerId: UUID) { captures[playerId] = OffsetDateTime.now() }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    fun saving(event: BukkitDataSaveEvent) {
+        if (event.saveCause != DataSnapshot.SaveCause.WORLD_SAVE) return
+        val fence = captures[event.user.uuid] ?: return
+        if (event.data.timestamp.isBefore(fence)) event.isCancelled = true
     }
 }

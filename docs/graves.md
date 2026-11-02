@@ -56,10 +56,21 @@ Disconnect checkout and later normal saves retain their native path.
 Receipt serialization stays registered with HuskSync while the Graves module
 is stopped, so ordinary saves retain receipts. The next generation replaces it
 and accepts the prior formal wire value without a plugin-classloader cast.
-It holds no runtime/player/SQL resources. Module stop separately drains accepted
-storage and Core's native packet cleanup. Reinitialization awaits both.
-Full JAR hot replacement with an active HuskSync capture queue is not a validated
-activation route; use a server restart.
+The fence-only Bukkit listener is owned by HuskSync, so delayed world-save events
+remain guarded after ARC/module stop. Same-classloader generations reuse one
+listener and its UUID/timestamp fences; HuskSync disable removes the registration.
+Neither this guard nor the serializer retains runtime/player/SQL resources.
+Module stop separately drains accepted storage and Core's native packet cleanup.
+Reinitialization awaits both. Full JAR/classloader hot replacement is unsupported;
+use a server restart.
+
+Every backend sharing a HuskSync inventory must register the receipt before native
+grave writes begin. HuskSync drops unknown custom data on an older backend, which
+can turn later progress into an apparent stale inventory. Quiesce/stop Spawn and
+Survival together before starting the new ARC; per-target rolling restarts are
+unsafe. Do not stage this JAR in either active plugin root while an independent
+automatic restart could activate only that backend. Parkour's local profile is
+independent of this coordinated activation gate.
 
 ## Visual lifecycle
 
