@@ -14,6 +14,7 @@ import io.mockk.spyk
 import io.mockk.verify
 import ru.arc.gui.ArcMenus
 import net.kyori.adventure.text.minimessage.MiniMessage
+import io.kotest.matchers.string.shouldContain
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Bukkit
@@ -56,6 +57,7 @@ class HelpCenterScreensTest {
     private var gravesOpenCalls = 0
     private var landsOpenCalls = 0
     private var dungeonOpenCalls = 0
+    private var gravesOpenResult = true
     private val executed = mutableListOf<String>()
     private var searchCompletion: (String, Int, String, String) -> CompletableFuture<String?> = { _, _, _, _ -> CompletableFuture.completedFuture(null) }
 
@@ -145,7 +147,7 @@ class HelpCenterScreensTest {
             enchantmentsGuide = HelpCenterEnchantmentsGuideConfig.load(directory).snapshot(),
             enchantmentsCatalog = { HelpCenterEnchantmentsCatalog.unavailable() },
             activeGraveCount = { if (gravesUnavailable) error("Graves unavailable") else gravesCount },
-            openGraves = { gravesOpenCalls++; true },
+            openGraves = { gravesOpenCalls++; gravesOpenResult },
             searchService = HelpCenterSearchService(options = HelpCenterSearchOptions(enabled = ai),
                 complete = { model, tokens, system, request -> searchCompletion(model, tokens, system, request) }),
         )
@@ -647,6 +649,21 @@ class HelpCenterScreensTest {
         open(HelpCenterPage.ROOT)
 
         assertFalse(screen.buttons.any { it.id.value == "graves" })
+    }
+
+    @Test
+    fun `a grave module that becomes unavailable gives feedback without closing the main menu`() {
+        gravesCount = 1
+        open(HelpCenterPage.ROOT)
+        val root = screen
+        gravesOpenResult = false
+
+        click("graves")
+
+        gravesOpenCalls shouldBe 1
+        screen shouldBe root
+        dialogCloses shouldBe 0
+        plain(requireNotNull((player as PlayerMock).nextComponentMessage())) shouldContain "Могилы сейчас недоступны"
     }
 
     @Test

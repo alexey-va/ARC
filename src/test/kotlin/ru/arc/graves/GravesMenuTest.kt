@@ -2,6 +2,9 @@ package ru.arc.graves
 
 import io.mockk.every
 import io.mockk.mockk
+import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import net.kyori.adventure.text.BlockNBTComponent
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.ComponentLike
@@ -36,6 +39,10 @@ class GravesMenuTest {
     private var toggles = 0
     private var trackedSelections = mutableListOf<UUID>()
     private var teleported: Pair<GraveView, Double>? = null
+    private var viewsAvailable = true
+    private var claimAllowed = false
+    private var claimed: GraveView? = null
+    private var dialogCloses = 0
 
     @BeforeEach
     fun setup() {
@@ -47,9 +54,13 @@ class GravesMenuTest {
         toggles = 0
         trackedSelections = mutableListOf()
         teleported = null
+        viewsAvailable = true
+        claimAllowed = false
+        claimed = null
+        dialogCloses = 0
         menu = GravesMenu(
             settings = GravesConfig(ConfigManager.empty()).snapshot(),
-            views = { views },
+            views = { if (viewsAvailable) views else null },
             tracking = { tracked },
             trackingEnabled = { isTrackingEnabled },
             toggleTracking = { isTrackingEnabled = !isTrackingEnabled; toggles++ },
@@ -57,7 +68,9 @@ class GravesMenuTest {
             price = { priceQuote },
             teleport = { _, grave, quotedPrice -> teleported = grave to quotedPrice },
             showDialog = { _, shown, showAgain -> screen = shown; reopen = showAgain },
-            closeDialog = {},
+            closeDialog = { dialogCloses++ },
+            canClaim = { _, _ -> claimAllowed },
+            claim = { _, grave -> claimed = grave },
         )
     }
 
@@ -201,6 +214,67 @@ class GravesMenuTest {
         assertEquals("graves.detail", screen.id)
         assertTrue(body().contains("Стоимость перехода сейчас недоступна."))
         assertFalse(screen.buttons.any { it.id.value == "teleport_grave" || it.id.value == "confirm_teleport" })
+    }
+
+    @Test
+    fun `unavailable source is distinct from an empty list even when opening a world marker`() {
+        viewsAvailable = false
+        menu.openDetail(player, UUID(0, 1))
+
+        screen.id shouldBe "graves.list"
+        body() shouldContain "Не удалось загрузить могилы"
+        body() shouldNotContain "Активных могил сейчас нет"
+        body() shouldNotContain "Эта могила больше недоступна"
+        screen.buttons.isEmpty() shouldBe true
+    }
+
+    @Test
+    fun `nearby claim is the first action and passes the fresh grave before returning to gameplay`() {
+        val selected = grave(20)
+        views = listOf(selected)
+        claimAllowed = true
+        menu.openDetail(player, selected.id)
+
+        screen.id shouldBe "graves.detail"
+        screen.buttons.first().id.value shouldBe "claim_grave"
+        dialogCloses shouldBe 0
+        val updated = selected.copy(experience = 99)
+        views = listOf(updated)
+        click("claim_grave")
+
+        claimed shouldBe updated
+        dialogCloses shouldBe 1
+    }
+
+    @Test
+    fun `claim disappears after moving away and a previously rendered action is revalidated`() {
+        val selected = grave(21)
+        views = listOf(selected)
+        claimAllowed = true
+        menu.openDetail(player, selected.id)
+        claimAllowed = false
+        click("claim_grave")
+
+        screen.id shouldBe "graves.detail"
+        screen.buttons.any { it.id.value == "claim_grave" } shouldBe false
+        body() shouldContain "Подойдите к могиле"
+        claimed shouldBe null
+        dialogCloses shouldBe 0
+    }
+
+    @Test
+    fun `removed grave cannot be claimed from an old detail screen`() {
+        val selected = grave(22)
+        views = listOf(selected)
+        claimAllowed = true
+        menu.openDetail(player, selected.id)
+        views = emptyList()
+        click("claim_grave")
+
+        screen.id shouldBe "graves.list"
+        body() shouldContain "Эта могила больше недоступна"
+        claimed shouldBe null
+        dialogCloses shouldBe 0
     }
 
     private fun click(id: String) {

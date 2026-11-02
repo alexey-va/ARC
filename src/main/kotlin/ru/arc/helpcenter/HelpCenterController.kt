@@ -250,7 +250,7 @@ internal class HelpCenterController(
                 buttons = buildList {
                     if (activeGraves > 0) {
                         add(button("graves", text("main-graves-label", "count" to activeGraves.toString()), text("graves-tooltip")) {
-                            openGraves(player)
+                            if (!openGraves(player)) player.sendMessage(text("graves-unavailable"))
                         })
                     }
                     add(button("now", text("now-label"), text("now-tooltip")) { openNow(player) })

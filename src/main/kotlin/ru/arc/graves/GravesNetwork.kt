@@ -69,7 +69,7 @@ internal data class GraveTravelMessage(
 /**
  * Cross-server grave discovery and transfer preparation.
  *
- * GravesX remains authoritative for grave state and charges. Every public
+ * The owning backend/store remains authoritative for grave state. Every public
  * callback or prepare completion is marshalled through this bridge's lifecycle
  * scope; this class never teleports a player or moves money.
  */

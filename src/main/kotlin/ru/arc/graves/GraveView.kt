@@ -2,7 +2,7 @@ package ru.arc.graves
 
 import java.util.UUID
 
-/** Read-only projection; GravesX remains the sole owner of inventories and grave lifetime. */
+/** Read-only menu/network projection; item ownership remains in the corresponding durable store. */
 internal data class GraveView(
     val id: UUID,
     val ownerId: UUID,

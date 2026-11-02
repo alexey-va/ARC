@@ -470,6 +470,8 @@ open class ARC : JavaPlugin() {
             nativeDrains += ru.arc.backwings.BackWingsModule.drained()
             nativeDrains += ru.arc.enchanting.EnchantingModule.drained()
             moduleDrains += ru.arc.scheduled.ScheduledCommandsManager.drained()
+            nativeDrains += ru.arc.graves.GravesModule.drained()
+            moduleDrains += ru.arc.graves.GravesModule.storageDrained()
             attempt { sharedServiceMetrics?.close() }
             sharedServiceMetrics = null
             val retiredSqlConsumer = sqlConsumer

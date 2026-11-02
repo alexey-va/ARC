@@ -11,24 +11,38 @@ import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import ru.arc.ARC
 import ru.arc.core.LifecycleTaskScope
+import ru.arc.core.Tasks
+import ru.arc.audit.AuditConfig
 import ru.arc.core.PluginModule
 import ru.arc.core.whenCompleteSync
 import ru.arc.gui.ArcMenus
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import ru.arc.xserver.XActionManager
+import ru.arc.paper.teleport.NativePaperTeleportExecutor
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 
 object GravesModule : PluginModule {
     override val name = "Graves"
     override val priority = 85
     private var runtime: GravesRuntime? = null
+    private var generation = 0L
+    private var drain = CompletableFuture.completedFuture<Void>(null)
+    private var storageDrain = CompletableFuture.completedFuture<Void>(null)
     override fun init() {
-        val settings = GravesConfig.load(ARC.instance.dataPath).snapshot()
-        runtime = GravesRuntime(settings).also(GravesRuntime::start)
+        val current = ++generation
+        ARC.instance.whenCompleteOnMain(drain) { _, failure ->
+            if (current != generation) return@whenCompleteOnMain
+            if (failure != null) { warn("Graves predecessor cleanup failed", failure); return@whenCompleteOnMain }
+            val settings = GravesConfig.load(ARC.instance.dataPath).snapshot()
+            runtime = GravesRuntime(settings).also(GravesRuntime::start)
+        }
     }
     override fun reload() { shutdown(); init() }
-    override fun shutdown() { runtime?.close(); runtime = null }
+    override fun shutdown() { ++generation; runtime?.let { drain = it.closeAsync(); storageDrain = it.storageDrained() }; runtime = null }
+    fun drained(): CompletableFuture<Void> = drain.copy()
+    fun storageDrained(): CompletableFuture<Void> = storageDrain.copy()
     fun activeCount(player: Player): Int = runtime?.views(player)?.size ?: 0
     fun open(player: Player): Boolean = runtime?.let { it.menu.open(player); true } ?: false
 }
@@ -39,6 +53,18 @@ internal class GravesRuntime(private val settings: GravesSettings) : Listener, A
     private val server = requireNotNull(ARC.serverName) { "Graves requires the configured network server name" }
     private val tasks = LifecycleTaskScope()
     private val native = if (plugin.server.pluginManager.isPluginEnabled("GravesX")) GravesXAccess.find(plugin.server, server) else null
+    private val graveStore = plugin.submitBackground {
+        val sql = requireNotNull(AuditConfig.load().mysql) { "Native graves require shared ARC MySQL settings" }
+        MySqlNativeGraveRepository.open(sql)
+    }
+    private val archive = LegacyGravesArchive(plugin.dataPath, server, native, graveStore.thenApply { it }, plugin.backgroundOwner())
+    private val restoration = archive.activateSealed()
+    private val playerPersistence = if (plugin.server.pluginManager.isPluginEnabled("HuskSync")) HuskSyncGravePersistence(plugin.backgroundOwner()) else LocalGravePersistence
+    private val owned = NativeGraves(server, settings, ::feedback, ::refreshPlayers, plugin,
+        graveStore.thenApply { it },
+        playerPersistence,
+        Tasks.scheduler, restoration)
+    private val legacyHolograms = LegacyGravesHolograms(plugin)
     private val redis = ARC.redisManager
     private val network = redis?.let { GravesNetwork(it, server, ::acceptTransfer) }
     private val preferenceStore = redis?.let { GraveTrackingStore(it, settings.trackingEnabledByDefault) }
@@ -53,6 +79,8 @@ internal class GravesRuntime(private val settings: GravesSettings) : Listener, A
     private var snapshotFailed = false
     private var networkFailed = false
     private var closed = false
+    private var storageDrain = CompletableFuture.completedFuture<Void>(null)
+    private var drain: CompletableFuture<Void>? = null
     private val transfers = mutableMapOf<UUID, Transfer>()
     private val outgoing = mutableSetOf<UUID>()
     private val notices = mutableMapOf<UUID, Set<UUID>>()
@@ -62,18 +90,22 @@ internal class GravesRuntime(private val settings: GravesSettings) : Listener, A
     private data class Transfer(val grave: UUID, val price: Double, val expires: Long)
 
     internal val menu = GravesMenu(
-        settings, ::views, { selected(it)?.id }, { preference(it).enabled },
+        settings, { if (owned.ready && !snapshotFailed) views(it) else null }, { selected(it)?.id }, { preference(it).enabled },
         { player -> updatePreference(player) { it.copy(enabled = !it.enabled) } },
         { player, grave -> updatePreference(player) { it.copy(enabled = true, selected = grave) } },
         ::price, ::teleport,
+        canClaim = owned::canClaim,
+        claim = owned::claim,
     )
 
     fun start() {
         Bukkit.getPluginManager().registerEvents(this, plugin)
+        owned.start()
+        legacyHolograms.start()
         if (native != null) nativeListener = GravesNativeListener(this).also {
             Bukkit.getPluginManager().registerEvents(it, plugin)
         }
-        if (waitsForInventorySync) syncListener = GravesSyncListener(::afterInventorySync).also {
+        if (waitsForInventorySync) syncListener = GravesSyncListener(::afterInventorySync, playerPersistence as HuskSyncGravePersistence).also {
             Bukkit.getPluginManager().registerEvents(it, plugin)
         }
         plugin.getCommand("graves")?.setExecutor { sender, _, _, _ ->
@@ -89,12 +121,12 @@ internal class GravesRuntime(private val settings: GravesSettings) : Listener, A
                 hud.refresh(player, graves, selected(player, graves)?.id, preference(player).enabled)
             }
         }
-        info("Graves integration initialized on {}: local={}, network={}", server, native != null, network != null)
+        info("ARC graves initialized on {}: native=true, legacy={}, network={}", server, native != null, network != null)
     }
 
     fun views(player: Player): List<GraveView> {
         val now = System.currentTimeMillis()
-        return (localViews.filter { it.ownerId == player.uniqueId } + network?.views(player.uniqueId).orEmpty())
+        return (owned.views().filter { it.ownerId == player.uniqueId } + localViews.filter { it.ownerId == player.uniqueId } + network?.views(player.uniqueId).orEmpty())
             .filter { it.active(now) }.distinctBy { it.id }.sortedByDescending { it.createdAt }
     }
 
@@ -110,6 +142,8 @@ internal class GravesRuntime(private val settings: GravesSettings) : Listener, A
         }
         if (network != null && !networkRefreshPending && !snapshotFailed) {
             networkRefreshPending = true
+            // Native grave discovery is SQL-backed; Redis carries only the legacy
+            // projection and online lease, without duplicating complete native lists.
             network.publish(localViews).thenCompose { network.refresh() }.whenCompleteSync(tasks) { _, failure ->
                 networkRefreshPending = false
                 if (failure != null && !networkFailed) warn("Graves network refresh failed on {}", server, failure)
@@ -124,6 +158,7 @@ internal class GravesRuntime(private val settings: GravesSettings) : Listener, A
 
     private fun refreshPlayers() {
         Bukkit.getOnlinePlayers().forEach { player ->
+            if (owned.playerReady(player.uniqueId)) finishTransfer(player.uniqueId)
             val graves = views(player)
             hud.refreshGlow(player, graves)
             if (!player.isDead) {
@@ -178,7 +213,8 @@ internal class GravesRuntime(private val settings: GravesSettings) : Listener, A
     }
 
     internal fun price(player: Player): Double = if (player.hasPermission(settings.freePermission)) 0.0 else settings.defaultFee
-    internal fun validLocal(player: Player, grave: UUID): Boolean = native?.canTeleport(player, grave) == true
+    internal fun validLocal(player: Player, grave: UUID): Boolean = !owned.blocked(player.uniqueId) &&
+        (owned.find(grave)?.let { it.server == server && it.ownerId == player.uniqueId } == true || native?.canTeleport(player, grave) == true)
     internal fun feedback(player: Player, key: String) { if (player.isOnline) player.sendMessage(settings.text(key)) }
 
     private fun teleport(player: Player, view: GraveView, quote: Double) {
@@ -205,6 +241,12 @@ internal class GravesRuntime(private val settings: GravesSettings) : Listener, A
     }
 
     private fun acceptTransfer(player: UUID, grave: UUID, quote: Double): Boolean {
+        owned.find(grave)?.let { record ->
+            if (closed || record.server != server || record.ownerId != player || owned.blocked(player) ||
+                quote !in setOf(0.0, settings.defaultFee) || transfers.containsKey(player)) return false
+            transfers[player] = Transfer(grave, quote, System.currentTimeMillis() + 30_000)
+            return true
+        }
         val live = native?.grave(grave) ?: return false
         if (closed || live.ownerUUID != player || live.timeAliveRemaining == 0L ||
             quote !in setOf(0.0, settings.defaultFee) || transfers.containsKey(player)) return false
@@ -216,7 +258,35 @@ internal class GravesRuntime(private val settings: GravesSettings) : Listener, A
         if (!validLocal(player, grave)) { feedback(player, "changed"); return }
         payments.prepare(player, grave, quote, { validLocal(player, grave) && price(player) == quote }) {
             ArcMenus.closeDialog(player)
+            owned.find(grave)?.let { record ->
+                teleportOwned(player, record, quote)
+                return@prepare
+            }
             check(native?.teleport(player, grave) == true) { "GravesX declined the prepared teleport" }
+        }
+    }
+
+    private fun teleportOwned(player: Player, record: NativeGraveRecord, quote: Double) {
+        if (!payments.admitNative(player, record.id)) return
+        val world = Bukkit.getWorld(record.world)
+        if (world == null) { payments.complete(player, record.id, true); feedback(player, "unavailable"); return }
+        world.getChunkAtAsync(record.x shr 4, record.z shr 4, true).whenCompleteSync(tasks) { _, failure ->
+            val target = if (failure == null) GraveDestinations.nearby(world, record.x, record.y, record.z) else null
+            if (target == null || !validLocal(player, record.id) || price(player) != quote) {
+                payments.complete(player, record.id, true); feedback(player, "teleport-failed"); return@whenCompleteSync
+            }
+            val origin = player.location.clone()
+            NativePaperTeleportExecutor.teleportAsync(player, target).whenCompleteSync(tasks) { moved, problem ->
+                if (problem != null || moved != true) { payments.complete(player, record.id, true); feedback(player, "teleport-failed"); return@whenCompleteSync }
+                if (payments.charge(player, record.id, price(player), validLocal(player, record.id))) {
+                    payments.complete(player, record.id, false)
+                } else {
+                    NativePaperTeleportExecutor.teleportAsync(player, origin).whenCompleteSync(tasks) { restored, rollbackFailure ->
+                        payments.complete(player, record.id, true)
+                        if (restored != true || rollbackFailure != null) warn("Grave unpaid teleport rollback failed player={} grave={}", player.uniqueId, record.id, rollbackFailure)
+                    }
+                }
+            }
         }
     }
 
@@ -240,10 +310,11 @@ internal class GravesRuntime(private val settings: GravesSettings) : Listener, A
         if (!waitsForInventorySync) tasks.runLater(20) { finishTransfer(event.player.uniqueId) }
     }
 
-    private fun afterInventorySync(player: UUID) { tasks.runSync { finishTransfer(player) } }
+    private fun afterInventorySync(player: UUID) { tasks.runSync { owned.synchronized(player); finishTransfer(player) } }
 
     private fun finishTransfer(playerId: UUID) {
         val player = Bukkit.getPlayer(playerId)?.takeIf { it.isOnline } ?: return
+        if (!owned.playerReady(playerId)) return
         val transfer = transfers.remove(playerId) ?: return
         if (transfer.expires < System.currentTimeMillis()) { feedback(player, "changed"); return }
         refresh()
@@ -259,7 +330,8 @@ internal class GravesRuntime(private val settings: GravesSettings) : Listener, A
         preferenceWrites.remove(event.player.uniqueId)
     }
 
-    override fun close() {
+    fun closeAsync(): CompletableFuture<Void> {
+        drain?.let { return it }
         closed = true
         HandlerList.unregisterAll(this)
         nativeListener?.let(HandlerList::unregisterAll)
@@ -267,6 +339,14 @@ internal class GravesRuntime(private val settings: GravesSettings) : Listener, A
         tasks.close()
         payments.close()
         network?.close()
-        hud.close()
+        legacyHolograms.close()
+        // Explicit stop/reload maintenance: these stages use SQL/file workers only,
+        // never Paper callbacks. Finish before ARC seals its background admission.
+        try { restoration.join(); archive.checkpointOnShutdown().join() }
+        catch (failure: Throwable) { warn("Legacy grave handoff failed on {}; keep the original GravesX database and plugin", server, failure) }
+        storageDrain = owned.closeAsync()
+        return CompletableFuture.allOf(storageDrain, hud.closeAsync()).also { drain = it }
     }
+    fun storageDrained(): CompletableFuture<Void> = storageDrain.copy()
+    override fun close() { closeAsync() }
 }

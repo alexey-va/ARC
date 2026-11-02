@@ -56,6 +56,7 @@ text:
   search-catalog-label: "<italic:false><#ffffff>Все разделы ›"
   main-graves-label: '<#c4a7e7><bold>Мои могилы: <#ffffff><count> <#c4a7e7>›</bold>'
   graves-tooltip: '<#e8dfd2>Открыть список активных могил и вернуть вещи.'
+  graves-unavailable: '<#f4bd6a>Могилы сейчас недоступны. Попробуйте открыть список позже.'
   main-now-label: '<#86dcf1>Мой профиль'
   main-teams-label: '<#f3a2c9>Кланы'
   main-travel-label: '<#91c4ff>Телепортация'

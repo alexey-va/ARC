@@ -8,6 +8,7 @@ import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer
 import org.bukkit.Location
 import org.bukkit.Server
 import org.bukkit.entity.Player
+import org.bukkit.entity.EntityType
 import org.bukkit.inventory.ItemStack
 import java.util.UUID
 
@@ -88,6 +89,28 @@ internal class GravesXAccess(
 
     /** Resolves an actual placed grave block, falling back to the death location if none remain. */
     fun anchor(id: UUID): Location? = grave(id)?.let(::resolveDisplayAnchor)
+
+    /** Loaded validated player records only; the original database is never changed. */
+    fun exportLoadedPlayerGraves(): List<NativeGraveRecord> {
+        check(gravesPlugin.isEnabled) { "Legacy GravesX must remain enabled through its final ARC snapshot" }
+        return graveApi.graveUUIDs.mapNotNull { id ->
+            val grave = graveApi.getGrave(id) ?: return@mapNotNull null
+            if (grave.ownerType != EntityType.PLAYER || grave.timeAliveRemaining == 0L) return@mapNotNull null
+            val owner = requireNotNull(grave.ownerUUID) { "Legacy grave has no owner id=$id" }
+            val anchor = requireNotNull(resolveDisplayAnchor(grave)) { "Legacy grave has no loaded world/anchor id=$id" }
+            val inventory = requireNotNull(grave.inventory) { "Legacy grave inventory is not initialized id=$id" }
+            val lifetime = grave.timeAlive
+            val expires = if (grave.timeAliveRemaining < 0) -1L else
+                if (Long.MAX_VALUE - grave.timeCreation < lifetime) Long.MAX_VALUE else grave.timeCreation + lifetime
+            NativeGraveRecord(id = grave.uuid, ownerId = owner, ownerName = grave.ownerName,
+                server = localServer, world = anchor.world.name, x = anchor.blockX, y = anchor.blockY, z = anchor.blockZ,
+                createdAt = grave.timeCreation, expiresAt = expires, experience = grave.experience.coerceAtLeast(0),
+                items = inventory.contents.filterNotNull().filter(::hasContents).map(NativeGraveItems::encode),
+                phase = NativeGravePhase.IMPORTED)
+            // GravesX equipmentMap is only a projection of this same player inventory;
+            // appending it would duplicate armor and held items.
+        }
+    }
 
     private fun toView(grave: Grave, now: Long): GraveView? {
         val ownerId = grave.ownerUUID ?: return null

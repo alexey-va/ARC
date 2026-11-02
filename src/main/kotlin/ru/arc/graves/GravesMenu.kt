@@ -21,10 +21,10 @@ import ru.arc.paper.menu.PaperDialogScreen
 import java.math.BigDecimal
 import java.util.UUID
 
-/** Native, history-aware presentation for the GravesX records supplied by the owning module. */
+/** Native, history-aware presentation for the grave records supplied by the owning module. */
 internal class GravesMenu(
     private val settings: GravesSettings,
-    private val views: (Player) -> List<GraveView>,
+    private val views: (Player) -> List<GraveView>?,
     private val tracking: (Player) -> UUID?,
     private val trackingEnabled: (Player) -> Boolean,
     private val toggleTracking: (Player) -> Unit,
@@ -35,12 +35,17 @@ internal class GravesMenu(
         ArcMenus.openDialog(player, screen, reopen = reopen)
     },
     private val closeDialog: (Player) -> Unit = ArcMenus::closeDialog,
+    private val canClaim: (Player, GraveView) -> Boolean = { _, _ -> false },
+    private val claim: (Player, GraveView) -> Unit = { _, _ -> },
 ) {
     private val gson = GsonComponentSerializer.gson()
     private val plainText = PlainTextComponentSerializer.plainText()
 
     /** Opens inside the current dialog flow; command entry points start a new flow before calling this. */
     fun open(player: Player) = openList(player, 0)
+
+    /** World interactions start their flow before opening the exact grave they selected. */
+    fun openDetail(player: Player, graveId: UUID) = openDetail(player, graveId, 0)
 
     private fun openList(player: Player, requestedPage: Int, notice: String? = null) {
         val active = activeViews(player)
@@ -64,7 +69,7 @@ internal class GravesMenu(
                     width = 420,
                 ),
             )
-            notice?.let { add(PaperDialogBody(settings.text(it), width = 420)) }
+            if (active != null) notice?.let { add(PaperDialogBody(settings.text(it), width = 420)) }
         }
         val buttons = buildList {
             pageEntries.forEachIndexed { index, grave ->
@@ -85,12 +90,6 @@ internal class GravesMenu(
                     }.copy(width = 300),
                 )
             }
-            if (page > 0) add(button("previous_page", settings.text("previous-label"), settings.text("previous-tooltip")) {
-                openList(player, page - 1)
-            })
-            if (page < pages - 1) add(button("next_page", settings.text("next-label"), settings.text("next-tooltip")) {
-                openList(player, page + 1)
-            })
             if (entries.isNotEmpty()) add(trackingButton(player, "tracking_toggle") {
                 if (activeViews(player).isNullOrEmpty()) {
                     openList(player, page, "list-stale")
@@ -98,6 +97,12 @@ internal class GravesMenu(
                     toggleTracking(player)
                     openList(player, page)
                 }
+            })
+            if (page > 0) add(button("previous_page", settings.text("previous-label"), settings.text("previous-tooltip")) {
+                openList(player, page - 1)
+            })
+            if (page < pages - 1) add(button("next_page", settings.text("next-label"), settings.text("next-tooltip")) {
+                openList(player, page + 1)
             })
         }
 
@@ -170,11 +175,16 @@ internal class GravesMenu(
             if (trackedId(player) == grave.id) add(PaperDialogBody(settings.text("detail-tracked"), width = 320))
         }
         val buttons = buildList {
-            if (itemPage > 0) add(button("items_previous", settings.text("previous-label"), settings.text("previous-tooltip")) {
-                openDetail(player, grave.id, listPage, itemPage - 1)
-            })
-            if (itemPage < itemPages - 1) add(button("items_next", settings.text("next-label"), settings.text("next-tooltip")) {
-                openDetail(player, grave.id, listPage, itemPage + 1)
+            if (canClaim(player, grave)) add(button("claim_grave", settings.text("claim-label"), settings.text("claim-tooltip")) {
+                val current = activeGrave(player, grave.id)
+                if (current == null) {
+                    openList(player, listPage, "list-stale")
+                } else if (!canClaim(player, current)) {
+                    showDetail(player, current, listPage, itemPage, "claim-unavailable")
+                } else {
+                    closeDialog(player)
+                    claim(player, current)
+                }
             })
             if (trackedId(player) != grave.id) add(button("track_grave", settings.text("track-label"), settings.text("track-tooltip")) {
                 if (activeGrave(player, grave.id) == null) {
@@ -197,6 +207,12 @@ internal class GravesMenu(
                     openConfirmation(player, grave.id, listPage, itemPage)
                 })
             }
+            if (itemPage > 0) add(button("items_previous", settings.text("previous-label"), settings.text("previous-tooltip")) {
+                openDetail(player, grave.id, listPage, itemPage - 1)
+            })
+            if (itemPage < itemPages - 1) add(button("items_next", settings.text("next-label"), settings.text("next-tooltip")) {
+                openDetail(player, grave.id, listPage, itemPage + 1)
+            })
         }
         showDialog(
             player,
@@ -283,7 +299,7 @@ internal class GravesMenu(
 
     private fun activeViews(player: Player): List<GraveView>? = try {
         val now = System.currentTimeMillis()
-        views(player).filter { it.active(now) }
+        views(player)?.filter { it.active(now) }
     } catch (_: Exception) {
         null
     }

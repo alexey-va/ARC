@@ -15,6 +15,10 @@ internal data class GravesSettings(
     val hudRefreshTicks: Int,
     val trackingEnabledByDefault: Boolean,
     private val texts: Map<String, String>,
+    val retentionSeconds: Long = 10_800,
+    val maxGraves: Int = 18,
+    val experienceFraction: Double = .8,
+    val claimDistance: Double = 6.0,
 ) {
     private val miniMessage = MiniMessage.miniMessage()
 
@@ -41,6 +45,10 @@ internal class GravesConfig(private val source: Config) {
             hudRefreshTicks = hudRefreshTicks,
             trackingEnabledByDefault = source.bool("tracking.enabled-by-default", true),
             texts = DEFAULT_TEXT.mapValues { (key, fallback) -> required("text.$key", fallback) },
+            retentionSeconds = source.long("storage.retention-seconds", 10_800).also { require(it in 60..2_592_000) },
+            maxGraves = source.int("storage.maximum-per-player", 18).also { require(it in 1..256) },
+            experienceFraction = source.double("storage.experience-fraction", .8).also { require(it.isFinite() && it in 0.0..1.0) },
+            claimDistance = source.double("interaction.claim-distance", 6.0).also { require(it.isFinite() && it in 1.0..6.0) },
         )
     }
 
@@ -74,6 +82,9 @@ internal class GravesConfig(private val source: Config) {
             "detail-body" to "<italic:false><#e8dfd2>Место и содержимое выбранной могилы.",
             "detail-tracked" to "<italic:false><#9bd48d>Эта могила выбрана для компаса.",
             "detail-items-title" to "<italic:false><#f4bd6a>Содержимое могилы",
+            "claim-label" to "<italic:false><#9bd48d>Забрать вещи",
+            "claim-tooltip" to "<italic:false><#e8dfd2>Перенести вещи и опыт из этой могилы в ваш инвентарь.",
+            "claim-unavailable" to "<italic:false><#f4bd6a>Подойдите к могиле, чтобы забрать вещи.",
             "items-empty" to "<italic:false><#e8dfd2>В этой могиле нет предметов.",
             "items-page" to "<italic:false><#e8dfd2>Предметы: страница <#ffffff><page>/<pages>",
             "item-name-unavailable" to "<italic:false><#e8dfd2>Название предмета недоступно",
@@ -113,7 +124,18 @@ internal class GravesConfig(private val source: Config) {
             "hud-target" to "<italic:false><#c4a7e7>Могила · <#ffffff><distance> м<vertical> · /graves — меню",
             "hud-remote" to "<italic:false><#c4a7e7>Могила: <#ffffff><server> · <world> · /graves",
             "hud-world" to "<italic:false><#c4a7e7>Могила в мире <#ffffff><world> · /graves",
+            "marker-label" to "<italic:false><#f4bd6a>Ваша могила<newline><#e8dfd2>Присядьте — забрать",
             "created" to "<italic:false><#f4bd6a>Вещи остались в могиле. <#ffffff><click:run_command:/graves>Открыть могилы ›</click>",
+            "inventory-full" to "<italic:false><#f4bd6a>В инвентаре не хватает места. Освободите место и попробуйте снова.",
+            "creation-preserved" to "<italic:false><#f4bd6a>Не удалось сохранить могилу. Вещи и опыт остались у вас.",
+            "storage-preserved" to "<italic:false><#f4bd6a>Хранилище могил сейчас недоступно. Вещи и опыт остались у вас.",
+            "placement-preserved" to "<italic:false><#f4bd6a>Рядом с местом смерти нет безопасного места для могилы. Вещи и опыт остались у вас.",
+            "pending-preserved" to "<italic:false><#f4bd6a>Предыдущая передача вещей ещё не завершилась. Эти вещи и опыт остались у вас.",
+            "grave-limit-preserved" to "<italic:false><#f4bd6a>Достигнут предел активных могил. Вещи и опыт остались у вас.",
+            "inventory-conflict" to "<italic:false><#f4bd6a>Состояние вещей изменилось. Передача приостановлена; обратитесь к администрации.",
+            "items-pending" to "<italic:false><#e8dfd2>Подождите: сохраняем ваши вещи.",
+            "claimed" to "<italic:false><#9bd48d>Вещи и опыт из могилы возвращены.",
+            "claimed-partial" to "<italic:false><#f4bd6a>Часть вещей осталась в могиле. Освободите место в инвентаре и заберите остаток.",
             "changed" to "<italic:false><#f4bd6a>Могила или стоимость изменились. Откройте карточку заново.",
             "insufficient" to "<italic:false><#ff9a9a>Недостаточно монет для перехода к могиле.",
             "payment-pending" to "<italic:false><#92bed8>Переход к могиле уже выполняется.",

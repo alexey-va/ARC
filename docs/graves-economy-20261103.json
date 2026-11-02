@@ -1,0 +1,59 @@
+{
+  "date": "2026-11-03",
+  "change": "Native ARC player graves; no new cash rewards or currency conversion",
+  "baseline": "Live Survival graves.yml SHA-256 d799ad7b260ef12a8cbbf4e615363d67e356419e45ca27f4a876cac008597c5e; GravesX defaults inspected",
+  "vault": {
+    "unit": "major coins",
+    "successful_teleport_before": 100,
+    "successful_teleport_after": 100,
+    "free_permission_before_after": "arc.graves.teleport.free",
+    "walking_or_claiming_before_after": 0,
+    "failed_or_unsafe_visit_before_after": 0,
+    "daily_successful_visit_scenarios": [
+      1,
+      10,
+      30
+    ],
+    "daily_sink_before": [
+      100,
+      1000,
+      3000
+    ],
+    "daily_sink_after": [
+      100,
+      1000,
+      3000
+    ],
+    "direct_mint_delta": 0,
+    "note": "Scenario event counts, not measured income. Independent successful visits pay again; duplicate confirmations do not."
+  },
+  "tokens": {
+    "direct_mint_delta": 0,
+    "direct_burn_delta": 0,
+    "new_flows": false
+  },
+  "experience": {
+    "unit": "XP points",
+    "stored_fraction_before": 0.8,
+    "stored_fraction_after": 0.8,
+    "formula": "floor(actual pre-death level/progress points * 0.8), never above pre-death points",
+    "keep_level_policy": "No XP escrow if another native policy keeps experience"
+  },
+  "items": {
+    "unit": "native stacks with complete metadata",
+    "flow": "death drops -> durable grave -> owner inventory; overflow stays in grave",
+    "new_reward_quantity": 0,
+    "retention_seconds_before_after": 10800,
+    "maximum_graves_per_player_per_backend_before_after": 18,
+    "failure": "Keep actual items/XP when placement/storage/capacity cannot admit safely. GravesX already enables placement.failure-keep-inventory; exact old XP/capacity fallback is not established.",
+    "scope_change": "Owner-only native graves. Legacy Survival open-other/protection theft behavior and mob graves are not ported.",
+    "indirect_effect": "More reliable recovery can reduce destroyed/lost/resold items; no player-rate measurement or fabricated Vault conversion is claimed."
+  },
+  "bounds": {
+    "earning_multiplier_added": false,
+    "cash_out_or_exchange_added": false,
+    "sell_to_contract_plan": "Active SELL and future SELL-to-contract transition unchanged; not counted as simultaneous new income.",
+    "multiaccount": "Retrieves each owner's saved entitlement without new reward items/XP/money."
+  },
+  "conclusion": "Cash rates and XP fraction stay fixed; intended change is reliable escrow/recovery and owner privacy. Live usage and indirect item retention need observation after activation."
+}

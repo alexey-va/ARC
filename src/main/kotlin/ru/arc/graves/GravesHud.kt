@@ -5,28 +5,41 @@ import net.kyori.adventure.text.Component
 import org.bukkit.Color
 import org.bukkit.Location
 import org.bukkit.Material
+import org.bukkit.entity.Display
 import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
 import org.bukkit.util.Transformation
 import org.joml.Quaternionf
 import org.joml.Vector3f
 import ru.arc.dungeons.api.CompassStrip
-import ru.arc.paper.display.PacketBlockDisplay
+import ru.arc.paper.display.PacketDisplay
 import ru.arc.paper.display.PaperPacketDisplays
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 import kotlin.math.atan2
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /** Personal guidance only: no world entities, block writes, or chunk loads. */
-internal class GravesHud(plugin: Plugin, private val server: String, private val settings: GravesSettings) : AutoCloseable {
+internal class GravesHud(
+    plugin: Plugin,
+    private val server: String,
+    private val settings: GravesSettings,
+    private val displays: PaperPacketDisplays = PaperPacketDisplays(plugin, "graves"),
+) : AutoCloseable {
     private class Bars(val notice: BossBar, val compass: BossBar, var compassShown: Boolean = false)
+    private class Marker(val world: UUID, val x: Int, val y: Int, val z: Int, val parts: List<PacketDisplay>) {
+        fun matches(grave: GraveView): Boolean = x == grave.x && y == grave.y && z == grave.z
+        fun remove() = parts.forEach(PacketDisplay::remove)
+    }
     private val bars = mutableMapOf<UUID, Pair<Player, Bars>>()
-    private val displays = PaperPacketDisplays(plugin, "graves")
-    private val glows = mutableMapOf<UUID, MutableMap<UUID, PacketBlockDisplay>>()
+    private val markers = mutableMapOf<UUID, MutableMap<UUID, Marker>>()
+    private var closed = false
 
     fun refresh(player: Player, graves: List<GraveView>, selected: UUID?, tracking: Boolean) {
+        if (closed) return
         if (graves.isEmpty() || player.isDead || !player.isOnline) { clear(player); return }
+        clearOtherWorldMarkers(player)
         val state = bars.getOrPut(player.uniqueId) {
             val created = Bars(
                 BossBar.bossBar(Component.empty(), 1f, BossBar.Color.YELLOW, BossBar.Overlay.PROGRESS),
@@ -61,39 +74,64 @@ internal class GravesHud(plugin: Plugin, private val server: String, private val
         }
     }
 
-    /** Once per snapshot interval; PaperPacketDisplays handles actual viewer/chunk packet lifecycle. */
+    /** Stable private scenes; PaperPacketDisplays owns connection, sent-chunk and world reconciliation. */
     fun refreshGlow(player: Player, graves: List<GraveView>) {
-        val current = glows.getOrPut(player.uniqueId, ::mutableMapOf)
-        val desired = if (player.isDead) emptyList() else graves.filter { grave ->
-            grave.server == server && grave.world == player.world.name &&
+        if (closed) return
+        clearOtherWorldMarkers(player)
+        val current = markers.getOrPut(player.uniqueId, ::mutableMapOf)
+        val desired = if (player.isDead || !player.isOnline) emptyList() else graves.filter { grave ->
+            grave.ownerId == player.uniqueId && grave.server == server && grave.world == player.world.name &&
                 player.location.distanceSquared(Location(player.world, grave.x + .5, grave.y + .5, grave.z + .5)) <= settings.nearbyGlowRadius.toDouble() * settings.nearbyGlowRadius &&
                 player.world.isChunkLoaded(grave.x shr 4, grave.z shr 4)
         }
         val ids = desired.mapTo(hashSetOf()) { it.id }
         (current.keys - ids).forEach { current.remove(it)?.remove() }
         desired.forEach { grave ->
-            if (grave.id in current) return@forEach
-            val block = player.world.getBlockAt(grave.x, grave.y, grave.z)
-            if (block.type.isAir) return@forEach
-            val box = block.boundingBox
-            if (box.widthX <= .04 || box.height <= .04 || box.widthZ <= .04) return@forEach
-            // The solid marker stays inside the actual grave block, avoiding coincident visible faces.
-            // Its glow outline is visible through terrain without changing the real block or hitbox.
-            current[grave.id] = displays.spawnBlock(
-                Location(player.world, box.minX + .01, box.minY + .01, box.minZ + .01),
-                Material.WHITE_CONCRETE.createBlockData(),
-            ).apply {
-                isVisibleByDefault = false
-                showTo(player)
-                isGlowing = true
-                glowColorOverride = Color.fromRGB(0xffcf70)
-                viewRange = settings.nearbyGlowRadius / 64f
-                transformation = Transformation(Vector3f(), Quaternionf(), Vector3f(
-                    (box.widthX - .02).toFloat(), (box.height - .02).toFloat(), (box.widthZ - .02).toFloat(),
-                ), Quaternionf())
+            if (current[grave.id]?.matches(grave) == true) return@forEach
+            current.remove(grave.id)?.remove()
+            val parts = mutableListOf<PacketDisplay>()
+            try {
+                GraveMarkerGeometry.parts.forEach { part ->
+                    displays.spawnBlock(
+                        Location(player.world, grave.x + .5 + part.x, grave.y + part.y, grave.z + .5 + part.z),
+                        part.material.createBlockData(),
+                    ).also(parts::add).apply {
+                        isVisibleByDefault = false
+                        showTo(player)
+                        isGlowing = true
+                        glowColorOverride = Color.fromRGB(0xffcf70)
+                        viewRange = settings.nearbyGlowRadius / 64f
+                        transformation = Transformation(Vector3f(), Quaternionf(), Vector3f(part.width, part.height, part.depth), Quaternionf())
+                    }
+                }
+                displays.spawnText(
+                    Location(player.world, grave.x + .5, grave.y + GraveMarkerGeometry.labelY, grave.z + .5),
+                    settings.text("marker-label"),
+                ).also(parts::add).apply {
+                    isVisibleByDefault = false
+                    showTo(player)
+                    billboard = Display.Billboard.CENTER
+                    viewRange = settings.nearbyGlowRadius / 64f
+                    lineWidth = 200
+                    isShadowed = true
+                    backgroundColor = Color.fromARGB(0xb020182a.toInt())
+                    transformation = Transformation(Vector3f(), Quaternionf(), Vector3f(GraveMarkerGeometry.labelScale), Quaternionf())
+                }
+                current[grave.id] = Marker(player.world.uid, grave.x, grave.y, grave.z, parts)
+            } catch (failure: RuntimeException) {
+                parts.forEach(PacketDisplay::remove)
+                throw failure
             }
         }
-        if (current.isEmpty()) glows.remove(player.uniqueId)
+        if (current.isEmpty()) markers.remove(player.uniqueId)
+    }
+
+    private fun clearOtherWorldMarkers(player: Player) {
+        val current = markers[player.uniqueId] ?: return
+        current.entries.removeIf { (_, marker) ->
+            (marker.world != player.world.uid).also { if (it) marker.remove() }
+        }
+        if (current.isEmpty()) markers.remove(player.uniqueId)
     }
 
     fun clear(player: Player) {
@@ -101,11 +139,33 @@ internal class GravesHud(plugin: Plugin, private val server: String, private val
             player.hideBossBar(it.notice)
             player.hideBossBar(it.compass)
         }
-        glows.remove(player.uniqueId)?.values?.forEach(PacketBlockDisplay::remove)
+        markers.remove(player.uniqueId)?.values?.forEach(Marker::remove)
     }
 
-    override fun close() {
+    /** The owning module must observe this future before starting a replacement runtime. */
+    fun closeAsync(): CompletableFuture<Void> {
+        closed = true
         bars.values.map { it.first }.forEach(::clear)
-        displays.close()
+        markers.values.forEach { it.values.forEach(Marker::remove) }
+        markers.clear()
+        return displays.closeAsync()
     }
+
+    override fun close() { closeAsync() }
+}
+
+/** Canonical cuboids are shared by the runtime and its source-driven composition preview. */
+internal object GraveMarkerGeometry {
+    data class Part(
+        val material: Material,
+        val x: Double, val y: Double, val z: Double,
+        val width: Float, val height: Float, val depth: Float,
+    )
+
+    val parts = listOf(
+        Part(Material.POLISHED_DEEPSLATE, -.35, .02, -.22, .70f, .12f, .44f),
+        Part(Material.CHISELED_DEEPSLATE, -.25, .14, -.10, .50f, .62f, .20f),
+    )
+    const val labelY = 1.02
+    const val labelScale = .65f
 }

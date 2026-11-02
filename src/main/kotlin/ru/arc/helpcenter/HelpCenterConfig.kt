@@ -160,6 +160,7 @@ class HelpCenterConfig(private val config: Config) {
             "my-location-heading" to "<italic:false><#86dcf1>Место и общение",
             "main-graves-label" to "<#c4a7e7><bold>Мои могилы: <#ffffff><count> <#c4a7e7>›</bold>",
             "graves-tooltip" to "<#e8dfd2>Открыть список активных могил и вернуть вещи.",
+            "graves-unavailable" to "<#f4bd6a>Могилы сейчас недоступны. Попробуйте открыть список позже.",
             "main-now-label" to "<#86dcf1>Мой профиль",
             "main-teams-label" to "<#f3a2c9>Кланы",
             "main-travel-label" to "<#91c4ff>Телепортация",

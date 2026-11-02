@@ -1,59 +1,103 @@
-# GravesX integration
+# ARC player graves
 
-ARC supplies `/graves`, native dialogs, a conditional first main-menu button,
-personal bossbars and nearby owner-only block outlines. GravesX 2026.4.9.2
-owns grave creation, records, inventories, expiry and safe teleportation.
-Spawn's keep-inventory/death policy is not changed.
+ARC owns new player graves, complete native item bytes, XP, recovery, the menu,
+cross-server discovery and private markers. GravesX is optional compatibility
+for old records, not the owner of new deaths. Mob graves, tokens and looting
+other players' graves are outside this implementation.
 
-`modules/graves.yml` sets a positive `teleport.default-fee` (100 Vault coins).
-Only `teleport.free-permission` (`arc.graves.teleport.free`, default false)
-waives it. No group receives that node from this change. Walking to a grave
-remains free. The confirmation displays the quote; destination permission,
-ownership, grave lifetime and price are checked again before teleport and debit.
-The balance assessment is `graves-economy-20261015.json`.
+`/graves` and the first main-menu button open a native list with contents,
+coordinates, server/world, experience and expiry. Shared MySQL includes graves
+whose source backend is offline; a visit requires that backend online.
+The destination waits for actual HuskSync completion and ARC reconciliation.
 
-The compass defaults on, targets the selected or most recent local-world grave,
-and can be disabled or retargeted in the same menu. Settings persist in Redis
-across backend changes. The strip uses `arc-dungeons-api`'s `CompassStrip`,
-also used by the EliteMobs compass. A remote/world target shows its server/world
-instead of a misleading bearing. A menu reminder remains when tracking is off.
-Glows are private packet displays inside the grave block's bounding box;
-they use already-loaded chunks and disappear outside the configured radius.
+Parkour keeps its separate inventory without HuskSync. It reads the same grave
+list, but never applies or advances a shared-inventory checkpoint. Pending
+operations are isolated by inventory profile.
 
-## Cross-server and payment boundaries
+At the grave, crouch or choose **Забрать вещи** in its card. Only the owner can
+claim, within six blocks on the owning backend. Overflow stays in the same grave.
 
-GravesX H2 stores and API caches are process-local. ARC publishes leased full
-read-only snapshots to `arc:graves:v1:servers` every two seconds. A missing node
-expires after 15 seconds; an empty live node publishes an empty snapshot.
-Names and collections are bounded; the current ceiling is 512 graves and
-32,768 item summaries per server. This is a presentation capacity, not a
-GravesX inventory or creation limit. A rejected publication is logged and
-the previous lease expires; no records are deleted.
+## Existing economic conditions
 
-Remote visits use `arc:graves:v1:travel`: destination acknowledgement is
-correlated to the player, grave, source, destination, quote and 10-second
-request. A destination join has 30 seconds to arrive and pass validation.
-When HuskSync is enabled, `BukkitSyncCompleteEvent` must succeed before the
-native teleport; timeout never bypasses inventory sync. Only the destination
-can charge. Source transfer failure does not charge.
+Defaults retain 3-hour storage, 18 graves per player per backend, 80% XP and
+100 Vault coins for a successful visit. `arc.graves.teleport.free` still waives
+the fee; this change grants no permissions. Walking and claiming are free.
+Keep-inventory worlds and canceled deaths retain their native policy.
+Unavailable placement/storage/capacity keeps death items and XP with the player.
+See [the assessment](graves-economy-20261103.json).
 
-Paid local visits write a durable intent under `data/grave-payments` before
-the native teleport starts. GravesX's successful post-event permits one
-Vault debit. A later canceled post-event refunds a known successful debit.
-Canceled/unsafe/expired attempts and missing post-events are never charged;
-admissions expire after 120 seconds. Old GravesX teleport entry points are
-redirected to ARC's quote flow instead of bypassing payment.
+## Item ownership and recovery
 
-An ambiguous provider exception or unresolved journal record blocks further
-paid visits for that player. It is never automatically retried or refunded.
-Operators must reconcile the logged operation UUID against provider history
-before any manual repair; preserve the original record as evidence. The
-integration does not mutate inventories or extend grave lifetimes.
+`arc_native_graves` uses the existing ARC audit MySQL settings/shared pool.
+`arc_native_grave_sequences` allocates monotonic operation receipts.
+`arc_native_grave_watermarks` retains each owner's latest acknowledged exact
+inventory/XP checkpoint independently of grave expiry or removal.
 
-## Validation scope
+Death retains inventory until PREPARED is durable; later death cancellation is
+checked before admission. Claim uses CLAIMING. Application first wins fresh SQL
+CAS: a cached operation cannot authorize another payout. Input, item/XP pickup,
+consumption, mending and durability changes wait while the transition/recovery
+is pending. An unexpected mismatch moves only that entitlement into REVIEW,
+releases ordinary controls and logs grave/player IDs. REVIEW never auto-replays.
 
-Focused tests cover dialog navigation/stale quotes, conditional root placement,
-compass projection, cross-server discovery/ACK/expiry, persistent tracking,
-charge/refund/timeout and durable-write shutdown races. They do not prove
-native Minecraft rendering or a real two-backend player transfer. Runtime
-activation and ordinary-client acceptance are recorded separately.
+After applying and verifying native inventory/XP, ARC records a HuskSync custom
+receipt and captures the matching snapshot in the same Paper turn. Exact SQL
+payload readback precedes final grave CAS and atomic owner-watermark advancement.
+An unknown write is not a payout ACK.
+
+HuskSync 3.8.8-c3a6afd Lockstep can prefer older Redis state over newer SQL,
+including a world-save snapshot. ARC compares synchronized receipt and durable
+watermark. It restores a newer valid Husk SQL inventory, or the independent
+checkpoint if history is stale/rotated, and persists before releasing recovery.
+Old world-save captures begun before the local native transition are canceled
+before publication: otherwise BEFORE items could mix with the new receipt.
+Disconnect checkout and later normal saves retain their native path.
+
+Receipt serialization stays registered with HuskSync while the Graves module
+is stopped, so ordinary saves retain receipts. The next generation replaces it
+and accepts the prior formal wire value without a plugin-classloader cast.
+It holds no runtime/player/SQL resources. Module stop separately drains accepted
+storage and Core's native packet cleanup. Reinitialization awaits both.
+Full JAR hot replacement with an active HuskSync capture queue is not a validated
+activation route; use a server restart.
+
+## Visual lifecycle
+
+Nearby owners see two packet-only stone parts and a camera-facing label.
+No world entities/blocks, chunk tickets or background chunk loads are created.
+Stable scenes disappear on claim, expiry, world change, logout and shutdown.
+The existing selected-grave compass and menu reminder remain.
+
+When GravesX is absent, a loaded-entity sweep and future chunk-load events remove
+only ArmorStand/TextDisplay holograms with `graveHologram` plus a valid matching
+`gravesx:grave_uuid` or `graveHologramGraveUUID:<uuid>`. Unmarked decorations and
+conflicting IDs stay. Old blocks and the GravesX database are not broadly deleted.
+
+## Two-stage legacy handoff
+
+1. Activate ARC with GravesX still installed. New deaths use ARC; the old adapter
+   serves existing GravesX records.
+2. Clean ARC stop captures loaded valid PLAYER inventories once (equipmentMap
+   duplicates the same items), stores IMPORTED records and atomically seals
+   their hashes in `plugins/ARC/data/native-graves-legacy-handoff.json`.
+3. Quarantine the exact GravesX root JAR through supported `mc rm`, preserve its
+   data directory, and restart with GravesX absent. Only exact sealed records
+   activate; partial activation can retry without increasing contents/revisions.
+
+Starting with GravesX present first invalidates an old seal, preventing stale
+reload snapshots from becoming imports. Do not remove GravesX after a failed
+final seal or re-enable its old database after ownership moved to ARC.
+The API exposes a loaded cache, not a complete database export. Missing-world,
+corrupt and unloaded records are not guessed/discarded; keep the database for
+separate evidence-based recovery.
+
+## Evidence
+
+Focused tests cover metadata/overflow/XP, delayed durability, stale CAS, recovery
+sessions, REVIEW, menus/markers, legacy seals, exact Husk ACK and real MySQL
+rollback. API/bytecode evidence uses Paper 1.21.11 and HuskSync 3.8.8-c3a6afd
+(runtime SHA-256 `b2e39fef7b7d00496b7a7359e272b00b2c9c8ac74610f2963ab5625837426073`);
+GravesX artifact/source identities are in [libs/README.md](../libs/README.md).
+Mocks and source-derived marker composition do not prove native player
+death/transfer or Minecraft rendering. Report delivery, activation and those
+observations separately.

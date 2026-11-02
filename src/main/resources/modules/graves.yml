@@ -1,4 +1,10 @@
-# GravesX owns grave records and contents. ARC provides the player-facing menu and tracking controls.
+# ARC owns new player graves. GravesX is optional legacy-data compatibility only.
+storage:
+  retention-seconds: 10800
+  maximum-per-player: 18
+  experience-fraction: 0.8
+interaction:
+  claim-distance: 6.0
 teleport:
   default-fee: 100.0
   free-permission: arc.graves.teleport.free
@@ -20,6 +26,9 @@ text:
   detail-body: '<italic:false><#e8dfd2>Место и содержимое выбранной могилы.'
   detail-tracked: '<italic:false><#9bd48d>Эта могила выбрана для компаса.'
   detail-items-title: '<italic:false><#f4bd6a>Содержимое могилы'
+  claim-label: '<italic:false><#9bd48d>Забрать вещи'
+  claim-tooltip: '<italic:false><#e8dfd2>Перенести вещи и опыт из этой могилы в ваш инвентарь.'
+  claim-unavailable: '<italic:false><#f4bd6a>Подойдите к могиле, чтобы забрать вещи.'
   items-empty: '<italic:false><#e8dfd2>В этой могиле нет предметов.'
   items-page: '<italic:false><#e8dfd2>Предметы: страница <#ffffff><page>/<pages>'
   item-name-unavailable: '<italic:false><#e8dfd2>Название предмета недоступно'
@@ -59,7 +68,18 @@ text:
   hud-target: '<italic:false><#c4a7e7>Могила · <#ffffff><distance> м<vertical> · /graves — меню'
   hud-remote: '<italic:false><#c4a7e7>Могила: <#ffffff><server> · <world> · /graves'
   hud-world: '<italic:false><#c4a7e7>Могила в мире <#ffffff><world> · /graves'
+  marker-label: '<italic:false><#f4bd6a>Ваша могила<newline><#e8dfd2>Присядьте — забрать'
   created: '<italic:false><#f4bd6a>Вещи остались в могиле. <#ffffff><click:run_command:/graves>Открыть могилы ›</click>'
+  inventory-full: '<italic:false><#f4bd6a>В инвентаре не хватает места. Освободите место и попробуйте снова.'
+  creation-preserved: '<italic:false><#f4bd6a>Не удалось сохранить могилу. Вещи и опыт остались у вас.'
+  storage-preserved: '<italic:false><#f4bd6a>Хранилище могил сейчас недоступно. Вещи и опыт остались у вас.'
+  placement-preserved: '<italic:false><#f4bd6a>Рядом с местом смерти нет безопасного места для могилы. Вещи и опыт остались у вас.'
+  pending-preserved: '<italic:false><#f4bd6a>Предыдущая передача вещей ещё не завершилась. Эти вещи и опыт остались у вас.'
+  grave-limit-preserved: '<italic:false><#f4bd6a>Достигнут предел активных могил. Вещи и опыт остались у вас.'
+  inventory-conflict: '<italic:false><#f4bd6a>Состояние вещей изменилось. Передача приостановлена; обратитесь к администрации.'
+  items-pending: '<italic:false><#e8dfd2>Подождите: сохраняем ваши вещи.'
+  claimed: '<italic:false><#9bd48d>Вещи и опыт из могилы возвращены.'
+  claimed-partial: '<italic:false><#f4bd6a>Часть вещей осталась в могиле. Освободите место в инвентаре и заберите остаток.'
   changed: '<white></white> <italic:false><#f4bd6a>Могила или стоимость изменились. Откройте карточку заново.'
   insufficient: '<white></white> <italic:false><#ff9a9a>Недостаточно монет для перехода к могиле.'
   payment-pending: '<white></white> <italic:false><#92bed8>Переход к могиле уже выполняется.'
