@@ -36,9 +36,15 @@ class GraveAppearanceTest : FunSpec({
         GraveAppearances.select(id, invalid.copy(epitaphs = listOf(" "))).epitaph shouldBe ""
     }
 
-    test("rotated silhouettes stay within one block and optional owner examples keep a readable scale") {
+    test("stone pedestals support one by two maps with bounded overhang and readable separate last words") {
         GraveModels.all.forEach { model ->
-            (model.parts.size <= 11) shouldBe true
+            (model.parts.size <= 12) shouldBe true
+            model.parts.any { part ->
+                part.z == -.5 && part.width >= .95f && part.height >= 1.95f
+            } shouldBe true
+            model.parts.any { part ->
+                part.y == .0 && part.width >= 1.40f && part.height >= .18f && part.depth >= 1.10f
+            } shouldBe true
             model.parts.forEach { part ->
                 val rotation = Quaternionf().rotationXYZ(
                     Math.toRadians(part.rotationX.toDouble()).toFloat(),
@@ -51,9 +57,22 @@ class GraveAppearanceTest : FunSpec({
                         (part.y + part.height / 2).toFloat(),
                         (part.z + part.depth / 2).toFloat(),
                     )
-                    (abs(point.x) <= .5f && abs(point.z) <= .5f && point.y >= -.000001f && point.y <= 1.3f) shouldBe true
+                    (abs(point.x) <= .740001f && point.z >= -.700001f && point.z <= .500001f &&
+                        point.y >= -.000001f && point.y <= 2.000001f) shouldBe true
+                    for (yaw in listOf(0f, 90f, 180f, 270f)) {
+                        val turned = Vector3f(point).rotateY(Math.toRadians(yaw.toDouble()).toFloat())
+                        (abs(turned.x) <= .740001f && abs(turned.z) <= .740001f) shouldBe true
+                    }
+                }
+                if (part.z < GraveModels.IMAGE_FRONT_Z) {
+                    // Trim may cover the map's empty outer border, never the engraving or last words.
+                    val crossesContent = part.x < .42 && part.x + part.width > -.42 &&
+                        part.y < 1.88 && part.y + part.height > .24
+                    crossesContent shouldBe false
                 }
             }
+            (model.inscription.z < GraveModels.IMAGE_FRONT_Z) shouldBe true
+            (model.inscription.centerY + model.inscription.maxHeight / 2 < .5) shouldBe true
             listOf("Похуй...", "Собаке собачья смерть", "Да не ссы, ничего не будет").forEach { epitaph ->
                 val placement = model.inscription.placement(epitaph)
                 (placement.scale >= .25f) shouldBe true

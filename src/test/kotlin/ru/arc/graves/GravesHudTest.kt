@@ -33,9 +33,10 @@ class GravesHudTest : FunSpec({
         MockBukkitTestRuntime.open().use { paper ->
             val fixture = GravesHudFixture(paper.createSimplePlugin("GravesHud"))
             val grave = fixture.grave(1, 0)
+            val displayCount = GraveAppearances.select(grave.id, fixture.appearance).model.parts.size + 1
             fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(grave)
             fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(grave)
-            fixture.spawned.size shouldBe 12
+            fixture.spawned.size shouldBe displayCount
             fixture.spawned.forEach {
                 verify(exactly = 1) { it.display.isVisibleByDefault = false }
                 verify(exactly = 1) { it.display.showTo(fixture.player) }
@@ -47,23 +48,27 @@ class GravesHudTest : FunSpec({
             verify(exactly = 0) { fixture.player.hideBossBar(any()) }
 
             fixture.hud.refreshGlow(fixture.player, emptyList()) shouldBe emptyList()
-            fixture.removed.size shouldBe 12
+            fixture.removed.size shouldBe displayCount
             fixture.cleared.size shouldBe 1
             fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(grave)
 
             every { fixture.world.uid } returns UUID.randomUUID()
             fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(grave)
-            fixture.removed.size shouldBe 24
+            fixture.removed.size shouldBe displayCount * 2
             fixture.cleared.size shouldBe 2
-            fixture.spawned.size shouldBe 36
-            fixture.hud.closeAsync() shouldBe fixture.cleanup
-            fixture.hud.closeAsync() shouldBe fixture.cleanup
+            fixture.spawned.size shouldBe displayCount * 3
+            val closing = fixture.hud.closeAsync()
+            (fixture.hud.closeAsync() === closing) shouldBe true
+            closing.isDone shouldBe false
             fixture.cleanup.isDone shouldBe false
-            fixture.removed.size shouldBe 36
+            fixture.removed.size shouldBe displayCount * 3
             fixture.cleared.size shouldBe 3
             fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe emptyList()
             verify(exactly = 1) { fixture.displays.closeAsync() }
             fixture.cleanup.complete(null)
+            closing.join()
+            closing.isDone shouldBe true
+            closing.isCompletedExceptionally shouldBe false
         }
     }
 
@@ -137,13 +142,14 @@ class GravesHudTest : FunSpec({
             val fixture = GravesHudFixture(paper.createSimplePlugin("GravesHudRotation"), appearance)
             val grave = (1L..100L).map { fixture.grave(it, 0) }
                 .first { GraveAppearances.select(it.id, appearance).yaw == 270f }
+            val partCount = GraveAppearances.select(grave.id, appearance).model.parts.size
             fixture.failText = true
             fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe emptyList()
-            fixture.removed.size shouldBe 8
+            fixture.removed.size shouldBe partCount
             fixture.spawned.forEach { verify(exactly = 0) { it.display.showTo(any<Player>()) } }
             fixture.failText = false
             fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(grave)
-            val current = fixture.spawned.drop(8)
+            val current = fixture.spawned.drop(partCount)
             val text = current.last()
             text.location.yaw shouldBe -90f
             PlainTextComponentSerializer.plainText().serialize(checkNotNull(text.text)) shouldBe "<red>Похуй..."
@@ -178,7 +184,7 @@ class GravesHudTest : FunSpec({
 
 private class GravesHudFixture(
     plugin: Plugin,
-    appearance: GraveAppearanceSettings = GraveAppearanceSettings(mapOf("slate" to 1.0), listOf("Да не ссы, ничего не будет")),
+    val appearance: GraveAppearanceSettings = GraveAppearanceSettings(mapOf("slate" to 1.0), listOf("Да не ссы, ничего не будет")),
 ) {
     data class Spawn(val display: PacketDisplay, val location: Location, val text: Component? = null)
     val owner: UUID = UUID.randomUUID()

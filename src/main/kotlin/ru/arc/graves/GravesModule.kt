@@ -7,10 +7,12 @@ import org.bukkit.event.EventPriority
 import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
 import org.bukkit.event.inventory.InventoryOpenEvent
+import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerCommandPreprocessEvent
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerQuitEvent
+import org.bukkit.event.server.PluginEnableEvent
 import ru.arc.ARC
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.Tasks
@@ -92,6 +94,10 @@ internal class GravesRuntime(private val settings: GravesSettings, sql: SqlConne
     private val outgoing = mutableSetOf<UUID>()
     private var nativeListener: GravesNativeListener? = null
     private var syncListener: Listener? = null
+    private var frameInteractions: GraveFrameInteractions? = null
+    private var imageOwner: YamipaGraveEngravings? = null
+    private var imageInitRunning = false
+    private var imageRetryTicks = 40L
     private val waitsForInventorySync = plugin.server.pluginManager.isPluginEnabled("HuskSync")
     private data class Transfer(val grave: UUID, val price: Double, val expires: Long)
 
@@ -123,7 +129,57 @@ internal class GravesRuntime(private val settings: GravesSettings, sql: SqlConne
         }
         refresh()
         tasks.runTimer(40, 40, ::refresh)
+        initializeEngravings()
         info("ARC graves initialized on {}: native=true, legacy={}, network={}", server, native != null, network != null)
+    }
+
+    private fun initializeEngravings() {
+        if (closed || imageInitRunning || imageOwner?.health()?.available == true) return
+        val plugins = plugin.server.pluginManager
+        if (!plugins.isPluginEnabled("YamipaPlugin") || !plugins.isPluginEnabled("packetevents")) return
+        imageInitRunning = true
+        plugin.submitBackground { GraveImageAssets.extract(plugin.dataPath, plugin::getResource) }
+            .whenCompleteSync(tasks) { paths, failure ->
+                imageInitRunning = false
+                if (closed) return@whenCompleteSync
+                if (failure != null || paths == null) {
+                    warn("Could not prepare grave engraving assets on {}", server, failure)
+                    return@whenCompleteSync
+                }
+                val engravings = YamipaGraveEngravings.create(plugin, paths)
+                val health = engravings.health()
+                if (!health.available) {
+                    engravings.closeAsync()
+                    // Yamipa's plugin-enable event can precede creation of its renderer.
+                    if (health.detail?.contains("Cannot get renderer instance if plugin is not running") == true) {
+                        val delay = imageRetryTicks
+                        imageRetryTicks = (imageRetryTicks * 2).coerceAtMost(2400L)
+                        tasks.runLater(delay) { initializeEngravings() }
+                    }
+                    return@whenCompleteSync
+                }
+                try {
+                    frameInteractions?.close()
+                    frameInteractions = GraveFrameInteractions(plugin, engravings::graveForFrame, barriers::interactFrame)
+                    hud.attachEngravings(engravings)
+                    imageOwner = engravings
+                    imageRetryTicks = 40L
+                    refreshPlayers()
+                } catch (error: Throwable) {
+                    frameInteractions?.close()
+                    frameInteractions = null
+                    engravings.closeAsync()
+                    warn("Could not enable grave engravings on {}", server, error)
+                }
+            }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    fun imageProviderEnabled(event: PluginEnableEvent) {
+        if (event.plugin.name == "YamipaPlugin") {
+            imageRetryTicks = 40L
+            initializeEngravings()
+        }
     }
 
     fun views(player: Player): List<GraveView> {
@@ -373,6 +429,9 @@ internal class GravesRuntime(private val settings: GravesSettings, sql: SqlConne
         outgoing.remove(event.player.uniqueId)
     }
 
+    @EventHandler fun changeWorld(event: PlayerChangedWorldEvent) = hud.clear(event.player)
+    @EventHandler fun death(event: PlayerDeathEvent) = hud.clear(event.entity)
+
     fun closeAsync(): CompletableFuture<Void> {
         drain?.let { return it }
         closed = true
@@ -384,6 +443,8 @@ internal class GravesRuntime(private val settings: GravesSettings, sql: SqlConne
         payments.close()
         network?.close()
         legacyHolograms.close()
+        frameInteractions?.close()
+        frameInteractions = null
         barriers.close()
         // Explicit stop/reload maintenance: these stages use SQL/file workers only,
         // never Paper callbacks. Finish before ARC seals its background admission.

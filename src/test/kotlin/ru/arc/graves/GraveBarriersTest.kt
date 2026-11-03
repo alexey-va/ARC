@@ -30,12 +30,12 @@ class GraveBarriersTest : FunSpec({
         withBarriers { f ->
             val graves = (0..8).map { f.grave(it) }
             f.barriers.update(f.player, graves)
-            f.packets.size shouldBe 8
+            f.packets.size shouldBe 16
             f.packets.all { it.material == Material.BARRIER } shouldBe true
             f.barriers.update(f.player, graves)
-            f.packets.size shouldBe 8
-            f.scheduler.tick(20)
             f.packets.size shouldBe 16
+            f.scheduler.tick(20)
+            f.packets.size shouldBe 32
             f.blocks.values.forEach { block ->
                 verify(exactly = 0) { block.setType(any<Material>()) }
                 verify(exactly = 0) { block.setType(any<Material>(), any<Boolean>()) }
@@ -58,10 +58,51 @@ class GraveBarriersTest : FunSpec({
             first.isCancelled shouldBe true
             first.useItemInHand() shouldBe Event.Result.DENY
             f.scheduler.tick()
-            f.packets.size shouldBe 2
+            f.packets.size shouldBe 4
             f.nanos += 250_000_000L
             f.paper.callEvent(f.click())
             f.opened shouldBe listOf(grave.id, grave.id)
+        }
+    }
+
+    test("the upper half of a two-block monument opens the same grave and is restored on removal") {
+        withBarriers { f ->
+            val grave = f.grave()
+            f.barriers.update(f.player, listOf(grave))
+            val upper = PlayerInteractEvent(f.player, Action.RIGHT_CLICK_BLOCK,
+                null, f.block(y = 65), BlockFace.NORTH, EquipmentSlot.HAND)
+            f.paper.callEvent(upper)
+            upper.isCancelled shouldBe true
+            f.opened shouldBe listOf(grave.id)
+            f.materials[Triple(0, 65, 0)] = Material.STONE
+            f.barriers.update(f.player, emptyList())
+            f.packets.takeLast(2).map { it.material } shouldBe listOf(Material.AIR, Material.STONE)
+        }
+    }
+
+    test("a grave frame follows the same owner, distance, readiness and stale-state checks") {
+        withBarriers { f ->
+            val own = f.grave()
+            val foreign = f.grave(x = 1, owner = UUID.randomUUID())
+            f.barriers.update(f.player, listOf(own, foreign))
+            f.barriers.interactFrame(f.player, UUID.randomUUID())
+            f.barriers.interactFrame(f.player, foreign.id)
+            f.messages.last() shouldBe "not-owner"
+            f.isReady = false
+            f.barriers.interactFrame(f.player, own.id)
+            f.messages.last() shouldBe "interaction-unavailable"
+            f.isReady = true
+            f.position = Location(f.world, 12.0, 64.0, .5)
+            f.barriers.interactFrame(f.player, own.id)
+            f.opened shouldBe emptyList()
+            f.position = Location(f.world, .5, 64.0, 2.5)
+            f.barriers.interactFrame(f.player, own.id)
+            f.barriers.interactFrame(f.player, own.id)
+            f.opened shouldBe listOf(own.id)
+            f.current.remove(own.id)
+            f.barriers.interactFrame(f.player, own.id)
+            f.packets.takeLast(2).map { it.material } shouldBe listOf(Material.AIR, Material.AIR)
+            f.opened shouldBe listOf(own.id)
         }
     }
 
@@ -97,7 +138,7 @@ class GraveBarriersTest : FunSpec({
             real.isCancelled shouldBe false
             f.paper.callEvent(real)
             real.isCancelled shouldBe false
-            f.packets.last().material shouldBe Material.STONE
+            f.packets.takeLast(2).map { it.material } shouldBe listOf(Material.STONE, Material.AIR)
             f.opened shouldBe emptyList()
             val count = f.packets.size
             f.scheduler.tick(40)
@@ -119,7 +160,7 @@ class GraveBarriersTest : FunSpec({
             f.paper.callEvent(f.click())
             f.materials[Triple(0, 64, 0)] = Material.WATER
             f.barriers.update(f.player, emptyList())
-            f.packets.last().material shouldBe Material.WATER
+            f.packets.takeLast(2).map { it.material } shouldBe listOf(Material.WATER, Material.AIR)
             val count = f.packets.size
             f.scheduler.tick(40)
             f.packets.size shouldBe count

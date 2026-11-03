@@ -8,6 +8,7 @@ import org.bukkit.Chunk
 import org.bukkit.Location
 import org.bukkit.Particle
 import org.bukkit.Sound
+import org.bukkit.block.BlockFace
 import org.bukkit.entity.Display
 import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
@@ -28,9 +29,17 @@ internal class GravesHud(
     private val displays: PaperPacketDisplays = PaperPacketDisplays(plugin, "graves"),
     private val onClear: (Player) -> Unit = {},
 ) : AutoCloseable {
-    private class Marker(val x: Int, val y: Int, val z: Int, val parts: List<PacketDisplay>) {
+    private class Marker(
+        val x: Int, val y: Int, val z: Int,
+        val parts: List<PacketDisplay>,
+        val yaw: Float,
+        var engraving: YamipaGraveEngravings.Handle?,
+    ) {
         fun matches(grave: GraveView): Boolean = x == grave.x && y == grave.y && z == grave.z && parts.all { it.isValid }
-        fun remove() = parts.forEach(PacketDisplay::remove)
+        fun remove() {
+            try { engraving?.removeAsync() }
+            finally { parts.forEach(PacketDisplay::remove) }
+        }
     }
     private class ViewerMarkers(val player: Player, val world: UUID, val entries: MutableMap<UUID, Marker> = mutableMapOf())
     private data class Cell(val x: Int, val y: Int, val z: Int)
@@ -39,6 +48,19 @@ internal class GravesHud(
     private var closed = false
     private var closeFuture: CompletableFuture<Void>? = null
     private var markerFailureLogged = false
+    private var imageFailureLogged = false
+    private var engravings: YamipaGraveEngravings? = null
+    private var retiredEngravings = CompletableFuture.completedFuture<Void>(null)
+
+    /** A fresh provider generation rebuilds the visible markers on the next normal refresh. */
+    fun attachEngravings(owner: YamipaGraveEngravings) {
+        check(!closed) { "Cannot attach grave images after HUD shutdown" }
+        if (engravings === owner) return
+        markers.values.map { it.player }.forEach(::clear)
+        engravings?.let { retiredEngravings = CompletableFuture.allOf(retiredEngravings, it.closeAsync()) }
+        engravings = owner
+        imageFailureLogged = false
+    }
 
     /** Returns selected, successfully allocated scenes; Core sends them asynchronously without a client render ACK. */
     fun refreshGlow(player: Player, graves: List<GraveView>): List<GraveView> {
@@ -66,7 +88,14 @@ internal class GravesHud(
         (current.keys - ids).forEach { current.remove(it)?.remove() }
         val rendered = mutableListOf<GraveView>()
         desired.forEach { grave ->
-            if (current[grave.id]?.matches(grave) == true) { rendered += grave; return@forEach }
+            val existing = current[grave.id]
+            if (existing?.matches(grave) == true) {
+                // Pending image cleanup can temporarily exhaust Yamipa's retained-image budget.
+                if (existing.engraving?.isValid == false) existing.engraving = null
+                if (existing.engraving == null) existing.engraving = createEngraving(player, grave, existing.yaw)
+                rendered += grave
+                return@forEach
+            }
             current.remove(grave.id)?.remove()
             val parts = mutableListOf<PacketDisplay>()
             try {
@@ -116,7 +145,9 @@ internal class GravesHud(
                     }
                 }
                 parts.forEach { it.showTo(player) }
-                current[grave.id] = Marker(grave.x, grave.y, grave.z, parts.toList())
+                // Artwork failure must not remove the already visible tomb or its independent epitaph.
+                val engraving = createEngraving(player, grave, appearance.yaw)
+                current[grave.id] = Marker(grave.x, grave.y, grave.z, parts.toList(), appearance.yaw, engraving)
                 rendered += grave
             } catch (failure: RuntimeException) {
                 parts.forEach(PacketDisplay::remove)
@@ -128,6 +159,26 @@ internal class GravesHud(
         }
         if (current.isEmpty()) clearMarkers(player)
         return rendered
+    }
+
+    private fun createEngraving(player: Player, grave: GraveView, yaw: Float): YamipaGraveEngravings.Handle? {
+        val owner = engravings?.takeIf { it.health().available } ?: return null
+        return try {
+            val face = when (yaw.toInt()) {
+                90 -> BlockFace.WEST
+                180 -> BlockFace.SOUTH
+                270 -> BlockFace.EAST
+                else -> BlockFace.NORTH
+            }
+            owner.spawn(player, grave.id, YamipaGraveEngravings.variant(grave.id),
+                Location(player.world, grave.x.toDouble(), grave.y + 1.0, grave.z.toDouble()), face)
+        } catch (failure: RuntimeException) {
+            if (!imageFailureLogged) {
+                imageFailureLogged = true
+                logger.log(Level.WARNING, "Could not attach grave engraving ${grave.id}; base tomb remains visible", failure)
+            }
+            null
+        }
     }
 
     private fun clearOtherWorldState(player: Player) {
@@ -159,7 +210,8 @@ internal class GravesHud(
         closeFuture?.let { return it }
         closed = true
         markers.values.map { it.player }.forEach(::clear)
-        return displays.closeAsync().also { closeFuture = it }
+        return CompletableFuture.allOf(displays.closeAsync(), retiredEngravings,
+            engravings?.closeAsync() ?: CompletableFuture.completedFuture(null)).also { closeFuture = it }
     }
 
     override fun close() { closeAsync() }

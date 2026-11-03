@@ -41,83 +41,94 @@ internal data class GraveInscription(
 internal data class GraveInscriptionPlacement(val bottomY: Double, val scale: Float)
 
 internal object GraveModels {
+    /** Yamipa's two north-facing map tiles cover x=[-.5,.5], y=[0,2]. */
+    const val IMAGE_FRONT_Z = -.53125
+    private const val FRONT_Z = -.5
+    private const val TRIM_Z = -.552
+    // The artwork leaves its lower quarter black for independently chosen last words.
+    private val inscription = GraveInscription(0.0, .37, -.565, .34f, 92, 0xE8DFD2, .22f)
+    // The mourning ribbon rests on the outer side, clear of the map and its front frame.
+    private val mourningRibbon = listOf(
+        GraveModelPart(Material.GRAY_WOOL, .499, 1.82, -.525, .020f, .080f, .400f, rotationX = 28f),
+        GraveModelPart(Material.BLACK_WOOL, .514, 1.83, -.516, .012f, .060f, .382f, rotationX = 28f),
+    )
+
     val slate = GraveModel(
         "slate",
         listOf(
-            GraveModelPart(Material.COBBLED_DEEPSLATE, -.43, .0, -.38, .86f, .13f, .76f),
-            GraveModelPart(Material.POLISHED_DEEPSLATE, -.37, .13, -.30, .74f, .10f, .60f),
-            GraveModelPart(Material.POLISHED_DEEPSLATE, -.34, .23, -.09, .68f, .64f, .25f),
-            GraveModelPart(Material.POLISHED_DEEPSLATE, -.34, .87, -.09, .12f, .10f, .25f),
-            GraveModelPart(Material.POLISHED_DEEPSLATE, .22, .87, -.09, .12f, .10f, .25f),
-            GraveModelPart(Material.POLISHED_DEEPSLATE, -.22, .87, -.09, .44f, .20f, .25f),
-            GraveModelPart(Material.SMOOTH_STONE, -.285, .40, -.116, .57f, .39f, .026f),
-            GraveModelPart(Material.CHISELED_STONE_BRICKS, -.09, .83, -.125, .18f, .18f, .035f),
-            GraveModelPart(Material.MOSS_BLOCK, -.33, .23, -.28, .20f, .025f, .16f),
-            GraveModelPart(Material.POPPY, -.36, .255, -.35, .26f, .26f, .26f),
-            GraveModelPart(Material.COBBLED_DEEPSLATE, .18, .23, -.27, .13f, .065f, .12f),
-        ),
-        GraveInscription(0.0, .59, -.124, .34f, 60, 0x343638),
+            GraveModelPart(Material.POLISHED_DEEPSLATE, -.49, .01, FRONT_Z, .98f, 1.98f, .34f),
+            GraveModelPart(Material.COBBLED_DEEPSLATE, -.72, .0, -.70, 1.44f, .20f, 1.15f),
+            GraveModelPart(Material.POLISHED_DEEPSLATE, -.62, .20, -.515, 1.24f, .16f, .945f),
+            GraveModelPart(Material.DEEPSLATE_TILES, -.5, .09, TRIM_Z, .045f, 1.74f, .08f),
+            GraveModelPart(Material.DEEPSLATE_TILES, .455, .09, TRIM_Z, .045f, 1.74f, .08f),
+            GraveModelPart(Material.POLISHED_DEEPSLATE, -.5, 1.94, TRIM_Z, 1f, .06f, .39f),
+            GraveModelPart(Material.CHISELED_DEEPSLATE, -.5, 1.83, TRIM_Z, .08f, .11f, .10f),
+            GraveModelPart(Material.CHISELED_DEEPSLATE, .42, 1.83, TRIM_Z, .08f, .11f, .10f),
+        ) + mourningRibbon,
+        inscription,
     )
 
     val obelisk = GraveModel(
         "obelisk",
         listOf(
-            GraveModelPart(Material.SMOOTH_QUARTZ, -.38, .0, -.35, .76f, .11f, .70f),
-            GraveModelPart(Material.QUARTZ_BRICKS, -.31, .11, -.28, .62f, .11f, .56f),
-            GraveModelPart(Material.GOLD_BLOCK, -.25, .22, -.22, .50f, .018f, .44f),
-            GraveModelPart(Material.QUARTZ_BLOCK, -.23, .238, -.19, .46f, .762f, .38f),
-            GraveModelPart(Material.SMOOTH_QUARTZ, -.17, 1.0, -.14, .34f, .12f, .28f),
-            GraveModelPart(Material.SMOOTH_QUARTZ, -.075, 1.08, -.10, .15f, .15f, .20f, rotationZ = 45f),
-            GraveModelPart(Material.SMOOTH_QUARTZ, -.215, .37, -.205, .43f, .43f, .015f),
-            GraveModelPart(Material.CHISELED_QUARTZ_BLOCK, -.115, .84, -.211, .23f, .14f, .021f),
-        ),
-        GraveInscription(0.0, .585, -.213, .28f, 60, 0x514D49),
+            GraveModelPart(Material.QUARTZ_BLOCK, -.49, .01, FRONT_Z, .98f, 1.98f, .38f),
+            GraveModelPart(Material.QUARTZ_BRICKS, -.70, .0, -.69, 1.40f, .18f, 1.14f),
+            GraveModelPart(Material.SMOOTH_QUARTZ, -.60, .18, -.515, 1.20f, .18f, .92f),
+            GraveModelPart(Material.GOLD_BLOCK, -.69, .15, -.697, 1.38f, .018f, .045f),
+            GraveModelPart(Material.QUARTZ_PILLAR, -.5, .103, TRIM_Z, .055f, 1.837f, .12f),
+            GraveModelPart(Material.QUARTZ_PILLAR, .445, .103, TRIM_Z, .055f, 1.837f, .12f),
+            GraveModelPart(Material.SMOOTH_QUARTZ, -.5, 1.94, TRIM_Z, 1f, .06f, .43f),
+            GraveModelPart(Material.GOLD_BLOCK, -.445, 1.925, TRIM_Z, .89f, .015f, .055f),
+        ) + mourningRibbon,
+        inscription,
     )
 
     val cairn = GraveModel(
         "cairn",
         listOf(
-            GraveModelPart(Material.STONE_BRICKS, -.47, .0, -.47, .94f, .10f, .94f),
-            GraveModelPart(Material.MOSSY_COBBLESTONE, -.42, .10, -.42, .84f, .30f, .84f),
-            GraveModelPart(Material.POLISHED_ANDESITE, -.45, .40, -.45, .90f, .09f, .90f),
-            GraveModelPart(Material.STONE, -.37, .49, -.36, .74f, .055f, .72f),
-            GraveModelPart(Material.MOSS_BLOCK, -.32, .545, .16, .35f, .025f, .15f),
-            GraveModelPart(Material.MOSS_BLOCK, -.32, .545, -.04, .12f, .025f, .20f),
-            GraveModelPart(Material.COBBLESTONE, .16, .545, .17, .13f, .06f, .13f),
-            GraveModelPart(Material.SMOOTH_STONE, -.33, .105, -.439, .66f, .285f, .019f),
-        ),
-        GraveInscription(0.0, .2475, -.447, .32f, 76, 0x343638, .26f),
+            GraveModelPart(Material.STONE, -.49, .01, FRONT_Z, .98f, 1.98f, .44f),
+            GraveModelPart(Material.MOSSY_COBBLESTONE, -.74, .0, -.70, 1.48f, .20f, 1.20f),
+            GraveModelPart(Material.STONE_BRICKS, -.63, .20, -.51, 1.26f, .18f, 1.00f),
+            GraveModelPart(Material.MOSSY_STONE_BRICKS, -.5, .10, TRIM_Z, .065f, .60f, .16f),
+            GraveModelPart(Material.COBBLESTONE, -.5, .70, TRIM_Z, .045f, .70f, .11f),
+            GraveModelPart(Material.MOSSY_STONE_BRICKS, -.5, 1.40, TRIM_Z, .065f, .54f, .16f),
+            GraveModelPart(Material.COBBLESTONE, .445, .10, TRIM_Z, .055f, 1.84f, .13f),
+            GraveModelPart(Material.STONE_BRICKS, -.5, 1.94, TRIM_Z, 1f, .06f, .49f),
+            GraveModelPart(Material.MOSS_BLOCK, -.49, 1.87, -.558, .065f, .07f, .10f),
+            GraveModelPart(Material.MOSS_BLOCK, .435, .10, -.558, .055f, .16f, .07f),
+        ) + mourningRibbon,
+        inscription,
     )
 
     val timber = GraveModel(
         "timber",
         listOf(
-            GraveModelPart(Material.MOSSY_COBBLESTONE, -.39, .0, -.38, .78f, .13f, .76f),
-            GraveModelPart(Material.COARSE_DIRT, -.28, .13, -.27, .56f, .08f, .54f),
-            GraveModelPart(Material.STRIPPED_SPRUCE_LOG, -.08, .21, -.075, .16f, .97f, .15f),
-            GraveModelPart(Material.STRIPPED_SPRUCE_LOG, -.08, .51, -.09, .16f, .68f, .18f, rotationZ = 90f),
-            GraveModelPart(Material.STRIPPED_OAK_WOOD, -.30, .36, -.13, .60f, .32f, .055f),
-            GraveModelPart(Material.DARK_OAK_WOOD, -.025, .89, -.092, .05f, .05f, .017f),
-            GraveModelPart(Material.COBBLESTONE, -.28, .21, -.24, .15f, .11f, .15f),
-            GraveModelPart(Material.COBBLESTONE, .13, .21, .10, .14f, .085f, .14f),
-            GraveModelPart(Material.DEAD_BUSH, .12, .21, -.26, .21f, .24f, .21f),
-        ),
-        GraveInscription(0.0, .52, -.138, .28f, 76, 0x3C2C20, .24f),
+            GraveModelPart(Material.SMOOTH_SANDSTONE, -.49, .01, FRONT_Z, .98f, 1.98f, .38f),
+            GraveModelPart(Material.RED_SANDSTONE, -.71, .0, -.68, 1.42f, .18f, 1.10f),
+            GraveModelPart(Material.CUT_SANDSTONE, -.61, .18, -.51, 1.22f, .18f, .90f),
+            GraveModelPart(Material.CUT_SANDSTONE, -.5, .10, TRIM_Z, .06f, 1.84f, .11f),
+            GraveModelPart(Material.CUT_SANDSTONE, .44, .10, TRIM_Z, .06f, 1.84f, .11f),
+            GraveModelPart(Material.SMOOTH_SANDSTONE, -.5, 1.94, TRIM_Z, 1f, .06f, .43f),
+            GraveModelPart(Material.CHISELED_SANDSTONE, -.44, 1.88, TRIM_Z, .14f, .06f, .08f),
+            GraveModelPart(Material.CHISELED_SANDSTONE, .30, 1.88, TRIM_Z, .14f, .06f, .08f),
+        ) + mourningRibbon,
+        inscription,
     )
 
     val broken = GraveModel(
         "broken",
         listOf(
-            GraveModelPart(Material.BLACKSTONE, -.43, .0, -.35, .86f, .14f, .70f),
-            GraveModelPart(Material.POLISHED_BLACKSTONE, -.27, .14, -.15, .54f, .71f, .30f),
-            GraveModelPart(Material.POLISHED_BLACKSTONE, -.25, .82, -.14, .23f, .20f, .28f, rotationZ = -12f),
-            GraveModelPart(Material.POLISHED_BLACKSTONE, .02, .82, -.14, .20f, .11f, .28f, rotationZ = 10f),
-            GraveModelPart(Material.SMOOTH_BASALT, -.225, .35, -.173, .45f, .40f, .023f),
-            GraveModelPart(Material.OXIDIZED_COPPER, -.29, .21, -.173, .58f, .035f, .346f),
-            GraveModelPart(Material.OXIDIZED_COPPER, -.29, .26, .138, .035f, .34f, .035f),
-            GraveModelPart(Material.BLACKSTONE, .22, .14, -.28, .16f, .11f, .13f, rotationY = 25f),
-        ),
-        GraveInscription(0.0, .55, -.181, .28f, 60, 0xDDD4C0),
+            GraveModelPart(Material.POLISHED_BLACKSTONE, -.49, .01, FRONT_Z, .98f, 1.98f, .34f),
+            GraveModelPart(Material.BLACKSTONE, -.73, .0, -.69, 1.46f, .20f, 1.15f),
+            GraveModelPart(Material.POLISHED_BLACKSTONE_BRICKS, -.60, .20, -.51, 1.20f, .14f, .94f),
+            GraveModelPart(Material.OXIDIZED_COPPER, -.71, .165, -.697, 1.42f, .018f, .035f),
+            GraveModelPart(Material.POLISHED_BLACKSTONE_BRICKS, -.5, .114, TRIM_Z, .05f, 1.826f, .11f),
+            GraveModelPart(Material.OXIDIZED_COPPER, .465, .114, TRIM_Z, .035f, 1.18f, .065f),
+            GraveModelPart(Material.BLACKSTONE, .45, 1.36, TRIM_Z, .05f, .58f, .10f),
+            GraveModelPart(Material.POLISHED_BLACKSTONE, -.5, 1.94, TRIM_Z, .46f, .06f, .39f),
+            GraveModelPart(Material.POLISHED_BLACKSTONE, .04, 1.94, TRIM_Z, .46f, .04f, .36f),
+        ) + mourningRibbon,
+        inscription,
     )
 
     val all = listOf(slate, obelisk, cairn, timber, broken)
