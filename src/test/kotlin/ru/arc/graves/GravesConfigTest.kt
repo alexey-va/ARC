@@ -21,9 +21,20 @@ class GravesConfigTest {
         assertEquals(32, settings.nearbyGlowRadius)
         assertEquals(2, settings.hudRefreshTicks)
         assertEquals(true, settings.trackingEnabledByDefault)
+        assertEquals(false, settings.creationMessageEnabled)
         assertEquals("Бесплатно по праву", PlainTextComponentSerializer.plainText().serialize(settings.text("free-price")))
         assertEquals(GraveAppearanceSettings.DEFAULT_WEIGHTS, settings.appearance.weights)
         assertEquals(GraveAppearanceSettings.DEFAULT_EPITAPHS, settings.appearance.epitaphs)
+    }
+
+    @Test
+    fun `creation notice requires explicit opt in`() {
+        val source = ConfigManager.of(root, "graves-test.yml")
+        assertEquals(false, GravesConfig(source).snapshot().creationMessageEnabled)
+        source.setBoolean("notifications.creation-message", true)
+        assertEquals(true, GravesConfig(source).snapshot().creationMessageEnabled)
+        source.setBoolean("notifications.creation-message", false)
+        assertEquals(false, GravesConfig(source).snapshot().creationMessageEnabled)
     }
 
     @Test
@@ -49,6 +60,9 @@ class GravesConfigTest {
 
         source.setStringList("appearance.epitaphs", listOf("", "x".repeat(97)))
         assertEquals(GraveAppearanceSettings.DEFAULT_EPITAPHS, GravesConfig(source).snapshot().appearance.epitaphs)
+
+        source.setStringList("appearance.epitaphs", emptyList())
+        assertEquals(emptyList<String>(), GravesConfig(source).snapshot().appearance.epitaphs)
 
         source.setStringList("appearance.epitaphs", (1..200).map { "Фраза $it" })
         val bounded = GravesConfig(source).snapshot().appearance.epitaphs

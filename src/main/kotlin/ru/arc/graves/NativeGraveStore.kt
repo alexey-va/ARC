@@ -36,6 +36,12 @@ import java.util.concurrent.RejectedExecutionException
 internal interface NativeGraveRepository : AutoCloseable {
     /** Full admin/test read, including empty CLAIMED tombstones. Ordinary refreshes use [loadCurrent]. */
     fun loadAll(): CompletableFuture<List<NativeGraveRecord>>
+    /** Current administrator browse, including offline owners on every backend. */
+    fun loadActive(now: Long, server: String? = null): CompletableFuture<List<NativeGraveRecord>> =
+        loadAll().thenApply { rows -> rows.filter { it.phase == NativeGravePhase.ACTIVE &&
+            (it.expiresAt < 0 || it.expiresAt > now) && (server == null || it.server == server) } }
+    fun findActive(id: UUID, now: Long): CompletableFuture<NativeGraveRecord?> =
+        loadActive(now).thenApply { rows -> rows.firstOrNull { it.id == id } }
     /** Local or requested-owner graves: live ACTIVE plus durable unfinished/import/review records. */
     fun loadCurrent(server: String, owners: Set<UUID>, now: Long): CompletableFuture<List<NativeGraveRecord>>
     fun loadWatermarks(owners: Set<UUID>): CompletableFuture<Map<UUID, NativeGraveWatermark>>
@@ -73,6 +79,32 @@ internal class MySqlNativeGraveRepository private constructor(
                         buildList { while (rows.next()) add(decodeRow(rows).record) }
                     }
                 }
+            }
+        }
+    }
+
+    override fun loadActive(now: Long, server: String?): CompletableFuture<List<NativeGraveRecord>> = admit {
+        require(now >= 0) { "Grave query time is invalid" }
+        require(server == null || BackendServerId.parseOrNull(server) != null) { "Grave query server is invalid" }
+        migration.thenCompose {
+            runtime.executor.read { connection ->
+                queryRecords(connection, "phase = 'ACTIVE' AND (expires_at < 0 OR expires_at > ?)" +
+                    if (server == null) "" else " AND server = ?") { statement ->
+                    statement.setLong(1, now)
+                    if (server != null) statement.setString(2, server)
+                }
+            }
+        }
+    }
+
+    override fun findActive(id: UUID, now: Long): CompletableFuture<NativeGraveRecord?> = admit {
+        require(now >= 0) { "Grave query time is invalid" }
+        migration.thenCompose {
+            runtime.executor.read { connection ->
+                queryRecords(connection, "id = ? AND phase = 'ACTIVE' AND (expires_at < 0 OR expires_at > ?)") { statement ->
+                    statement.setString(1, id.toString())
+                    statement.setLong(2, now)
+                }.singleOrNull()
             }
         }
     }

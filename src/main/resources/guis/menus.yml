@@ -98,6 +98,16 @@ menus:
         next: { slot: 50, template: catalog-next }
       regions:
         catalog-items: { slots: ['0-44'] }
+    grave-contents:
+      schema-version: 1
+      rows: 6
+      elements:
+        summary: { slot: 45, template: graves-contents-summary, kind: decoration }
+        previous: { slot: 48, template: graves-contents-previous }
+        claim: { slot: 49, template: graves-contents-claim }
+        next: { slot: 50, template: graves-contents-next }
+      regions:
+        grave-items: { slots: ['0-44'] }
     scheduled-edit:
       schema-version: 1
       rows: 2
@@ -501,6 +511,32 @@ menus:
     catalog-next:
       material: BLUE_STAINED_GLASS_PANE
       name: '<gray>Следующая страница »'
+      lore: []
+    graves-contents-summary:
+      material: EXPERIENCE_BOTTLE
+      name: '<italic:false><gold>Опыт: <white><experience>'
+      lore:
+        - '<italic:false><gray>Владелец: <white><owner>'
+        - '<italic:false><gray><world>'
+        - '<italic:false><gray><expiry>'
+        - '<italic:false><dark_gray>Страница <page>/<pages>'
+        - ''
+        - { text: '<italic:false><gray>Только просмотр. Вещи нельзя забрать.', when: read-only }
+        - { text: '<italic:false><gray>Для выдачи нажмите «Забрать всё».', unless: read-only }
+    graves-contents-claim:
+      material: LIME_DYE
+      name: '<italic:false><green>Забрать всё'
+      lore:
+        - { text: '<italic:false><gray>Вы получите вещи и опыт.', when: claimable }
+        - { text: '<italic:false><gray>Непоместившиеся вещи останутся в могиле.', when: claimable }
+        - { text: '<italic:false><gray>Подойдите к могиле, чтобы забрать вещи.', unless: claimable }
+    graves-contents-previous:
+      material: ARROW
+      name: '<italic:false><gray>‹ Предыдущая страница'
+      lore: []
+    graves-contents-next:
+      material: ARROW
+      name: '<italic:false><gray>Следующая страница ›'
       lore: []
     scheduled-edit-command:
       material: COMMAND_BLOCK

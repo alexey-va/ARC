@@ -137,6 +137,13 @@ class NativeGraveStoreIntegrationTest : FreeSpec({
                 val requestedOwners = LinkedHashSet<UUID>().apply { repeat(256) { add(UUID.randomUUID()) }; add(remoteOwner) }
                 first.loadCurrent("query_backend", requestedOwners, 2_000).join().map { it.id }.toSet() shouldBe
                     setOf(local, unlimited, remote, pendingQuery, claimingQuery, reviewQuery, imported).map { it.id }.toSet()
+                first.loadActive(2_000).join().map { it.id }.toSet() shouldBe
+                    setOf(local, unlimited, remote, unrelated).map { it.id }.toSet()
+                first.loadActive(2_000, "query_remote").join().map { it.id }.toSet() shouldBe
+                    setOf(remote.id, unrelated.id)
+                first.findActive(unrelated.id, 2_000).join() shouldBe unrelated
+                first.findActive(expired.id, 2_000).join() shouldBe null
+                first.findActive(reviewQuery.id, 2_000).join() shouldBe null
 
                 val reopening = MySqlNativeGraveRepository.open(config)
                 try {

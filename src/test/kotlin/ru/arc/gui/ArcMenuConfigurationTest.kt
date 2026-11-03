@@ -48,6 +48,13 @@ class ArcMenuConfigurationTest : StringSpec({
                 region(ArcMenuSchema.STORE_ITEMS).size shouldBe (rows - 1) * 9
             }
         }
+        configuration.catalog.require(ArcMenuSchema.GRAVE_CONTENTS).apply {
+            rows shouldBe 6
+            region(ArcMenuSchema.GRAVE_ITEMS).size shouldBe 45
+            slot("claim").index shouldBe 49
+            slot("summary").index shouldBe 45
+            backgroundTemplate shouldBe null
+        }
     }
 
     "loads the full legacy menu file repeatedly without validating child templates or rewriting host config" {
@@ -68,11 +75,14 @@ class ArcMenuConfigurationTest : StringSpec({
         legacy.exists("menus.templates.contracts-order") shouldBe true
         legacy.exists("menus.templates.elite-loot-previous") shouldBe true
         legacy.exists("menus.layouts.mount-list") shouldBe true
+        legacy.exists("menus.layouts.grave-contents") shouldBe false
 
         val loaded = ArcMenuConfiguration.load(root)
 
         loaded.catalog.layouts.keys shouldContainExactly ArcMenuSchema.contracts.keys
         loaded.catalog.require(ArcMenuSchema.INVESTIGATION_HUB).slot("start").index shouldBe 15
+        loaded.catalog.require(ArcMenuSchema.GRAVE_CONTENTS).region(ArcMenuSchema.GRAVE_ITEMS).size shouldBe 45
+        loaded.catalog.require(ArcMenuSchema.GRAVE_CONTENTS).slot("claim").index shouldBe 49
         loaded.catalog.layouts.containsKey(MenuId.of("mount-list")) shouldBe false
         loaded.catalog.layouts.containsKey(MenuId.of("contracts-desk-3")) shouldBe false
         loaded.templates.containsKey("contract-desk-order") shouldBe false
@@ -89,9 +99,26 @@ class ArcMenuConfigurationTest : StringSpec({
 
         val persisted = Config(root, ArcMenuConfiguration.RESOURCE)
         persisted.exists("menus.layouts.mount-list") shouldBe true
+        persisted.exists("menus.layouts.grave-contents") shouldBe false
         persisted.exists("menus.templates.contract-desk-order") shouldBe true
         persisted.exists("menus.templates.contracts-detail-confirm") shouldBe true
         persisted.stringOrNull("menus.templates.operator-custom.material") shouldBe "STONE"
+    }
+
+    "an explicitly invalid grave layout is rejected rather than replaced by bundled defaults" {
+        val root = Files.createTempDirectory("arc-menu-invalid-graves")
+        val target = root.resolve(ArcMenuConfiguration.RESOURCE)
+        Files.createDirectories(target.parent)
+        javaClass.classLoader.getResourceAsStream(ArcMenuConfiguration.RESOURCE).use { source ->
+            Files.copy(checkNotNull(source), target)
+        }
+        Config(root, ArcMenuConfiguration.RESOURCE).apply {
+            setInt("menus.layouts.grave-contents.rows", 7)
+            saveStrict()
+        }
+        val beforeLoad = Files.readString(target)
+        shouldThrow<IllegalArgumentException> { ArcMenuConfiguration.load(root) }
+        Files.readString(target) shouldBe beforeLoad
     }
 
     "investigation menu backgrounds render the canonical filler model" {

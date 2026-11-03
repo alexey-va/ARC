@@ -11,6 +11,7 @@ import ru.arc.jobs.JobsModule
 import ru.arc.mounts.api.ArcMountService.ActiveMountSnapshot
 import ru.arc.integrations.mounts.mountService
 import ru.arc.xserver.playerlist.PlayerManager
+import ru.arc.util.WorldNames
 
 class PAPIHook internal constructor(
     private val cachedPlaceholderResolver: CachedPlaceholderResolver,
@@ -129,11 +130,7 @@ class PAPIHook internal constructor(
         val player = offlinePlayer as? Player ?: return "&7Обычный мир"
         val playerWorld = player.world.name
         val worlds: Map<String, String> = config.map("world-names")
-        worlds[playerWorld]?.let { return it }
-        for ((world, name) in worlds) {
-            if (!world.contains("*")) continue
-            if (playerWorld.matches(Regex(world.replace("*", ".*")))) return name
-        }
+        WorldNames.configured(playerWorld, worlds)?.let { return it }
         config.injectDeepKey("world-names.$playerWorld", playerWorld)
         return "&7Обычный мир"
     }

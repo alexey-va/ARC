@@ -14,6 +14,7 @@ import org.bukkit.damage.DamageSource
 import org.bukkit.entity.Player
 import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.player.PlayerCommandPreprocessEvent
+import org.bukkit.event.player.PlayerToggleSneakEvent
 import org.bukkit.inventory.ItemStack
 import org.mockbukkit.mockbukkit.entity.PlayerMock
 import ru.arc.config.ConfigManager
@@ -27,6 +28,25 @@ import java.util.concurrent.CompletableFuture
 
 /** Engine contracts; native NBT and terrain collision search are outside MockBukkit's oracle. */
 class NativeGravesRuntimeTest : FunSpec({
+    test("sneaking beside an available owned grave never withdraws or starts persistence") {
+        withGraveRuntime { f ->
+            val grave = f.active(listOf(namedStack(Material.DIAMOND, 3, "Grave contents")), experience = 7)
+            f.store.backing.insert(grave).join() shouldBe true
+            f.start()
+            f.engine.canClaim(f.player, f.engine.views().single()) shouldBe true
+            val before = NativeGraveItems.capture(f.player)
+
+            f.paper.callEvent(PlayerToggleSneakEvent(f.player, true))
+            f.flush()
+
+            NativeGraveItems.capture(f.player) shouldBe before
+            f.store.rows() shouldBe listOf(grave)
+            f.persistence.saves shouldBe emptyList()
+            f.engine.blocked(f.player.uniqueId) shouldBe false
+            f.feedback shouldBe emptyList()
+        }
+    }
+
     test("death keeps actual items until the grave intent is durable and waits for the player save") {
         withGraveRuntime { f ->
             val dropped = namedStack(Material.DIAMOND, 5, "Death drop")
@@ -76,6 +96,46 @@ class NativeGravesRuntimeTest : FunSpec({
             grave.checkpoint shouldBe NativeGraveItems.capture(f.player)
             f.persistence.saves.size shouldBe 1
             f.engine.blocked(f.player.uniqueId) shouldBe false
+            f.feedback.count { it == "created" } shouldBe 0
+        }
+    }
+
+    test("opted-in creation notice follows the durable final ACK once and refreshes cannot repeat it") {
+        withGraveRuntime(creationMessage = true) { f ->
+            val dropped = namedStack(Material.DIAMOND, 1, "Notified grave")
+            f.player.inventory.setItem(0, dropped)
+            f.start()
+            val insert = CompletableFuture<Unit>().also { f.store.nextInsert = it }
+            val save = CompletableFuture<Unit>().also { f.persistence.nextSave = it }
+            val event = PlayerDeathEvent(f.player, mockk<DamageSource>(), mutableListOf(dropped.clone()), 0, Component.empty(), true)
+            mockkObject(GraveDestinations)
+            try {
+                every { GraveDestinations.nearby(f.world, 0, 64, 0) } returns Location(f.world, .5, 64.0, .5)
+                f.paper.callEvent(event)
+            } finally {
+                unmockkObject(GraveDestinations)
+            }
+            f.scheduler.advanceMs(50)
+            f.flush()
+            f.feedback.count { it == "created" } shouldBe 0
+            insert.complete(Unit)
+            f.flush()
+            f.feedback.count { it == "created" } shouldBe 0
+            val finalized = CompletableFuture<Unit>().also { f.store.nextReplace = it }
+            save.complete(Unit)
+            f.flush()
+            f.store.rows().single().phase shouldBe NativeGravePhase.PREPARED
+            f.feedback.count { it == "created" } shouldBe 0
+
+            finalized.complete(Unit)
+            f.flush()
+            f.store.rows().single().phase shouldBe NativeGravePhase.ACTIVE
+            f.feedback.count { it == "created" } shouldBe 1
+            repeat(2) { f.engine.synchronized(f.player.uniqueId); f.flush() }
+            f.scheduler.tick(80)
+            f.flush()
+            f.engine.views().size shouldBe 1
+            f.feedback.count { it == "created" } shouldBe 1
         }
     }
 
@@ -174,6 +234,65 @@ class NativeGravesRuntimeTest : FunSpec({
             f.persistence.saves.size shouldBe 1
             f.feedback.count { it == "claimed-partial" } shouldBe 1
             f.engine.blocked(f.player.uniqueId) shouldBe false
+        }
+    }
+
+    test("full storage with binary-variant native items declines a no-op claim without changing fractional XP") {
+        withGraveRuntime(unstableItemEncoding = true) { f ->
+            f.player.inventory.storageContents = Array(36) { ItemStack(Material.COBBLESTONE, 64) }
+            f.player.level = 23
+            f.player.exp = .1234567f
+            f.player.totalExperience = 137
+            val grave = f.active(listOf(namedStack(Material.PAPER, 1, "No space key")))
+            f.store.backing.insert(grave).join() shouldBe true
+            f.start()
+            val before = NativeGraveItems.capture(f.player)
+            val noSpace = NativeGraveItems.pickup(before, grave.items, 0)
+            (noSpace.remaining == grave.items) shouldBe false
+            NativeGraveItems.matches(noSpace.after, before) shouldBe true
+
+            f.engine.claim(f.player, f.engine.views().single())
+            f.flush()
+
+            f.store.rows() shouldBe listOf(grave)
+            f.persistence.saves shouldBe emptyList()
+            f.feedback.count { it == "inventory-full" } shouldBe 1
+            f.engine.blocked(f.player.uniqueId) shouldBe false
+            NativeGraveItems.matches(NativeGraveItems.capture(f.player), before) shouldBe true
+        }
+    }
+
+    test("binary-variant native inventory passes admission and apply then finalizes one durable claim") {
+        withGraveRuntime(unstableItemEncoding = true) { f ->
+            val retained = namedStack(Material.PAPER, 1, "Existing native key")
+            f.player.inventory.setItem(0, retained)
+            val reward = namedStack(Material.BEEHIVE, 1, "Claimed hive")
+            f.store.backing.insert(f.active(listOf(reward))).join() shouldBe true
+            f.start()
+            val view = f.engine.views().single()
+            val save = CompletableFuture<Unit>().also { f.persistence.nextSave = it }
+
+            f.engine.claim(f.player, view)
+            f.flush()
+
+            val pending = f.store.rows().single()
+            pending.phase shouldBe NativeGravePhase.CLAIMING
+            val current = NativeGraveItems.capture(f.player)
+            (current == requireNotNull(pending.operation).after) shouldBe false
+            NativeGraveItems.matches(current, pending.operation.after) shouldBe true
+            f.player.inventory.getItem(0) shouldBe retained
+            f.player.inventory.getItem(1) shouldBe reward
+
+            save.complete(Unit)
+            f.flush()
+            repeat(2) { f.engine.synchronized(f.player.uniqueId); f.flush() }
+
+            f.store.rows().single().phase shouldBe NativeGravePhase.CLAIMED
+            f.feedback.count { it == "claimed" } shouldBe 1
+            f.feedback.count { it == "inventory-conflict" } shouldBe 0
+            f.persistence.saves.size shouldBe 1
+            f.player.inventory.getItem(0) shouldBe retained
+            f.player.inventory.getItem(1) shouldBe reward
         }
     }
 
@@ -334,7 +453,7 @@ class NativeGravesRuntimeTest : FunSpec({
     }
 })
 
-private fun withGraveRuntime(sharedInventory: Boolean = true, body: (GraveRuntimeFixture) -> Unit) = failOnUnsupportedMockBukkitOperation {
+private fun withGraveRuntime(sharedInventory: Boolean = true, creationMessage: Boolean = false, unstableItemEncoding: Boolean = false, body: (GraveRuntimeFixture) -> Unit) = failOnUnsupportedMockBukkitOperation {
     MockBukkitTestRuntime.open().use { paper ->
         // MockBukkit cannot exercise Paper's native NBT serializer. Stable cloned stacks
         // retain amounts and ItemMeta identity while the real grave transition code runs.
@@ -342,7 +461,7 @@ private fun withGraveRuntime(sharedInventory: Boolean = true, body: (GraveRuntim
         mockkObject(NativePaperItemStackBinaryCodec)
         every { NativePaperItemStackBinaryCodec.encodeItem(any()) } answers {
             val item = firstArg<ItemStack>()
-            val existing = encoded.indexOfFirst { it.amount == item.amount && it.isSimilar(item) }
+            val existing = if (unstableItemEncoding) -1 else encoded.indexOfFirst { it.amount == item.amount && it.isSimilar(item) }
             val id = if (existing >= 0) existing else encoded.size.also { encoded += item.clone() }
             id.toString().toByteArray(Charsets.UTF_8)
         }
@@ -350,21 +469,21 @@ private fun withGraveRuntime(sharedInventory: Boolean = true, body: (GraveRuntim
             encoded[firstArg<ByteArray>().toString(Charsets.UTF_8).toInt()].clone()
         }
         try {
-            GraveRuntimeFixture(paper, sharedInventory).use(body)
+            GraveRuntimeFixture(paper, sharedInventory, creationMessage).use(body)
         } finally {
             unmockkObject(NativePaperItemStackBinaryCodec)
         }
     }
 }
 
-private class GraveRuntimeFixture(val paper: MockBukkitTestRuntime, sharedInventory: Boolean) : AutoCloseable {
+private class GraveRuntimeFixture(val paper: MockBukkitTestRuntime, sharedInventory: Boolean, creationMessage: Boolean) : AutoCloseable {
     val world = paper.addSimpleWorld("graves")
     val player = paper.addPlayer("GraveOwner")
     val scheduler = TestTaskScheduler()
     val store = ControlledGraveRepository()
     val persistence = ControlledGravePersistence(sharedInventory)
     val feedback = mutableListOf<String>()
-    val engine = NativeGraves("survival", GravesConfig(ConfigManager.empty()).snapshot(),
+    val engine = NativeGraves("survival", GravesConfig(ConfigManager.empty()).snapshot().copy(creationMessageEnabled = creationMessage),
         { _, key -> feedback += key }, {}, paper.createSimplePlugin("NativeGravesTest"),
         CompletableFuture.completedFuture(store), persistence, scheduler)
 
@@ -402,6 +521,7 @@ private class ControlledGraveRepository(
     val backing: InMemoryNativeGraveRepository = InMemoryNativeGraveRepository(),
 ) : NativeGraveRepository by backing {
     var nextInsert: CompletableFuture<Unit>? = null
+    var nextReplace: CompletableFuture<Unit>? = null
     var nextCurrent: CompletableFuture<List<NativeGraveRecord>>? = null
     var closeGate: CompletableFuture<Unit>? = null
     var closeCalls = 0
@@ -413,6 +533,11 @@ private class ControlledGraveRepository(
 
     override fun loadCurrent(server: String, owners: Set<UUID>, now: Long): CompletableFuture<List<NativeGraveRecord>> =
         nextCurrent.also { nextCurrent = null } ?: backing.loadCurrent(server, owners, now)
+
+    override fun replace(expected: NativeGraveRecord, next: NativeGraveRecord): CompletableFuture<Boolean> {
+        val gate = nextReplace.also { nextReplace = null } ?: CompletableFuture.completedFuture(Unit)
+        return gate.thenCompose { backing.replace(expected, next) }
+    }
 
     fun rows(): List<NativeGraveRecord> = backing.loadAll().join()
 

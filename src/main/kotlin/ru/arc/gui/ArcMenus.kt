@@ -90,8 +90,8 @@ object ArcMenus {
     /** An explicit Back footer uses native Back/history semantics, including Escape, for this visit. */
     fun openDialog(player: Player, screen: PaperDialogScreen, closeButton: ru.arc.paper.menu.PaperDialogButton?, reopen: (() -> Unit)?, onDismiss: () -> Unit, preferBackFooter: Boolean) {
         val close = closeButton ?: ru.arc.paper.menu.PaperDialogButton(
-            ru.arc.paper.menu.PaperDialogActionId.of("close_menu"), Component.translatable("mco.selectServer.close", NamedTextColor.WHITE),
-            tooltip = Component.translatable("mco.selectServer.close", NamedTextColor.WHITE),
+            ru.arc.paper.menu.PaperDialogActionId.of("close_menu"), Component.text("Закрыть", NamedTextColor.WHITE),
+            tooltip = Component.text("Закрыть", NamedTextColor.WHITE),
             width = 200, closeDialogBeforeAction = true, onClick = {},
         )
         val escapeGoesBack = MenuEscapeBehavior.footerGoesBack(screen, preferBackFooter || MenuEscapeBehavior.goesBack(player))

@@ -22,7 +22,6 @@ import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerRespawnEvent
 import org.bukkit.event.player.PlayerSwapHandItemsEvent
 import org.bukkit.event.player.PlayerTeleportEvent
-import org.bukkit.event.player.PlayerToggleSneakEvent
 import org.bukkit.event.player.PlayerItemConsumeEvent
 import org.bukkit.event.player.PlayerItemDamageEvent
 import org.bukkit.event.player.PlayerItemMendEvent
@@ -120,7 +119,7 @@ internal class NativeGraves(
         val previous = find(view.id) ?: return
         val before = NativeGraveItems.capture(player)
         val pickup = NativeGraveItems.pickup(before, previous.items, previous.experience)
-        if (pickup.remaining == previous.items && previous.experience == 0) { feedback(player, "inventory-full"); return }
+        if (previous.experience == 0 && NativeGraveItems.matches(before, pickup.after)) { feedback(player, "inventory-full"); return }
         val operation = NativeGraveOperation(UUID.randomUUID(), server, NativeGraveOperationKind.CLAIM, before, pickup.after, inventoryScope = inventoryScope)
         val pending = previous.copy(revision = previous.revision + 1, phase = NativeGravePhase.CLAIMING,
             items = pickup.remaining, experience = 0, operation = operation)
@@ -260,7 +259,7 @@ internal class NativeGraves(
         val operation = requireNotNull(record.operation)
         val current = NativeGraveItems.capture(player)
         val receipted = operation.sequence > 0 && persistence.sequence(player) >= operation.sequence
-        if (!receipted && current != operation.before && current != operation.after) {
+        if (!receipted && !NativeGraveItems.matches(current, operation.before) && !NativeGraveItems.matches(current, operation.after)) {
             val review = record.copy(revision = record.revision + 1, phase = NativeGravePhase.REVIEW)
             observe(requireNotNull(repository).replace(record, review)) { accepted, failure ->
                 busy -= player.uniqueId
@@ -271,7 +270,7 @@ internal class NativeGraves(
             return
         }
         try {
-            if (!receipted && current != operation.after) NativeGraveItems.apply(player, operation.after)
+            if (!receipted && !NativeGraveItems.matches(current, operation.after)) NativeGraveItems.apply(player, operation.after)
             val checkpoint = NativeGraveItems.capture(player)
             val saved = persistence.persist(player, operation.sequence)
             observe(saved) { _, failure ->
@@ -288,7 +287,9 @@ internal class NativeGraves(
                     } else {
                         remember(completed)
                         conflicts -= operation.id
-                        feedback(player, if (operation.kind == NativeGraveOperationKind.CREATE) "created" else if (completed.phase == NativeGravePhase.CLAIMED) "claimed" else "claimed-partial")
+                        if (operation.kind != NativeGraveOperationKind.CREATE || settings.creationMessageEnabled) {
+                            feedback(player, if (operation.kind == NativeGraveOperationKind.CREATE) "created" else if (completed.phase == NativeGravePhase.CLAIMED) "claimed" else "claimed-partial")
+                        }
                         changed()
                     }
                 }
@@ -378,13 +379,6 @@ internal class NativeGraves(
         if (blocked(event.player.uniqueId) && label !in setOf("/graves", "/arc:graves", "/menu", "/help")) { event.isCancelled = true; feedback(event.player, "items-pending") }
     }
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true) fun teleport(event: PlayerTeleportEvent) { if (blocked(event.player.uniqueId)) event.isCancelled = true }
-    @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true) fun sneak(event: PlayerToggleSneakEvent) {
-        if (!event.isSneaking || blocked(event.player.uniqueId)) return
-        views().filter { canClaim(event.player, it) }.minByOrNull {
-            event.player.location.distanceSquared(Location(event.player.world, it.x + .5, it.y + .5, it.z + .5))
-        }?.let { claim(event.player, it) }
-    }
-
     fun closeAsync(beforeStoreClose: CompletableFuture<*> = CompletableFuture.completedFuture(Unit)): CompletableFuture<Void> {
         drain?.let { return it }
         closed = true

@@ -17,7 +17,7 @@ internal class GravesNativeListener(private val runtime: GravesRuntime) : Listen
         val player = event.entity as? Player ?: return
         if (!runtime.payments.admitNative(player, event.grave.uuid)) {
             event.isCancelled = true
-            runtime.menu.open(player)
+            runtime.openPersonal(player)
         }
     }
 

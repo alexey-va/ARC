@@ -104,6 +104,9 @@ commands:
     description: Materialize one exact physical ARC case reward
     usage: /arc-reward-issue <player> <case> <entry>
 permissions:
+  arc.graves.admin:
+    description: Inspect active graves and their contents across the network without withdrawing items
+    default: op
   arc.onboarding.hud.hologram:
     description: Test quest hints at the fixed staff hologram position
     default: false

@@ -1,29 +1,26 @@
 package ru.arc.graves
 
-import net.kyori.adventure.bossbar.BossBar
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.Color
 import org.bukkit.Chunk
 import org.bukkit.Location
+import org.bukkit.Particle
+import org.bukkit.Sound
 import org.bukkit.entity.Display
 import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
 import org.bukkit.util.Transformation
 import org.joml.Quaternionf
 import org.joml.Vector3f
-import ru.arc.dungeons.api.CompassStrip
 import ru.arc.paper.display.PacketDisplay
 import ru.arc.paper.display.PaperPacketDisplays
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.logging.Level
-import kotlin.math.atan2
-import kotlin.math.roundToInt
-import kotlin.math.sqrt
 
-/** Private guidance and nearby public tombs; no world entities, block writes, or chunk loads. */
+/** Nearby public tombs; no bossbars, world entities, block writes, or chunk loads. */
 internal class GravesHud(
     plugin: Plugin,
     private val server: String,
@@ -31,60 +28,17 @@ internal class GravesHud(
     private val displays: PaperPacketDisplays = PaperPacketDisplays(plugin, "graves"),
     private val onClear: (Player) -> Unit = {},
 ) : AutoCloseable {
-    private class Bars(val world: UUID, val notice: BossBar, val compass: BossBar, var compassShown: Boolean = false)
     private class Marker(val x: Int, val y: Int, val z: Int, val parts: List<PacketDisplay>) {
         fun matches(grave: GraveView): Boolean = x == grave.x && y == grave.y && z == grave.z && parts.all { it.isValid }
         fun remove() = parts.forEach(PacketDisplay::remove)
     }
     private class ViewerMarkers(val player: Player, val world: UUID, val entries: MutableMap<UUID, Marker> = mutableMapOf())
     private data class Cell(val x: Int, val y: Int, val z: Int)
-    private val bars = mutableMapOf<UUID, Pair<Player, Bars>>()
     private val markers = mutableMapOf<UUID, ViewerMarkers>()
     private val logger = plugin.logger
     private var closed = false
     private var closeFuture: CompletableFuture<Void>? = null
     private var markerFailureLogged = false
-
-    fun refresh(player: Player, graves: List<GraveView>, selected: UUID?, tracking: Boolean) {
-        if (closed) return
-        if (player.isDead || !player.isOnline) { clear(player); return }
-        clearOtherWorldState(player)
-        val owned = graves.filter { it.ownerId == player.uniqueId }
-        if (owned.isEmpty()) { clearBars(player); return }
-        val state = bars.getOrPut(player.uniqueId) {
-            val created = Bars(
-                player.world.uid,
-                BossBar.bossBar(Component.empty(), 1f, BossBar.Color.YELLOW, BossBar.Overlay.PROGRESS),
-                BossBar.bossBar(Component.empty(), 1f, BossBar.Color.PURPLE, BossBar.Overlay.PROGRESS),
-            )
-            player.showBossBar(created.notice)
-            player to created
-        }.second
-        state.notice.name(settings.text("hud-notice", "count" to owned.size.toString()))
-        val target = owned.firstOrNull { it.id == selected } ?: owned.first()
-        val local = target.server == server && target.world == player.world.name
-        if (tracking && local) {
-            val location = player.location
-            val dx = target.x + 0.5 - location.x
-            val dz = target.z + 0.5 - location.z
-            val dy = target.y - location.y
-            val distance = sqrt(dx * dx + dy * dy + dz * dz).roundToInt()
-            val bearing = Math.toDegrees(atan2(-dx, dz))
-            state.compass.name(CompassStrip.render(location.yaw, bearing, "☠", 0xffcf70))
-            state.notice.name(settings.text("hud-target", "distance" to distance.toString(), "vertical" to when {
-                dy > 3 -> " · ↑ ${dy.roundToInt()} м"
-                dy < -3 -> " · ↓ ${(-dy).roundToInt()} м"
-                else -> ""
-            }))
-            if (!state.compassShown) { player.showBossBar(state.compass); state.compassShown = true }
-        } else {
-            if (state.compassShown) { player.hideBossBar(state.compass); state.compassShown = false }
-            if (tracking) state.notice.name(settings.text(
-                if (target.server == server) "hud-world" else "hud-remote",
-                "server" to target.server, "world" to target.world,
-            ))
-        }
-    }
 
     /** Returns selected, successfully allocated scenes; Core sends them asynchronously without a client render ACK. */
     fun refreshGlow(player: Player, graves: List<GraveView>): List<GraveView> {
@@ -142,22 +96,24 @@ internal class GravesHud(
                         )
                     }
                 }
-                val inscription = appearance.model.inscription
-                val placement = inscription.placement(appearance.epitaph)
-                val textAt = yaw.transform(Vector3f(inscription.x.toFloat(), placement.bottomY.toFloat(), inscription.z.toFloat()))
-                displays.spawnText(
-                    // Native fixed text faces Bukkit yaw; its +Z front becomes local −Z at 180°.
-                    Location(world, grave.x + .5 + textAt.x, grave.y + textAt.y.toDouble(), grave.z + .5 + textAt.z, 180f - appearance.yaw, 0f),
-                    Component.text(appearance.epitaph, TextColor.color(inscription.color)).decoration(TextDecoration.ITALIC, false),
-                ).also(parts::add).apply {
-                    isVisibleByDefault = false
-                    billboard = Display.Billboard.FIXED
-                    viewRange = settings.nearbyGlowRadius / 64f
-                    lineWidth = inscription.lineWidth
-                    isShadowed = false
-                    isSeeThrough = false
-                    backgroundColor = Color.fromARGB(0)
-                    transformation = Transformation(Vector3f(), Quaternionf(), Vector3f(placement.scale), Quaternionf())
+                if (appearance.epitaph.isNotBlank()) {
+                    val inscription = appearance.model.inscription
+                    val placement = inscription.placement(appearance.epitaph)
+                    val textAt = yaw.transform(Vector3f(inscription.x.toFloat(), placement.bottomY.toFloat(), inscription.z.toFloat()))
+                    displays.spawnText(
+                        // Native fixed text faces Bukkit yaw; its +Z front becomes local −Z at 180°.
+                        Location(world, grave.x + .5 + textAt.x, grave.y + textAt.y.toDouble(), grave.z + .5 + textAt.z, 180f - appearance.yaw, 0f),
+                        Component.text(appearance.epitaph, TextColor.color(inscription.color)).decoration(TextDecoration.ITALIC, false),
+                    ).also(parts::add).apply {
+                        isVisibleByDefault = false
+                        billboard = Display.Billboard.FIXED
+                        viewRange = settings.nearbyGlowRadius / 64f
+                        lineWidth = inscription.lineWidth
+                        isShadowed = false
+                        isSeeThrough = false
+                        backgroundColor = Color.fromARGB(0)
+                        transformation = Transformation(Vector3f(), Quaternionf(), Vector3f(placement.scale), Quaternionf())
+                    }
                 }
                 parts.forEach { it.showTo(player) }
                 current[grave.id] = Marker(grave.x, grave.y, grave.z, parts.toList())
@@ -176,17 +132,8 @@ internal class GravesHud(
 
     private fun clearOtherWorldState(player: Player) {
         val current = markers[player.uniqueId]
-        val personal = bars[player.uniqueId]
-        if ((current != null && (current.world != player.world.uid || current.player !== player)) ||
-            (personal != null && (personal.second.world != player.world.uid || personal.first !== player))) {
+        if (current != null && (current.world != player.world.uid || current.player !== player)) {
             clear(player)
-        }
-    }
-
-    private fun clearBars(player: Player) {
-        bars.remove(player.uniqueId)?.second?.let {
-            player.hideBossBar(it.notice)
-            player.hideBossBar(it.compass)
         }
     }
 
@@ -196,15 +143,22 @@ internal class GravesHud(
     }
 
     fun clear(player: Player) {
-        clearBars(player)
         clearMarkers(player)
+    }
+
+    /** Call only after the owning grave transaction has acknowledged durable claim completion. */
+    fun claimSucceeded(player: Player) {
+        if (closed || !player.isOnline || player.isDead) return
+        player.playSound(player.location, Sound.ENTITY_EXPERIENCE_ORB_PICKUP, .35f, 1.2f)
+        val at = player.location.clone().add(0.0, .65, 0.0)
+        player.spawnParticle(Particle.END_ROD, at, 4, .18, .18, .18, .01)
     }
 
     /** The owning module must observe this future before starting a replacement runtime. */
     fun closeAsync(): CompletableFuture<Void> {
         closeFuture?.let { return it }
         closed = true
-        (bars.values.map { it.first } + markers.values.map { it.player }).distinctBy { it.uniqueId }.forEach(::clear)
+        markers.values.map { it.player }.forEach(::clear)
         return displays.closeAsync().also { closeFuture = it }
     }
 

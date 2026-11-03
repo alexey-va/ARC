@@ -8,6 +8,8 @@ import ru.arc.menu.MenuRegionId
 import ru.arc.paper.menu.PaperMenuConfiguration
 import ru.arc.paper.menu.PaperMenuConfigurationParser
 import ru.arc.paper.menu.PaperMenuTextContract
+import org.snakeyaml.engine.v2.api.Load
+import org.snakeyaml.engine.v2.api.LoadSettings
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -22,6 +24,7 @@ object ArcMenuSchema {
     val PARKOUR_ROOT = MenuId.of("parkour-root")
     val PARKOUR_CATEGORY = MenuId.of("parkour-category")
     val ITEM_CATALOG = MenuId.of("item-catalog")
+    val GRAVE_CONTENTS = MenuId.of("grave-contents")
     val SCHEDULED_EDIT = MenuId.of("scheduled-edit")
     val BALTOP = MenuId.of("baltop")
     val JOIN_MESSAGES = MenuId.of("join-messages")
@@ -43,6 +46,7 @@ object ArcMenuSchema {
     val PARKOUR_CATEGORIES = MenuRegionId.of("categories")
     val PARKOUR_COURSES = MenuRegionId.of("courses")
     val CATALOG_ITEMS = MenuRegionId.of("catalog-items")
+    val GRAVE_ITEMS = MenuRegionId.of("grave-items")
     val BALTOP_ENTRIES = MenuRegionId.of("baltop-entries")
     val JOIN_MESSAGE_ENTRIES = MenuRegionId.of("message-entries")
     val JOB_ENTRIES = MenuRegionId.of("jobs")
@@ -81,6 +85,10 @@ object ArcMenuSchema {
         ITEM_CATALOG to MenuContract(
             requiredElements = elements("back", "previous", "page", "next"),
             requiredRegions = setOf(CATALOG_ITEMS),
+        ),
+        GRAVE_CONTENTS to MenuContract(
+            requiredElements = elements("summary", "claim", "previous", "next"),
+            requiredRegions = setOf(GRAVE_ITEMS),
         ),
         SCHEDULED_EDIT to MenuContract(
             requiredElements = elements("command", "id", "schedule-value", "schedule-type", "servers", "enabled", "back", "save"),
@@ -204,6 +212,13 @@ object ArcMenuSchema {
         "catalog-previous" to PaperMenuTextContract(),
         "catalog-page" to PaperMenuTextContract(values = setOf("page", "pages", "shown", "total")),
         "catalog-next" to PaperMenuTextContract(),
+        "graves-contents-summary" to PaperMenuTextContract(
+            values = setOf("owner", "world", "experience", "expiry", "page", "pages"),
+            flags = setOf("read-only"),
+        ),
+        "graves-contents-claim" to PaperMenuTextContract(flags = setOf("claimable")),
+        "graves-contents-previous" to PaperMenuTextContract(),
+        "graves-contents-next" to PaperMenuTextContract(),
         "scheduled-edit-command" to PaperMenuTextContract(values = setOf("command")),
         "scheduled-edit-id" to PaperMenuTextContract(values = setOf("id")),
         "scheduled-edit-value-cron" to PaperMenuTextContract(values = setOf("value", "hint"), flags = setOf("weekly")),
@@ -335,9 +350,26 @@ object ArcMenuConfiguration {
     }
 
     /** Worker-only disk/YAML projection. Material validation remains in [bind] on Paper. */
-    internal fun prepare(dataRoot: Path): Config = filterToArcMenus(Config(dataRoot, RESOURCE))
+    internal fun prepare(dataRoot: Path): Config = filterToArcMenus(withGraveDefaults(Config(dataRoot, RESOURCE)))
 
     internal fun bind(config: Config): PaperMenuConfiguration = parse(config)
+
+    /** Older catalogs predate this screen. Overlay only its absent definition; never save the operator's file. */
+    private fun withGraveDefaults(config: Config): Config {
+        val path = "$LAYOUT_ROOT.grave-contents"
+        if (config.exists(path)) return config
+        val bundled = requireNotNull(javaClass.classLoader.getResourceAsStream(RESOURCE)).use { stream ->
+            Load(LoadSettings.builder().build()).loadFromInputStream(stream) as Map<*, *>
+        }
+        val menus = bundled["menus"] as Map<*, *>
+        config.setStructured(path, requireNotNull((menus["layouts"] as Map<*, *>)["grave-contents"]))
+        val templates = menus["templates"] as Map<*, *>
+        listOf("summary", "claim", "previous", "next").forEach { role ->
+            val id = "graves-contents-$role"
+            if (!config.exists("$TEMPLATE_ROOT.$id")) config.setStructured("$TEMPLATE_ROOT.$id", requireNotNull(templates[id]))
+        }
+        return config
+    }
 
     /**
      * Keep host validation away from extracted plugin layouts and their reserved

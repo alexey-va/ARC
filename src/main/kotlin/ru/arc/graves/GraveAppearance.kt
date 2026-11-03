@@ -129,23 +129,7 @@ internal data class GraveAppearanceSettings(
 ) {
     companion object {
         val DEFAULT_WEIGHTS = linkedMapOf("slate" to 35.0, "obelisk" to 15.0, "cairn" to 20.0, "timber" to 20.0, "broken" to 10.0)
-        val DEFAULT_EPITAPHS = listOf(
-            "Похуй...",
-            "Собаке собачья смерть",
-            "Да не ссы, ничего не будет",
-            "Не, я допрыгну.",
-            "Воды хватит.",
-            "Я тут уже ходил.",
-            "Это же мирный.",
-            "Сейчас покажу.",
-            "Ещё один блок.",
-            "Да у меня тотем.",
-            "Тут неглубоко.",
-            "Крипер далеко.",
-            "Я успею.",
-            "Не лагай сейчас.",
-            "Ща проверю.",
-        )
+        val DEFAULT_EPITAPHS: List<String> = emptyList()
     }
 }
 
@@ -165,8 +149,8 @@ internal object GraveAppearances {
                 remaining < 0.0
             }?.let(GraveModels.all::get) ?: GraveModels.all[weights.indexOfLast { it > 0.0 }]
         }
-        val epitaphs = settings.epitaphs.filter(String::isNotBlank).ifEmpty { GraveAppearanceSettings.DEFAULT_EPITAPHS }
-        val epitaph = epitaphs[(fraction(id, "epitaph") * epitaphs.size).toInt()]
+        val epitaphs = settings.epitaphs.filter(String::isNotBlank)
+        val epitaph = if (epitaphs.isEmpty()) "" else epitaphs[(fraction(id, "epitaph") * epitaphs.size).toInt()]
         return GraveAppearance(model, epitaph, (fraction(id, "front") * 4).toInt() * 90f)
     }
 

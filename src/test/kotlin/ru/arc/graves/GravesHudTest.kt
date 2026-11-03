@@ -10,6 +10,7 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Chunk
 import org.bukkit.Color
 import org.bukkit.Location
+import org.bukkit.Sound
 import org.bukkit.World
 import org.bukkit.block.Block
 import org.bukkit.entity.Display
@@ -28,7 +29,7 @@ import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
 class GravesHudTest : FunSpec({
-    test("public tombs stay stable when private bars empty and release masks on world change and close") {
+    test("public tombs stay stable without bossbars and release masks on snapshot world change and close") {
         MockBukkitTestRuntime.open().use { paper ->
             val fixture = GravesHudFixture(paper.createSimplePlugin("GravesHud"))
             val grave = fixture.grave(1, 0)
@@ -40,14 +41,10 @@ class GravesHudTest : FunSpec({
                 verify(exactly = 1) { it.display.showTo(fixture.player) }
                 verify(exactly = 0) { it.display.isGlowing = true }
             }
-            fixture.hud.refresh(fixture.player, emptyList(), null, false)
+            fixture.hud.refreshGlow(fixture.player, listOf(grave.copy(ownerId = fixture.owner)))
             fixture.removed.size shouldBe 0
             verify(exactly = 0) { fixture.player.showBossBar(any()) }
-            fixture.hud.refresh(fixture.player, listOf(grave.copy(ownerId = fixture.owner)), null, false)
-            fixture.hud.refresh(fixture.player, emptyList(), null, false)
-            fixture.removed.size shouldBe 0
-            verify(exactly = 1) { fixture.player.showBossBar(any()) }
-            verify(exactly = 2) { fixture.player.hideBossBar(any()) }
+            verify(exactly = 0) { fixture.player.hideBossBar(any()) }
 
             fixture.hud.refreshGlow(fixture.player, emptyList()) shouldBe emptyList()
             fixture.removed.size shouldBe 12
@@ -55,10 +52,9 @@ class GravesHudTest : FunSpec({
             fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(grave)
 
             every { fixture.world.uid } returns UUID.randomUUID()
-            fixture.hud.refresh(fixture.player, emptyList(), null, false)
+            fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(grave)
             fixture.removed.size shouldBe 24
             fixture.cleared.size shouldBe 2
-            fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(grave)
             fixture.spawned.size shouldBe 36
             fixture.hud.closeAsync() shouldBe fixture.cleanup
             fixture.hud.closeAsync() shouldBe fixture.cleanup
@@ -67,6 +63,35 @@ class GravesHudTest : FunSpec({
             fixture.cleared.size shouldBe 3
             fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe emptyList()
             verify(exactly = 1) { fixture.displays.closeAsync() }
+            fixture.cleanup.complete(null)
+        }
+    }
+
+    test("empty default epitaphs leave tomb models without text displays or bossbars") {
+        MockBukkitTestRuntime.open().use { paper ->
+            val fixture = GravesHudFixture(paper.createSimplePlugin("GravesHudNoText"),
+                GraveAppearanceSettings(mapOf("slate" to 1.0)))
+            val grave = fixture.grave(1, 0, fixture.owner)
+            fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(grave)
+            fixture.spawned.size shouldBe GraveModels.slate.parts.size
+            fixture.spawned.any { it.display is PacketTextDisplay } shouldBe false
+            verify(exactly = 0) { fixture.displays.spawnText(any(), any()) }
+            verify(exactly = 0) { fixture.player.showBossBar(any()) }
+            fixture.hud.closeAsync()
+            fixture.cleanup.complete(null)
+        }
+    }
+
+    test("claim acknowledgement feedback is explicit local and stops with the runtime") {
+        MockBukkitTestRuntime.open().use { paper ->
+            val fixture = GravesHudFixture(paper.createSimplePlugin("GravesHudClaim"))
+            fixture.hud.refreshGlow(fixture.player, listOf(fixture.grave(1, 0)))
+            verify(exactly = 0) { fixture.player.playSound(any<Location>(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, .35f, 1.2f) }
+            fixture.hud.claimSucceeded(fixture.player)
+            verify(exactly = 1) { fixture.player.playSound(any<Location>(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, .35f, 1.2f) }
+            fixture.hud.closeAsync()
+            fixture.hud.claimSucceeded(fixture.player)
+            verify(exactly = 1) { fixture.player.playSound(any<Location>(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, .35f, 1.2f) }
             fixture.cleanup.complete(null)
         }
     }

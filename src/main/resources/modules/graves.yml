@@ -12,6 +12,8 @@ glow:
   nearby-radius: 32
 tracking:
   enabled-by-default: true
+notifications:
+  creation-message: false
 hud:
   refresh-ticks: 2
 # Cosmetics only. Zero disables a model; all zero weights fall back to slate.
@@ -22,24 +24,29 @@ appearance:
     cairn: 20.0
     timber: 20.0
     broken: 10.0
-  # Plain TextDisplay inscriptions: at most 128 entries of 96 characters each.
-  epitaphs:
-    - 'Похуй...'
-    - 'Собаке собачья смерть'
-    - 'Да не ссы, ничего не будет'
-    - 'Не, я допрыгну.'
-    - 'Воды хватит.'
-    - 'Я тут уже ходил.'
-    - 'Это же мирный.'
-    - 'Сейчас покажу.'
-    - 'Ещё один блок.'
-    - 'Да у меня тотем.'
-    - 'Тут неглубоко.'
-    - 'Крипер далеко.'
-    - 'Я успею.'
-    - 'Не лагай сейчас.'
-    - 'Ща проверю.'
+  # Empty means no inscription TextDisplay. Optional plain text, at most 128 entries of 96 characters.
+  epitaphs: []
+  # Opt-in examples requested by the owner:
+  # epitaphs:
+  #   - 'Похуй...'
+  #   - 'Собаке собачья смерть'
+  #   - 'Да не ссы, ничего не будет'
 text:
+  entry-location-label: '<italic:false><#c4a7e7><world> · <x>, <y>, <z> ›'
+  contents-title: '<italic:false><dark_gray>Вещи в могиле'
+  contents-label: '<italic:false><#c4a7e7>Посмотреть вещи ›'
+  contents-tooltip: '<italic:false><#e8dfd2>Открыть содержимое могилы в сундуке.'
+  contents-unavailable: '<italic:false><#f4bd6a>Не удалось открыть содержимое могилы. Попробуйте ещё раз.'
+  back-label: '<italic:false><#92bed8>‹ Назад'
+  back-tooltip: '<italic:false><#e8dfd2>Вернуться к предыдущему экрану.'
+  admin-title: '<italic:false><#c4a7e7>Все активные могилы'
+  admin-contents-title: '<italic:false><dark_gray>Просмотр: <owner>'
+  admin-body: '<italic:false><#e8dfd2>Активные могилы: <#ffffff><count><newline><#e8dfd2>Только просмотр · страница <#ffffff><page>/<pages>'
+  admin-empty: '<italic:false><#e8dfd2>Активных могил по этому запросу нет.'
+  admin-loading: '<italic:false><#e8dfd2>Загружаем активные могилы…'
+  admin-entry-label: '<italic:false><#c4a7e7><owner> · <world> ›'
+  admin-entry-tooltip: '<italic:false><#e8dfd2><x>, <y>, <z> · <expiry><newline>Посмотреть вещи без возможности забрать.'
+  admin-denied: '<italic:false><#f4bd6a>У вас нет доступа к просмотру чужих могил.'
   list-title: '<italic:false><#c4a7e7>Ваши могилы'
   list-body: '<italic:false><#e8dfd2>Активные могилы: <#ffffff><count><newline><#e8dfd2>Страница <#ffffff><page>/<pages>'
   list-empty: '<italic:false><#e8dfd2>Активных могил сейчас нет.'

@@ -2,10 +2,16 @@ package ru.arc.graves
 
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.every
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import org.bukkit.Material
+import org.bukkit.NamespacedKey
 import org.bukkit.inventory.ItemStack
+import org.bukkit.persistence.PersistentDataType
 import net.kyori.adventure.text.Component
+import ru.arc.paper.playerstate.NativePaperItemStackBinaryCodec
 
 class NativeGraveItemsTest : FunSpec({
     test("experience thresholds and float progress retain exact whole experience points") {
@@ -43,6 +49,66 @@ class NativeGraveItemsTest : FunSpec({
             received.itemMeta.displayName() shouldBe named.itemMeta.displayName()
             pickup.remaining.map { NativeGraveItems.decode(it).amount } shouldBe listOf(13)
             NativeGraveItems.experiencePoints(pickup.after.level, pickup.after.progress) shouldBe 403
+        }
+    }
+
+    test("native-equivalent binary variants match while slots amount metadata PDC and exact XP remain strict") {
+        MockBukkitTestRuntime.open().use { paper ->
+            val player = paper.addPlayer("GraveVariant")
+            val key = NamespacedKey("arc", "grave-test")
+            val item = ItemStack(Material.PAPER, 2).apply {
+                editMeta { meta ->
+                    meta.displayName(Component.text("Test key"))
+                    meta.persistentDataContainer.set(key, PersistentDataType.STRING, "original")
+                }
+            }
+            player.inventory.setItem(0, item)
+            player.level = 4
+            player.exp = .5f
+            player.totalExperience = 37
+            // The real Paper probe proves this transport behavior; stable MockBukkit bytes cannot represent it.
+            val encoded = mutableListOf<ItemStack>()
+            mockkObject(NativePaperItemStackBinaryCodec)
+            every { NativePaperItemStackBinaryCodec.encodeItem(any()) } answers {
+                val id = encoded.size
+                encoded += firstArg<ItemStack>().clone()
+                id.toString().toByteArray(Charsets.UTF_8)
+            }
+            every { NativePaperItemStackBinaryCodec.decodeItem(any()) } answers {
+                encoded[firstArg<ByteArray>().toString(Charsets.UTF_8).toInt()].clone()
+            }
+            try {
+                val expected = NativeGraveItems.capture(player)
+                NativeGraveItems.apply(player, expected)
+                val actual = NativeGraveItems.capture(player)
+                (actual == expected) shouldBe false
+                NativeGraveInventoryPayload.encode(actual).contentEquals(NativeGraveInventoryPayload.encode(expected)) shouldBe false
+                NativeGraveItems.matches(actual, expected) shouldBe true
+
+                fun changed(stack: ItemStack) = actual.copy(slots = actual.slots.toMutableList().also {
+                    it[0] = NativeGraveItems.encode(stack)
+                })
+                NativeGraveItems.matches(changed(item.clone().also { it.amount++ }), expected) shouldBe false
+                NativeGraveItems.matches(changed(item.clone().apply {
+                    editMeta { it.displayName(Component.text("Changed key")) }
+                }), expected) shouldBe false
+                NativeGraveItems.matches(changed(item.clone().apply {
+                    editMeta { it.persistentDataContainer.set(key, PersistentDataType.STRING, "changed") }
+                }), expected) shouldBe false
+                NativeGraveItems.matches(actual.copy(slots = actual.slots.toMutableList().also { it[0] = null }), expected) shouldBe false
+                NativeGraveItems.matches(actual.copy(slots = actual.slots.dropLast(1)), expected) shouldBe false
+                NativeGraveItems.matches(actual.copy(level = actual.level + 1), expected) shouldBe false
+                NativeGraveItems.matches(actual.copy(progress = Float.fromBits(actual.progress.toBits() + 1)), expected) shouldBe false
+                NativeGraveItems.matches(actual.copy(totalExperience = actual.totalExperience + 1), expected) shouldBe false
+                val fractional = expected.copy(level = 23, progress = .1234567f, totalExperience = 137)
+                val noXp = NativeGraveItems.pickup(fractional, emptyList(), 0).after
+                noXp.level shouldBe fractional.level
+                noXp.progress.toBits() shouldBe fractional.progress.toBits()
+                noXp.totalExperience shouldBe fractional.totalExperience
+                NativeGraveItems.matches(noXp, fractional) shouldBe true
+            } finally {
+                unmockkObject(NativePaperItemStackBinaryCodec)
+            }
         }
     }
 })

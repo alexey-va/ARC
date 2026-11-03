@@ -20,6 +20,7 @@ internal data class GravesSettings(
     val experienceFraction: Double = .8,
     val claimDistance: Double = 6.0,
     val appearance: GraveAppearanceSettings = GraveAppearanceSettings(),
+    val creationMessageEnabled: Boolean = false,
 ) {
     private val miniMessage = MiniMessage.miniMessage()
 
@@ -51,6 +52,7 @@ internal class GravesConfig(private val source: Config) {
             experienceFraction = source.double("storage.experience-fraction", .8).also { require(it.isFinite() && it in 0.0..1.0) },
             claimDistance = source.double("interaction.claim-distance", 6.0).also { require(it.isFinite() && it in 1.0..6.0) },
             appearance = appearance(),
+            creationMessageEnabled = source.bool("notifications.creation-message", false),
         )
     }
 
@@ -62,7 +64,7 @@ internal class GravesConfig(private val source: Config) {
         val epitaphs = source.stringList("appearance.epitaphs", GraveAppearanceSettings.DEFAULT_EPITAPHS)
             .take(128).map(String::trim).filter { line ->
                 line.isNotBlank() && line.length <= 96 && line.none { it.isISOControl() || it in "§<>" }
-            }.ifEmpty { GraveAppearanceSettings.DEFAULT_EPITAPHS }
+            }
         return GraveAppearanceSettings(weights, epitaphs)
     }
 
@@ -85,6 +87,21 @@ internal class GravesConfig(private val source: Config) {
         }
 
         private val DEFAULT_TEXT = linkedMapOf(
+            "entry-location-label" to "<italic:false><#c4a7e7><world> · <x>, <y>, <z> ›",
+            "contents-title" to "<italic:false><dark_gray>Вещи в могиле",
+            "contents-label" to "<italic:false><#c4a7e7>Посмотреть вещи ›",
+            "contents-tooltip" to "<italic:false><#e8dfd2>Открыть содержимое могилы в сундуке.",
+            "contents-unavailable" to "<italic:false><#f4bd6a>Не удалось открыть содержимое могилы. Попробуйте ещё раз.",
+            "back-label" to "<italic:false><#92bed8>‹ Назад",
+            "back-tooltip" to "<italic:false><#e8dfd2>Вернуться к предыдущему экрану.",
+            "admin-title" to "<italic:false><#c4a7e7>Все активные могилы",
+            "admin-contents-title" to "<italic:false><dark_gray>Просмотр: <owner>",
+            "admin-body" to "<italic:false><#e8dfd2>Активные могилы: <#ffffff><count><newline><#e8dfd2>Только просмотр · страница <#ffffff><page>/<pages>",
+            "admin-empty" to "<italic:false><#e8dfd2>Активных могил по этому запросу нет.",
+            "admin-loading" to "<italic:false><#e8dfd2>Загружаем активные могилы…",
+            "admin-entry-label" to "<italic:false><#c4a7e7><owner> · <world> ›",
+            "admin-entry-tooltip" to "<italic:false><#e8dfd2><x>, <y>, <z> · <expiry><newline>Посмотреть вещи без возможности забрать.",
+            "admin-denied" to "<italic:false><#f4bd6a>У вас нет доступа к просмотру чужих могил.",
             "list-title" to "<italic:false><#c4a7e7>Ваши могилы",
             "list-body" to "<italic:false><#e8dfd2>Активные могилы: <#ffffff><count><newline><#e8dfd2>Страница <#ffffff><page>/<pages>",
             "list-empty" to "<italic:false><#e8dfd2>Активных могил сейчас нет.",

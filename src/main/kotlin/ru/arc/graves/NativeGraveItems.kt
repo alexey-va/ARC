@@ -17,6 +17,18 @@ internal object NativeGraveItems {
         player.level, player.exp, player.totalExperience,
     )
 
+    /** Native NBT byte order is not stable; item equality still includes count and every native component. */
+    fun matches(actual: NativeGraveInventory, expected: NativeGraveInventory): Boolean {
+        if (actual.slots.size != NativeGraveInventory.SLOT_COUNT || expected.slots.size != NativeGraveInventory.SLOT_COUNT ||
+            actual.level != expected.level || actual.progress.toBits() != expected.progress.toBits() ||
+            actual.totalExperience != expected.totalExperience) return false
+        return actual.slots.indices.all { slot ->
+            val left = actual.slots[slot]
+            val right = expected.slots[slot]
+            left == right || (left != null && right != null && decode(left) == decode(right))
+        }
+    }
+
     fun apply(player: Player, value: NativeGraveInventory) {
         val items = value.slots.map { it?.let(::decode) }
         items.forEachIndexed { slot, item -> player.inventory.setItem(slot, item) }
@@ -24,7 +36,7 @@ internal object NativeGraveItems {
         player.exp = value.progress
         player.totalExperience = value.totalExperience
         player.updateInventory()
-        check(capture(player) == value) { "Grave inventory application did not match its durable intent" }
+        check(matches(capture(player), value)) { "Grave inventory application did not match its durable intent" }
     }
 
     /** Remove only actual death drops; plugin-retained/soulbound items remain with their owner. */
@@ -73,6 +85,7 @@ internal object NativeGraveItems {
             }
             if (incoming.amount > 0) remaining += encode(incoming)
         }
+        if (experience == 0) return Pickup(before.copy(slots = slots.map { it?.let(::encode) }), remaining)
         val total = (experiencePoints(before.level, before.progress).toLong() + experience).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
         val (level, progress) = experienceState(total)
         return Pickup(NativeGraveInventory(slots.map { it?.let(::encode) }, level, progress,

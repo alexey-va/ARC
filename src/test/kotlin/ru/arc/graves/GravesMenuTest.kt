@@ -1,325 +1,160 @@
 package ru.arc.graves
 
-import io.mockk.every
-import io.mockk.mockk
+import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
-import net.kyori.adventure.text.BlockNBTComponent
+import io.mockk.every
+import io.mockk.mockk
 import net.kyori.adventure.text.Component
-import net.kyori.adventure.text.ComponentLike
-import net.kyori.adventure.text.EntityNBTComponent
-import net.kyori.adventure.text.SelectorComponent
-import net.kyori.adventure.text.StorageNBTComponent
-import net.kyori.adventure.text.TranslatableComponent
-import net.kyori.adventure.text.event.ClickEvent
-import net.kyori.adventure.text.event.HoverEvent
-import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.entity.Player
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Test
 import ru.arc.config.ConfigManager
 import ru.arc.paper.menu.PaperDialogClickContext
 import ru.arc.paper.menu.PaperDialogScreen
 import java.util.UUID
 
-class GravesMenuTest {
-    private lateinit var player: Player
-    private lateinit var menu: GravesMenu
-    private lateinit var screen: PaperDialogScreen
-    private var reopen: (() -> Unit)? = null
-    private var views = emptyList<GraveView>()
-    private var tracked: UUID? = null
-    private var isTrackingEnabled = true
-    private var priceQuote = 100.0
-    private var toggles = 0
-    private var trackedSelections = mutableListOf<UUID>()
-    private var teleported: Pair<GraveView, Double>? = null
-    private var viewsAvailable = true
-    private var claimAllowed = false
-    private var claimed: GraveView? = null
-    private var dialogCloses = 0
+class GravesMenuTest : FunSpec({
+    test("owner list paginates fresh data with Russian world names and no server or tracking controls") {
+        val f = GravesMenuFixture()
+        f.views = (1L..7L).map(f::grave) + f.grave(99).copy(ownerId = UUID(2, 3))
+        f.menu.open(f.player)
+        f.screen.buttons.count { it.id.value.startsWith("grave_") } shouldBe 6
+        f.text() shouldContain "Ванильный мир"
+        f.text() shouldNotContain "survival"
+        f.text() shouldNotContain "vanilla"
+        f.text() shouldNotContain "Компас"
+        f.screen.buttons.any { "track" in it.id.value } shouldBe false
+        f.click("next_page")
+        f.screen.buttons.count { it.id.value.startsWith("grave_") } shouldBe 1
+        f.views = listOf(f.grave(8))
+        f.reopen!!.invoke()
+        f.screen.buttons.count { it.id.value.startsWith("grave_") } shouldBe 1
+        f.text() shouldContain "8, 64, 8"
+        f.literalClose()
+    }
 
-    @BeforeEach
-    fun setup() {
-        player = mockk(relaxed = true)
-        views = emptyList()
-        tracked = null
-        isTrackingEnabled = true
-        priceQuote = 100.0
-        toggles = 0
-        trackedSelections = mutableListOf()
-        teleported = null
-        viewsAvailable = true
-        claimAllowed = false
-        claimed = null
-        dialogCloses = 0
+    test("command detail opens the chest callback and has no direct claim or tracking action") {
+        val f = GravesMenuFixture()
+        f.views = listOf(f.grave(1))
+        f.menu.openDetail(f.player, f.views.single().id)
+        f.screen.id shouldBe "graves.detail"
+        f.screen.buttons.map { it.id.value }.toSet() shouldBe setOf("contents", "teleport_grave", "back_to_list")
+        f.text() shouldContain "Ванильный мир"
+        f.text() shouldNotContain "survival"
+        f.literalClose()
+        f.click("contents")
+        f.openedContents shouldBe f.views.single().id
+        f.closes shouldBe 1
+        f.teleported shouldBe null
+    }
+
+    test("three confirm and return cycles keep explicit literal back and close without closing between dialogs") {
+        val f = GravesMenuFixture()
+        f.views = listOf(f.grave(1))
+        f.menu.open(f.player)
+        repeat(3) {
+            f.click("grave_0")
+            f.literalClose()
+            f.click("teleport_grave")
+            f.screen.id shouldBe "graves.teleport-confirmation"
+            f.literalClose()
+            f.click("back_to_detail")
+            f.screen.id shouldBe "graves.detail"
+            f.click("back_to_list")
+            f.screen.id shouldBe "graves.list"
+        }
+        f.closes shouldBe 0
+    }
+
+    test("confirmation keeps its quote but supplies the current owner record to the backend") {
+        val f = GravesMenuFixture()
+        f.views = listOf(f.grave(1))
+        f.menu.openDetail(f.player, f.views.single().id)
+        f.click("teleport_grave")
+        f.quote = 300.0
+        f.views = listOf(f.views.single().copy(x = 55))
+        f.reopen!!.invoke()
+        f.text() shouldContain "100"
+        f.text() shouldContain "55, 64, 1"
+        f.click("confirm_teleport")
+        f.teleported shouldBe (f.views.single() to 100.0)
+        f.closes shouldBe 1
+    }
+
+    test("expired or removed records cannot open contents or teleport") {
+        val f = GravesMenuFixture()
+        f.views = listOf(f.grave(1))
+        f.menu.openDetail(f.player, f.views.single().id)
+        f.views = emptyList()
+        f.click("contents")
+        f.screen.id shouldBe "graves.list"
+        f.text() shouldContain "больше недоступна"
+        f.openedContents shouldBe null
+        f.views = listOf(f.grave(2))
+        f.menu.openDetail(f.player, f.views.single().id)
+        f.click("teleport_grave")
+        f.views = listOf(f.views.single().copy(expiresAt = 1))
+        f.click("confirm_teleport")
+        f.teleported shouldBe null
+        f.closes shouldBe 0
+    }
+
+    test("unavailable data and empty graves stay distinct and invalid prices do not show confirmation") {
+        val f = GravesMenuFixture()
+        f.available = false
+        f.menu.open(f.player)
+        f.text() shouldContain "Не удалось загрузить"
+        f.literalClose()
+        f.available = true
+        f.menu.open(f.player)
+        f.text() shouldContain "Активных могил сейчас нет"
+        f.views = listOf(f.grave(1))
+        f.quote = Double.NaN
+        f.menu.openDetail(f.player, f.views.single().id)
+        f.click("teleport_grave")
+        f.screen.id shouldBe "graves.detail"
+        f.text() shouldContain "Стоимость перехода сейчас недоступна"
+        f.screen.buttons.any { it.id.value == "teleport_grave" } shouldBe false
+    }
+})
+
+private class GravesMenuFixture {
+    val owner: UUID = UUID(1, 1)
+    val player = mockk<Player>(relaxed = true)
+    var views = emptyList<GraveView>()
+    var available = true
+    var quote = 100.0
+    var closes = 0
+    var openedContents: UUID? = null
+    var teleported: Pair<GraveView, Double>? = null
+    lateinit var screen: PaperDialogScreen
+    var reopen: (() -> Unit)? = null
+    val menu: GravesMenu
+
+    init {
+        every { player.uniqueId } returns owner
         menu = GravesMenu(
-            settings = GravesConfig(ConfigManager.empty()).snapshot(),
-            views = { if (viewsAvailable) views else null },
-            tracking = { tracked },
-            trackingEnabled = { isTrackingEnabled },
-            toggleTracking = { isTrackingEnabled = !isTrackingEnabled; toggles++ },
-            track = { _, graveId -> tracked = graveId; trackedSelections += graveId },
-            price = { priceQuote },
-            teleport = { _, grave, quotedPrice -> teleported = grave to quotedPrice },
-            showDialog = { _, shown, showAgain -> screen = shown; reopen = showAgain },
-            closeDialog = { dialogCloses++ },
-            canClaim = { _, _ -> claimAllowed },
-            claim = { _, grave -> claimed = grave },
+            GravesConfig(ConfigManager.empty()).snapshot(), { if (available) views else null },
+            { quote }, { _, grave, price -> teleported = grave to price },
+            { Component.text("Ванильный мир") }, { _, id -> openedContents = id },
+            showDialog = { _, value, callback -> screen = value; reopen = callback },
+            closeDialog = { closes++ },
         )
     }
 
-    @Test
-    fun `grave list and item contents paginate six at a time and reopen current data`() {
-        views = (1L..7L).map { grave(it) }
-        menu.open(player)
-
-        assertEquals("graves.list", screen.id)
-        assertEquals(6, screen.buttons.count { it.id.value.startsWith("grave_") })
-        assertTrue(screen.buttons.any { it.id.value == "next_page" })
-        click("next_page")
-        assertEquals(1, screen.buttons.count { it.id.value.startsWith("grave_") })
-        assertFalse(screen.buttons.any { it.id.value == "next_page" })
-
-        views = listOf(grave(8))
-        reopen!!.invoke()
-        assertEquals("survival · world · 8, 64, 8 ›", plain(screen.buttons.single { it.id.value == "grave_0" }.label))
-
-        val unsafeName = Component.text("<red>player text").clickEvent(ClickEvent.runCommand("/op Viewer"))
-        views = listOf(grave(9, items = (1L..7L).map {
-            GraveItem(GsonComponentSerializer.gson().serialize(if (it == 1L) unsafeName else Component.text("Item $it")), 1)
-        }))
-        menu.open(player)
-        click("grave_0")
-        assertTrue(body().contains("<red>player text"))
-        assertTrue(body().contains("Item 6"))
-        assertFalse(body().contains("Item 7"))
-        assertFalse(screen.body.any { hasActionEvent(it.text) })
-        click("items_next")
-        assertTrue(body().contains("Item 7"))
-        assertFalse(body().contains("Item 6"))
-    }
-
-    @Test
-    fun `item names cannot retain actions in translation arguments or separators`() {
-        val nestedAction = Component.text("nested item name")
-            .clickEvent(ClickEvent.runCommand("/op Viewer"))
-            .hoverEvent(HoverEvent.showText(Component.text("unsafe hover")))
-            .insertion("unsafe insertion")
-        val names = listOf(
-            Component.translatable("chat.type.text", nestedAction),
-            Component.selector("@a", nestedAction),
-            Component.blockNBT { builder ->
-                builder.nbtPath("Items")
-                builder.separator(nestedAction)
-                builder.absoluteWorldPos(0, 64, 0)
-            },
-        )
-        views = listOf(grave(10, items = names.map { name ->
-            GraveItem(GsonComponentSerializer.gson().serialize(name), 1)
-        }))
-
-        menu.open(player)
-        click("grave_0")
-
-        val renderedJson = screen.body.joinToString("\n") { GsonComponentSerializer.gson().serialize(it.text) }
-        assertTrue(renderedJson.contains("chat.type.text"))
-        assertTrue(renderedJson.contains("@a"))
-        assertTrue(renderedJson.contains("Items"))
-        assertTrue(renderedJson.contains("nested item name"))
-        assertFalse(screen.body.any { hasActionEvent(it.text) })
-    }
-
-    @Test
-    fun `grave selection and compass switch refresh the detail state`() {
-        val selected = grave(5)
-        views = listOf(selected)
-        menu.open(player)
-        click("tracking_toggle")
-        assertEquals(1, toggles)
-        assertFalse(isTrackingEnabled)
-
-        click("grave_0")
-        click("track_grave")
-        assertEquals(listOf(selected.id), trackedSelections)
-        assertEquals(selected.id, tracked)
-        assertTrue(body().contains("Эта могила выбрана для компаса."))
-        assertFalse(screen.buttons.any { it.id.value == "track_grave" })
-    }
-
-    @Test
-    fun `expired or missing grave cannot reach teleport confirmation`() {
-        val selected = grave(6)
-        views = listOf(selected)
-        menu.open(player)
-        click("grave_0")
-
-        views = emptyList()
-        click("teleport_grave")
-
-        assertEquals("graves.list", screen.id)
-        assertTrue(body().contains("Эта могила больше недоступна"))
-        assertFalse(screen.buttons.any { it.id.value == "confirm_teleport" })
-
-        views = listOf(grave(7, expiresAt = System.currentTimeMillis() - 1L))
-        menu.open(player)
-        assertTrue(body().contains("Активных могил сейчас нет."))
-        assertFalse(screen.buttons.any { it.id.value.startsWith("grave_") })
-    }
-
-    @Test
-    fun `confirmation displays and sends the exact captured price and grave`() {
-        val selected = grave(11)
-        views = listOf(selected)
-        priceQuote = 12.345
-        menu.open(player)
-        click("grave_0")
-        click("teleport_grave")
-
-        assertEquals("graves.teleport-confirmation", screen.id)
-        assertTrue(body().contains("12.345"))
-        assertTrue(body().contains("💰"))
-        priceQuote = 99.0
-        click("confirm_teleport")
-
-        assertEquals(selected, teleported?.first)
-        assertEquals(12.345, teleported?.second)
-    }
-
-    @Test
-    fun `zero price is presented as the free entitlement`() {
-        views = listOf(grave(12))
-        priceQuote = 0.0
-        menu.open(player)
-        click("grave_0")
-        click("teleport_grave")
-
-        assertTrue(body().contains("Бесплатно по праву"))
-        assertFalse(body().contains("💰"))
-    }
-
-    @Test
-    fun `invalid price quote cannot be confirmed`() {
-        views = listOf(grave(13))
-        priceQuote = Double.NaN
-        menu.open(player)
-        click("grave_0")
-        click("teleport_grave")
-
-        assertEquals("graves.detail", screen.id)
-        assertTrue(body().contains("Стоимость перехода сейчас недоступна."))
-        assertFalse(screen.buttons.any { it.id.value == "teleport_grave" || it.id.value == "confirm_teleport" })
-    }
-
-    @Test
-    fun `unavailable source is distinct from an empty list even when opening a world marker`() {
-        viewsAvailable = false
-        menu.openDetail(player, UUID(0, 1))
-
-        screen.id shouldBe "graves.list"
-        body() shouldContain "Не удалось загрузить могилы"
-        body() shouldNotContain "Активных могил сейчас нет"
-        body() shouldNotContain "Эта могила больше недоступна"
-        screen.buttons.isEmpty() shouldBe true
-    }
-
-    @Test
-    fun `nearby claim is the first action and passes the fresh grave before returning to gameplay`() {
-        val selected = grave(20)
-        views = listOf(selected)
-        claimAllowed = true
-        menu.openDetail(player, selected.id)
-
-        screen.id shouldBe "graves.detail"
-        screen.buttons.first().id.value shouldBe "claim_grave"
-        dialogCloses shouldBe 0
-        val updated = selected.copy(experience = 99)
-        views = listOf(updated)
-        click("claim_grave")
-
-        claimed shouldBe updated
-        dialogCloses shouldBe 1
-    }
-
-    @Test
-    fun `claim disappears after moving away and a previously rendered action is revalidated`() {
-        val selected = grave(21)
-        views = listOf(selected)
-        claimAllowed = true
-        menu.openDetail(player, selected.id)
-        claimAllowed = false
-        click("claim_grave")
-
-        screen.id shouldBe "graves.detail"
-        screen.buttons.any { it.id.value == "claim_grave" } shouldBe false
-        body() shouldContain "Подойдите к могиле"
-        claimed shouldBe null
-        dialogCloses shouldBe 0
-    }
-
-    @Test
-    fun `removed grave cannot be claimed from an old detail screen`() {
-        val selected = grave(22)
-        views = listOf(selected)
-        claimAllowed = true
-        menu.openDetail(player, selected.id)
-        views = emptyList()
-        click("claim_grave")
-
-        screen.id shouldBe "graves.list"
-        body() shouldContain "Эта могила больше недоступна"
-        claimed shouldBe null
-        dialogCloses shouldBe 0
-    }
-
-    private fun click(id: String) {
+    fun grave(id: Long) = GraveView(UUID(0, id), owner, "survival", "vanilla", id.toInt(), 64, id.toInt(), id, -1, 50, emptyList())
+    fun click(id: String) {
         val context = mockk<PaperDialogClickContext>()
-        every { context.text(any()) } returns ""
+        every { context.player } returns player
         screen.buttons.single { it.id.value == id }.onClick.handle(context)
     }
-
-    private fun body(): String = screen.body.joinToString("\n") {
-        PlainTextComponentSerializer.plainText().serialize(it.text)
-    }
-
-    private fun plain(component: Component): String = PlainTextComponentSerializer.plainText().serialize(component)
-
-    private fun grave(id: Long, expiresAt: Long = -1L, items: List<GraveItem> = emptyList()) = GraveView(
-        id = UUID(0, id),
-        ownerId = UUID(1, id),
-        server = "survival",
-        world = "world",
-        x = id.toInt(),
-        y = 64,
-        z = id.toInt(),
-        createdAt = 1L,
-        expiresAt = expiresAt,
-        experience = 42,
-        items = items,
+    fun text(): String = PlainTextComponentSerializer.plainText().serialize(
+        Component.empty().append(screen.title).append(screen.body.fold(Component.empty()) { a, b -> a.append(b.text) })
+            .append(screen.buttons.fold(Component.empty()) { a, b -> a.append(b.label) }),
     )
-
-    private fun hasActionEvent(component: Component): Boolean {
-        val hasStyleAction = component.clickEvent() != null || component.hoverEvent() != null || component.insertion() != null
-        val hasNestedTranslationAction = component is TranslatableComponent && component.arguments().any { argument ->
-            when (val value = argument.value()) {
-                is Component -> hasActionEvent(value)
-                is ComponentLike -> hasActionEvent(value.asComponent())
-                else -> false
-            }
-        }
-        val separator = when (component) {
-            is SelectorComponent -> component.separator()
-            is BlockNBTComponent -> component.separator()
-            is EntityNBTComponent -> component.separator()
-            is StorageNBTComponent -> component.separator()
-            else -> null
-        }
-        return hasStyleAction || hasNestedTranslationAction || component.children().any(::hasActionEvent) ||
-            separator?.let(::hasActionEvent) == true
+    fun literalClose() {
+        PlainTextComponentSerializer.plainText().serialize(checkNotNull(screen.exitButton).label) shouldBe "Закрыть"
+        checkNotNull(screen.exitButton).closeDialogBeforeAction shouldBe true
     }
 }

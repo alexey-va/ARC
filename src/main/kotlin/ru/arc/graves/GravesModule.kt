@@ -6,6 +6,8 @@ import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
+import org.bukkit.event.inventory.InventoryOpenEvent
+import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerCommandPreprocessEvent
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerQuitEvent
@@ -13,11 +15,14 @@ import ru.arc.ARC
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.Tasks
 import ru.arc.audit.AuditConfig
+import ru.arc.config.ConfigManager
 import ru.arc.core.PluginModule
 import ru.arc.core.whenCompleteSync
 import ru.arc.gui.ArcMenus
+import ru.arc.network.BackendServerId
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
+import ru.arc.util.WorldNames
 import ru.arc.xserver.XActionManager
 import ru.arc.paper.teleport.NativePaperTeleportExecutor
 import ru.arc.sql.SqlConnectionConfig
@@ -50,7 +55,7 @@ object GravesModule : PluginModule {
     fun drained(): CompletableFuture<Void> = drain.copy()
     fun storageDrained(): CompletableFuture<Void> = storageDrain.copy()
     fun activeCount(player: Player): Int = runtime?.views(player)?.size ?: 0
-    fun open(player: Player): Boolean = runtime?.let { it.menu.open(player); true } ?: false
+    fun open(player: Player): Boolean = runtime?.let { it.openPersonal(player); true } ?: false
 }
 
 /** All Bukkit and domain state is confined to the owning Paper thread. */
@@ -70,11 +75,8 @@ internal class GravesRuntime(private val settings: GravesSettings, sql: SqlConne
     private val legacyHolograms = LegacyGravesHolograms(plugin)
     private val redis = ARC.redisManager
     private val network = redis?.let { GravesNetwork(it, server, ::acceptTransfer) }
-    private val preferenceStore = redis?.let { GraveTrackingStore(it, settings.trackingEnabledByDefault) }
-    private val preferences = mutableMapOf<UUID, GraveTracking>()
-    private val preferenceGenerations = mutableMapOf<UUID, Long>()
-    private val preferenceWrites = mutableMapOf<UUID, Long>()
-    private var nextPreferenceGeneration = 0L
+    private val adminRequests = GravesAdminRequests()
+    private val worldNames: Map<String, String> = ConfigManager.of(plugin.dataPath, "modules/misc.yml").map("world-names")
     private val barriers = GraveBarriers(plugin, server, settings.nearbyGlowRadius, ::currentMarker,
         owned::playerReady, ::openMarker, ::feedback)
     private val hud = GravesHud(plugin, server, settings, onClear = barriers::clear)
@@ -88,23 +90,21 @@ internal class GravesRuntime(private val settings: GravesSettings, sql: SqlConne
     private var drain: CompletableFuture<Void>? = null
     private val transfers = mutableMapOf<UUID, Transfer>()
     private val outgoing = mutableSetOf<UUID>()
-    private val notices = mutableMapOf<UUID, Set<UUID>>()
     private var nativeListener: GravesNativeListener? = null
     private var syncListener: Listener? = null
     private val waitsForInventorySync = plugin.server.pluginManager.isPluginEnabled("HuskSync")
     private data class Transfer(val grave: UUID, val price: Double, val expires: Long)
 
-    internal val menu = GravesMenu(
-        settings, { if (owned.ready && !snapshotFailed) views(it) else null }, { selected(it)?.id }, { preference(it).enabled },
-        { player -> updatePreference(player) { it.copy(enabled = !it.enabled) } },
-        { player, grave -> updatePreference(player) { it.copy(enabled = true, selected = grave) } },
-        ::price, ::teleport,
-        canClaim = owned::canClaim,
-        claim = owned::claim,
-    )
+    private val menu = GravesMenu(settings, { if (owned.ready && !snapshotFailed) views(it) else null },
+        ::price, ::teleport, { WorldNames.display(it, worldNames) }, { player, grave -> openContents(player, grave) })
+    private val contentsMenu = GravesContentsMenu(settings, { WorldNames.display(it, worldNames) },
+        ::canClaimContents, ::claimContents, ::requestContentsPage)
+    private val adminMenu = GravesAdminMenu(settings, { WorldNames.display(it, worldNames) },
+        ::openAdmin, { player, grave -> openAdminContents(player, grave) })
 
     fun start() {
         Bukkit.getPluginManager().registerEvents(this, plugin)
+        Bukkit.getPluginManager().registerEvents(adminRequests, plugin)
         owned.start()
         legacyHolograms.start()
         if (native != null) nativeListener = GravesNativeListener(this).also {
@@ -113,19 +113,16 @@ internal class GravesRuntime(private val settings: GravesSettings, sql: SqlConne
         if (waitsForInventorySync) syncListener = GravesSyncListener(::afterInventorySync).also {
             Bukkit.getPluginManager().registerEvents(it, plugin)
         }
-        plugin.getCommand("graves")?.setExecutor { sender, _, _, _ ->
-            if (sender is Player) openCommand(sender)
+        plugin.getCommand("graves")?.setExecutor { sender, _, _, args ->
+            if (sender is Player) openCommand(sender, args.toList())
             true
         }
-        refresh()
-        Bukkit.getOnlinePlayers().forEach(::loadPreference)
-        tasks.runTimer(40, 40, ::refresh)
-        tasks.runTimer(1, settings.hudRefreshTicks.toLong()) {
-            Bukkit.getOnlinePlayers().forEach { player ->
-                val graves = views(player)
-                hud.refresh(player, graves, selected(player, graves)?.id, preference(player).enabled)
-            }
+        plugin.getCommand("graves")?.setTabCompleter { sender, _, _, args ->
+            if (sender is Player && sender.hasPermission(GRAVES_ADMIN_PERMISSION) && args.size == 1 &&
+                "admin".startsWith(args[0], ignoreCase = true)) listOf("admin") else emptyList()
         }
+        refresh()
+        tasks.runTimer(40, 40, ::refresh)
         info("ARC graves initialized on {}: native=true, legacy={}, network={}", server, native != null, network != null)
     }
 
@@ -165,13 +162,7 @@ internal class GravesRuntime(private val settings: GravesSettings, sql: SqlConne
         val publicGraves = (owned.views() + localViews).filter { it.server == server && it.active(System.currentTimeMillis()) }.distinctBy { it.id }
         Bukkit.getOnlinePlayers().forEach { player ->
             if (owned.playerReady(player.uniqueId)) finishTransfer(player.uniqueId)
-            val graves = views(player)
             barriers.update(player, hud.refreshGlow(player, publicGraves))
-            if (!player.isDead) {
-                val ids = graves.mapTo(hashSetOf()) { it.id }
-                val old = notices.put(player.uniqueId, ids).orEmpty()
-                if ((ids - old).isNotEmpty()) player.sendMessage(settings.text("created"))
-            }
         }
     }
 
@@ -186,57 +177,76 @@ internal class GravesRuntime(private val settings: GravesSettings, sql: SqlConne
 
     private fun openMarker(player: Player, grave: UUID) {
         if (closed || !owned.playerReady(player.uniqueId)) return
+        openContents(player, grave)
+    }
+
+    private fun openContents(player: Player, grave: UUID, page: Int = 0) {
+        adminRequests.invalidate(player)
+        if (closed || !player.isOnline || player.isDead || !owned.playerReady(player.uniqueId)) return
+        val record = owned.find(grave)
+        if (record == null) { feedback(player, "contents-unavailable"); return }
+        if (record.ownerId != player.uniqueId) { feedback(player, "not-owner"); return }
+        ArcMenus.closeDialog(player)
+        contentsMenu.open(player, record, page = page)
+    }
+
+    private fun canClaimContents(player: Player, displayed: NativeGraveRecord): Boolean {
+        if (closed || !owned.playerReady(player.uniqueId) || displayed.ownerId != player.uniqueId) return false
+        val current = owned.find(displayed.id)?.takeIf { it.revision == displayed.revision && it.ownerId == player.uniqueId } ?: return false
+        val view = owned.views().firstOrNull { it.id == current.id } ?: return false
+        return owned.canClaim(player, view)
+    }
+
+    private fun claimContents(player: Player, grave: UUID, revision: Long) {
+        val current = owned.find(grave)
+        if (current == null || current.revision != revision) { feedback(player, "changed"); return }
+        if (!canClaimContents(player, current)) { feedback(player, "claim-unavailable"); return }
+        val view = owned.views().firstOrNull { it.id == grave } ?: return
+        owned.claim(player, view)
+    }
+
+    private fun requestContentsPage(player: Player, grave: UUID, readOnly: Boolean, page: Int) {
+        if (readOnly) openAdminContents(player, grave, page) else openContents(player, grave, page)
+    }
+
+    private fun beginAdmin(player: Player): GravesAdminRequests.Request? {
+        if (closed || !player.isOnline || player.isDead) return null
+        if (!player.hasPermission(GRAVES_ADMIN_PERMISSION)) { feedback(player, "admin-denied"); return null }
+        player.closeInventory()
         ArcMenus.beginDialogFlow(player)
-        menu.openDetail(player, grave)
+        val request = adminRequests.begin(player) ?: return null
+        adminMenu.loading(player) { adminRequests.dismiss(request) }
+        return request
     }
 
-    private fun preference(player: Player): GraveTracking = preferences[player.uniqueId] ?: GraveTracking(settings.trackingEnabledByDefault)
-    private fun selected(player: Player, graves: List<GraveView> = views(player)): GraveView? =
-        graves.firstOrNull { it.id == preference(player).selected }
-            ?: graves.firstOrNull { it.server == server && it.world == player.world.name }
-            ?: graves.firstOrNull()
-
-    private fun loadPreference(player: Player) {
-        val generation = ++nextPreferenceGeneration
-        preferenceGenerations[player.uniqueId] = generation
-        preferenceStore?.load(player.uniqueId)?.whenCompleteSync(tasks) { value, failure ->
-            if (player.isOnline && preferenceGenerations[player.uniqueId] == generation && failure == null && value != null) {
-                preferences[player.uniqueId] = value
-            }
+    private fun openAdmin(player: Player, page: Int = 0, serverFilter: String? = null) {
+        val request = beginAdmin(player) ?: return
+        graveStore.thenCompose { it.loadActive(System.currentTimeMillis(), serverFilter) }.whenCompleteSync(tasks) { records, failure ->
+            if (!adminRequests.complete(request)) return@whenCompleteSync
+            if (failure != null) warn("Graves administrator list failed server={} player={}", server, player.uniqueId, failure)
+            adminMenu.open(player, if (failure == null) records else null, page, serverFilter)
         }
     }
 
-    private fun updatePreference(player: Player, transform: (GraveTracking) -> GraveTracking) {
-        if (player.uniqueId in preferenceWrites) return
-        val previous = preference(player)
-        val next = transform(previous)
-        val generation = ++nextPreferenceGeneration
-        preferenceWrites[player.uniqueId] = generation
-        preferenceGenerations[player.uniqueId] = generation
-        preferences[player.uniqueId] = next
-        val store = preferenceStore
-        if (store == null) {
-            preferenceWrites.remove(player.uniqueId)
-            return
-        }
-        store.update(player.uniqueId) { next }.whenCompleteSync(tasks) { value, failure ->
-            if (preferenceWrites[player.uniqueId] != generation) return@whenCompleteSync
-            preferenceWrites.remove(player.uniqueId)
-            if (!player.isOnline || preferenceGenerations[player.uniqueId] != generation) return@whenCompleteSync
-            if (failure == null && value != null) preferences[player.uniqueId] = value
-            else {
-                preferences[player.uniqueId] = previous
-                warn("Grave tracking preference failed for {}", player.uniqueId, failure)
-                if (player.isOnline) feedback(player, "tracking-save-failed")
-            }
-            // Do not reopen an abandoned dialog from an asynchronous storage callback.
+    private fun openAdminContents(player: Player, grave: UUID, page: Int = 0) {
+        val request = beginAdmin(player) ?: return
+        graveStore.thenCompose { it.findActive(grave, System.currentTimeMillis()) }.whenCompleteSync(tasks) { record, failure ->
+            if (!adminRequests.complete(request)) return@whenCompleteSync
+            if (failure != null) warn("Graves administrator contents failed server={} player={} grave={}", server, player.uniqueId, grave, failure)
+            ArcMenus.closeDialog(player)
+            if (record == null || failure != null) feedback(player, "contents-unavailable")
+            else contentsMenu.open(player, record, readOnly = true, page = page)
         }
     }
 
     internal fun price(player: Player): Double = if (player.hasPermission(settings.freePermission)) 0.0 else settings.defaultFee
     internal fun validLocal(player: Player, grave: UUID): Boolean = !owned.blocked(player.uniqueId) &&
         (owned.find(grave)?.let { it.server == server && it.ownerId == player.uniqueId } == true || native?.canTeleport(player, grave) == true)
-    internal fun feedback(player: Player, key: String) { if (player.isOnline) player.sendMessage(settings.text(key)) }
+    internal fun feedback(player: Player, key: String) {
+        if (!player.isOnline) return
+        player.sendMessage(settings.text(key))
+        if (key == "claimed" || key == "claimed-partial") hud.claimSucceeded(player)
+    }
 
     private fun teleport(player: Player, view: GraveView, quote: Double) {
         if (!player.isOnline || view.ownerId != player.uniqueId || !view.active(System.currentTimeMillis()) || price(player) != quote ||
@@ -315,9 +325,22 @@ internal class GravesRuntime(private val settings: GravesSettings, sql: SqlConne
         }
     }
 
-    private fun openCommand(player: Player) {
+    fun openPersonal(player: Player) {
+        adminRequests.invalidate(player)
+        if (closed || !player.isOnline || player.isDead) return
         ArcMenus.beginDialogFlow(player)
         menu.open(player)
+    }
+
+    private fun openCommand(player: Player, args: List<String>) {
+        adminRequests.invalidate(player)
+        if (args.firstOrNull()?.equals("admin", ignoreCase = true) == true) {
+            if (!player.hasPermission(GRAVES_ADMIN_PERMISSION)) { feedback(player, "admin-denied"); return }
+            if (args.size > 2) { feedback(player, "unavailable"); return }
+            val filter = args.getOrNull(1)?.let { BackendServerId.parseOrNull(it)?.value }
+            if (args.size == 2 && filter == null) { feedback(player, "unavailable"); return }
+            openAdmin(player, serverFilter = filter)
+        } else openPersonal(player)
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -325,13 +348,12 @@ internal class GravesRuntime(private val settings: GravesSettings, sql: SqlConne
         val words = event.message.trim().removePrefix("/").split(Regex("\\s+"))
         val label = words.firstOrNull()?.lowercase() ?: return
         if (label !in setOf("graves", "grave", "gravesx", "graves:graves", "gravesx:graves", "arc:graves")) return
-        if (words.size > 1 && (words.size != 2 || words[1].lowercase() !in setOf("list", "menu", "gui"))) return
+        if (words.size > 1 && words[1].lowercase() !in setOf("list", "menu", "gui", "admin")) return
         event.isCancelled = true
-        openCommand(event.player)
+        openCommand(event.player, words.drop(1))
     }
 
     @EventHandler fun join(event: PlayerJoinEvent) {
-        loadPreference(event.player)
         if (!waitsForInventorySync) tasks.runLater(20) { finishTransfer(event.player.uniqueId) }
     }
 
@@ -348,16 +370,13 @@ internal class GravesRuntime(private val settings: GravesSettings, sql: SqlConne
 
     @EventHandler fun quit(event: PlayerQuitEvent) {
         hud.clear(event.player)
-        preferences.remove(event.player.uniqueId)
-        notices.remove(event.player.uniqueId)
         outgoing.remove(event.player.uniqueId)
-        preferenceGenerations.remove(event.player.uniqueId)
-        preferenceWrites.remove(event.player.uniqueId)
     }
 
     fun closeAsync(): CompletableFuture<Void> {
         drain?.let { return it }
         closed = true
+        adminRequests.close()
         HandlerList.unregisterAll(this)
         nativeListener?.let(HandlerList::unregisterAll)
         syncListener?.let(HandlerList::unregisterAll)
@@ -375,4 +394,38 @@ internal class GravesRuntime(private val settings: GravesSettings, sql: SqlConne
     }
     fun storageDrained(): CompletableFuture<Void> = storageDrain.copy()
     override fun close() { closeAsync() }
+}
+
+/** Owns only outstanding administrator SQL requests; it never stores grave contents. */
+internal class GravesAdminRequests(private val currentPlayer: (UUID) -> Player? = Bukkit::getPlayer) : Listener, AutoCloseable {
+    class Request internal constructor(val nonce: Long, val player: Player, val world: UUID)
+    private val requests = mutableMapOf<UUID, Request>()
+    private var serial = 0L
+    private var closed = false
+
+    fun begin(player: Player): Request? {
+        if (closed || !player.isOnline || player.isDead || !player.hasPermission(GRAVES_ADMIN_PERMISSION)) return null
+        return Request(++serial, player, player.world.uid).also { requests[player.uniqueId] = it }
+    }
+
+    fun invalidate(player: Player) { requests.remove(player.uniqueId) }
+    fun dismiss(request: Request) { if (requests[request.player.uniqueId] === request) requests.remove(request.player.uniqueId) }
+
+    /** Consume before opening either UI: its own InventoryOpen must not cancel the result. */
+    fun complete(request: Request): Boolean {
+        if (requests[request.player.uniqueId] !== request) return false
+        requests.remove(request.player.uniqueId)
+        val player = request.player
+        return !closed && player.isOnline && !player.isDead && currentPlayer(player.uniqueId) === player &&
+            player.world.uid == request.world && player.hasPermission(GRAVES_ADMIN_PERMISSION)
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    fun command(event: PlayerCommandPreprocessEvent) { invalidate(event.player) }
+    @EventHandler(priority = EventPriority.LOWEST)
+    fun inventory(event: InventoryOpenEvent) { (event.player as? Player)?.let(::invalidate) }
+    @EventHandler fun quit(event: PlayerQuitEvent) { invalidate(event.player) }
+    @EventHandler fun world(event: PlayerChangedWorldEvent) { invalidate(event.player) }
+
+    override fun close() { closed = true; requests.clear(); HandlerList.unregisterAll(this) }
 }
