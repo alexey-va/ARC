@@ -22,6 +22,16 @@ internal object GraveDestinations {
         return null
     }
 
+    /** Visiting a tomb must not put the player inside its client barrier column. */
+    fun visit(world: World, x: Int, y: Int, z: Int, occupiedColumns: Set<Pair<Int, Int>> = emptySet()): Location? {
+        if (!world.isChunkLoaded(x shr 4, z shr 4)) return null
+        for (radius in 1..2) for (dx in -radius..radius) for (dz in -radius..radius) {
+            if (kotlin.math.abs(dx) + kotlin.math.abs(dz) != radius || (x + dx to z + dz) in occupiedColumns) continue
+            nearby(world, x + dx, y, z + dz)?.let { return it }
+        }
+        return null
+    }
+
     fun safe(target: Location): Boolean {
         val world = target.world
         val x = target.blockX; val y = target.blockY; val z = target.blockZ

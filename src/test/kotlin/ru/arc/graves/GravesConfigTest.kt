@@ -2,13 +2,19 @@ package ru.arc.graves
 
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
 import ru.arc.config.ConfigManager
+import java.nio.file.Path
 
 class GravesConfigTest {
+    @TempDir
+    lateinit var root: Path
+
     @Test
     fun `defaults expose fee tracking and presentation policy`() {
-        val settings = GravesConfig(ConfigManager.empty()).snapshot()
+        val settings = GravesConfig(ConfigManager.of(root, "graves-test.yml")).snapshot()
 
         assertEquals(100.0, settings.defaultFee)
         assertEquals("arc.graves.teleport.free", settings.freePermission)
@@ -16,5 +22,37 @@ class GravesConfigTest {
         assertEquals(2, settings.hudRefreshTicks)
         assertEquals(true, settings.trackingEnabledByDefault)
         assertEquals("Бесплатно по праву", PlainTextComponentSerializer.plainText().serialize(settings.text("free-price")))
+        assertEquals(GraveAppearanceSettings.DEFAULT_WEIGHTS, settings.appearance.weights)
+        assertEquals(GraveAppearanceSettings.DEFAULT_EPITAPHS, settings.appearance.epitaphs)
+    }
+
+    @Test
+    fun `cosmetic weights preserve zero and fall back individually for nonfinite and negative values`() {
+        val source = ConfigManager.of(root, "graves-test.yml")
+        source.setDouble("appearance.weights.slate", 0.0)
+        source.setDouble("appearance.weights.obelisk", Double.NaN)
+        source.setDouble("appearance.weights.cairn", Double.POSITIVE_INFINITY)
+        source.setDouble("appearance.weights.timber", -1.0)
+        source.setDouble("appearance.weights.broken", 2.5)
+
+        val settings = GravesConfig(source).snapshot()
+
+        assertEquals(mapOf("slate" to 0.0, "obelisk" to 15.0, "cairn" to 20.0, "timber" to 20.0, "broken" to 2.5), settings.appearance.weights)
+        assertEquals(18, settings.maxGraves)
+    }
+
+    @Test
+    fun `epitaphs are bounded plain lines and wholly invalid input retains defaults`() {
+        val source = ConfigManager.of(root, "graves-test.yml")
+        source.setStringList("appearance.epitaphs", listOf("  Я допрыгну.  ", "", "<click:run_command:/op>нет</click>", "x".repeat(97), "две\nстроки", "§aцвет"))
+        assertEquals(listOf("Я допрыгну."), GravesConfig(source).snapshot().appearance.epitaphs)
+
+        source.setStringList("appearance.epitaphs", listOf("", "x".repeat(97)))
+        assertEquals(GraveAppearanceSettings.DEFAULT_EPITAPHS, GravesConfig(source).snapshot().appearance.epitaphs)
+
+        source.setStringList("appearance.epitaphs", (1..200).map { "Фраза $it" })
+        val bounded = GravesConfig(source).snapshot().appearance.epitaphs
+        assertEquals(128, bounded.size)
+        assertTrue(bounded.all { it.length <= 96 })
     }
 }

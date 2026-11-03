@@ -75,7 +75,9 @@ internal class GravesRuntime(private val settings: GravesSettings, sql: SqlConne
     private val preferenceGenerations = mutableMapOf<UUID, Long>()
     private val preferenceWrites = mutableMapOf<UUID, Long>()
     private var nextPreferenceGeneration = 0L
-    private val hud = GravesHud(plugin, server, settings)
+    private val barriers = GraveBarriers(plugin, server, settings.nearbyGlowRadius, ::currentMarker,
+        owned::playerReady, ::openMarker, ::feedback)
+    private val hud = GravesHud(plugin, server, settings, onClear = barriers::clear)
     internal val payments = GravePayments(plugin.dataPath, ::feedback)
     private var localViews = emptyList<GraveView>()
     private var networkRefreshPending = false
@@ -160,16 +162,32 @@ internal class GravesRuntime(private val settings: GravesSettings, sql: SqlConne
     }
 
     private fun refreshPlayers() {
+        val publicGraves = (owned.views() + localViews).filter { it.server == server && it.active(System.currentTimeMillis()) }.distinctBy { it.id }
         Bukkit.getOnlinePlayers().forEach { player ->
             if (owned.playerReady(player.uniqueId)) finishTransfer(player.uniqueId)
             val graves = views(player)
-            hud.refreshGlow(player, graves)
+            barriers.update(player, hud.refreshGlow(player, publicGraves))
             if (!player.isDead) {
                 val ids = graves.mapTo(hashSetOf()) { it.id }
                 val old = notices.put(player.uniqueId, ids).orEmpty()
                 if ((ids - old).isNotEmpty()) player.sendMessage(settings.text("created"))
             }
         }
+    }
+
+    private fun currentMarker(view: GraveView): Boolean {
+        if (closed || view.server != server || !view.active(System.currentTimeMillis())) return false
+        val record = owned.find(view.id)
+        return if (record != null) record.ownerId == view.ownerId && record.server == view.server && record.world == view.world &&
+            record.x == view.x && record.y == view.y && record.z == view.z
+        else localViews.any { it.id == view.id && it.ownerId == view.ownerId && it.server == view.server && it.world == view.world &&
+            it.x == view.x && it.y == view.y && it.z == view.z && it.active(System.currentTimeMillis()) }
+    }
+
+    private fun openMarker(player: Player, grave: UUID) {
+        if (closed || !owned.playerReady(player.uniqueId)) return
+        ArcMenus.beginDialogFlow(player)
+        menu.openDetail(player, grave)
     }
 
     private fun preference(player: Player): GraveTracking = preferences[player.uniqueId] ?: GraveTracking(settings.trackingEnabledByDefault)
@@ -274,7 +292,11 @@ internal class GravesRuntime(private val settings: GravesSettings, sql: SqlConne
         val world = Bukkit.getWorld(record.world)
         if (world == null) { payments.complete(player, record.id, true); feedback(player, "unavailable"); return }
         world.getChunkAtAsync(record.x shr 4, record.z shr 4, true).whenCompleteSync(tasks) { _, failure ->
-            val target = if (failure == null) GraveDestinations.nearby(world, record.x, record.y, record.z) else null
+            val now = System.currentTimeMillis()
+            val occupied = (owned.views() + localViews).asSequence()
+                .filter { it.server == server && it.world == world.name && it.active(now) }
+                .map { it.x to it.z }.toSet()
+            val target = if (failure == null) GraveDestinations.visit(world, record.x, record.y, record.z, occupied) else null
             if (target == null || !validLocal(player, record.id) || price(player) != quote) {
                 payments.complete(player, record.id, true); feedback(player, "teleport-failed"); return@whenCompleteSync
             }
@@ -343,6 +365,7 @@ internal class GravesRuntime(private val settings: GravesSettings, sql: SqlConne
         payments.close()
         network?.close()
         legacyHolograms.close()
+        barriers.close()
         // Explicit stop/reload maintenance: these stages use SQL/file workers only,
         // never Paper callbacks. Finish before ARC seals its background admission.
         try { restoration.join(); archive.checkpointOnShutdown().join() }

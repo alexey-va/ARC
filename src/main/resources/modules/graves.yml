@@ -14,6 +14,31 @@ tracking:
   enabled-by-default: true
 hud:
   refresh-ticks: 2
+# Cosmetics only. Zero disables a model; all zero weights fall back to slate.
+appearance:
+  weights:
+    slate: 35.0
+    obelisk: 15.0
+    cairn: 20.0
+    timber: 20.0
+    broken: 10.0
+  # Plain TextDisplay inscriptions: at most 128 entries of 96 characters each.
+  epitaphs:
+    - 'Похуй...'
+    - 'Собаке собачья смерть'
+    - 'Да не ссы, ничего не будет'
+    - 'Не, я допрыгну.'
+    - 'Воды хватит.'
+    - 'Я тут уже ходил.'
+    - 'Это же мирный.'
+    - 'Сейчас покажу.'
+    - 'Ещё один блок.'
+    - 'Да у меня тотем.'
+    - 'Тут неглубоко.'
+    - 'Крипер далеко.'
+    - 'Я успею.'
+    - 'Не лагай сейчас.'
+    - 'Ща проверю.'
 text:
   list-title: '<italic:false><#c4a7e7>Ваши могилы'
   list-body: '<italic:false><#e8dfd2>Активные могилы: <#ffffff><count><newline><#e8dfd2>Страница <#ffffff><page>/<pages>'
@@ -69,7 +94,9 @@ text:
   hud-remote: '<italic:false><#c4a7e7>Могила: <#ffffff><server> · <world> · /graves'
   hud-world: '<italic:false><#c4a7e7>Могила в мире <#ffffff><world> · /graves'
   marker-label: '<italic:false><#f4bd6a>Ваша могила<newline><#e8dfd2>Присядьте — забрать'
-  created: '<italic:false><#f4bd6a>Вещи остались в могиле. <#ffffff><click:run_command:/graves>Открыть могилы ›</click>'
+  created: '<italic:false><#f4bd6a>Вещи остались в могиле. Нажмите ПКМ по памятнику, чтобы открыть могилу. <#ffffff><click:run_command:/graves>Открыть могилы ›</click>'
+  not-owner: '<italic:false><#f4bd6a>Это чужая могила. Забрать вещи может только её владелец.'
+  interaction-unavailable: '<italic:false><#f4bd6a>Могила сейчас недоступна. <#ffffff><click:run_command:/graves>Открыть мои могилы ›</click>'
   inventory-full: '<italic:false><#f4bd6a>В инвентаре не хватает места. Освободите место и попробуйте снова.'
   creation-preserved: '<italic:false><#f4bd6a>Не удалось сохранить могилу. Вещи и опыт остались у вас.'
   storage-preserved: '<italic:false><#f4bd6a>Хранилище могил сейчас недоступно. Вещи и опыт остались у вас.'

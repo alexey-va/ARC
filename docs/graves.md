@@ -1,7 +1,7 @@
 # ARC player graves
 
 ARC owns new player graves, complete native item bytes, XP, recovery, the menu,
-cross-server discovery and private markers. GravesX is optional compatibility
+cross-server discovery and public nearby tombstones. GravesX is optional compatibility
 for old records, not the owner of new deaths. Mob graves, tokens and looting
 other players' graves are outside this implementation.
 
@@ -14,7 +14,8 @@ Parkour keeps its separate inventory without HuskSync. It reads the same grave
 list, but never applies or advances a shared-inventory checkpoint. Pending
 operations are isolated by inventory profile.
 
-At the grave, crouch or choose **Забрать вещи** in its card. Only the owner can
+At the grave, right-click the tombstone to open its card, then choose
+**Забрать вещи**; crouching remains an alternative. Only the owner can
 claim, within six blocks on the owning backend. Overflow stays in the same grave.
 
 ## Existing economic conditions
@@ -65,20 +66,42 @@ Module stop separately drains accepted storage and Core's native packet cleanup.
 Reinitialization awaits both. Full JAR/classloader hot replacement is unsupported;
 use a server restart.
 
-Every backend sharing a HuskSync inventory must register the receipt before native
-grave writes begin. HuskSync drops unknown custom data on an older backend, which
-can turn later progress into an apparent stale inventory. Quiesce/stop Spawn and
-Survival together before starting the new ARC; per-target rolling restarts are
-unsafe. Do not stage this JAR in either active plugin root while an independent
-automatic restart could activate only that backend. Parkour's local profile is
-independent of this coordinated activation gate.
+For the first introduction of native grave receipts, every backend sharing a
+HuskSync inventory must register the receipt before native grave writes begin.
+HuskSync drops unknown custom data on an older backend, which can turn later
+progress into an apparent stale inventory. That introduction requires stopping
+Spawn and Survival together before starting receipt-aware ARC; an independent
+automatic restart must not activate only one backend. Subsequent cosmetic
+updates retaining the same receipt wire format do not repeat this migration
+gate. Parkour's local profile is independent of the coordinated introduction.
 
 ## Visual lifecycle
 
-Nearby owners see two packet-only stone parts and a camera-facing label.
-No world entities/blocks, chunk tickets or background chunk loads are created.
-Stable scenes disappear on claim, expiry, world change, logout and shutdown.
-The existing selected-grave compass and menu reminder remain.
+Nearby players see varied packet-only tombstones with plain TextDisplay
+inscriptions. `appearance.weights` chooses the relative model frequency; zero
+disables a type and all-zero weights fall back to slate. `appearance.epitaphs`
+accepts up to 128 plain lines of at most 96 characters each. Invalid cosmetic
+values use safe defaults without disabling graves. The grave UUID determines
+the model, inscription and rotation for the current configuration.
+
+Each viewer receives client-only BARRIER masks only for their allocated selected
+nearby scenes (at most eight, with one tomb per cell). Core transport remains
+asynchronous; allocation is not a native-client rendering acknowledgement. Actual world
+blocks are never written; masks use only loaded, client-sent, passable cells.
+Main-hand right-click opens the owner's exact grave card after readiness,
+current-record, expiry, world and reach checks. Foreign clicks disclose no
+inventory. Claims still use the existing owner-only durable flow. Teleport
+visits choose a safe adjacent column excluding the target and other local active
+tomb columns. If every bounded candidate is blocked, the visit fails without
+charging the player.
+
+Paper's actual block updates may replace a client mask; the owner reasserts it
+on the next tick after a click and on a one-second heartbeat. Removal restores
+the current actual block data, never a cached before-image. Scenes and masks
+clear on claim/expiry, world unload/change, death, logout and shutdown; queued
+work cannot enter a replacement runtime. No world entities, signs, block
+persistence, chunk tickets or background chunk loads are created. Personal
+compass, menu lists and item claims remain private.
 
 When GravesX is absent, a loaded-entity sweep and future chunk-load events remove
 only ArmorStand/TextDisplay holograms with `graveHologram` plus a valid matching

@@ -19,6 +19,7 @@ internal data class GravesSettings(
     val maxGraves: Int = 18,
     val experienceFraction: Double = .8,
     val claimDistance: Double = 6.0,
+    val appearance: GraveAppearanceSettings = GraveAppearanceSettings(),
 ) {
     private val miniMessage = MiniMessage.miniMessage()
 
@@ -49,7 +50,20 @@ internal class GravesConfig(private val source: Config) {
             maxGraves = source.int("storage.maximum-per-player", 18).also { require(it in 1..256) },
             experienceFraction = source.double("storage.experience-fraction", .8).also { require(it.isFinite() && it in 0.0..1.0) },
             claimDistance = source.double("interaction.claim-distance", 6.0).also { require(it.isFinite() && it in 1.0..6.0) },
+            appearance = appearance(),
         )
+    }
+
+    /** Cosmetic mistakes fall back locally and never disable item recovery. */
+    private fun appearance(): GraveAppearanceSettings {
+        val weights = GraveAppearanceSettings.DEFAULT_WEIGHTS.mapValues { (id, fallback) ->
+            source.double("appearance.weights.$id", fallback).takeIf { it.isFinite() && it >= 0.0 } ?: fallback
+        }
+        val epitaphs = source.stringList("appearance.epitaphs", GraveAppearanceSettings.DEFAULT_EPITAPHS)
+            .take(128).map(String::trim).filter { line ->
+                line.isNotBlank() && line.length <= 96 && line.none { it.isISOControl() || it in "§<>" }
+            }.ifEmpty { GraveAppearanceSettings.DEFAULT_EPITAPHS }
+        return GraveAppearanceSettings(weights, epitaphs)
     }
 
     private fun required(path: String, fallback: String): String = source.string(path, fallback).also {
@@ -125,7 +139,9 @@ internal class GravesConfig(private val source: Config) {
             "hud-remote" to "<italic:false><#c4a7e7>Могила: <#ffffff><server> · <world> · /graves",
             "hud-world" to "<italic:false><#c4a7e7>Могила в мире <#ffffff><world> · /graves",
             "marker-label" to "<italic:false><#f4bd6a>Ваша могила<newline><#e8dfd2>Присядьте — забрать",
-            "created" to "<italic:false><#f4bd6a>Вещи остались в могиле. <#ffffff><click:run_command:/graves>Открыть могилы ›</click>",
+            "created" to "<italic:false><#f4bd6a>Вещи остались в могиле. Нажмите ПКМ по памятнику, чтобы открыть могилу. <#ffffff><click:run_command:/graves>Открыть могилы ›</click>",
+            "not-owner" to "<italic:false><#f4bd6a>Это чужая могила. Забрать вещи может только её владелец.",
+            "interaction-unavailable" to "<italic:false><#f4bd6a>Могила сейчас недоступна. <#ffffff><click:run_command:/graves>Открыть мои могилы ›</click>",
             "inventory-full" to "<italic:false><#f4bd6a>В инвентаре не хватает места. Освободите место и попробуйте снова.",
             "creation-preserved" to "<italic:false><#f4bd6a>Не удалось сохранить могилу. Вещи и опыт остались у вас.",
             "storage-preserved" to "<italic:false><#f4bd6a>Хранилище могил сейчас недоступно. Вещи и опыт остались у вас.",
