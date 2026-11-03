@@ -18,6 +18,8 @@ hud:
   refresh-ticks: 2
 # Cosmetics only. Zero disables a model; all zero weights fall back to slate.
 appearance:
+  # Fraction of graves using an engraved Yamipa monument; the rest use the original designs.
+  engraved-chance: 0.5
   weights:
     slate: 35.0
     obelisk: 15.0

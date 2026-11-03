@@ -33,6 +33,7 @@ class NativeGravesRuntimeTest : FunSpec({
             val grave = f.active(listOf(namedStack(Material.DIAMOND, 3, "Grave contents")), experience = 7)
             f.store.backing.insert(grave).join() shouldBe true
             f.start()
+            f.engine.views().single().ownerName shouldBe grave.ownerName
             f.engine.canClaim(f.player, f.engine.views().single()) shouldBe true
             val before = NativeGraveItems.capture(f.player)
 

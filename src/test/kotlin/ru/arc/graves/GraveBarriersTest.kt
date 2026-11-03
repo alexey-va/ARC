@@ -29,10 +29,10 @@ class GraveBarriersTest : FunSpec({
     test("only bounded rendered passable cells are masked and stable refreshes reuse them") {
         withBarriers { f ->
             val graves = (0..8).map { f.grave(it) }
-            f.barriers.update(f.player, graves)
+            f.barriers.update(f.player, graves.markers())
             f.packets.size shouldBe 16
             f.packets.all { it.material == Material.BARRIER } shouldBe true
-            f.barriers.update(f.player, graves)
+            f.barriers.update(f.player, graves.markers())
             f.packets.size shouldBe 16
             f.scheduler.tick(20)
             f.packets.size shouldBe 32
@@ -48,7 +48,7 @@ class GraveBarriersTest : FunSpec({
     test("block-only denied AIR input opens once without uncancel and coalesces next-tick reassertion") {
         withBarriers { f ->
             val grave = f.grave()
-            f.barriers.update(f.player, listOf(grave))
+            f.barriers.update(f.player, listOf(grave).markers())
             val first = f.click().apply { setUseInteractedBlock(Event.Result.DENY) }
             first.isCancelled shouldBe true
             first.useItemInHand() shouldBe Event.Result.DEFAULT
@@ -65,10 +65,91 @@ class GraveBarriersTest : FunSpec({
         }
     }
 
+    test("a one-block monument masks and opens only its lower cell under a solid ceiling") {
+        withBarriers { f ->
+            val grave = f.grave()
+            f.materials[Triple(0, 65, 0)] = Material.STONE
+            f.barriers.update(f.player, listOf(grave).markers(height = 1))
+            f.packets.map { it.cell to it.material } shouldBe listOf(Triple(0, 64, 0) to Material.BARRIER)
+            f.scheduler.tick(20)
+            f.packets.size shouldBe 2
+            f.packets.all { it.cell == Triple(0, 64, 0) && it.material == Material.BARRIER } shouldBe true
+
+            val upper = PlayerInteractEvent(f.player, Action.RIGHT_CLICK_BLOCK,
+                null, f.block(y = 65), BlockFace.NORTH, EquipmentSlot.HAND)
+            f.paper.callEvent(upper)
+            upper.isCancelled shouldBe false
+            f.opened shouldBe emptyList()
+            f.paper.callEvent(f.click())
+            f.opened shouldBe listOf(grave.id)
+            f.barriers.update(f.player, emptyList())
+            f.packets.last().cell shouldBe Triple(0, 64, 0)
+            f.packets.last().material shouldBe Material.AIR
+            f.packets.none { it.cell == Triple(0, 65, 0) } shouldBe true
+        }
+    }
+
+    test("shrinking a monument restores the upper cell and queued work keeps only the lower mask") {
+        withBarriers { f ->
+            val grave = f.grave()
+            f.barriers.update(f.player, listOf(grave).markers())
+            f.paper.callEvent(f.click())
+            val previous = f.packets.size
+            f.materials[Triple(0, 65, 0)] = Material.STONE
+            f.barriers.update(f.player, listOf(grave).markers(height = 1))
+            f.packets.drop(previous).map { it.cell to it.material } shouldBe listOf(
+                Triple(0, 65, 0) to Material.STONE,
+                Triple(0, 64, 0) to Material.BARRIER,
+            )
+            val shrunk = f.packets.size
+            f.scheduler.tick(20)
+            f.packets.drop(shrunk).all { it.cell == Triple(0, 64, 0) && it.material == Material.BARRIER } shouldBe true
+            val upper = PlayerInteractEvent(f.player, Action.RIGHT_CLICK_BLOCK,
+                null, f.block(y = 65), BlockFace.NORTH, EquipmentSlot.HAND)
+            f.paper.callEvent(upper)
+            upper.isCancelled shouldBe false
+            f.opened shouldBe listOf(grave.id)
+        }
+    }
+
+    test("a two-block monument requires both cells and invalidates both when the upper cell becomes solid") {
+        withBarriers { f ->
+            val grave = f.grave()
+            f.materials[Triple(0, 65, 0)] = Material.STONE
+            f.barriers.update(f.player, listOf(grave).markers())
+            f.packets shouldBe emptyList()
+            f.materials[Triple(0, 65, 0)] = Material.AIR
+            f.barriers.update(f.player, listOf(grave).markers())
+            f.packets.size shouldBe 2
+            f.materials[Triple(0, 65, 0)] = Material.STONE
+            val lower = f.click()
+            f.paper.callEvent(lower)
+            lower.isCancelled shouldBe false
+            f.opened shouldBe emptyList()
+            f.packets.takeLast(2).map { it.cell to it.material } shouldBe listOf(
+                Triple(0, 64, 0) to Material.AIR,
+                Triple(0, 65, 0) to Material.STONE,
+            )
+        }
+    }
+
+    test("a one-block monument can occupy the highest world cell while a two-block monument cannot") {
+        withBarriers { f ->
+            val grave = f.grave(y = 319)
+            f.position = Location(f.world, .5, 318.0, 2.5)
+            f.barriers.update(f.player, listOf(grave).markers(height = 1))
+            f.packets.map { it.cell to it.material } shouldBe listOf(Triple(0, 319, 0) to Material.BARRIER)
+            f.barriers.update(f.player, listOf(grave).markers())
+            f.packets.last().cell shouldBe Triple(0, 319, 0)
+            f.packets.last().material shouldBe Material.AIR
+            verify(exactly = 0) { f.world.getBlockAt(0, 320, 0) }
+        }
+    }
+
     test("the upper half of a two-block monument opens the same grave and is restored on removal") {
         withBarriers { f ->
             val grave = f.grave()
-            f.barriers.update(f.player, listOf(grave))
+            f.barriers.update(f.player, listOf(grave).markers())
             val upper = PlayerInteractEvent(f.player, Action.RIGHT_CLICK_BLOCK,
                 null, f.block(y = 65), BlockFace.NORTH, EquipmentSlot.HAND)
             f.paper.callEvent(upper)
@@ -84,7 +165,7 @@ class GraveBarriersTest : FunSpec({
         withBarriers { f ->
             val own = f.grave()
             val foreign = f.grave(x = 1, owner = UUID.randomUUID())
-            f.barriers.update(f.player, listOf(own, foreign))
+            f.barriers.update(f.player, listOf(own, foreign).markers())
             f.barriers.interactFrame(f.player, UUID.randomUUID())
             f.barriers.interactFrame(f.player, foreign.id)
             f.messages.last() shouldBe "not-owner"
@@ -109,13 +190,13 @@ class GraveBarriersTest : FunSpec({
     test("foreign blocked offhand explicit denial and distant inputs cannot open a grave") {
         withBarriers { f ->
             val foreign = f.grave(owner = UUID.randomUUID())
-            f.barriers.update(f.player, listOf(foreign))
+            f.barriers.update(f.player, listOf(foreign).markers())
             f.paper.callEvent(f.click())
             f.messages shouldBe listOf("not-owner")
             f.opened shouldBe emptyList()
 
             val own = f.grave()
-            f.barriers.update(f.player, listOf(own))
+            f.barriers.update(f.player, listOf(own).markers())
             f.isReady = false
             f.paper.callEvent(f.click())
             f.messages.last() shouldBe "interaction-unavailable"
@@ -132,7 +213,7 @@ class GraveBarriersTest : FunSpec({
     test("a newly solid cell or stale grave is restored without consuming its real block interaction") {
         withBarriers { f ->
             val grave = f.grave()
-            f.barriers.update(f.player, listOf(grave))
+            f.barriers.update(f.player, listOf(grave).markers())
             f.materials[Triple(0, 64, 0)] = Material.STONE
             val real = f.click()
             real.isCancelled shouldBe false
@@ -145,7 +226,7 @@ class GraveBarriersTest : FunSpec({
             f.packets.size shouldBe count
 
             f.materials[Triple(0, 64, 0)] = Material.AIR
-            f.barriers.update(f.player, listOf(grave))
+            f.barriers.update(f.player, listOf(grave).markers())
             f.current.clear()
             val stale = f.click()
             f.paper.callEvent(stale)
@@ -156,7 +237,7 @@ class GraveBarriersTest : FunSpec({
 
     test("removal restores current data and fences the previously queued reassertion") {
         withBarriers { f ->
-            f.barriers.update(f.player, listOf(f.grave()))
+            f.barriers.update(f.player, listOf(f.grave()).markers())
             f.paper.callEvent(f.click())
             f.materials[Triple(0, 64, 0)] = Material.WATER
             f.barriers.update(f.player, emptyList())
@@ -171,10 +252,10 @@ class GraveBarriersTest : FunSpec({
         withBarriers { f ->
             val grave = f.grave()
             val old = f.player
-            f.barriers.update(old, listOf(grave))
+            f.barriers.update(old, listOf(grave).markers())
             f.paper.callEvent(f.click())
             val replacement = f.newPlayer()
-            f.barriers.update(replacement, listOf(grave))
+            f.barriers.update(replacement, listOf(grave).markers())
             f.barriers.quit(mockk<PlayerQuitEvent> { every { player } returns old })
             val afterReplace = f.packets.size
             f.scheduler.tick()
@@ -188,7 +269,7 @@ class GraveBarriersTest : FunSpec({
     test("world change death unload expiry and unsent chunks revoke masks without loading chunks") {
         withBarriers { f ->
             val grave = f.grave()
-            f.barriers.update(f.player, listOf(grave))
+            f.barriers.update(f.player, listOf(grave).markers())
             f.paper.callEvent(f.click())
             f.playerWorld = mockk<World> { every { uid } returns UUID.randomUUID() }
             f.barriers.world(PlayerChangedWorldEvent(f.player, f.world))
@@ -197,21 +278,21 @@ class GraveBarriersTest : FunSpec({
             f.packets.size shouldBe changed
             f.playerWorld = f.world
 
-            f.barriers.update(f.player, listOf(grave))
+            f.barriers.update(f.player, listOf(grave).markers())
             f.barriers.death(mockk<PlayerDeathEvent> { every { entity } returns f.player })
             f.packets.last().material shouldBe Material.AIR
-            f.barriers.update(f.player, listOf(grave))
+            f.barriers.update(f.player, listOf(grave).markers())
             f.barriers.unload(WorldUnloadEvent(f.world))
             f.packets.last().material shouldBe Material.AIR
 
             val expired = grave.copy(expiresAt = System.currentTimeMillis() - 1)
             f.current[grave.id] = expired
             val count = f.packets.size
-            f.barriers.update(f.player, listOf(expired))
+            f.barriers.update(f.player, listOf(expired).markers())
             f.packets.size shouldBe count
             f.current[grave.id] = grave
             f.sent = false
-            f.barriers.update(f.player, listOf(grave))
+            f.barriers.update(f.player, listOf(grave).markers())
             f.packets.size shouldBe count
         }
     }
@@ -219,18 +300,18 @@ class GraveBarriersTest : FunSpec({
     test("close cancels queued work and a replacement generation starts independently") {
         withBarriers { f ->
             val grave = f.grave()
-            f.barriers.update(f.player, listOf(grave))
+            f.barriers.update(f.player, listOf(grave).markers())
             f.paper.callEvent(f.click())
             f.barriers.close()
             f.packets.last().material shouldBe Material.AIR
             f.scheduler.pendingCount() shouldBe 0
             f.scheduler.timerCount() shouldBe 0
             val count = f.packets.size
-            f.barriers.update(f.player, listOf(grave))
+            f.barriers.update(f.player, listOf(grave).markers())
             f.scheduler.tick(40)
             f.packets.size shouldBe count
             f.createBarriers().use { next ->
-                next.update(f.player, listOf(grave))
+                next.update(f.player, listOf(grave).markers())
                 f.packets.last().material shouldBe Material.BARRIER
             }
         }
@@ -240,6 +321,8 @@ class GraveBarriersTest : FunSpec({
 private fun withBarriers(test: (BarrierFixture) -> Unit) = failOnUnsupportedMockBukkitOperation {
     BarrierFixture().use(test)
 }
+
+private fun List<GraveView>.markers(height: Int = 2): List<GraveMarker> = map { GraveMarker(it, height) }
 
 private class BarrierFixture : AutoCloseable {
     val paper = MockBukkitTestRuntime.open()
@@ -285,11 +368,12 @@ private class BarrierFixture : AutoCloseable {
         every { player.isChunkSent(any<Long>()) } answers { sent }
         every { player.getAttribute(any()) } returns null
         every { player.sendBlockChange(any<Location>(), any<BlockData>()) } answers {
-            packets += MaskPacket(player, secondArg<BlockData>().material)
+            val location = firstArg<Location>()
+            packets += MaskPacket(player, Triple(location.blockX, location.blockY, location.blockZ), secondArg<BlockData>().material)
         }
     }
 
-    fun grave(x: Int = 0, owner: UUID = this.owner) = GraveView(UUID.randomUUID(), owner, "survival", "world", x, 64, 0,
+    fun grave(x: Int = 0, owner: UUID = this.owner, y: Int = 64) = GraveView(UUID.randomUUID(), owner, "survival", "world", x, y, 0,
         1, -1, 0, emptyList()).also { current[it.id] = it }
 
     fun block(x: Int = 0, y: Int = 64, z: Int = 0): Block = blocks.getOrPut(Triple(x, y, z)) {
@@ -316,4 +400,4 @@ private class BarrierFixture : AutoCloseable {
     }
 }
 
-private data class MaskPacket(val player: Player, val material: Material)
+private data class MaskPacket(val player: Player, val cell: Triple<Int, Int, Int>, val material: Material)

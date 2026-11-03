@@ -15,6 +15,7 @@ import org.bukkit.World
 import org.bukkit.block.Block
 import org.bukkit.entity.Display
 import org.bukkit.entity.Player
+import org.bukkit.event.server.PluginDisableEvent
 import org.bukkit.plugin.Plugin
 import org.bukkit.util.Transformation
 import org.joml.Quaternionf
@@ -33,9 +34,9 @@ class GravesHudTest : FunSpec({
         MockBukkitTestRuntime.open().use { paper ->
             val fixture = GravesHudFixture(paper.createSimplePlugin("GravesHud"))
             val grave = fixture.grave(1, 0)
-            val displayCount = GraveAppearances.select(grave.id, fixture.appearance).model.parts.size + 1
-            fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(grave)
-            fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(grave)
+            val displayCount = GraveAppearances.select(grave.id, fixture.appearance, engravingsAvailable = false).model.parts.size + 1
+            fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(GraveMarker(grave, 1))
+            fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(GraveMarker(grave, 1))
             fixture.spawned.size shouldBe displayCount
             fixture.spawned.forEach {
                 verify(exactly = 1) { it.display.isVisibleByDefault = false }
@@ -50,10 +51,10 @@ class GravesHudTest : FunSpec({
             fixture.hud.refreshGlow(fixture.player, emptyList()) shouldBe emptyList()
             fixture.removed.size shouldBe displayCount
             fixture.cleared.size shouldBe 1
-            fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(grave)
+            fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(GraveMarker(grave, 1))
 
             every { fixture.world.uid } returns UUID.randomUUID()
-            fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(grave)
+            fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(GraveMarker(grave, 1))
             fixture.removed.size shouldBe displayCount * 2
             fixture.cleared.size shouldBe 2
             fixture.spawned.size shouldBe displayCount * 3
@@ -77,12 +78,100 @@ class GravesHudTest : FunSpec({
             val fixture = GravesHudFixture(paper.createSimplePlugin("GravesHudNoText"),
                 GraveAppearanceSettings(mapOf("slate" to 1.0)))
             val grave = fixture.grave(1, 0, fixture.owner)
-            fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(grave)
+            fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(GraveMarker(grave, 1))
             fixture.spawned.size shouldBe GraveModels.slate.parts.size
             fixture.spawned.any { it.display is PacketTextDisplay } shouldBe false
             verify(exactly = 0) { fixture.displays.spawnText(any(), any()) }
             verify(exactly = 0) { fixture.player.showBossBar(any()) }
             fixture.hud.closeAsync()
+            fixture.cleanup.complete(null)
+        }
+    }
+
+    test("saved owner names are literal signatures and a name change rebuilds the existing marker") {
+        MockBukkitTestRuntime.open().use { paper ->
+            val fixture = GravesHudFixture(paper.createSimplePlugin("GravesHudAuthor"))
+            val grave = fixture.grave(1, 0).copy(ownerName = ".WWWWWWWWWWWWWWWW")
+            fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(GraveMarker(grave, 1))
+            val initialCount = fixture.spawned.size
+            val initialText = fixture.spawned.filter { it.display is PacketTextDisplay }
+            initialText.size shouldBe 2
+            val inscription = initialText.map { PlainTextComponentSerializer.plainText().serialize(checkNotNull(it.text)) }
+            inscription.first() shouldBe "«Да не ссы, ничего не будет»"
+            inscription.last().replace("\n", "") shouldBe "— .WWWWWWWWWWWWWWWW"
+            val renamed = grave.copy(ownerName = "Alexey")
+            fixture.hud.refreshGlow(fixture.player, listOf(renamed)) shouldBe listOf(GraveMarker(renamed, 1))
+            fixture.removed.size shouldBe initialCount
+            fixture.spawned.size shouldBe initialCount * 2 - 1
+            PlainTextComponentSerializer.plainText().serialize(checkNotNull(fixture.spawned.last().text)) shouldBe
+                "«Да не ссы, ничего не будет»\n— Alexey"
+            fixture.hud.closeAsync()
+            fixture.cleanup.complete(null)
+        }
+    }
+
+    test("available Yamipa only decorates the stelae selected by the independent engraving chance") {
+        MockBukkitTestRuntime.open().use { paper ->
+            val plugin = paper.createSimplePlugin("GravesHudMixed")
+            val fixture = GravesHudFixture(plugin)
+            val backend = mockk<YamipaGraveEngravings.Backend>(relaxed = true)
+            every { backend.destroy(any(), any()) } returns CompletableFuture.completedFuture(null)
+            val images = YamipaGraveEngravings(plugin, backend)
+            fixture.hud.attachEngravings(images)
+            val candidates = (1L..100L).map { fixture.grave(it, 0) }
+            val original = candidates.first { !GraveAppearances.select(it.id, fixture.appearance).model.engraved }
+            val engraved = candidates.first { GraveAppearances.select(it.id, fixture.appearance).model.engraved }.copy(x = 2)
+            val expected = listOf(GraveMarker(original, 1), GraveMarker(engraved, 2))
+            fixture.hud.refreshGlow(fixture.player, listOf(original, engraved)) shouldBe expected
+            fixture.hud.refreshGlow(fixture.player, listOf(original, engraved)) shouldBe expected
+            fixture.spawned.size shouldBe GraveModels.slate.parts.size + GraveModels.engravedSlate.parts.size + 2
+            fixture.spawned.count { it.display is PacketTextDisplay } shouldBe 2
+            verify(exactly = 1) { backend.create(fixture.player, any(), match { it.blockX == 2 }, any()) }
+            verify(exactly = 0) { backend.create(fixture.player, any(), match { it.blockX == 0 }, any()) }
+            fixture.hud.closeAsync()
+            verify(exactly = 1) { backend.destroy(any(), fixture.player) }
+            fixture.cleanup.complete(null)
+        }
+    }
+
+    test("ceiling and provider changes rebuild the same grave between one-cell original and two-cell stele") {
+        MockBukkitTestRuntime.open().use { paper ->
+            val plugin = paper.createSimplePlugin("GravesHudFallback")
+            val fixture = GravesHudFixture(plugin,
+                GraveAppearanceSettings(mapOf("slate" to 1.0), listOf("Да я свой"), engravedChance = 1.0))
+            val backend = mockk<YamipaGraveEngravings.Backend>(relaxed = true)
+            val nativeImages = List(2) { Any() }
+            every { backend.provider } returns plugin
+            every { backend.create(any(), any(), any(), any()) } returnsMany nativeImages
+            every { backend.destroy(any(), any()) } returns CompletableFuture.completedFuture(null)
+            val images = YamipaGraveEngravings(plugin, backend)
+            fixture.hud.attachEngravings(images)
+            val grave = fixture.grave(1, 0)
+            fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(GraveMarker(grave, 2))
+            fixture.spawned.size shouldBe GraveModels.engravedSlate.parts.size + 1
+            val ceiling = mockk<Block>()
+            every { ceiling.isPassable } returns false
+            every { fixture.world.getBlockAt(0, 65, 0) } returns ceiling
+            fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(GraveMarker(grave, 1))
+            fixture.removed.size shouldBe GraveModels.engravedSlate.parts.size + 1
+            fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(GraveMarker(grave, 1))
+            verify(exactly = 1) { backend.create(any(), any(), any(), any()) }
+            verify(exactly = 1) { backend.destroy(nativeImages[0], fixture.player) }
+
+            every { ceiling.isPassable } returns true
+            fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(GraveMarker(grave, 2))
+            verify(exactly = 2) { backend.create(any(), any(), any(), any()) }
+            images.providerDisabled(PluginDisableEvent(plugin))
+            fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(GraveMarker(grave, 1))
+            verify(exactly = 1) { backend.destroy(nativeImages[1], fixture.player) }
+            (fixture.spawned.size - fixture.removed.size) shouldBe GraveModels.slate.parts.size + 1
+
+            val highest = grave.copy(y = 319)
+            every { fixture.player.location } returns Location(fixture.world, .5, 319.0, 2.0)
+            fixture.hud.refreshGlow(fixture.player, listOf(highest)) shouldBe listOf(GraveMarker(highest, 1))
+            verify(exactly = 0) { fixture.world.getBlockAt(0, 320, 0) }
+            fixture.hud.closeAsync()
+            fixture.removed.size shouldBe fixture.spawned.size
             fixture.cleanup.complete(null)
         }
     }
@@ -97,6 +186,39 @@ class GravesHudTest : FunSpec({
             fixture.hud.closeAsync()
             fixture.hud.claimSucceeded(fixture.player)
             verify(exactly = 1) { fixture.player.playSound(any<Location>(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, .35f, 1.2f) }
+            fixture.cleanup.complete(null)
+        }
+    }
+
+    test("cairn inscriptions face upward on the existing lid at every cardinal grave orientation") {
+        MockBukkitTestRuntime.open().use { paper ->
+            val appearance = GraveAppearanceSettings(mapOf("cairn" to 1.0), listOf("Да не ссы, я сто раз так делал."), 0.0)
+            val fixture = GravesHudFixture(paper.createSimplePlugin("GravesHudCairnLid"), appearance)
+            val inscription = GraveModels.cairn.inscription
+            val name = ".Alexey_Warrior23"
+            val placements = inscription.placements(appearance.epitaphs.single(), name)
+            for (angle in listOf(0f, 90f, 180f, 270f)) {
+                val grave = (1L..100L).map { fixture.grave(it, 0).copy(ownerName = name) }
+                    .first { GraveAppearances.select(it.id, appearance).yaw == angle }
+                val start = fixture.spawned.size
+                fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(GraveMarker(grave, 1))
+                val texts = fixture.spawned.drop(start).filter { it.display is PacketTextDisplay }
+                texts.size shouldBe placements.size
+                val yaw = Quaternionf().rotationY(Math.toRadians(angle.toDouble()).toFloat())
+                texts.zip(placements).forEach { (spawn, placement) ->
+                    val transform = fixture.transforms.getValue(spawn.display)
+                    val nativeRotation = Quaternionf().rotationY(Math.toRadians(-spawn.location.yaw.toDouble()).toFloat())
+                        .mul(transform.leftRotation)
+                    (nativeRotation.transform(Vector3f(0f, 0f, 1f)).distance(Vector3f(0f, 1f, 0f)) < .00001f) shouldBe true
+                    (nativeRotation.transform(Vector3f(0f, 1f, 0f)).distance(yaw.transform(Vector3f(0f, 0f, 1f))) < .00001f) shouldBe true
+                    val local = yaw.transform(Vector3f(inscription.x.toFloat(), inscription.centerY.toFloat(),
+                        (inscription.z + placement.bottomY - inscription.centerY).toFloat()))
+                    (spawn.location.distanceSquared(Location(fixture.world, .5 + local.x, 64.0 + local.y, .5 + local.z)) < .0000001) shouldBe true
+                    transform.scale shouldBe Vector3f(placement.scale)
+                    PlainTextComponentSerializer.plainText().serialize(checkNotNull(spawn.text)) shouldBe placement.text
+                }
+            }
+            fixture.hud.closeAsync()
             fixture.cleanup.complete(null)
         }
     }
@@ -123,7 +245,7 @@ class GravesHudTest : FunSpec({
                 fixture.grave(30, 1, createdAt = 50), publicNewest,
             )
             val expected = listOf(owned, ownedNewest, publicNewest) + ordinary.filter { it.x != 3 }.take(5)
-            fixture.hud.refreshGlow(fixture.player, input) shouldBe expected
+            fixture.hud.refreshGlow(fixture.player, input).map { it.grave } shouldBe expected
             fixture.spawned.count { it.display is PacketTextDisplay } shouldBe 8
             verify(exactly = 0) { fixture.world.getBlockAt(-16, any<Int>(), any<Int>()) }
             verify(exactly = 0) { fixture.world.getBlockAt(90, any<Int>(), any<Int>()) }
@@ -142,17 +264,17 @@ class GravesHudTest : FunSpec({
             val fixture = GravesHudFixture(paper.createSimplePlugin("GravesHudRotation"), appearance)
             val grave = (1L..100L).map { fixture.grave(it, 0) }
                 .first { GraveAppearances.select(it.id, appearance).yaw == 270f }
-            val partCount = GraveAppearances.select(grave.id, appearance).model.parts.size
+            val partCount = GraveAppearances.select(grave.id, appearance, engravingsAvailable = false).model.parts.size
             fixture.failText = true
             fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe emptyList()
             fixture.removed.size shouldBe partCount
             fixture.spawned.forEach { verify(exactly = 0) { it.display.showTo(any<Player>()) } }
             fixture.failText = false
-            fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(grave)
+            fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(GraveMarker(grave, 1))
             val current = fixture.spawned.drop(partCount)
             val text = current.last()
             text.location.yaw shouldBe -90f
-            PlainTextComponentSerializer.plainText().serialize(checkNotNull(text.text)) shouldBe "<red>Похуй..."
+            PlainTextComponentSerializer.plainText().serialize(checkNotNull(text.text)) shouldBe "«<red>Похуй...»\n— Игрок"
             val textDisplay = text.display as PacketTextDisplay
             verify { textDisplay.billboard = Display.Billboard.FIXED }
             verify { textDisplay.backgroundColor = Color.fromARGB(0) }

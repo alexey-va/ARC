@@ -65,7 +65,9 @@ internal class GravesConfig(private val source: Config) {
             .take(128).map(String::trim).filter { line ->
                 line.isNotBlank() && line.length <= 96 && line.none { it.isISOControl() || it in "§<>" }
             }
-        return GraveAppearanceSettings(weights, epitaphs)
+        val engravedChance = source.double("appearance.engraved-chance", GraveAppearanceSettings.DEFAULT_ENGRAVED_CHANCE)
+            .takeIf { it.isFinite() && it in 0.0..1.0 } ?: GraveAppearanceSettings.DEFAULT_ENGRAVED_CHANCE
+        return GraveAppearanceSettings(weights, epitaphs, engravedChance)
     }
 
     private fun required(path: String, fallback: String): String = source.string(path, fallback).also {

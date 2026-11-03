@@ -12,6 +12,7 @@ internal data class GraveModel(
     val id: String,
     val parts: List<GraveModelPart>,
     val inscription: GraveInscription,
+    val engraved: Boolean = false,
 )
 
 /** Lower corner plus dimensions. Optional XYZ rotations act around this cuboid's centre. */
@@ -22,25 +23,138 @@ internal data class GraveModelPart(
     val rotationX: Float = 0f, val rotationY: Float = 0f, val rotationZ: Float = 0f,
 )
 
-/** Centre of the inscription area, fixed to the front face with a transparent background. */
+/** Centre of a fixed inscription plane; rotationX tilts its local front upward. */
 internal data class GraveInscription(
     val x: Double, val centerY: Double, val z: Double,
     val scale: Float,
     val lineWidth: Int,
     val color: Int,
     val maxHeight: Float = .28f,
+    val rotationX: Float = 0f,
+    val signatureScale: Float = .22f,
 ) {
-    fun placement(epitaph: String): GraveInscriptionPlacement {
-        val layout = DialogTextLayout.layout(Component.text(epitaph), TextAlignment.LEFT, lineWidth + 8)
-        val lines = (layout as? TextLayoutResult.Aligned)?.lineCount ?: 3
-        val fittedScale = minOf(scale, maxHeight / (.25f * lines))
-        return GraveInscriptionPlacement(centerY - .125 * lines * fittedScale, fittedScale)
+    fun placements(epitaph: String, ownerName: String? = null): List<GraveInscriptionPlacement> {
+        // Bedrock names may add a dot before their 16-character account name.
+        val name = ownerName?.takeIf(String::isNotBlank)?.take(17) ?: "Игрок"
+        val author = "— $name"
+        val text = "«$epitaph»\n$author"
+        val width = maxOf(lineWidth, DialogTextLayout.naturalWidth(Component.text(author)) ?: lineWidth)
+        fun lineCount(value: String, wrapWidth: Int): Int =
+            (DialogTextLayout.layout(Component.text(value), TextAlignment.LEFT, wrapWidth + 8) as? TextLayoutResult.Aligned)?.lineCount ?: 4
+        val lines = lineCount(text, width)
+        val fittedScale = minOf(scale, lineWidth * scale / width, maxHeight / (.25f * lines))
+        val combined = GraveInscriptionPlacement(text, centerY - .125 * lines * fittedScale, fittedScale, width)
+        if (width == lineWidth) return listOf(combined)
+
+        // A long nickname must not shrink the quote on the narrow original plaques.
+        val authorRows = mutableListOf<String>()
+        var row = "— "
+        name.forEach { character ->
+            if ((DialogTextLayout.naturalWidth(Component.text(row + character)) ?: 0) > lineWidth) {
+                authorRows += row
+                row = ""
+            }
+            row += character
+        }
+        authorRows += row
+        val authorScale = minOf(scale, signatureScale)
+        val authorHeight = .25f * authorScale * authorRows.size
+        val quoteHeight = maxHeight - authorHeight - .01f
+        val quote = "«$epitaph»"
+        val quoteLines = lineCount(quote, lineWidth)
+        val quoteScale = minOf(scale, quoteHeight / (.25f * quoteLines))
+        if (quoteScale <= fittedScale) return listOf(combined)
+        val bottom = centerY - maxHeight / 2
+        return listOf(
+            GraveInscriptionPlacement(quote, bottom + authorHeight + .01 + (quoteHeight - .25f * quoteLines * quoteScale) / 2, quoteScale, lineWidth),
+            GraveInscriptionPlacement(authorRows.joinToString("\n"), bottom, authorScale, lineWidth),
+        )
     }
 }
 
-internal data class GraveInscriptionPlacement(val bottomY: Double, val scale: Float)
+internal data class GraveInscriptionPlacement(val text: String, val bottomY: Double, val scale: Float, val lineWidth: Int)
 
 internal object GraveModels {
+    val slate = GraveModel(
+        "slate",
+        listOf(
+            GraveModelPart(Material.COBBLED_DEEPSLATE, -.43, .0, -.38, .86f, .13f, .76f),
+            GraveModelPart(Material.POLISHED_DEEPSLATE, -.37, .13, -.30, .74f, .10f, .60f),
+            GraveModelPart(Material.POLISHED_DEEPSLATE, -.34, .23, -.09, .68f, .64f, .25f),
+            GraveModelPart(Material.POLISHED_DEEPSLATE, -.34, .87, -.09, .12f, .10f, .25f),
+            GraveModelPart(Material.POLISHED_DEEPSLATE, .22, .87, -.09, .12f, .10f, .25f),
+            GraveModelPart(Material.POLISHED_DEEPSLATE, -.22, .87, -.09, .44f, .20f, .25f),
+            GraveModelPart(Material.SMOOTH_STONE, -.285, .40, -.116, .57f, .39f, .026f),
+            GraveModelPart(Material.CHISELED_STONE_BRICKS, -.09, .83, -.125, .18f, .18f, .035f),
+            GraveModelPart(Material.MOSS_BLOCK, -.33, .23, -.28, .20f, .025f, .16f),
+            GraveModelPart(Material.POPPY, -.36, .255, -.35, .26f, .26f, .26f),
+            GraveModelPart(Material.COBBLED_DEEPSLATE, .18, .23, -.27, .13f, .065f, .12f),
+        ),
+        GraveInscription(0.0, .59, -.124, .34f, 60, 0x343638, .35f),
+    )
+
+    val obelisk = GraveModel(
+        "obelisk",
+        listOf(
+            GraveModelPart(Material.SMOOTH_QUARTZ, -.38, .0, -.35, .76f, .11f, .70f),
+            GraveModelPart(Material.QUARTZ_BRICKS, -.31, .11, -.28, .62f, .11f, .56f),
+            GraveModelPart(Material.GOLD_BLOCK, -.25, .22, -.22, .50f, .018f, .44f),
+            GraveModelPart(Material.QUARTZ_BLOCK, -.23, .238, -.19, .46f, .762f, .38f),
+            GraveModelPart(Material.SMOOTH_QUARTZ, -.17, 1.0, -.14, .34f, .12f, .28f),
+            GraveModelPart(Material.SMOOTH_QUARTZ, -.075, 1.08, -.10, .15f, .15f, .20f, rotationZ = 45f),
+            GraveModelPart(Material.SMOOTH_QUARTZ, -.215, .37, -.205, .43f, .43f, .015f),
+            GraveModelPart(Material.CHISELED_QUARTZ_BLOCK, -.115, .84, -.211, .23f, .14f, .021f),
+        ),
+        GraveInscription(0.0, .585, -.213, .28f, 60, 0x514D49, .38f),
+    )
+
+    val cairn = GraveModel(
+        "cairn",
+        listOf(
+            GraveModelPart(Material.STONE_BRICKS, -.47, .0, -.47, .94f, .10f, .94f),
+            GraveModelPart(Material.MOSSY_COBBLESTONE, -.42, .10, -.42, .84f, .30f, .84f),
+            GraveModelPart(Material.POLISHED_ANDESITE, -.45, .40, -.45, .90f, .09f, .90f),
+            GraveModelPart(Material.STONE, -.37, .49, -.36, .74f, .055f, .72f),
+            GraveModelPart(Material.MOSS_BLOCK, -.32, .545, .16, .35f, .025f, .15f),
+            GraveModelPart(Material.MOSS_BLOCK, -.32, .545, -.04, .12f, .025f, .20f),
+            GraveModelPart(Material.COBBLESTONE, .16, .545, .17, .13f, .06f, .13f),
+            GraveModelPart(Material.SMOOTH_STONE, -.33, .105, -.439, .66f, .285f, .019f),
+        ),
+        // The low front face is foreshortened from player height; keep the engraving on the clear lid.
+        GraveInscription(.08, .551, -.105, .34f, 60, 0x171A1B, .49f, rotationX = 90f, signatureScale = .30f),
+    )
+
+    val timber = GraveModel(
+        "timber",
+        listOf(
+            GraveModelPart(Material.MOSSY_COBBLESTONE, -.39, .0, -.38, .78f, .13f, .76f),
+            GraveModelPart(Material.COARSE_DIRT, -.28, .13, -.27, .56f, .08f, .54f),
+            GraveModelPart(Material.STRIPPED_SPRUCE_LOG, -.08, .21, -.075, .16f, .97f, .15f),
+            GraveModelPart(Material.STRIPPED_SPRUCE_LOG, -.08, .51, -.09, .16f, .68f, .18f, rotationZ = 90f),
+            GraveModelPart(Material.STRIPPED_OAK_WOOD, -.30, .36, -.13, .60f, .32f, .055f),
+            GraveModelPart(Material.DARK_OAK_WOOD, -.025, .89, -.092, .05f, .05f, .017f),
+            GraveModelPart(Material.COBBLESTONE, -.28, .21, -.24, .15f, .11f, .15f),
+            GraveModelPart(Material.COBBLESTONE, .13, .21, .10, .14f, .085f, .14f),
+            GraveModelPart(Material.DEAD_BUSH, .12, .21, -.26, .21f, .24f, .21f),
+        ),
+        GraveInscription(0.0, .52, -.138, .28f, 76, 0x3C2C20, .28f),
+    )
+
+    val broken = GraveModel(
+        "broken",
+        listOf(
+            GraveModelPart(Material.BLACKSTONE, -.43, .0, -.35, .86f, .14f, .70f),
+            GraveModelPart(Material.POLISHED_BLACKSTONE, -.27, .14, -.15, .54f, .71f, .30f),
+            GraveModelPart(Material.POLISHED_BLACKSTONE, -.25, .82, -.14, .23f, .20f, .28f, rotationZ = -12f),
+            GraveModelPart(Material.POLISHED_BLACKSTONE, .02, .82, -.14, .20f, .11f, .28f, rotationZ = 10f),
+            GraveModelPart(Material.SMOOTH_BASALT, -.225, .35, -.173, .45f, .40f, .023f),
+            GraveModelPart(Material.OXIDIZED_COPPER, -.29, .21, -.173, .58f, .035f, .346f),
+            GraveModelPart(Material.OXIDIZED_COPPER, -.29, .26, .138, .035f, .34f, .035f),
+            GraveModelPart(Material.BLACKSTONE, .22, .14, -.28, .16f, .11f, .13f, rotationY = 25f),
+        ),
+        GraveInscription(0.0, .55, -.181, .28f, 60, 0xDDD4C0, .36f),
+    )
+
     /** Yamipa's two north-facing map tiles cover x=[-.5,.5], y=[0,2]. */
     const val IMAGE_FRONT_Z = -.53125
     private const val FRONT_Z = -.5
@@ -53,7 +167,7 @@ internal object GraveModels {
         GraveModelPart(Material.BLACK_WOOL, .514, 1.83, -.516, .012f, .060f, .382f, rotationX = 28f),
     )
 
-    val slate = GraveModel(
+    val engravedSlate = GraveModel(
         "slate",
         listOf(
             GraveModelPart(Material.POLISHED_DEEPSLATE, -.49, .01, FRONT_Z, .98f, 1.98f, .34f),
@@ -66,9 +180,10 @@ internal object GraveModels {
             GraveModelPart(Material.CHISELED_DEEPSLATE, .42, 1.83, TRIM_Z, .08f, .11f, .10f),
         ) + mourningRibbon,
         inscription,
+        engraved = true,
     )
 
-    val obelisk = GraveModel(
+    val engravedObelisk = GraveModel(
         "obelisk",
         listOf(
             GraveModelPart(Material.QUARTZ_BLOCK, -.49, .01, FRONT_Z, .98f, 1.98f, .38f),
@@ -81,9 +196,10 @@ internal object GraveModels {
             GraveModelPart(Material.GOLD_BLOCK, -.445, 1.925, TRIM_Z, .89f, .015f, .055f),
         ) + mourningRibbon,
         inscription,
+        engraved = true,
     )
 
-    val cairn = GraveModel(
+    val engravedCairn = GraveModel(
         "cairn",
         listOf(
             GraveModelPart(Material.STONE, -.49, .01, FRONT_Z, .98f, 1.98f, .44f),
@@ -98,9 +214,10 @@ internal object GraveModels {
             GraveModelPart(Material.MOSS_BLOCK, .435, .10, -.558, .055f, .16f, .07f),
         ) + mourningRibbon,
         inscription,
+        engraved = true,
     )
 
-    val timber = GraveModel(
+    val engravedTimber = GraveModel(
         "timber",
         listOf(
             GraveModelPart(Material.SMOOTH_SANDSTONE, -.49, .01, FRONT_Z, .98f, 1.98f, .38f),
@@ -113,9 +230,10 @@ internal object GraveModels {
             GraveModelPart(Material.CHISELED_SANDSTONE, .30, 1.88, TRIM_Z, .14f, .06f, .08f),
         ) + mourningRibbon,
         inscription,
+        engraved = true,
     )
 
-    val broken = GraveModel(
+    val engravedBroken = GraveModel(
         "broken",
         listOf(
             GraveModelPart(Material.POLISHED_BLACKSTONE, -.49, .01, FRONT_Z, .98f, 1.98f, .34f),
@@ -129,16 +247,22 @@ internal object GraveModels {
             GraveModelPart(Material.POLISHED_BLACKSTONE, .04, 1.94, TRIM_Z, .46f, .04f, .36f),
         ) + mourningRibbon,
         inscription,
+        engraved = true,
     )
 
-    val all = listOf(slate, obelisk, cairn, timber, broken)
+    /** Both geometries share the existing style IDs and their configured weights. */
+    val originals = listOf(slate, obelisk, cairn, timber, broken)
+    val engraved = listOf(engravedSlate, engravedObelisk, engravedCairn, engravedTimber, engravedBroken)
+    val all = originals + engraved
 }
 
 internal data class GraveAppearanceSettings(
     val weights: Map<String, Double> = DEFAULT_WEIGHTS,
     val epitaphs: List<String> = DEFAULT_EPITAPHS,
+    val engravedChance: Double = DEFAULT_ENGRAVED_CHANCE,
 ) {
     companion object {
+        const val DEFAULT_ENGRAVED_CHANCE = .5
         val DEFAULT_WEIGHTS = linkedMapOf("slate" to 35.0, "obelisk" to 15.0, "cairn" to 20.0, "timber" to 20.0, "broken" to 10.0)
         val DEFAULT_EPITAPHS: List<String> = emptyList()
     }
@@ -148,21 +272,25 @@ internal data class GraveAppearance(val model: GraveModel, val epitaph: String, 
 
 /** Pure cosmetics: identical grave UUID and configuration produce the same scene after reconnects. */
 internal object GraveAppearances {
-    fun select(id: UUID, settings: GraveAppearanceSettings): GraveAppearance {
-        val weights = GraveModels.all.map { model -> settings.weights[model.id]?.takeIf { it.isFinite() && it > 0.0 } ?: 0.0 }
+    fun select(id: UUID, settings: GraveAppearanceSettings, engravingsAvailable: Boolean = true): GraveAppearance {
+        val weights = GraveModels.originals.map { model -> settings.weights[model.id]?.takeIf { it.isFinite() && it > 0.0 } ?: 0.0 }
         val max = weights.maxOrNull()?.takeIf { it > 0.0 }
         val model = if (max == null) GraveModels.slate else {
             // Normalization keeps even individually valid, very large configured weights finite.
             val normalized = weights.map { it / max }
             var remaining = fraction(id, "model") * normalized.sum()
-            GraveModels.all.indices.firstOrNull { index ->
+            GraveModels.originals.indices.firstOrNull { index ->
                 remaining -= normalized[index]
                 remaining < 0.0
-            }?.let(GraveModels.all::get) ?: GraveModels.all[weights.indexOfLast { it > 0.0 }]
+            }?.let(GraveModels.originals::get) ?: GraveModels.originals[weights.indexOfLast { it > 0.0 }]
         }
-        val epitaphs = settings.epitaphs.filter(String::isNotBlank)
+        val chance = settings.engravedChance.takeIf { it.isFinite() }?.coerceIn(0.0, 1.0)
+            ?: GraveAppearanceSettings.DEFAULT_ENGRAVED_CHANCE
+        val selected = if (engravingsAvailable && fraction(id, "engraving") < chance)
+            GraveModels.engraved.first { it.id == model.id } else model
+        val epitaphs = settings.epitaphs.filter(String::isNotBlank).distinct()
         val epitaph = if (epitaphs.isEmpty()) "" else epitaphs[(fraction(id, "epitaph") * epitaphs.size).toInt()]
-        return GraveAppearance(model, epitaph, (fraction(id, "front") * 4).toInt() * 90f)
+        return GraveAppearance(selected, epitaph, (fraction(id, "front") * 4).toInt() * 90f)
     }
 
     private fun fraction(id: UUID, channel: String): Double =

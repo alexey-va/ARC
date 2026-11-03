@@ -100,7 +100,7 @@ internal class NativeGraves(
                 val item = NativeGraveItems.decode(raw)
                 val name = item.itemMeta?.displayName() ?: Component.translatable(item.type.translationKey())
                 GraveItem(GravesNetworkWire.safeItemNameJson(GsonComponentSerializer.gson().serialize(safeName(name))), item.amount)
-            }) }.toList().also { projectionDirty = false }
+            }, ownerName = record.ownerName) }.toList().also { projectionDirty = false }
         return projection.filter { it.active(System.currentTimeMillis()) }
     }
 

@@ -142,6 +142,7 @@ internal class GravesXAccess(
             expiresAt = expiresAt,
             experience = grave.experience.coerceAtLeast(0),
             items = items,
+            ownerName = grave.ownerName,
         )
     }
 

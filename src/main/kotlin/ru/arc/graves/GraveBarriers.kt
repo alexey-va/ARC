@@ -39,7 +39,7 @@ internal class GraveBarriers(
 ) : Listener, AutoCloseable {
     private data class Cell(val x: Int, val y: Int, val z: Int)
     private class Viewer(val player: Player, val world: UUID) {
-        val cells = linkedMapOf<Cell, GraveView>()
+        val cells = linkedMapOf<Cell, GraveMarker>()
         var queued = false
         var lastOpen: Long? = null
     }
@@ -55,21 +55,23 @@ internal class GraveBarriers(
     }
 
     /** Only the HUD's successfully rendered, ordered scenes may own a mask. */
-    fun update(player: Player, rendered: List<GraveView>) {
+    fun update(player: Player, rendered: List<GraveMarker>) {
         if (closed) return
         val old = viewers[player.uniqueId]
         if (old != null && (old.player !== player || old.world != player.world.uid)) clear(old.player)
         if (!player.isOnline || player.isDead) { clear(player); return }
         val viewer = viewers.getOrPut(player.uniqueId) { Viewer(player, player.world.uid) }
-        val desired = linkedMapOf<Cell, GraveView>()
-        rendered.take(MAX_MASKS).forEach { grave ->
-            for (y in grave.y..grave.y + 1) {
+        val desired = linkedMapOf<Cell, GraveMarker>()
+        rendered.take(MAX_MASKS).forEach { marker ->
+            if (marker.height !in 1..2) return@forEach
+            val grave = marker.grave
+            for (y in grave.y until grave.y + marker.height) {
                 val cell = Cell(grave.x, y, grave.z)
-                if (block(viewer, grave, cell) != null) desired.putIfAbsent(cell, grave)
+                if (block(viewer, marker, cell) != null) desired.putIfAbsent(cell, marker)
             }
         }
         (viewer.cells.keys - desired.keys).forEach { restore(viewer, it) }
-        val changed = desired.filter { (cell, grave) -> viewer.cells[cell] != grave }
+        val changed = desired.filter { (cell, marker) -> viewer.cells[cell] != marker }
         viewer.cells.clear()
         viewer.cells.putAll(desired)
         changed.keys.forEach { cell ->
@@ -78,18 +80,18 @@ internal class GraveBarriers(
         if (viewer.cells.isEmpty()) viewers.remove(player.uniqueId, viewer)
     }
 
-    private fun block(viewer: Viewer, grave: GraveView, cell: Cell): Block? {
+    private fun block(viewer: Viewer, marker: GraveMarker, cell: Cell): Block? {
+        val grave = marker.grave
         val player = viewer.player
         if (closed || !player.isOnline || player.isDead || player.world.uid != viewer.world ||
             grave.server != server || grave.world != player.world.name || !grave.active(System.currentTimeMillis()) || !current(grave) ||
-            cell.x != grave.x || cell.z != grave.z || cell.y !in grave.y..grave.y + 1) return null
+            marker.height !in 1..2 || cell.x != grave.x || cell.z != grave.z || cell.y !in grave.y until grave.y + marker.height) return null
         val world = player.world
-        if (grave.y < world.minHeight || grave.y >= world.maxHeight - 1 ||
+        if (grave.y < world.minHeight || grave.y > world.maxHeight - marker.height ||
             cell.y !in world.minHeight until world.maxHeight || !world.isChunkLoaded(grave.x shr 4, grave.z shr 4) ||
             !player.isChunkSent(Chunk.getChunkKey(grave.x shr 4, grave.z shr 4)) ||
             player.location.distanceSquared(Location(world, grave.x + .5, grave.y + .5, grave.z + .5)) > radius.toDouble() * radius) return null
-        if (!world.getBlockAt(grave.x, grave.y, grave.z).isPassable ||
-            !world.getBlockAt(grave.x, grave.y + 1, grave.z).isPassable) return null
+        if ((0 until marker.height).any { !world.getBlockAt(grave.x, grave.y + it, grave.z).isPassable }) return null
         return world.getBlockAt(cell.x, cell.y, cell.z)
     }
 
@@ -97,8 +99,8 @@ internal class GraveBarriers(
         if (closed || viewers[viewer.player.uniqueId] !== viewer) return
         val cells = viewer.cells.iterator()
         while (cells.hasNext()) {
-            val (cell, grave) = cells.next()
-            val actual = block(viewer, grave, cell)
+            val (cell, marker) = cells.next()
+            val actual = block(viewer, marker, cell)
             if (actual == null) { restore(viewer, cell); cells.remove() }
             else viewer.player.sendBlockChange(actual.location, barrier)
         }
@@ -122,9 +124,9 @@ internal class GraveBarriers(
         val viewer = viewers[player.uniqueId]?.takeIf { it.player === player && it.world == player.world.uid } ?: return
         if (clicked.world.uid != viewer.world) return
         val cell = Cell(clicked.x, clicked.y, clicked.z)
-        val grave = viewer.cells[cell] ?: return
-        if (block(viewer, grave, cell) == null) {
-            discard(viewer, grave.id)
+        val marker = viewer.cells[cell] ?: return
+        if (block(viewer, marker, cell) == null) {
+            discard(viewer, marker.grave.id)
             if (viewer.cells.isEmpty()) viewers.remove(player.uniqueId, viewer)
             return
         }
@@ -133,26 +135,26 @@ internal class GraveBarriers(
         event.isCancelled = true
         reassert(viewer)
         if (event.hand != EquipmentSlot.HAND || denied) return
-        requestOpen(viewer, grave, listOf(cell))
+        requestOpen(viewer, marker.grave, listOf(cell))
     }
 
     /** Called on the Paper thread only for an exact, viewer-owned Yamipa frame ID. */
     fun interactFrame(player: Player, graveId: UUID) {
         if (closed) return
         val viewer = viewers[player.uniqueId]?.takeIf { it.player === player && it.world == player.world.uid } ?: return
-        val cells = viewer.cells.filterValues { it.id == graveId }
-        val grave = cells.values.firstOrNull() ?: return
-        if (cells.keys.any { block(viewer, grave, it) == null }) {
+        val cells = viewer.cells.filterValues { it.grave.id == graveId }
+        val marker = cells.values.firstOrNull() ?: return
+        if (cells.keys.any { block(viewer, marker, it) == null }) {
             discard(viewer, graveId)
             if (viewer.cells.isEmpty()) viewers.remove(player.uniqueId, viewer)
             return
         }
         reassert(viewer)
-        requestOpen(viewer, grave, cells.keys)
+        requestOpen(viewer, marker.grave, cells.keys)
     }
 
     private fun discard(viewer: Viewer, graveId: UUID) {
-        val cells = viewer.cells.filterValues { it.id == graveId }.keys.toList()
+        val cells = viewer.cells.filterValues { it.grave.id == graveId }.keys.toList()
         cells.forEach { viewer.cells.remove(it); restore(viewer, it) }
     }
 

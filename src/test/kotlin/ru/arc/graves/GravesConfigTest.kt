@@ -25,6 +25,20 @@ class GravesConfigTest {
         assertEquals("Бесплатно по праву", PlainTextComponentSerializer.plainText().serialize(settings.text("free-price")))
         assertEquals(GraveAppearanceSettings.DEFAULT_WEIGHTS, settings.appearance.weights)
         assertEquals(GraveAppearanceSettings.DEFAULT_EPITAPHS, settings.appearance.epitaphs)
+        assertEquals(0.5, settings.appearance.engravedChance)
+    }
+
+    @Test
+    fun `engraved chance accepts endpoints and falls back for invalid input`() {
+        val source = ConfigManager.of(root, "graves-test.yml")
+        for (chance in listOf(0.0, 0.25, 1.0)) {
+            source.setDouble("appearance.engraved-chance", chance)
+            assertEquals(chance, GravesConfig(source).snapshot().appearance.engravedChance)
+        }
+        for (chance in listOf(-0.1, 1.1, Double.NaN, Double.POSITIVE_INFINITY)) {
+            source.setDouble("appearance.engraved-chance", chance)
+            assertEquals(0.5, GravesConfig(source).snapshot().appearance.engravedChance)
+        }
     }
 
     @Test

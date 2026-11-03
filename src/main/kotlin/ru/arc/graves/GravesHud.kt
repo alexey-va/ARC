@@ -21,6 +21,9 @@ import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.logging.Level
 
+/** The rendered geometry determines how many client-only interaction cells it needs. */
+internal data class GraveMarker(val grave: GraveView, val height: Int)
+
 /** Nearby public tombs; no bossbars, world entities, block writes, or chunk loads. */
 internal class GravesHud(
     plugin: Plugin,
@@ -32,10 +35,13 @@ internal class GravesHud(
     private class Marker(
         val x: Int, val y: Int, val z: Int,
         val parts: List<PacketDisplay>,
+        val model: GraveModel,
+        val ownerName: String?,
         val yaw: Float,
         var engraving: YamipaGraveEngravings.Handle?,
     ) {
-        fun matches(grave: GraveView): Boolean = x == grave.x && y == grave.y && z == grave.z && parts.all { it.isValid }
+        fun matches(grave: GraveView, selected: GraveModel): Boolean =
+            x == grave.x && y == grave.y && z == grave.z && model == selected && ownerName == grave.ownerName && parts.all { it.isValid }
         fun remove() {
             try { engraving?.removeAsync() }
             finally { parts.forEach(PacketDisplay::remove) }
@@ -63,7 +69,7 @@ internal class GravesHud(
     }
 
     /** Returns selected, successfully allocated scenes; Core sends them asynchronously without a client render ACK. */
-    fun refreshGlow(player: Player, graves: List<GraveView>): List<GraveView> {
+    fun refreshGlow(player: Player, graves: List<GraveView>): List<GraveMarker> {
         if (closed) return emptyList()
         if (player.isDead || !player.isOnline) { clear(player); return emptyList() }
         clearOtherWorldState(player)
@@ -72,34 +78,40 @@ internal class GravesHud(
         fun distance(grave: GraveView): Double = eye.distanceSquared(Location(world, grave.x + .5, grave.y + .5, grave.z + .5))
         val ownerFirst = compareBy<GraveView> { it.ownerId != player.uniqueId }
         val now = System.currentTimeMillis()
+        val imagesAvailable = engravings?.health()?.available == true
         val desired = graves.asSequence().filter { grave ->
             grave.server == server && grave.world == world.name && grave.active(now) &&
-                grave.y >= world.minHeight && grave.y < world.maxHeight - 1 &&
+                grave.y >= world.minHeight && grave.y < world.maxHeight &&
                 distance(grave) <= settings.nearbyGlowRadius.toDouble() * settings.nearbyGlowRadius &&
                 world.isChunkLoaded(grave.x shr 4, grave.z shr 4) &&
                 player.isChunkSent(Chunk.getChunkKey(grave.x shr 4, grave.z shr 4))
         }.sortedWith(ownerFirst.thenByDescending { it.createdAt }.thenBy { it.id })
             .distinctBy { Cell(it.x, it.y, it.z) }
             .sortedWith(ownerFirst.thenBy(::distance).thenByDescending { it.createdAt }.thenBy { it.id })
-            .filter { world.getBlockAt(it.x, it.y, it.z).isPassable && world.getBlockAt(it.x, it.y + 1, it.z).isPassable }
-            .take(MAX_VISIBLE).toList()
+            .filter { world.getBlockAt(it.x, it.y, it.z).isPassable }
+            .take(MAX_VISIBLE).map { grave ->
+                val roomForImage = imagesAvailable && grave.y < world.maxHeight - 1 &&
+                    world.getBlockAt(grave.x, grave.y + 1, grave.z).isPassable
+                grave to GraveAppearances.select(grave.id, settings.appearance, roomForImage)
+            }.toList()
         val current = markers.getOrPut(player.uniqueId) { ViewerMarkers(player, world.uid) }.entries
-        val ids = desired.mapTo(hashSetOf()) { it.id }
+        val ids = desired.mapTo(hashSetOf()) { it.first.id }
         (current.keys - ids).forEach { current.remove(it)?.remove() }
-        val rendered = mutableListOf<GraveView>()
-        desired.forEach { grave ->
+        val rendered = mutableListOf<GraveMarker>()
+        desired.forEach { (grave, appearance) ->
+            val renderedMarker = GraveMarker(grave, if (appearance.model.engraved) 2 else 1)
             val existing = current[grave.id]
-            if (existing?.matches(grave) == true) {
+            if (existing?.matches(grave, appearance.model) == true) {
                 // Pending image cleanup can temporarily exhaust Yamipa's retained-image budget.
                 if (existing.engraving?.isValid == false) existing.engraving = null
-                if (existing.engraving == null) existing.engraving = createEngraving(player, grave, existing.yaw)
-                rendered += grave
+                if (existing.model.engraved && existing.engraving == null)
+                    existing.engraving = createEngraving(player, grave, existing.yaw)
+                rendered += renderedMarker
                 return@forEach
             }
             current.remove(grave.id)?.remove()
             val parts = mutableListOf<PacketDisplay>()
             try {
-                val appearance = GraveAppearances.select(grave.id, settings.appearance)
                 val yaw = Quaternionf().rotationY(Math.toRadians(appearance.yaw.toDouble()).toFloat())
                 appearance.model.parts.forEach { part ->
                     val center = yaw.transform(Vector3f(
@@ -127,28 +139,34 @@ internal class GravesHud(
                 }
                 if (appearance.epitaph.isNotBlank()) {
                     val inscription = appearance.model.inscription
-                    val placement = inscription.placement(appearance.epitaph)
-                    val textAt = yaw.transform(Vector3f(inscription.x.toFloat(), placement.bottomY.toFloat(), inscription.z.toFloat()))
-                    displays.spawnText(
-                        // Native fixed text faces Bukkit yaw; its +Z front becomes local −Z at 180°.
-                        Location(world, grave.x + .5 + textAt.x, grave.y + textAt.y.toDouble(), grave.z + .5 + textAt.z, 180f - appearance.yaw, 0f),
-                        Component.text(appearance.epitaph, TextColor.color(inscription.color)).decoration(TextDecoration.ITALIC, false),
-                    ).also(parts::add).apply {
-                        isVisibleByDefault = false
-                        billboard = Display.Billboard.FIXED
-                        viewRange = settings.nearbyGlowRadius / 64f
-                        lineWidth = inscription.lineWidth
-                        isShadowed = false
-                        isSeeThrough = false
-                        backgroundColor = Color.fromARGB(0)
-                        transformation = Transformation(Vector3f(), Quaternionf(), Vector3f(placement.scale), Quaternionf())
+                    val inscriptionTilt = Math.toRadians(inscription.rotationX.toDouble()).toFloat()
+                    inscription.placements(appearance.epitaph, grave.ownerName).forEach { placement ->
+                        val textAt = yaw.transform(
+                            Quaternionf().rotationX(inscriptionTilt)
+                                .transform(Vector3f(0f, (placement.bottomY - inscription.centerY).toFloat(), 0f))
+                                .add(inscription.x.toFloat(), inscription.centerY.toFloat(), inscription.z.toFloat()),
+                        )
+                        displays.spawnText(
+                            // Native fixed text faces Bukkit yaw; its +Z front becomes local −Z at 180°.
+                            Location(world, grave.x + .5 + textAt.x, grave.y + textAt.y.toDouble(), grave.z + .5 + textAt.z, 180f - appearance.yaw, 0f),
+                            Component.text(placement.text, TextColor.color(inscription.color)).decoration(TextDecoration.ITALIC, false),
+                        ).also(parts::add).apply {
+                            isVisibleByDefault = false
+                            billboard = Display.Billboard.FIXED
+                            viewRange = settings.nearbyGlowRadius / 64f
+                            lineWidth = placement.lineWidth
+                            isShadowed = false
+                            isSeeThrough = false
+                            backgroundColor = Color.fromARGB(0)
+                            transformation = Transformation(Vector3f(), Quaternionf().rotationX(-inscriptionTilt), Vector3f(placement.scale), Quaternionf())
+                        }
                     }
                 }
                 parts.forEach { it.showTo(player) }
                 // Artwork failure must not remove the already visible tomb or its independent epitaph.
-                val engraving = createEngraving(player, grave, appearance.yaw)
-                current[grave.id] = Marker(grave.x, grave.y, grave.z, parts.toList(), appearance.yaw, engraving)
-                rendered += grave
+                val engraving = if (appearance.model.engraved) createEngraving(player, grave, appearance.yaw) else null
+                current[grave.id] = Marker(grave.x, grave.y, grave.z, parts.toList(), appearance.model, grave.ownerName, appearance.yaw, engraving)
+                rendered += renderedMarker
             } catch (failure: RuntimeException) {
                 parts.forEach(PacketDisplay::remove)
                 if (!markerFailureLogged) {
