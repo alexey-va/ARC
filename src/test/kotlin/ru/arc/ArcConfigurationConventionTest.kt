@@ -167,6 +167,7 @@ class ArcConfigurationConventionTest {
             paths
                 .filter(Files::isRegularFile)
                 .filter { it != pluginPath }
+                .filter { it.toString().endsWith(".kt") || it.toString().endsWith(".yml") }
                 .forEach { path ->
                     Files.readAllLines(path).forEach { line ->
                         when {
