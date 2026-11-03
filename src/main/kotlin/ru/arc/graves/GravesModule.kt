@@ -20,6 +20,7 @@ import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import ru.arc.xserver.XActionManager
 import ru.arc.paper.teleport.NativePaperTeleportExecutor
+import ru.arc.sql.SqlConnectionConfig
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
@@ -35,8 +36,13 @@ object GravesModule : PluginModule {
         ARC.instance.whenCompleteOnMain(drain) { _, failure ->
             if (current != generation) return@whenCompleteOnMain
             if (failure != null) { warn("Graves predecessor cleanup failed", failure); return@whenCompleteOnMain }
+            val sql = AuditConfig.load().mysql
+            if (sql == null) {
+                warn("Graves module unavailable: shared ARC MySQL settings are not configured")
+                return@whenCompleteOnMain
+            }
             val settings = GravesConfig.load(ARC.instance.dataPath).snapshot()
-            runtime = GravesRuntime(settings).also(GravesRuntime::start)
+            runtime = GravesRuntime(settings, sql).also(GravesRuntime::start)
         }
     }
     override fun reload() { shutdown(); init() }
@@ -48,15 +54,12 @@ object GravesModule : PluginModule {
 }
 
 /** All Bukkit and domain state is confined to the owning Paper thread. */
-internal class GravesRuntime(private val settings: GravesSettings) : Listener, AutoCloseable {
+internal class GravesRuntime(private val settings: GravesSettings, sql: SqlConnectionConfig) : Listener, AutoCloseable {
     private val plugin = ARC.instance
     private val server = requireNotNull(ARC.serverName) { "Graves requires the configured network server name" }
     private val tasks = LifecycleTaskScope()
     private val native = if (plugin.server.pluginManager.isPluginEnabled("GravesX")) GravesXAccess.find(plugin.server, server) else null
-    private val graveStore = plugin.submitBackground {
-        val sql = requireNotNull(AuditConfig.load().mysql) { "Native graves require shared ARC MySQL settings" }
-        MySqlNativeGraveRepository.open(sql)
-    }
+    private val graveStore = plugin.submitBackground { MySqlNativeGraveRepository.open(sql) }
     private val archive = LegacyGravesArchive(plugin.dataPath, server, native, graveStore.thenApply { it }, plugin.backgroundOwner())
     private val restoration = archive.activateSealed()
     private val playerPersistence = if (plugin.server.pluginManager.isPluginEnabled("HuskSync")) HuskSyncGravePersistence(plugin.backgroundOwner()) else LocalGravePersistence

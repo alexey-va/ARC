@@ -29,6 +29,7 @@ See [the assessment](graves-economy-20261103.json).
 ## Item ownership and recovery
 
 `arc_native_graves` uses the existing ARC audit MySQL settings/shared pool.
+Without configured MySQL settings the module stays unavailable and registers no player recovery guards; a configured database failure retains recovery protection.
 `arc_native_grave_sequences` allocates monotonic operation receipts.
 `arc_native_grave_watermarks` retains each owner's latest acknowledged exact
 inventory/XP checkpoint independently of grave expiry or removal.
