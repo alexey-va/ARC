@@ -9,6 +9,27 @@ import java.util.UUID
 import java.util.concurrent.CompletionException
 
 class NativeGraveRecordTest : FreeSpec({
+    "cosmetic snapshots use an independent codec without changing legacy payload bytes or recovery receipts" {
+        // Fixed v1 field order/shape from ARC 1.4.526 (71101be8), independent of this encoder.
+        val legacy = grave().copy(id = UUID(0, 1), ownerId = UUID(0, 2))
+        val bytes = requireNotNull(javaClass.classLoader.getResourceAsStream("graves/native-grave-v1.json")).use { it.readBytes() }
+        NativeGravePayload.decode(bytes) shouldBe legacy
+        NativeGravePayload.encode(legacy).contentEquals(bytes) shouldBe true
+        JsonParser.parseString(bytes.toString(Charsets.UTF_8)).asJsonObject.has("appearance") shouldBe false
+        NativeGravePayload.encode(NativeGravePayload.decode(bytes)).contentEquals(bytes) shouldBe true
+        val choice = GraveAppearanceChoice("timber", false, "Ведро было. Реакции не было.")
+        val customized = legacy.copy(appearance = choice)
+        NativeGravePayload.encode(customized).contentEquals(bytes) shouldBe true
+        NativeGravePayload.decode(NativeGravePayload.encode(customized)) shouldBe legacy
+        GraveAppearancePayload.decodeOrNull(GraveAppearancePayload.encode(choice)) shouldBe choice
+        GraveAppearancePayload.decodeOrNull("invalid") shouldBe null
+        customized.copy(revision = 1).appearance shouldBe choice
+        customized.items shouldBe legacy.items
+        customized.operation shouldBe legacy.operation
+        shouldThrow<IllegalArgumentException> { legacy.copy(appearance = choice.copy(modelId = "unknown")).validate() }
+        shouldThrow<IllegalArgumentException> { legacy.copy(appearance = choice.copy(epitaph = "bad\ntext")).validate() }
+    }
+
     "snapshots defensively freeze their input and preserve every native slot and XP field" {
         val slots = MutableList<String?>(41) { null }.apply { this[40] = STACK }
         val inventory = NativeGraveInventory(slots, 7, 0.25f, 91)

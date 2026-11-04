@@ -1051,7 +1051,7 @@ class HelpCenterScreensTest {
             every { ru.arc.misc.JoinMessageGuiFactory.show(player, true, 0) } returns Unit
             open(HelpCenterPage.SETTINGS)
             assertEquals(2, screen.columns)
-            assertEquals(4, screen.buttons.map { it.label.color() }.distinct().size)
+            assertEquals(5, screen.buttons.map { it.label.color() }.distinct().size)
             click("settings_social")
             val join = screen.buttons.single { it.id.value == "settings_join_messages" }
             assertEquals("Сообщения при входе ›", plain(join.label))
@@ -1118,6 +1118,22 @@ class HelpCenterScreensTest {
         click("back")
         assertEquals("help.settings.section.social", screen.id)
         assertEquals(emptyList<String>(), executed)
+    }
+
+    @Test
+    fun `personal grave settings are a direct child of main menu settings`() {
+        open(HelpCenterPage.ROOT)
+        click("settings")
+        assertEquals("help.category.settings", screen.id)
+        assertEquals(listOf("settings_controls", "settings_interface", "settings_social", "settings_world", "settings_grave"),
+            screen.buttons.map { it.id.value })
+        click("settings_grave")
+        assertEquals("help.settings.grave", screen.id)
+        assertTrue(body().contains("будущие могилы"))
+        assertEquals(listOf("grave_models", "grave_text"), screen.buttons.map { it.id.value })
+        click("back")
+        assertEquals("help.category.settings", screen.id)
+        assertTrue(executed.isEmpty())
     }
 
     @Test
@@ -1216,7 +1232,7 @@ class HelpCenterScreensTest {
         )
         expected.forEach { (group, ids) ->
             open(HelpCenterPage.SETTINGS)
-            assertEquals(4, screen.buttons.size)
+            assertEquals(5, screen.buttons.size)
             click("settings_$group")
             assertEquals(ids, screen.buttons.map { it.id.value })
             assertTrue(screen.buttons.all { it.width == 230 && !it.closeDialogBeforeAction })

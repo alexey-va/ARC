@@ -16,6 +16,7 @@ internal data class GraveView(
     val experience: Int,
     val items: List<GraveItem>,
     val ownerName: String? = null,
+    val appearance: GraveAppearanceChoice? = null,
 ) {
     fun active(now: Long): Boolean = expiresAt < 0 || expiresAt > now
 }

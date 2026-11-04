@@ -54,6 +54,7 @@ internal class NativeGraves(
     private val persistence: NativeGravePlayerPersistence,
     scheduler: TaskScheduler,
     private val restoration: CompletableFuture<Unit> = CompletableFuture.completedFuture(Unit),
+    private val appearanceForDeath: (PlayerDeathEvent, UUID) -> GraveAppearanceChoice? = { _, _ -> null },
 ) : Listener, AutoCloseable {
     private val tasks = LifecycleTaskScope(scheduler)
     private var repository: NativeGraveRepository? = null
@@ -100,7 +101,7 @@ internal class NativeGraves(
                 val item = NativeGraveItems.decode(raw)
                 val name = item.itemMeta?.displayName() ?: Component.translatable(item.type.translationKey())
                 GraveItem(GravesNetworkWire.safeItemNameJson(GsonComponentSerializer.gson().serialize(safeName(name))), item.amount)
-            }, ownerName = record.ownerName) }.toList().also { projectionDirty = false }
+            }, ownerName = record.ownerName, appearance = record.appearance) }.toList().also { projectionDirty = false }
         return projection.filter { it.active(System.currentTimeMillis()) }
     }
 
@@ -167,13 +168,15 @@ internal class NativeGraves(
                 it.distanceSquared(location) <= 128.0 * 128.0 && GraveDestinations.safe(it) }
         if (anchor == null) { preserveDeath(event); feedback(player, "placement-preserved"); return }
         val now = System.currentTimeMillis()
-        val record = NativeGraveRecord(id = UUID.randomUUID(), ownerId = player.uniqueId, ownerName = player.name,
+        val graveId = UUID.randomUUID()
+        val record = NativeGraveRecord(id = graveId, ownerId = player.uniqueId, ownerName = player.name,
             server = server, world = anchor.world.name, x = anchor.blockX,
             y = anchor.blockY, z = anchor.blockZ,
             createdAt = now, expiresAt = now + settings.retentionSeconds * 1000L, experience = xp,
             items = drops.map(NativeGraveItems::encode), revision = 0, phase = NativeGravePhase.PREPARED,
             operation = NativeGraveOperation(UUID.randomUUID(), server, NativeGraveOperationKind.CREATE, before,
-                NativeGraveItems.afterDeath(before, drops, keepXp), inventoryScope = inventoryScope))
+                NativeGraveItems.afterDeath(before, drops, keepXp), inventoryScope = inventoryScope),
+            appearance = appearanceForDeath(event, graveId))
         preserveDeath(event)
         preparing += player.uniqueId
         // Paper permits death cancellation. Let later handlers settle before owning

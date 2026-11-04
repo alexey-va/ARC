@@ -99,13 +99,39 @@ gate. Parkour's local profile is independent of the coordinated introduction.
 
 ## Visual lifecycle
 
-Nearby players see varied packet-only tombstones. `appearance.weights` chooses
-the relative model frequency; zero
-disables a type and all-zero weights fall back to slate. `appearance.epitaphs`
-accepts up to 128 plain lines of at most 96 characters each. Its default empty
-list creates no inscription; optional inscriptions use only TextDisplay.
-Invalid cosmetic values do not disable graves. The grave UUID determines
-the model, inscription and rotation for the current configuration.
+Nearby players see varied packet-only tombstones. Every inscription has a solid
+plaque generated from the same measured text bounds, including its signature,
+with a visible inset and a small front offset. The cairn mounts its plaque on
+the lid. Engraved monuments have an independent dark plaque below the portrait.
+Text wrapping and fitting retain both quote and full Java/Bedrock nickname.
+Unmeasured legacy glyphs suppress the inscription instead of guessing its size.
+
+`/mm → Настройки → Моя могила` selects a random style or one of ten models
+(five compact and five engraved), plus automatic, custom or absent inscription.
+A custom inscription is one plain line of at most 80 supported characters;
+formatting, hidden controls and unsupported glyphs are rejected. Preferences
+use the existing shared LuckPerms metadata owner under `arc-grave-appearance`.
+They apply to future graves. Each new grave captures an immutable cosmetic
+snapshot; reconnects, configuration changes and later preferences do not change
+its text. A selected engraved model uses its matching compact design when
+images or the second interaction cell are unavailable.
+
+The bundled `graves/epitaphs.yml` contains 320 unique short Russian phrases,
+16 per death category. The last damage cause distinguishes falling, lava,
+fire, drowning, explosions, projectiles, mobs, PvP, void, suffocation, hunger,
+freezing, magic, lightning, retaliation, falling blocks, elytra collision,
+wither, dragon and generic deaths. Selection is stable per grave and category;
+it never loads or parses the catalog during a death event.
+
+`appearance.weights` retains relative model frequency for random selection;
+all-zero weights fall back to slate. The legacy `appearance.epitaphs` pool
+continues to render old graves lacking a snapshot. New automatic inscriptions
+come from the cause-specific catalog. Cosmetics are stored in the optional
+`arc_native_grave_appearance` table, atomically with grave creation. They are
+excluded from the canonical v1 item/XP payload, its hash and recovery receipts.
+Older ARC readers/writers keep the same payload and leave the optional table
+alone. Missing or corrupt cosmetic metadata falls back to the legacy appearance
+without preventing item recovery.
 
 Each viewer receives client-only BARRIER masks only for their allocated selected
 nearby scenes (at most eight, with one tomb per cell). Core transport remains

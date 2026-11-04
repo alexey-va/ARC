@@ -99,6 +99,7 @@ internal class NativeGraveRecord(
     val operation: NativeGraveOperation? = null,
     val completedSequence: Long = 0,
     val checkpoint: NativeGraveInventory? = null,
+    @Transient val appearance: GraveAppearanceChoice? = null,
 ) {
     val items: List<String> = Collections.unmodifiableList(ArrayList(items))
 
@@ -120,9 +121,10 @@ internal class NativeGraveRecord(
         operation: NativeGraveOperation? = this.operation,
         completedSequence: Long = this.completedSequence,
         checkpoint: NativeGraveInventory? = this.checkpoint,
+        appearance: GraveAppearanceChoice? = this.appearance,
     ) = NativeGraveRecord(
         id, ownerId, ownerName, server, world, x, y, z, createdAt, expiresAt,
-        experience, items, revision, phase, operation, completedSequence, checkpoint,
+        experience, items, revision, phase, operation, completedSequence, checkpoint, appearance,
     )
 
     fun validate() {
@@ -140,6 +142,7 @@ internal class NativeGraveRecord(
         require(completedSequence == 0L || checkpoint != null) { "Completed grave is missing its inventory checkpoint" }
         require(items.size <= MAX_ITEMS) { "Grave contains too many items" }
         requireNotNull(phase) { "Grave phase is missing" }
+        appearance?.validate()
         var totalBytes = validateStacks(items, allowEmptySlots = false)
         operation?.let { pending ->
             requireNotNull(pending.id) { "Grave operation id is missing" }
@@ -178,11 +181,11 @@ internal class NativeGraveRecord(
         world == other.world && x == other.x && y == other.y && z == other.z && createdAt == other.createdAt &&
         expiresAt == other.expiresAt && experience == other.experience && items == other.items &&
         revision == other.revision && phase == other.phase && operation == other.operation &&
-        completedSequence == other.completedSequence && checkpoint == other.checkpoint
+        completedSequence == other.completedSequence && checkpoint == other.checkpoint && appearance == other.appearance
 
     override fun hashCode(): Int = arrayOf(
         id, ownerId, ownerName, server, world, x, y, z, createdAt, expiresAt,
-        experience, items, revision, phase, operation, completedSequence, checkpoint,
+        experience, items, revision, phase, operation, completedSequence, checkpoint, appearance,
     ).contentHashCode()
 
     override fun toString(): String =

@@ -41,6 +41,23 @@ class GraveAppearanceTest : FunSpec({
         GraveAppearances.select(id, invalid.copy(epitaphs = listOf(" "))).epitaph shouldBe ""
     }
 
+    test("saved choices preserve exact last words and style while unavailable image tombs keep their compact counterpart") {
+        val id = UUID(12L, 34L)
+        val settings = GraveAppearanceSettings(epitaphs = listOf("Случайная надпись"), engravedChance = 0.0)
+        val seeded = GraveAppearances.select(id, settings)
+        GraveModels.originals.forEach { model ->
+            val choice = GraveAppearanceChoice(model.id, true, "Мои последние слова")
+            val selected = GraveAppearances.select(id, settings, choice = choice)
+            selected.model shouldBe GraveModels.engraved.first { it.id == model.id }
+            selected.epitaph shouldBe choice.epitaph
+            selected.yaw shouldBe seeded.yaw
+            GraveAppearances.select(id, settings, false, choice).model shouldBe model
+            GraveAppearances.select(id, settings, choice = choice.copy(engraved = false)).model shouldBe model
+            GraveAppearances.select(id, settings, choice = choice.copy(epitaph = "")).epitaph shouldBe ""
+        }
+        GraveAppearances.select(id, settings, choice = GraveAppearanceChoice(epitaph = "Текст")).model shouldBe seeded.model
+    }
+
     test("engraving chance only switches geometry and unavailable images preserve the original style") {
         val settings = GraveAppearanceSettings(epitaphs = listOf("Похуй...", "Да я свой"))
         (0L..255L).forEach { seed ->
@@ -125,9 +142,64 @@ class GraveAppearanceTest : FunSpec({
         }
     }
 
+    test("every inscription has an opaque backing and its longest allowed text fits after each yaw and lid tilt") {
+        val longest = "Очень длинная надпись на память о последнем приключении и о верных друзьях рядом"
+        longest.length shouldBe GravePreferences.MAX_TEXT_LENGTH
+        val samples = listOf("Да не ссы, я сто раз так делал.", longest, "Ш".repeat(80))
+        GraveModels.all.forEach { model ->
+            val inscription = model.inscription
+            val backing = inscription.backing
+            backing.material.isSolid shouldBe true
+            model.parts.last() shouldBe backing
+            val backCenter = Vector3f(0f, 0f, backing.depth / 2)
+                .rotateX(Math.toRadians(backing.rotationX.toDouble()).toFloat()).add(
+                    (backing.x + backing.width / 2).toFloat(), (backing.y + backing.height / 2).toFloat(),
+                    (backing.z + backing.depth / 2).toFloat(),
+                )
+            model.body.any { part ->
+                part.rotationX == 0f && part.rotationY == 0f && part.rotationZ == 0f &&
+                    backCenter.x >= part.x - .000001 && backCenter.x <= part.x + part.width + .000001 &&
+                    backCenter.y >= part.y - .000001 && backCenter.y <= part.y + part.height + .000001 &&
+                    backCenter.z >= part.z - .000001 && backCenter.z <= part.z + part.depth + .000001
+            } shouldBe true
+            if (model.engraved) (inscription.placements(longest, ".WWWWWWWWWWWWWWWW").first().scale >= .17f) shouldBe true
+            samples.forEach { text ->
+                val placements = inscription.placements(text, ".WWWWWWWWWWWWWWWW")
+                placements.isNotEmpty() shouldBe true
+                placements.forEach { placement ->
+                    val layout = DialogTextLayout.layout(Component.text(placement.text), TextAlignment.LEFT, placement.lineWidth + 8)
+                        as TextLayoutResult.Aligned
+                    val pixel = .025f * placement.scale
+                    val halfWidth = placement.lineWidth * pixel / 2
+                    for (yaw in listOf(0f, 90f, 180f, 270f)) {
+                        val turn = Quaternionf().rotationY(Math.toRadians(yaw.toDouble()).toFloat())
+                        val tilt = Quaternionf().rotationX(Math.toRadians(inscription.rotationX.toDouble()).toFloat())
+                        val rotation = Quaternionf(turn).mul(tilt)
+                        val backingCenter = turn.transform(Vector3f(
+                            (backing.x + backing.width / 2).toFloat(),
+                            (backing.y + backing.height / 2).toFloat(),
+                            (backing.z + backing.depth / 2).toFloat(),
+                        ))
+                        for (x in listOf(-halfWidth - pixel, halfWidth + pixel)) {
+                            for (y in listOf(placement.bottomY, placement.bottomY + .25 * layout.lineCount * placement.scale)) {
+                                val point = tilt.transform(Vector3f(x, (y - inscription.centerY).toFloat(), 0f))
+                                    .add(inscription.x.toFloat(), inscription.centerY.toFloat(), inscription.z.toFloat())
+                                    .rotate(turn).sub(backingCenter).rotate(Quaternionf(rotation).invert())
+                                (abs(point.x) < backing.width / 2) shouldBe true
+                                (abs(point.y) < backing.height / 2) shouldBe true
+                                (abs(point.z + backing.depth / 2 + GraveInscription.TEXT_GAP) < .000001f) shouldBe true
+                            }
+                        }
+                    }
+                }
+            }
+            inscription.placements("Неизмеренный символ \u0378").isEmpty() shouldBe true
+        }
+    }
+
     test("stone pedestals support one by two maps with bounded overhang and readable separate last words") {
         GraveModels.engraved.forEach { model ->
-            (model.parts.size <= 12) shouldBe true
+            (model.parts.size <= 13) shouldBe true
             model.parts.any { part ->
                 part.z == -.5 && part.width >= .95f && part.height >= 1.95f
             } shouldBe true
@@ -153,7 +225,7 @@ class GraveAppearanceTest : FunSpec({
                         (abs(turned.x) <= .740001f && abs(turned.z) <= .740001f) shouldBe true
                     }
                 }
-                if (part.z < GraveModels.IMAGE_FRONT_Z) {
+                if (part.z < GraveModels.IMAGE_FRONT_Z && part != model.inscription.backing) {
                     // Trim may cover the map's empty outer border, never the engraving or last words.
                     val crossesContent = part.x < .42 && part.x + part.width > -.42 &&
                         part.y < 1.88 && part.y + part.height > .24

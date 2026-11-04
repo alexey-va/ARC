@@ -35,13 +35,12 @@ internal class GravesHud(
     private class Marker(
         val x: Int, val y: Int, val z: Int,
         val parts: List<PacketDisplay>,
-        val model: GraveModel,
+        val appearance: GraveAppearance,
         val ownerName: String?,
-        val yaw: Float,
         var engraving: YamipaGraveEngravings.Handle?,
     ) {
-        fun matches(grave: GraveView, selected: GraveModel): Boolean =
-            x == grave.x && y == grave.y && z == grave.z && model == selected && ownerName == grave.ownerName && parts.all { it.isValid }
+        fun matches(grave: GraveView, selected: GraveAppearance): Boolean =
+            x == grave.x && y == grave.y && z == grave.z && appearance == selected && ownerName == grave.ownerName && parts.all { it.isValid }
         fun remove() {
             try { engraving?.removeAsync() }
             finally { parts.forEach(PacketDisplay::remove) }
@@ -92,7 +91,7 @@ internal class GravesHud(
             .take(MAX_VISIBLE).map { grave ->
                 val roomForImage = imagesAvailable && grave.y < world.maxHeight - 1 &&
                     world.getBlockAt(grave.x, grave.y + 1, grave.z).isPassable
-                grave to GraveAppearances.select(grave.id, settings.appearance, roomForImage)
+                grave to GraveAppearances.select(grave.id, settings.appearance, roomForImage, grave.appearance)
             }.toList()
         val current = markers.getOrPut(player.uniqueId) { ViewerMarkers(player, world.uid) }.entries
         val ids = desired.mapTo(hashSetOf()) { it.first.id }
@@ -101,11 +100,11 @@ internal class GravesHud(
         desired.forEach { (grave, appearance) ->
             val renderedMarker = GraveMarker(grave, if (appearance.model.engraved) 2 else 1)
             val existing = current[grave.id]
-            if (existing?.matches(grave, appearance.model) == true) {
+            if (existing?.matches(grave, appearance) == true) {
                 // Pending image cleanup can temporarily exhaust Yamipa's retained-image budget.
                 if (existing.engraving?.isValid == false) existing.engraving = null
-                if (existing.model.engraved && existing.engraving == null)
-                    existing.engraving = createEngraving(player, grave, existing.yaw)
+                if (existing.appearance.model.engraved && existing.engraving == null)
+                    existing.engraving = createEngraving(player, grave, existing.appearance.yaw)
                 rendered += renderedMarker
                 return@forEach
             }
@@ -165,7 +164,7 @@ internal class GravesHud(
                 parts.forEach { it.showTo(player) }
                 // Artwork failure must not remove the already visible tomb or its independent epitaph.
                 val engraving = if (appearance.model.engraved) createEngraving(player, grave, appearance.yaw) else null
-                current[grave.id] = Marker(grave.x, grave.y, grave.z, parts.toList(), appearance.model, grave.ownerName, appearance.yaw, engraving)
+                current[grave.id] = Marker(grave.x, grave.y, grave.z, parts.toList(), appearance, grave.ownerName, engraving)
                 rendered += renderedMarker
             } catch (failure: RuntimeException) {
                 parts.forEach(PacketDisplay::remove)

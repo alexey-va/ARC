@@ -16,7 +16,7 @@ notifications:
   creation-message: false
 hud:
   refresh-ticks: 2
-# Cosmetics only. Zero disables a model; all zero weights fall back to slate.
+# Random-selection weights only. Explicit player choices remain selectable; all zero weights fall back to slate.
 appearance:
   # Fraction of graves using an engraved Yamipa monument; the rest use the original designs.
   engraved-chance: 0.5
@@ -26,7 +26,9 @@ appearance:
     cairn: 20.0
     timber: 20.0
     broken: 10.0
-  # Empty means no inscription TextDisplay. Optional plain text, at most 128 entries of 96 characters.
+  # Legacy graves without a personal snapshot use this optional plain-text pool.
+  # New graves use graves/epitaphs.yml by death cause or the player's /mm settings.
+  # At most 128 legacy entries of 96 characters; empty hides their inscription.
   epitaphs: []
   # Opt-in examples requested by the owner:
   # epitaphs:

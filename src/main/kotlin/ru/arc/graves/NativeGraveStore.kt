@@ -74,7 +74,7 @@ internal class MySqlNativeGraveRepository private constructor(
     override fun loadAll(): CompletableFuture<List<NativeGraveRecord>> = admit {
         migration.thenCompose {
             runtime.executor.read { connection ->
-                connection.prepareStatement("SELECT $COLUMNS FROM $TABLE ORDER BY id").use { statement ->
+                connection.prepareStatement("SELECT $COLUMNS, appearance_payload FROM $READ_FROM ORDER BY id").use { statement ->
                     statement.executeQuery().use { rows ->
                         buildList { while (rows.next()) add(decodeRow(rows).record) }
                     }
@@ -174,16 +174,24 @@ internal class MySqlNativeGraveRepository private constructor(
         migration.thenCompose {
             runtime.executor.transaction { connection ->
                 val payload = encode(record)
-                connection.prepareStatement(INSERT).use { statement ->
+                val inserted = connection.prepareStatement(INSERT).use { statement ->
                     bindRecord(statement, record, payload)
                     try {
-                        statement.executeUpdate()
+                        statement.executeUpdate() == 1
                     } catch (failure: SQLException) {
                         if (!failure.isDuplicateKey()) throw failure
+                        false
+                    }
+                }
+                if (inserted && record.appearance != null) {
+                    connection.prepareStatement("INSERT INTO $APPEARANCES (id, appearance_payload) VALUES (?, ?)").use { statement ->
+                        statement.setString(1, record.id.toString())
+                        statement.setString(2, GraveAppearancePayload.encode(record.appearance))
+                        statement.executeUpdate()
                     }
                 }
                 val current = readLocked(connection, record.id.toString()) ?: return@transaction false
-                current.bytes.contentEquals(payload.bytes) && current.hash == payload.hash
+                current.bytes.contentEquals(payload.bytes) && current.hash == payload.hash && current.record.appearance == record.appearance
             }
         }
     }
@@ -192,6 +200,7 @@ internal class MySqlNativeGraveRepository private constructor(
         migration.thenCompose {
             runtime.executor.transaction { connection ->
                 require(expected.id == next.id) { "Grave replacement id differs" }
+                require(expected.appearance == next.appearance) { "Grave cosmetic snapshot is immutable" }
                 require(expected.revision < Long.MAX_VALUE && next.revision == expected.revision + 1) {
                     "Grave replacement revision must advance exactly once"
                 }
@@ -222,7 +231,7 @@ internal class MySqlNativeGraveRepository private constructor(
     }
 
     private fun queryRecords(connection: Connection, where: String, bind: (PreparedStatement) -> Unit): List<NativeGraveRecord> =
-        connection.prepareStatement("SELECT $COLUMNS FROM $TABLE WHERE $where ORDER BY id").use { statement ->
+        connection.prepareStatement("SELECT $COLUMNS, appearance_payload FROM $READ_FROM WHERE $where ORDER BY id").use { statement ->
             bind(statement)
             statement.executeQuery().use { rows -> buildList { while (rows.next()) add(decodeRow(rows).record) } }
         }
@@ -260,7 +269,7 @@ internal class MySqlNativeGraveRepository private constructor(
     }
 
     private fun readLocked(connection: Connection, id: String): Stored? =
-        connection.prepareStatement("SELECT $COLUMNS FROM $TABLE WHERE id = ? FOR UPDATE").use { statement ->
+        connection.prepareStatement("SELECT $COLUMNS, appearance_payload FROM $READ_FROM WHERE id = ? FOR UPDATE").use { statement ->
             statement.setString(1, id)
             statement.executeQuery().use { rows -> if (rows.next()) decodeRow(rows) else null }
         }
@@ -304,7 +313,7 @@ internal class MySqlNativeGraveRepository private constructor(
                 record.revision == rows.getLong("revision") && record.expiresAt == rows.getLong("expires_at") &&
                 record.pendingOwnerId() == rows.getString("pending_owner")
             ) { "Grave indexed fields differ from payload" }
-            return Stored(record, bytes, hash)
+            return Stored(record.copy(appearance = GraveAppearancePayload.decodeOrNull(rows.getString("appearance_payload"))), bytes, hash)
         } catch (failure: Exception) {
             throw IllegalStateException("Native grave row is corrupt id=$id", failure)
         }
@@ -326,6 +335,8 @@ internal class MySqlNativeGraveRepository private constructor(
 
     companion object {
         private const val TABLE = "arc_native_graves"
+        private const val APPEARANCES = "arc_native_grave_appearance"
+        private const val READ_FROM = "$TABLE LEFT JOIN $APPEARANCES USING (id)"
         private const val SEQUENCES = "arc_native_grave_sequences"
         private const val WATERMARKS = "arc_native_grave_watermarks"
         private const val OWNER_QUERY_BATCH = 256
@@ -385,6 +396,12 @@ internal class MySqlNativeGraveRepository private constructor(
                             SqlMigration(1, "create shared native graves", listOf(SCHEMA)),
                             SqlMigration(2, "create native grave receipt sequences", listOf(SEQUENCE_SCHEMA)),
                             SqlMigration(3, "create native grave owner checkpoints", listOf(WATERMARK_SCHEMA)),
+                            SqlMigration(4, "create independent grave cosmetics", listOf("""
+                                CREATE TABLE IF NOT EXISTS $APPEARANCES (
+                                    id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL PRIMARY KEY,
+                                    appearance_payload VARCHAR(2048) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL
+                                ) ENGINE=InnoDB
+                            """.trimIndent())),
                         ),
                     )
                     Unit

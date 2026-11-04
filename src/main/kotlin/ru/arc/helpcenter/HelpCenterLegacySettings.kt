@@ -26,6 +26,7 @@ import ru.arc.config.ConfigManager
 import ru.arc.hooks.HookRegistry
 import ru.arc.gui.MenuShortcutAction
 import ru.arc.gui.MenuEscapeBehavior
+import ru.arc.graves.GravePreferences
 import ru.arc.chestpreview.ChestPreviewPreferences
 import ru.arc.chestpreview.ChestPreviewSettings
 import ru.arc.iteminfo.ItemInfoMode
@@ -122,6 +123,12 @@ class HelpCenterLegacySettings(
 
     internal fun containerPreviewPreferences(player: Player): ChestPreviewPreferences =
         ChestPreviewPreferences.fromStored { key -> backend.meta(player, key) }
+
+    internal fun gravePreferences(player: Player): GravePreferences =
+        GravePreferences.fromStored(backend.meta(player, GravePreferences.META_KEY))
+
+    internal fun saveGravePreferences(player: Player, preferences: GravePreferences): CompletableFuture<Boolean> =
+        backend.setMeta(player, GravePreferences.META_KEY, preferences.stored())
 
     internal fun containerPreviewSettings(player: Player): ChestPreviewSettings =
         containerPreviewPreferences(player).applyTo(ItemInfoModule.chestPreviewSettings)

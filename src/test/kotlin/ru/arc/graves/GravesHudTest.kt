@@ -110,6 +110,29 @@ class GravesHudTest : FunSpec({
         }
     }
 
+    test("a saved appearance drives the scene and changed or cleared last words rebuild its existing displays") {
+        MockBukkitTestRuntime.open().use { paper ->
+            val fixture = GravesHudFixture(paper.createSimplePlugin("GravesHudChoice"))
+            val grave = fixture.grave(1, 0).copy(appearance = GraveAppearanceChoice("timber", false, "Мои слова"))
+            fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(GraveMarker(grave, 1))
+            fixture.spawned.size shouldBe GraveModels.timber.parts.size + 1
+            PlainTextComponentSerializer.plainText().serialize(checkNotNull(fixture.spawned.last().text)) shouldBe
+                "«Мои слова»\n— Игрок"
+            val firstCount = fixture.spawned.size
+            val changed = grave.copy(appearance = grave.appearance!!.copy(epitaph = "Другие слова"))
+            fixture.hud.refreshGlow(fixture.player, listOf(changed)) shouldBe listOf(GraveMarker(changed, 1))
+            fixture.removed.size shouldBe firstCount
+            PlainTextComponentSerializer.plainText().serialize(checkNotNull(fixture.spawned.last().text)) shouldBe
+                "«Другие слова»\n— Игрок"
+            val cleared = changed.copy(appearance = changed.appearance!!.copy(epitaph = ""))
+            fixture.hud.refreshGlow(fixture.player, listOf(cleared)) shouldBe listOf(GraveMarker(cleared, 1))
+            fixture.removed.size shouldBe firstCount * 2
+            fixture.spawned.drop(firstCount * 2).any { it.display is PacketTextDisplay } shouldBe false
+            fixture.hud.closeAsync()
+            fixture.cleanup.complete(null)
+        }
+    }
+
     test("available Yamipa only decorates the stelae selected by the independent engraving chance") {
         MockBukkitTestRuntime.open().use { paper ->
             val plugin = paper.createSimplePlugin("GravesHudMixed")

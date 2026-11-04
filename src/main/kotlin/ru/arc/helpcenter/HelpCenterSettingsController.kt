@@ -56,6 +56,7 @@ internal class HelpCenterSettingsController(
     private val itemInfoScaleInput = PaperDialogInputId.of("item_info_scale")
     private val itemInfoVerticalInput = PaperDialogInputId.of("item_info_vertical")
     private val itemInfoHorizontalInput = PaperDialogInputId.of("item_info_horizontal")
+    private val graves = HelpCenterGraveSettings(settings, legacy, navigation, showDialog, ::open)
 
     fun open(player: Player) {
         navigation.visit(player) { open(player) }
@@ -64,6 +65,8 @@ internal class HelpCenterSettingsController(
             button("settings_${section.key}", text("settings-${section.key}-label"), text("settings-${section.key}-tooltip")) {
                 openSection(player, section)
             }
+        } + button("settings_grave", text("settings-grave-label"), text("settings-grave-tooltip")) {
+            graves.open(player)
         } + if (player.hasPermission("tab.group.admin")) listOf(
             button("legacy_admin", text("legacy-settings-admin", "state" to state(entries.getValue("admin"))), text("legacy-settings-admin-tooltip")) {
                 legacy.execute(player, "admin")
@@ -795,5 +798,5 @@ internal class HelpCenterSettingsController(
         settings.text(key), *values.map { (key, value) -> Placeholder.component(key, value) }.toTypedArray(),
     ).decoration(TextDecoration.ITALIC, false)
 
-    override fun close() { active = false; tasks.close() }
+    override fun close() { active = false; tasks.close(); graves.close() }
 }

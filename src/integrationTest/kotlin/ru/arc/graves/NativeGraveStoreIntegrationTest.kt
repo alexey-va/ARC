@@ -31,6 +31,56 @@ class NativeGraveStoreIntegrationTest : FreeSpec({
             val first = openingFirst.join()
             val second = openingSecond.join()
             try {
+                first.loadAll().join() shouldBe emptyList()
+                val cosmetic = GraveAppearanceChoice("slate", true, "Ведро было. Реакции не было.")
+                val rejectedCosmetic = integrationGrave().copy(phase = NativeGravePhase.PREPARED,
+                    operation = integrationOperation(), appearance = cosmetic)
+                mysql.endpoint.connect().use { database ->
+                    database.createStatement().use {
+                        it.execute("ALTER TABLE arc_native_grave_appearance ADD CONSTRAINT reject_grave_cosmetics CHECK (id <> '${rejectedCosmetic.id}')")
+                    }
+                }
+                try {
+                    shouldThrow<CompletionException> { first.insert(rejectedCosmetic).join() }
+                    first.loadAll().join().any { it.id == rejectedCosmetic.id } shouldBe false
+                } finally {
+                    mysql.endpoint.connect().use { database ->
+                        database.createStatement().use { it.execute("ALTER TABLE arc_native_grave_appearance DROP CHECK reject_grave_cosmetics") }
+                    }
+                }
+                // The failed cosmetic insert rolled back both the main row and its pending-owner reservation.
+                first.insert(rejectedCosmetic).join() shouldBe true
+                second.loadAll().join().single { it.id == rejectedCosmetic.id } shouldBe rejectedCosmetic
+
+                listOf(false, true).forEach { corrupt ->
+                    val source = integrationGrave().copy(appearance = cosmetic)
+                    first.insert(source).join() shouldBe true
+                    mysql.endpoint.connect().use { database ->
+                        val sql = if (corrupt) "UPDATE arc_native_grave_appearance SET appearance_payload = 'invalid' WHERE id = ?"
+                            else "DELETE FROM arc_native_grave_appearance WHERE id = ?"
+                        database.prepareStatement(sql).use { statement ->
+                            statement.setString(1, source.id.toString())
+                            statement.executeUpdate() shouldBe 1
+                        }
+                    }
+                    val active = second.loadAll().join().single { it.id == source.id }
+                    active shouldBe source.copy(appearance = null)
+                    val operationId = UUID.randomUUID()
+                    val sequence = second.reserveSequence(operationId, active.ownerId).join()
+                    val after = integrationInventory()
+                    val claiming = active.copy(revision = 1, phase = NativeGravePhase.CLAIMING,
+                        items = emptyList(), experience = 0,
+                        operation = NativeGraveOperation(operationId, active.server, NativeGraveOperationKind.CLAIM,
+                            NativeGraveInventory(List(41) { null }, 0, 0f, 0), after, sequence))
+                    first.replace(active, claiming).join() shouldBe true
+                    val claimed = claiming.copy(revision = 2, phase = NativeGravePhase.CLAIMED,
+                        operation = null, completedSequence = sequence, checkpoint = after)
+                    second.replace(claiming, claimed).join() shouldBe true
+                    first.loadAll().join().single { it.id == source.id } shouldBe claimed
+                    first.loadWatermarks(setOf(source.ownerId)).join() shouldBe
+                        mapOf(source.ownerId to NativeGraveWatermark(source.ownerId, sequence, after))
+                }
+
                 val sequenceOwner = UUID.randomUUID()
                 val sequenceOperation = UUID.randomUUID()
                 val firstReservation = first.reserveSequence(sequenceOperation, sequenceOwner)
@@ -45,7 +95,8 @@ class NativeGraveStoreIntegrationTest : FreeSpec({
                 (nextSequence > firstSequence) shouldBe true
                 first.reserveSequence(sequenceOperation, sequenceOwner).join() shouldBe firstSequence
 
-                val original = integrationGrave().copy(ownerId = sequenceOwner)
+                val appearance = GraveAppearanceChoice("slate", true, "Ведро было. Реакции не было.")
+                val original = integrationGrave().copy(ownerId = sequenceOwner, appearance = appearance)
                 first.insert(original).join() shouldBe true
                 second.insert(original).join() shouldBe true
                 second.insert(original.copy(experience = 10)).join() shouldBe false
@@ -93,6 +144,7 @@ class NativeGraveStoreIntegrationTest : FreeSpec({
                     checkpoint = NativeGraveInventory(List(41) { null }, 0, 0f, 0),
                 )
                 first.replace(older, olderCompleted).join() shouldBe true
+                second.loadAll().join().single { it.id == original.id }.appearance shouldBe appearance
                 val failedSequence = second.reserveSequence(UUID.randomUUID(), sequenceOwner).join()
                 second.replace(
                     olderCompleted.copy(experience = 99),
@@ -154,6 +206,24 @@ class NativeGraveStoreIntegrationTest : FreeSpec({
                     reopening.reserveSequence(sequenceOperation, sequenceOwner).join() shouldBe firstSequence
                     (reopening.reserveSequence(UUID.randomUUID(), sequenceOwner).join() > nextSequence) shouldBe true
                 } finally { reopening.closeAsync().join() }
+
+                // Cosmetic data is optional: even a malformed snapshot must leave v1 recovery readable.
+                mysql.endpoint.connect().use { database ->
+                    database.prepareStatement("SELECT payload_version, payload FROM arc_native_graves WHERE id = ?").use { statement ->
+                        statement.setString(1, original.id.toString())
+                        statement.executeQuery().use { row ->
+                            row.next() shouldBe true
+                            row.getInt("payload_version") shouldBe 1
+                            NativeGravePayload.decode(row.getBytes("payload")) shouldBe tombstone.copy(appearance = null)
+                        }
+                    }
+                    database.prepareStatement("UPDATE arc_native_grave_appearance SET appearance_payload = ? WHERE id = ?").use { statement ->
+                        statement.setString(1, "invalid")
+                        statement.setString(2, original.id.toString())
+                        statement.executeUpdate() shouldBe 1
+                    }
+                }
+                first.loadAll().join().single { it.id == original.id } shouldBe tombstone.copy(appearance = null)
 
                 mysql.endpoint.connect().use { database ->
                     val corrupt = "{\"id\":\"${original.id}\"}".toByteArray()

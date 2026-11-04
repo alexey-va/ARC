@@ -21,6 +21,7 @@ import ru.arc.config.ConfigManager
 import ru.arc.core.PluginModule
 import ru.arc.core.whenCompleteSync
 import ru.arc.gui.ArcMenus
+import ru.arc.hooks.HookRegistry
 import ru.arc.network.BackendServerId
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
@@ -70,10 +71,14 @@ internal class GravesRuntime(private val settings: GravesSettings, sql: SqlConne
     private val archive = LegacyGravesArchive(plugin.dataPath, server, native, graveStore.thenApply { it }, plugin.backgroundOwner())
     private val restoration = archive.activateSealed()
     private val playerPersistence = if (plugin.server.pluginManager.isPluginEnabled("HuskSync")) HuskSyncGravePersistence(plugin.backgroundOwner()) else LocalGravePersistence
+    private val epitaphs = GraveEpitaphs.load(plugin::getResource)
     private val owned = NativeGraves(server, settings, ::feedback, ::refreshPlayers, plugin,
         graveStore.thenApply { it },
         playerPersistence,
-        Tasks.scheduler, restoration)
+        Tasks.scheduler, restoration, { event, id ->
+            GravePreferences.fromStored(HookRegistry.luckPermsHook?.getCachedMeta(event.entity.uniqueId, GravePreferences.META_KEY))
+                .appearance { epitaphs.choose(id, GraveDeathKind.of(event)) }
+        })
     private val legacyHolograms = LegacyGravesHolograms(plugin)
     private val redis = ARC.redisManager
     private val network = redis?.let { GravesNetwork(it, server, ::acceptTransfer) }

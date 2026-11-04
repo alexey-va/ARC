@@ -50,6 +50,8 @@ class NativeGravesRuntimeTest : FunSpec({
 
     test("death keeps actual items until the grave intent is durable and waits for the player save") {
         withGraveRuntime { f ->
+            val appearance = GraveAppearanceChoice("slate", true, "Ведро было. Реакции не было.")
+            f.deathAppearance = appearance
             val dropped = namedStack(Material.DIAMOND, 5, "Death drop")
             val retained = namedStack(Material.IRON_SWORD, 1, "Retained item")
             f.player.inventory.setItem(0, dropped)
@@ -69,6 +71,7 @@ class NativeGravesRuntimeTest : FunSpec({
                 unmockkObject(GraveDestinations)
             }
             f.scheduler.advanceMs(50)
+            f.deathAppearance = GraveAppearanceChoice("timber", false, "Следующая могила.")
             f.flush()
 
             event.keepInventory shouldBe true
@@ -92,6 +95,8 @@ class NativeGravesRuntimeTest : FunSpec({
             f.flush()
 
             val grave = f.store.rows().single()
+            grave.appearance shouldBe appearance
+            f.engine.views().single().appearance shouldBe appearance
             grave.phase shouldBe NativeGravePhase.ACTIVE
             grave.items.map(NativeGraveItems::decode) shouldBe listOf(dropped)
             grave.checkpoint shouldBe NativeGraveItems.capture(f.player)
@@ -484,9 +489,10 @@ private class GraveRuntimeFixture(val paper: MockBukkitTestRuntime, sharedInvent
     val store = ControlledGraveRepository()
     val persistence = ControlledGravePersistence(sharedInventory)
     val feedback = mutableListOf<String>()
+    var deathAppearance: GraveAppearanceChoice? = null
     val engine = NativeGraves("survival", GravesConfig(ConfigManager.empty()).snapshot().copy(creationMessageEnabled = creationMessage),
         { _, key -> feedback += key }, {}, paper.createSimplePlugin("NativeGravesTest"),
-        CompletableFuture.completedFuture(store), persistence, scheduler)
+        CompletableFuture.completedFuture(store), persistence, scheduler, appearanceForDeath = { _, _ -> deathAppearance })
 
     init {
         player.gameMode = GameMode.SURVIVAL
