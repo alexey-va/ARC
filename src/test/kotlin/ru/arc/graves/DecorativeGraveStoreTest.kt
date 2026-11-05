@@ -4,12 +4,11 @@ import io.kotest.assertions.throwables.shouldThrowAny
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import java.nio.file.Files
-import java.nio.file.Path
 import java.util.UUID
 
 class DecorativeGraveStoreTest : FunSpec({
     test("decorative creation replacement and removal survive independent store instances") {
-        val root = Files.createTempDirectory(Path.of("/private/tmp"), "decorative-graves-")
+        val root = Files.createTempDirectory("decorative-graves-")
         try {
             val original = decorativeRecord()
             DecorativeGraveStore(root).load() shouldBe emptyList()
@@ -24,7 +23,7 @@ class DecorativeGraveStoreTest : FunSpec({
     }
 
     test("bounded catalog rejects malformed records without replacing committed scenery") {
-        val root = Files.createTempDirectory(Path.of("/private/tmp"), "decorative-graves-validation-")
+        val root = Files.createTempDirectory("decorative-graves-validation-")
         try {
             val store = DecorativeGraveStore(root)
             val original = decorativeRecord()
