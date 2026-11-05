@@ -52,17 +52,17 @@ class GraveCustomizationTest : FunSpec({
         val catalog = GraveEpitaphs.load { javaClass.classLoader.getResourceAsStream(it) }
         val all = GraveDeathKind.entries.flatMap { cause ->
             (0L until 2048L).map { catalog.choose(UUID(11L, it), cause) }.toSet().also {
-                it.size shouldBeGreaterThanOrEqual 16
+                it.size shouldBeGreaterThanOrEqual 9
                 it.forEach { phrase ->
                     GravePreferences.validText(phrase) shouldBe true
-                    (phrase.length <= 48) shouldBe true
+                    (phrase.length <= 80) shouldBe true
                     GraveModels.originals.forEach { model ->
                         model.inscription.placements(phrase, ".LongestNick123456").isNotEmpty() shouldBe true
                     }
                 }
             }
         }
-        all.size shouldBeGreaterThanOrEqual 320
+        all.size shouldBeGreaterThanOrEqual 200
         all.distinct().size shouldBe all.size
         val id = UUID(9, 123)
         GraveDeathKind.entries.forEach { catalog.choose(id, it) shouldBe catalog.choose(id, it) }

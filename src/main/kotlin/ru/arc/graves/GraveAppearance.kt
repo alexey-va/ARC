@@ -52,14 +52,14 @@ internal data class GraveInscription(
                 width, height, backingDepth, rotationX = rotationX)
         }
 
-    fun placements(epitaph: String, ownerName: String? = null): List<GraveInscriptionPlacement> {
+    fun placements(epitaph: String, ownerName: String? = null, includeSignature: Boolean = true): List<GraveInscriptionPlacement> {
         // Bedrock names may add a dot before their 16-character account name.
         val name = ownerName?.takeIf(String::isNotBlank)?.take(17) ?: "Игрок"
         val author = "— $name"
-        val text = "«$epitaph»\n$author"
+        val text = "«$epitaph»" + if (includeSignature) "\n$author" else ""
         // Never guess the height of an unknown legacy glyph: it could write over the surrounding model.
         if (DialogTextLayout.naturalWidth(Component.text(text)) == null) return emptyList()
-        val width = maxOf(lineWidth, checkNotNull(DialogTextLayout.naturalWidth(Component.text(author))))
+        val width = if (includeSignature) maxOf(lineWidth, checkNotNull(DialogTextLayout.naturalWidth(Component.text(author)))) else lineWidth
         fun lineCount(value: String, wrapWidth: Int): Int? =
             (DialogTextLayout.layout(Component.text(value), TextAlignment.LEFT, wrapWidth + 8) as? TextLayoutResult.Aligned)?.lineCount
         val lines = lineCount(text, width) ?: return emptyList()

@@ -75,7 +75,8 @@ internal class GravesHud(
         val world = player.world
         val eye = player.location
         fun distance(grave: GraveView): Double = eye.distanceSquared(Location(world, grave.x + .5, grave.y + .5, grave.z + .5))
-        val ownerFirst = compareBy<GraveView> { it.ownerId != player.uniqueId }
+        // Every recovery scene wins both the per-cell tie and the bounded visible-scene budget.
+        val ownerFirst = compareBy<GraveView> { it.decorative }.thenBy { it.ownerId != player.uniqueId }
         val now = System.currentTimeMillis()
         val imagesAvailable = engravings?.health()?.available == true
         val desired = graves.asSequence().filter { grave ->
@@ -89,9 +90,7 @@ internal class GravesHud(
             .sortedWith(ownerFirst.thenBy(::distance).thenByDescending { it.createdAt }.thenBy { it.id })
             .filter { world.getBlockAt(it.x, it.y, it.z).isPassable }
             .take(MAX_VISIBLE).map { grave ->
-                val roomForImage = imagesAvailable && grave.y < world.maxHeight - 1 &&
-                    world.getBlockAt(grave.x, grave.y + 1, grave.z).isPassable
-                grave to GraveAppearances.select(grave.id, settings.appearance, roomForImage, grave.appearance)
+                grave to appearance(grave, player.world, imagesAvailable)
             }.toList()
         val current = markers.getOrPut(player.uniqueId) { ViewerMarkers(player, world.uid) }.entries
         val ids = desired.mapTo(hashSetOf()) { it.first.id }
@@ -139,7 +138,7 @@ internal class GravesHud(
                 if (appearance.epitaph.isNotBlank()) {
                     val inscription = appearance.model.inscription
                     val inscriptionTilt = Math.toRadians(inscription.rotationX.toDouble()).toFloat()
-                    inscription.placements(appearance.epitaph, grave.ownerName).forEach { placement ->
+                    inscription.placements(appearance.epitaph, grave.ownerName, !grave.decorative || !grave.ownerName.isNullOrBlank()).forEach { placement ->
                         val textAt = yaw.transform(
                             Quaternionf().rotationX(inscriptionTilt)
                                 .transform(Vector3f(0f, (placement.bottomY - inscription.centerY).toFloat(), 0f))
@@ -175,7 +174,15 @@ internal class GravesHud(
             }
         }
         if (current.isEmpty()) clearMarkers(player)
-        return rendered
+        return rendered.filterNot { it.grave.decorative }
+    }
+
+    /** The same fallback geometry drives administrator selection and the public renderer. */
+    fun appearance(grave: GraveView, world: org.bukkit.World, imagesAvailable: Boolean = engravings?.health()?.available == true): GraveAppearance {
+        val roomForImage = imagesAvailable && world.isChunkLoaded(grave.x shr 4, grave.z shr 4) && grave.y < world.maxHeight - 1 &&
+            world.getBlockAt(grave.x, grave.y + 1, grave.z).isPassable
+        val selected = GraveAppearances.select(grave.id, settings.appearance, roomForImage, grave.appearance)
+        return grave.cosmeticYaw?.let { selected.copy(yaw = it) } ?: selected
     }
 
     private fun createEngraving(player: Player, grave: GraveView, yaw: Float): YamipaGraveEngravings.Handle? {

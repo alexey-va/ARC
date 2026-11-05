@@ -30,6 +30,36 @@ import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
 class GravesHudTest : FunSpec({
+    test("decorative scenes use the same backing and saved direction without recovery markers or forced signatures") {
+        MockBukkitTestRuntime.open().use { paper ->
+            val fixture = GravesHudFixture(paper.createSimplePlugin("GravesHudDecorative"))
+            val decor = fixture.grave(1, 0, fixture.owner).copy(decorative = true, cosmeticYaw = 90f, ownerName = "",
+                appearance = GraveAppearanceChoice("slate", false, "Мои слова"))
+            fixture.hud.refreshGlow(fixture.player, listOf(decor)) shouldBe emptyList()
+            fixture.spawned.size shouldBe GraveModels.slate.parts.size + 1
+            PlainTextComponentSerializer.plainText().serialize(checkNotNull(fixture.spawned.last().text)) shouldBe "«Мои слова»"
+            fixture.spawned.last().location.yaw shouldBe 90f
+            // Even a much newer decoration owned by this viewer cannot hide another player's recoverable grave.
+            val recovery = fixture.grave(2, 0, createdAt = 0)
+            fixture.hud.refreshGlow(fixture.player, listOf(decor.copy(createdAt = 999), recovery)) shouldBe listOf(GraveMarker(recovery, 1))
+            val pending = fixture.hud.closeAsync()
+            fixture.cleanup.complete(null)
+            pending.join()
+        }
+    }
+
+    test("the bounded scene budget admits all recoverable graves before even nearby owned decorations") {
+        MockBukkitTestRuntime.open().use { paper ->
+            val fixture = GravesHudFixture(paper.createSimplePlugin("GravesHudRecoveryPriority"))
+            val decoration = fixture.grave(1, 0, fixture.owner).copy(decorative = true)
+            val recoveries = (2L..9L).map { fixture.grave(it, it.toInt()) }
+            fixture.hud.refreshGlow(fixture.player, listOf(decoration) + recoveries).map { it.grave } shouldBe recoveries
+            fixture.spawned.count { it.display is PacketTextDisplay } shouldBe 8
+            fixture.hud.closeAsync()
+            fixture.cleanup.complete(null)
+        }
+    }
+
     test("public tombs stay stable without bossbars and release masks on snapshot world change and close") {
         MockBukkitTestRuntime.open().use { paper ->
             val fixture = GravesHudFixture(paper.createSimplePlugin("GravesHud"))

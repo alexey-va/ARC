@@ -59,6 +59,7 @@ object GravesModule : PluginModule {
     fun storageDrained(): CompletableFuture<Void> = storageDrain.copy()
     fun activeCount(player: Player): Int = runtime?.views(player)?.size ?: 0
     fun open(player: Player): Boolean = runtime?.let { it.openPersonal(player); true } ?: false
+    fun decorativeCommand(player: Player, args: List<String>): Boolean = runtime?.let { it.decorative.command(player, args); true } ?: false
 }
 
 /** All Bukkit and domain state is confined to the owning Paper thread. */
@@ -87,6 +88,10 @@ internal class GravesRuntime(private val settings: GravesSettings, sql: SqlConne
     private val barriers = GraveBarriers(plugin, server, settings.nearbyGlowRadius, ::currentMarker,
         owned::playerReady, ::openMarker, ::feedback)
     private val hud = GravesHud(plugin, server, settings, onClear = barriers::clear)
+    internal val decorative = DecorativeGraves(plugin, settings, server,
+        plugin.submitBackground { DecorativeGraveStore(plugin.dataPath) }, plugin.backgroundOwner(), epitaphs,
+        { owned.views() + localViews }, ::refreshPlayers,
+        { record -> hud.appearance(record.view(server), requireNotNull(Bukkit.getWorld(record.worldId))) })
     internal val payments = GravePayments(plugin.dataPath, ::feedback)
     private var localViews = emptyList<GraveView>()
     private var networkRefreshPending = false
@@ -117,6 +122,7 @@ internal class GravesRuntime(private val settings: GravesSettings, sql: SqlConne
         Bukkit.getPluginManager().registerEvents(this, plugin)
         Bukkit.getPluginManager().registerEvents(adminRequests, plugin)
         owned.start()
+        decorative.start()
         legacyHolograms.start()
         if (native != null) nativeListener = GravesNativeListener(this).also {
             Bukkit.getPluginManager().registerEvents(it, plugin)
@@ -220,7 +226,7 @@ internal class GravesRuntime(private val settings: GravesSettings, sql: SqlConne
     }
 
     private fun refreshPlayers() {
-        val publicGraves = (owned.views() + localViews).filter { it.server == server && it.active(System.currentTimeMillis()) }.distinctBy { it.id }
+        val publicGraves = (owned.views() + localViews + decorative.views()).filter { it.server == server && it.active(System.currentTimeMillis()) }.distinctBy { it.id }
         Bukkit.getOnlinePlayers().forEach { player ->
             if (owned.playerReady(player.uniqueId)) finishTransfer(player.uniqueId)
             barriers.update(player, hud.refreshGlow(player, publicGraves))
@@ -455,8 +461,16 @@ internal class GravesRuntime(private val settings: GravesSettings, sql: SqlConne
         // never Paper callbacks. Finish before ARC seals its background admission.
         try { restoration.join(); archive.checkpointOnShutdown().join() }
         catch (failure: Throwable) { warn("Legacy grave handoff failed on {}; keep the original GravesX database and plugin", server, failure) }
-        storageDrain = owned.closeAsync()
-        return CompletableFuture.allOf(storageDrain, hud.closeAsync()).also { drain = it }
+        val nativeStorage = owned.closeAsync()
+        val decorativeStorage = decorative.closeAsync()
+        storageDrain = CompletableFuture.allOf(nativeStorage, decorativeStorage)
+        // A terminal local-scenery I/O failure has no live resources left. Keep it observable in
+        // storageDrained, but let the next runtime recover player items and reload scenery separately.
+        val decorativeRetired = decorativeStorage.handle { _, failure ->
+            if (failure != null) warn("Decorative grave catalog I/O failed before retirement on {}; scenery will reload independently of item recovery", server, failure)
+            null
+        }
+        return CompletableFuture.allOf(nativeStorage, decorativeRetired, hud.closeAsync()).also { drain = it }
     }
     fun storageDrained(): CompletableFuture<Void> = storageDrain.copy()
     override fun close() { closeAsync() }

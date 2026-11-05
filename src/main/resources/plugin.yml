@@ -105,7 +105,7 @@ commands:
     usage: /arc-reward-issue <player> <case> <entry>
 permissions:
   arc.graves.admin:
-    description: Inspect active graves and their contents across the network without withdrawing items
+    description: Inspect active graves without withdrawing items and manage your decorative graves
     default: op
   arc.onboarding.hud.hologram:
     description: Test quest hints at the fixed staff hologram position

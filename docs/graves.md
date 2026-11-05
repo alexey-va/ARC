@@ -116,8 +116,8 @@ snapshot; reconnects, configuration changes and later preferences do not change
 its text. A selected engraved model uses its matching compact design when
 images or the second interaction cell are unavailable.
 
-The bundled `graves/epitaphs.yml` contains 320 unique short Russian phrases,
-16 per death category. The last damage cause distinguishes falling, lava,
+The bundled `graves/epitaphs.yml` contains 206 unique short Russian phrases,
+9–12 per death category. The last damage cause distinguishes falling, lava,
 fire, drowning, explosions, projectiles, mobs, PvP, void, suffocation, hunger,
 freezing, magic, lightning, retaliation, falling blocks, elytra collision,
 wither, dragon and generic deaths. Selection is stable per grave and category;
@@ -157,6 +157,42 @@ When GravesX is absent, a loaded-entity sweep and future chunk-load events remov
 only ArmorStand/TextDisplay holograms with `graveHologram` plus a valid matching
 `gravesx:grave_uuid` or `graveHologramGraveUUID:<uuid>`. Unmarked decorations and
 conflicting IDs stay. Old blocks and the GravesX database are not broadly deleted.
+
+## Administrator-created decorative graves
+
+With `arc.graves.admin` (OP by default), look at a loaded solid support block
+within six metres and run `/arc grave create`. The native dialog keeps that
+fixed target, offers all ten existing designs plus random selection, a random
+cause-based inscription or plain custom text up to 80 supported characters,
+and an optional signature up to 17 characters. The signature starts empty.
+`/arc grave create random` immediately saves a random model and inscription.
+New scenery faces the administrator in the nearest cardinal direction. Tall
+image variants retain the existing compact fallback when images or headroom
+are unavailable.
+
+Aim at a decorative model and use `/arc grave edit` to change your own creation,
+or `/arc grave remove` to open an explicit deletion confirmation. Selection uses
+the rendered model bounds; the support block need not be broken. Entry and
+commit check the fixed admin permission, player identity, world, loaded chunk,
+distance and current record revision. Creating or editing also rechecks solid
+support and passable placement. Old visits, quit, death, world changes and
+runtime shutdown invalidate callbacks.
+
+The bounded local `plugins/ARC/data/decorative-graves.json` catalog is separate
+from native death records: at most 4,096 entries, no items, XP, payment, recovery
+receipts, personal-list entries, network advertisements or teleport targets.
+Construction, loading and atomic read-back-verified writes use ARC's background
+executor; the main thread retains an immutable snapshot. One admitted catalog
+write runs at a time, and shutdown observes its storage drain. A failed catalog
+load/write disables scenery management independently of item recovery. Raw
+storage failures remain observable; completed decorative I/O does not prevent
+the next recovery runtime from starting.
+
+Public scenery uses the same HUD/display/engraving owner as real graves.
+Recoverable graves have priority at a shared cell and throughout the eight-scene
+budget. Decorative scenes never produce client recovery barriers or loot actions.
+The existing plaque backing and ordinary death-grave signatures remain intact;
+unsigned decorative inscriptions do not acquire an administrator's name.
 
 ## Two-stage legacy handoff
 

@@ -17,6 +17,9 @@ internal data class GraveView(
     val items: List<GraveItem>,
     val ownerName: String? = null,
     val appearance: GraveAppearanceChoice? = null,
+    /** Local scenery projection only; never eligible for recovery or network discovery. */
+    val decorative: Boolean = false,
+    val cosmeticYaw: Float? = null,
 ) {
     fun active(now: Long): Boolean = expiresAt < 0 || expiresAt > now
 }

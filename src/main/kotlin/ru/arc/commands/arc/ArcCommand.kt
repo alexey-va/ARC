@@ -28,6 +28,7 @@ import ru.arc.commands.arc.subcommands.FirstRtpSubCommand
 import ru.arc.commands.arc.subcommands.FurnitureSubCommand
 import ru.arc.commands.arc.subcommands.GiveBoostSubCommand
 import ru.arc.commands.arc.subcommands.GiveSubCommand
+import ru.arc.commands.arc.subcommands.GraveSubCommand
 import ru.arc.commands.arc.subcommands.HelpSubCommand
 import ru.arc.commands.arc.subcommands.HuntSubCommand
 import ru.arc.commands.arc.subcommands.InvestigationSubCommand
@@ -99,6 +100,7 @@ class ArcCommand(private val profile: ArcRuntimeProfile = ArcRuntimeProfile.FULL
                 OnboardingSubCommand,
                 OriginPortalsSubCommand,
                 AuctionPedestalSubCommand,
+                GraveSubCommand,
                 RtpSubCommand,
                 LocationPoolSubCommand,
                 FurnitureSubCommand,
