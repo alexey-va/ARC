@@ -18,6 +18,7 @@ internal class GraveFrameInteractions(
     private val plugin: Plugin,
     private val graveForFrame: (Player, Int) -> UUID?,
     private val interact: (Player, UUID) -> Unit,
+    private val attack: (Player, UUID) -> Unit,
 ) : AutoCloseable {
     @Volatile private var closed = false
     private val listener = object : PacketListenerAbstract(PacketListenerPriority.HIGHEST) {
@@ -26,26 +27,30 @@ internal class GraveFrameInteractions(
             val player = event.getPlayer<Any>() as? Player ?: return
             val id: Int
             val rightClick: Boolean
+            val leftClick: Boolean
             when (event.packetType) {
                 PacketType.Play.Client.INTERACT_ENTITY -> {
                     val packet = WrapperPlayClientInteractEntity(event)
                     id = packet.entityId
-                    rightClick = packet.action != WrapperPlayClientInteractEntity.InteractAction.ATTACK &&
-                        packet.hand == InteractionHand.MAIN_HAND
+                    leftClick = packet.action == WrapperPlayClientInteractEntity.InteractAction.ATTACK
+                    rightClick = !leftClick && packet.hand == InteractionHand.MAIN_HAND
                 }
                 PacketType.Play.Client.ATTACK -> {
                     id = WrapperPlayClientAttack(event).entityId
                     rightClick = false
+                    leftClick = true
                 }
                 else -> return
             }
             val grave = graveForFrame(player, id) ?: return
             val alreadyDenied = event.isCancelled
             event.isCancelled = true
-            if (!rightClick || alreadyDenied) return
+            if (alreadyDenied || (!rightClick && !leftClick)) return
             try {
                 plugin.server.scheduler.runTask(plugin, Runnable {
-                    if (!closed && graveForFrame(player, id) == grave) interact(player, grave)
+                    if (!closed && graveForFrame(player, id) == grave) {
+                        if (leftClick) attack(player, grave) else interact(player, grave)
+                    }
                 })
             } catch (_: IllegalPluginAccessException) {
                 // A disable racing this packet makes its queued click irrelevant.

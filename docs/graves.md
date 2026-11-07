@@ -175,8 +175,16 @@ or `/arc grave remove` to open an explicit deletion confirmation. Selection uses
 the rendered model bounds; the support block need not be broken. Entry and
 commit check the fixed admin permission, player identity, world, loaded chunk,
 distance and current record revision. Creating or editing also rechecks solid
-support and passable placement. Old visits, quit, death, world changes and
-runtime shutdown invalidate callbacks.
+support and room for the whole collision column. Old visits, quit, death, world
+changes and runtime shutdown invalidate callbacks.
+
+Decorative graves have one real barrier block for low designs and two for tall
+designs. The creator can strike either cell with the same admin permission:
+Creative removes the grave in one hit, while Survival uses three hits with
+distinct recoil on the first two. The material's break sound plays after the
+catalog confirms removal. ARC journals which air cells it filled in the owning
+chunk and restores only its barriers. Scenery with an obstructed footprint stays
+hidden until ARC can reserve all its cells.
 
 The bounded local `plugins/ARC/data/decorative-graves.json` catalog is separate
 from native death records: at most 4,096 entries, no items, XP, payment, recovery

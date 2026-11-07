@@ -2,6 +2,8 @@ package ru.arc.graves
 
 import org.bukkit.FluidCollisionMode
 import org.bukkit.Location
+import org.bukkit.Material
+import org.bukkit.block.Block
 import org.bukkit.entity.Player
 import org.bukkit.util.BoundingBox
 import org.bukkit.util.Vector
@@ -19,13 +21,14 @@ internal data class DecorativeGraveTarget(val worldId: UUID, val world: String, 
             player.eyeLocation.distanceSquared(Location(current, x + .5, y.toDouble(), z + .5)) <= MAX_DISTANCE * MAX_DISTANCE
     }
 
-    fun placeable(player: Player): Boolean = reachable(player) &&
-        player.world.getBlockAt(x, y - 1, z).type.isSolid && player.world.getBlockAt(x, y, z).isPassable
+    fun placeable(player: Player, height: Int, owns: (Block) -> Boolean): Boolean = reachable(player) &&
+        y + height <= player.world.maxHeight && player.world.getBlockAt(x, y - 1, z).let { it.type.isSolid && it.type != Material.BARRIER } &&
+        (y until y + height).all { blockY -> player.world.getBlockAt(x, blockY, z).let { it.type.isAir || owns(it) } }
 
     companion object {
         const val MAX_DISTANCE = 6.0
 
-        fun capture(player: Player): DecorativeGraveTarget? {
+        fun capture(player: Player, owns: (Block) -> Boolean): DecorativeGraveTarget? {
             if (!player.isOnline || player.isDead || !loadedRay(player)) return null
             val block = player.rayTraceBlocks(MAX_DISTANCE, FluidCollisionMode.NEVER)?.hitBlock ?: return null
             val toward = player.eyeLocation.toVector().subtract(Vector(block.x + .5, block.y + 1.0, block.z + .5))
@@ -33,7 +36,7 @@ internal data class DecorativeGraveTarget(val worldId: UUID, val world: String, 
             val degrees = Math.toDegrees(kotlin.math.atan2(-toward.x, -toward.z))
             val yaw = (Math.floorMod((degrees / 90).roundToInt(), 4) * 90).toFloat()
             return DecorativeGraveTarget(block.world.uid, block.world.name, block.x, block.y + 1, block.z, yaw)
-                .takeIf { it.placeable(player) }
+                .takeIf { it.placeable(player, 1, owns) }
         }
 
         fun of(record: DecorativeGraveRecord) = DecorativeGraveTarget(record.worldId, record.world, record.x, record.y, record.z, record.yaw)
@@ -48,13 +51,18 @@ internal data class DecorativeGraveTarget(val worldId: UUID, val world: String, 
         }
 
         /** Aim at visible geometry, not the support block. Opaque world blocks stop the selection ray. */
-        fun select(player: Player, records: List<DecorativeGraveRecord>, appearance: (DecorativeGraveRecord) -> GraveAppearance): DecorativeGraveRecord? {
+        fun select(
+            player: Player, records: List<DecorativeGraveRecord>, appearance: (DecorativeGraveRecord) -> GraveAppearance,
+            recordAt: (Block) -> DecorativeGraveRecord?,
+        ): DecorativeGraveRecord? {
             if (!player.isOnline || player.isDead || !loadedRay(player)) return null
             val eye = player.eyeLocation
             val origin = eye.toVector()
             val direction = eye.direction
-            val obstacle = player.rayTraceBlocks(MAX_DISTANCE, FluidCollisionMode.NEVER)?.hitPosition
-                ?.distance(origin) ?: MAX_DISTANCE
+            val hitBlock = player.rayTraceBlocks(MAX_DISTANCE, FluidCollisionMode.NEVER)
+            val hitGrave = hitBlock?.hitBlock?.let(recordAt)
+            if (hitGrave != null) return hitGrave.takeIf { it.createdBy == player.uniqueId && of(it).reachable(player) }
+            val obstacle = hitBlock?.hitPosition?.distance(origin) ?: MAX_DISTANCE
             return records.asSequence().filter { it.createdBy == player.uniqueId && of(it).reachable(player) }
                 .mapNotNull { record ->
                     val hit = bounds(record, appearance(record).model).rayTrace(origin, direction, minOf(MAX_DISTANCE, obstacle + .05))
@@ -62,8 +70,11 @@ internal data class DecorativeGraveTarget(val worldId: UUID, val world: String, 
                 }.minByOrNull { it.second }?.first
         }
 
+        fun collisionHeight(record: DecorativeGraveRecord, model: GraveModel): Int =
+            if (bounds(record, model, padding = 0.0).maxY - record.y > 1.0001) 2 else 1
+
         /** The union of the actual rotated cuboids includes wide feet, tilted tops and the inscription backing. */
-        fun bounds(record: DecorativeGraveRecord, model: GraveModel): BoundingBox {
+        fun bounds(record: DecorativeGraveRecord, model: GraveModel, padding: Double = .04): BoundingBox {
             val yaw = Quaternionf().rotationY(Math.toRadians(record.yaw.toDouble()).toFloat())
             val points = model.parts.flatMap { part ->
                 val center = Vector3f((part.x + part.width / 2).toFloat(), (part.y + part.height / 2).toFloat(), (part.z + part.depth / 2).toFloat())
@@ -74,7 +85,7 @@ internal data class DecorativeGraveTarget(val worldId: UUID, val world: String, 
                 } } }
             }
             return BoundingBox(record.x + .5 + points.minOf { it.x }, record.y + points.minOf { it.y }.toDouble(), record.z + .5 + points.minOf { it.z },
-                record.x + .5 + points.maxOf { it.x }, record.y + points.maxOf { it.y }.toDouble(), record.z + .5 + points.maxOf { it.z }).expand(.04)
+                record.x + .5 + points.maxOf { it.x }, record.y + points.maxOf { it.y }.toDouble(), record.z + .5 + points.maxOf { it.z }).expand(padding)
         }
     }
 }

@@ -36,12 +36,20 @@ class GravesHudTest : FunSpec({
             val decor = fixture.grave(1, 0, fixture.owner).copy(decorative = true, cosmeticYaw = 90f, ownerName = "",
                 appearance = GraveAppearanceChoice("slate", false, "Мои слова"))
             fixture.hud.refreshGlow(fixture.player, listOf(decor)) shouldBe emptyList()
+            fixture.spawned shouldBe emptyList()
+            fixture.solidDecorations += decor.id
+            fixture.hud.refreshGlow(fixture.player, listOf(decor)) shouldBe emptyList()
             fixture.spawned.size shouldBe GraveModels.slate.parts.size + 1
             PlainTextComponentSerializer.plainText().serialize(checkNotNull(fixture.spawned.last().text)) shouldBe "«Мои слова»"
             fixture.spawned.last().location.yaw shouldBe 90f
             // Even a much newer decoration owned by this viewer cannot hide another player's recoverable grave.
             val recovery = fixture.grave(2, 0, createdAt = 0)
             fixture.hud.refreshGlow(fixture.player, listOf(decor.copy(createdAt = 999), recovery)) shouldBe listOf(GraveMarker(recovery, 1))
+            // An obstructed recovery scene cannot suppress an actually installed monument.
+            fixture.passable = false
+            val before = fixture.spawned.size
+            fixture.hud.refreshGlow(fixture.player, listOf(decor, recovery)) shouldBe emptyList()
+            fixture.spawned.size - before shouldBe GraveModels.slate.parts.size + 1
             val pending = fixture.hud.closeAsync()
             fixture.cleanup.complete(null)
             pending.join()
@@ -52,6 +60,7 @@ class GravesHudTest : FunSpec({
         MockBukkitTestRuntime.open().use { paper ->
             val fixture = GravesHudFixture(paper.createSimplePlugin("GravesHudRecoveryPriority"))
             val decoration = fixture.grave(1, 0, fixture.owner).copy(decorative = true)
+            fixture.solidDecorations += decoration.id
             val recoveries = (2L..9L).map { fixture.grave(it, it.toInt()) }
             fixture.hud.refreshGlow(fixture.player, listOf(decoration) + recoveries).map { it.grave } shouldBe recoveries
             fixture.spawned.count { it.display is PacketTextDisplay } shouldBe 8
@@ -372,6 +381,8 @@ private class GravesHudFixture(
     val cleared = mutableListOf<Player>()
     val cleanup = CompletableFuture<Void>()
     var failText = false
+    var passable = true
+    val solidDecorations = mutableSetOf<UUID>()
     val hud: GravesHud
 
     init {
@@ -381,7 +392,7 @@ private class GravesHudFixture(
         every { world.maxHeight } returns 320
         every { world.isChunkLoaded(any<Int>(), any<Int>()) } returns true
         val air = mockk<Block>()
-        every { air.isPassable } returns true
+        every { air.isPassable } answers { passable }
         every { world.getBlockAt(any<Int>(), any<Int>(), any<Int>()) } returns air
         every { player.uniqueId } returns owner
         every { player.world } returns world
@@ -400,7 +411,8 @@ private class GravesHudFixture(
             display
         }
         every { displays.closeAsync() } returns cleanup
-        hud = GravesHud(plugin, "survival", GravesConfig(ConfigManager.empty()).snapshot().copy(appearance = appearance), displays) { cleared += it }
+        hud = GravesHud(plugin, "survival", GravesConfig(ConfigManager.empty()).snapshot().copy(appearance = appearance), displays,
+            decorativeBarrier = { id, _ -> id in solidDecorations }, onClear = { cleared += it })
     }
 
     private fun track(display: PacketDisplay, location: Location, text: Component? = null) {

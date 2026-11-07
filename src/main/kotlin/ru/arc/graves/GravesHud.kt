@@ -8,6 +8,8 @@ import org.bukkit.Chunk
 import org.bukkit.Location
 import org.bukkit.Particle
 import org.bukkit.Sound
+import org.bukkit.World
+import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
 import org.bukkit.entity.Display
 import org.bukkit.entity.Player
@@ -30,9 +32,10 @@ internal class GravesHud(
     private val server: String,
     private val settings: GravesSettings,
     private val displays: PaperPacketDisplays = PaperPacketDisplays(plugin, "graves"),
+    private val decorativeBarrier: (UUID, Block) -> Boolean = { _, _ -> false },
     private val onClear: (Player) -> Unit = {},
 ) : AutoCloseable {
-    private class Marker(
+    private inner class Marker(
         val x: Int, val y: Int, val z: Int,
         val parts: List<PacketDisplay>,
         val appearance: GraveAppearance,
@@ -42,6 +45,7 @@ internal class GravesHud(
         fun matches(grave: GraveView, selected: GraveAppearance): Boolean =
             x == grave.x && y == grave.y && z == grave.z && appearance == selected && ownerName == grave.ownerName && parts.all { it.isValid }
         fun remove() {
+            impact?.cancel(parts)
             try { engraving?.removeAsync() }
             finally { parts.forEach(PacketDisplay::remove) }
         }
@@ -50,6 +54,7 @@ internal class GravesHud(
     private data class Cell(val x: Int, val y: Int, val z: Int)
     private val markers = mutableMapOf<UUID, ViewerMarkers>()
     private val logger = plugin.logger
+    private var impact: GraveImpact? = null
     private var closed = false
     private var closeFuture: CompletableFuture<Void>? = null
     private var markerFailureLogged = false
@@ -78,17 +83,19 @@ internal class GravesHud(
         // Every recovery scene wins both the per-cell tie and the bounded visible-scene budget.
         val ownerFirst = compareBy<GraveView> { it.decorative }.thenBy { it.ownerId != player.uniqueId }
         val now = System.currentTimeMillis()
-        val imagesAvailable = engravings?.health()?.available == true
+        val imagesAvailable = engravingsAvailable()
         val desired = graves.asSequence().filter { grave ->
             grave.server == server && grave.world == world.name && grave.active(now) &&
                 grave.y >= world.minHeight && grave.y < world.maxHeight &&
                 distance(grave) <= settings.nearbyGlowRadius.toDouble() * settings.nearbyGlowRadius &&
                 world.isChunkLoaded(grave.x shr 4, grave.z shr 4) &&
                 player.isChunkSent(Chunk.getChunkKey(grave.x shr 4, grave.z shr 4))
+        }.filter { grave ->
+            val block = world.getBlockAt(grave.x, grave.y, grave.z)
+            if (grave.decorative) decorativeBarrier(grave.id, block) else block.isPassable
         }.sortedWith(ownerFirst.thenByDescending { it.createdAt }.thenBy { it.id })
             .distinctBy { Cell(it.x, it.y, it.z) }
             .sortedWith(ownerFirst.thenBy(::distance).thenByDescending { it.createdAt }.thenBy { it.id })
-            .filter { world.getBlockAt(it.x, it.y, it.z).isPassable }
             .take(MAX_VISIBLE).map { grave ->
                 grave to appearance(grave, player.world, imagesAvailable)
             }.toList()
@@ -177,10 +184,17 @@ internal class GravesHud(
         return rendered.filterNot { it.grave.decorative }
     }
 
-    /** The same fallback geometry drives administrator selection and the public renderer. */
-    fun appearance(grave: GraveView, world: org.bukkit.World, imagesAvailable: Boolean = engravings?.health()?.available == true): GraveAppearance {
+    fun engravingsAvailable(): Boolean = engravings?.health()?.available == true
+
+    /** The renderer only uses headroom reserved for the grave; placement also considers empty cells. */
+    fun appearance(
+        grave: GraveView,
+        world: World,
+        imagesAvailable: Boolean = engravingsAvailable(),
+        decorativeHeadroom: (Block) -> Boolean = { decorativeBarrier(grave.id, it) },
+    ): GraveAppearance {
         val roomForImage = imagesAvailable && world.isChunkLoaded(grave.x shr 4, grave.z shr 4) && grave.y < world.maxHeight - 1 &&
-            world.getBlockAt(grave.x, grave.y + 1, grave.z).isPassable
+            world.getBlockAt(grave.x, grave.y + 1, grave.z).let { if (grave.decorative) decorativeHeadroom(it) else it.isPassable }
         val selected = GraveAppearances.select(grave.id, settings.appearance, roomForImage, grave.appearance)
         return grave.cosmeticYaw?.let { selected.copy(yaw = it) } ?: selected
     }
@@ -221,6 +235,21 @@ internal class GravesHud(
         clearMarkers(player)
     }
 
+    fun decorativeHit(id: UUID, at: Location, appearance: GraveAppearance, hit: Int) {
+        if (closed) return
+        val feedback = impact()
+        feedback.hit(at, appearance, hit)
+        markers.values.forEach { viewer ->
+            viewer.entries[id]?.let { feedback.shake(it.parts, it.appearance, hit) }
+        }
+    }
+
+    fun decorativeBreak(at: Location, appearance: GraveAppearance) {
+        if (!closed) impact().broken(at, appearance)
+    }
+
+    private fun impact(): GraveImpact = impact ?: GraveImpact().also { impact = it }
+
     /** Call only after the owning grave transaction has acknowledged durable claim completion. */
     fun claimSucceeded(player: Player) {
         if (closed || !player.isOnline || player.isDead) return
@@ -233,6 +262,7 @@ internal class GravesHud(
     fun closeAsync(): CompletableFuture<Void> {
         closeFuture?.let { return it }
         closed = true
+        impact?.close()
         markers.values.map { it.player }.forEach(::clear)
         return CompletableFuture.allOf(displays.closeAsync(), retiredEngravings,
             engravings?.closeAsync() ?: CompletableFuture.completedFuture(null)).also { closeFuture = it }

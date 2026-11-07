@@ -87,11 +87,18 @@ internal class GravesRuntime(private val settings: GravesSettings, sql: SqlConne
     private val worldNames: Map<String, String> = ConfigManager.of(plugin.dataPath, "modules/misc.yml").map("world-names")
     private val barriers = GraveBarriers(plugin, server, settings.nearbyGlowRadius, ::currentMarker,
         owned::playerReady, ::openMarker, ::feedback)
-    private val hud = GravesHud(plugin, server, settings, onClear = barriers::clear)
-    internal val decorative = DecorativeGraves(plugin, settings, server,
+    private val hud: GravesHud = GravesHud(plugin, server, settings, onClear = barriers::clear, decorativeBarrier = ::decorativeBarrier)
+    internal val decorative: DecorativeGraves = DecorativeGraves(plugin, settings, server,
         plugin.submitBackground { DecorativeGraveStore(plugin.dataPath) }, plugin.backgroundOwner(), epitaphs,
         { owned.views() + localViews }, ::refreshPlayers,
-        { record -> hud.appearance(record.view(server), requireNotNull(Bukkit.getWorld(record.worldId))) })
+        ::decorativeAppearance, onHit = hud::decorativeHit, onBreak = hud::decorativeBreak)
+    private fun decorativeBarrier(id: UUID, block: org.bukkit.block.Block): Boolean = decorative.hasBarrier(id, block)
+    private fun decorativeAppearance(record: DecorativeGraveRecord): GraveAppearance =
+        hud.appearance(record.view(server), requireNotNull(Bukkit.getWorld(record.worldId))) { block ->
+            block.type.isAir || decorative.hasJournaledBarrier(block)
+        }
+
+    private var engravingsAvailable = false
     internal val payments = GravePayments(plugin.dataPath, ::feedback)
     private var localViews = emptyList<GraveView>()
     private var networkRefreshPending = false
@@ -171,7 +178,7 @@ internal class GravesRuntime(private val settings: GravesSettings, sql: SqlConne
                 }
                 try {
                     frameInteractions?.close()
-                    frameInteractions = GraveFrameInteractions(plugin, engravings::graveForFrame, barriers::interactFrame)
+                    frameInteractions = GraveFrameInteractions(plugin, engravings::graveForFrame, barriers::interactFrame, decorative::strikeFrame)
                     hud.attachEngravings(engravings)
                     imageOwner = engravings
                     imageRetryTicks = 40L
@@ -226,6 +233,11 @@ internal class GravesRuntime(private val settings: GravesSettings, sql: SqlConne
     }
 
     private fun refreshPlayers() {
+        val images = hud.engravingsAvailable()
+        if (images != engravingsAvailable) {
+            engravingsAvailable = images
+            decorative.refreshBlocks()
+        }
         val publicGraves = (owned.views() + localViews + decorative.views()).filter { it.server == server && it.active(System.currentTimeMillis()) }.distinctBy { it.id }
         Bukkit.getOnlinePlayers().forEach { player ->
             if (owned.playerReady(player.uniqueId)) finishTransfer(player.uniqueId)

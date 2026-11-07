@@ -12,15 +12,20 @@ import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.FluidCollisionMode
+import org.bukkit.GameMode
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.World
 import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
 import org.bukkit.entity.Player
+import org.bukkit.event.block.Action
+import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerCommandPreprocessEvent
+import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerQuitEvent
+import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.util.RayTraceResult
 import org.bukkit.util.Vector
 import ru.arc.config.ConfigManager
@@ -156,6 +161,91 @@ class DecorativeGravesTest : FunSpec({
         }
     }
 
+    test("left-clicking physical graves breaks them after three survival hits or one creative hit and a confirmed save") {
+        MockBukkitTestRuntime.open().use { paper ->
+            val plugin = paper.createSimplePlugin("DecorativeGraveStrikes")
+            val world = paper.addSimpleWorld("decorative")
+            val chunk = world.getChunkAt(0, 0)
+            val owner = paper.addPlayer("Author")
+            val visitor = paper.addPlayer("Visitor")
+            for (player in listOf(owner, visitor)) {
+                player.teleport(Location(world, 3.5, 64.0, 5.5)) shouldBe true
+                player.addAttachment(plugin, GRAVES_ADMIN_PERMISSION, true)
+            }
+            owner.gameMode = GameMode.SURVIVAL
+            chunk.getBlock(2, 63, 2).type = Material.STONE
+            chunk.getBlock(4, 63, 2).type = Material.STONE
+            val shortBase = chunk.getBlock(2, 64, 2).apply { type = Material.CAVE_AIR }
+            val shortTop = chunk.getBlock(2, 65, 2).apply { type = Material.AIR }
+            val tallBase = chunk.getBlock(4, 64, 2).apply { type = Material.AIR }
+            val tallTop = chunk.getBlock(4, 65, 2).apply { type = Material.CAVE_AIR }
+            val ordinary = chunk.getBlock(6, 64, 2).apply { type = Material.BARRIER }
+            val short = decorativeRecord().copy(
+                createdBy = owner.uniqueId, worldId = world.uid, world = world.name, x = 2, z = 2, style = GraveStyle.CAIRN,
+            )
+            val tall = short.copy(id = UUID(1, 2), x = 4, style = GraveStyle.ENGRAVED_CAIRN)
+            var persisted = listOf(short, tall)
+            val store = mockk<DecorativeGraveStore>()
+            every { store.load() } answers { persisted }
+            every { store.save(any()) } answers { persisted = firstArg() }
+            val settings = GravesConfig(ConfigManager.empty()).snapshot()
+            val work = ArrayDeque<Runnable>()
+            val hits = mutableListOf<Int>()
+            var breaks = 0
+            fun flush() {
+                while (work.isNotEmpty()) work.removeFirst().run()
+                paper.performTicks(3)
+            }
+            fun click(player: Player, block: Block, action: Action = Action.LEFT_CLICK_BLOCK) =
+                paper.callEvent(PlayerInteractEvent(player, action, null, block, BlockFace.NORTH, EquipmentSlot.HAND))
+
+            Tasks.install(BukkitTaskScheduler(plugin))
+            val controller = DecorativeGraves(
+                plugin, settings, "survival", CompletableFuture.completedFuture(store), Executor { work.addLast(it) },
+                GraveEpitaphs.load { javaClass.classLoader.getResourceAsStream(it) }, { emptyList() }, {},
+                { GraveAppearances.select(it.id, settings.appearance, choice = it.view("survival").appearance).copy(yaw = it.yaw) },
+                beginFlow = {}, closeDialog = {},
+                onHit = { _, _, _, hit -> hits += hit }, onBreak = { _, _ -> breaks++ },
+            )
+            try {
+                controller.start()
+                flush()
+                listOf(shortBase.type, shortTop.type, tallBase.type, tallTop.type) shouldBe
+                    listOf(Material.BARRIER, Material.AIR, Material.BARRIER, Material.BARRIER)
+                click(owner, ordinary).isCancelled shouldBe false
+                click(owner, shortBase, Action.RIGHT_CLICK_BLOCK)
+                click(visitor, shortBase).isCancelled shouldBe true
+                hits shouldBe emptyList()
+
+                repeat(2) { click(owner, shortBase).isCancelled shouldBe true }
+                hits shouldBe listOf(1, 2)
+                persisted shouldBe listOf(short, tall)
+                work.isEmpty() shouldBe true
+                click(owner, shortBase).isCancelled shouldBe true
+                shortBase.type shouldBe Material.BARRIER
+                breaks shouldBe 0
+                flush()
+                shortBase.type shouldBe Material.CAVE_AIR
+                persisted shouldBe listOf(tall)
+                breaks shouldBe 1
+
+                owner.gameMode = GameMode.CREATIVE
+                paper.callEvent(BlockBreakEvent(tallTop, owner)).isCancelled shouldBe true
+                click(owner, tallTop).isCancelled shouldBe true
+                flush()
+                persisted shouldBe emptyList()
+                hits shouldBe listOf(1, 2)
+                breaks shouldBe 2
+                listOf(tallBase.type, tallTop.type, ordinary.type) shouldBe
+                    listOf(Material.AIR, Material.CAVE_AIR, Material.BARRIER)
+            } finally {
+                controller.closeAsync()
+                flush()
+                Tasks.reset()
+            }
+        }
+    }
+
     test("custom inscriptions enforce supported plain text and optional signature without discarding the saved draft") {
         for (raw in listOf("", "   ", "x".repeat(81), "<red>markup", "§cцвет", "две\nстроки", "скрытый\u200Bзнак", "\u0488", "🪦"))
             DecorativeGraves.acceptedText(raw) shouldBe null
@@ -223,7 +313,7 @@ private class DecorativeJourney(val paper: MockBukkitTestRuntime, plugin: org.bu
         every { support.y } returns 63
         every { support.z } returns 0
         every { support.type } answers { if (solid) Material.STONE else Material.WATER }
-        every { air.isPassable } answers { passable }
+        every { air.type } answers { if (passable) Material.AIR else Material.STONE }
         every { player.uniqueId } returns UUID(2, 2)
         every { player.world } returns world
         every { player.eyeLocation } answers { eye.clone() }
