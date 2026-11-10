@@ -6,6 +6,7 @@ import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
 import net.advancedplugins.ae.api.AEAPI
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.TranslatableComponent
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
@@ -91,6 +92,40 @@ class EquipmentEnchantmentPresentationTest {
             assertEquals(1, second.lore()!!.count { plain.serialize(it) == "Лёгкий IV" })
             assertEquals(counters.map(plain::serialize), second.lore()!!.takeLast(counters.size).map(plain::serialize))
             assertEquals(second, EquipmentEnchantmentPresentation.render(second, vanilla, listOf(upgraded), true, null))
+        }
+    }
+
+    @Test
+    fun `counter icon has an empty server fallback and keeps the existing row after AE updates`() {
+        MockBukkitTestRuntime.open().use {
+            val killsKey = NamespacedKey("advancedenchantments", "stattrak")
+            val initial = Component.text("Убийств: 0", NamedTextColor.YELLOW)
+            val authored = Component.text("Мобов: 13", NamedTextColor.AQUA)
+            val item = ItemStack(Material.NETHERITE_SWORD).apply {
+                editMeta {
+                    it.lore(listOf(initial, authored))
+                    it.persistentDataContainer.set(killsKey, PersistentDataType.STRING, "0")
+                }
+            }
+            fun render(input: ItemStack) =
+                EquipmentEnchantmentPresentation.render(input, emptyList(), emptyList(), true, null)
+
+            val decorated = render(item)
+            val row = decorated.lore()!!.first()
+            val icon = row.children().first() as TranslatableComponent
+            assertEquals("ruscrafting.item_lore.icon", icon.key())
+            assertEquals("", icon.fallback())
+            assertEquals("", plain.serialize(icon.args().single()))
+            assertEquals(initial, row.children().last())
+            assertEquals(authored, decorated.lore()!!.last())
+            assertEquals(decorated, render(decorated))
+
+            val updated = Component.text("Убийств: 1", NamedTextColor.YELLOW)
+            decorated.editMeta {
+                it.lore(listOf(updated, authored))
+                it.persistentDataContainer.set(killsKey, PersistentDataType.STRING, "1")
+            }
+            assertEquals(updated, render(decorated).lore()!!.first().children().last())
         }
     }
 

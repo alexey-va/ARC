@@ -2,6 +2,7 @@ package ru.arc.enchanting
 
 import net.advancedplugins.ae.api.AEAPI
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.TranslatableComponent
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
@@ -10,6 +11,7 @@ import org.bukkit.Bukkit
 import org.bukkit.NamespacedKey
 import org.bukkit.inventory.ItemFlag
 import org.bukkit.inventory.ItemStack
+import org.bukkit.persistence.PersistentDataContainer
 import org.bukkit.persistence.PersistentDataType
 import ru.arc.dungeons.dungeonService
 import ru.arc.util.Logging
@@ -24,6 +26,12 @@ internal object EquipmentEnchantmentPresentation {
     private val afterGapKey = NamespacedKey("arc", "after_gap")
     private val middleGapKey = NamespacedKey("arc", "middle_gap")
     private val commonStyle = NamespacedKey("lzblocks", "tooltip/common")
+    private const val COUNTER_ICON_TRANSLATION = "ruscrafting.item_lore.icon"
+    private val playerKillsKey = NamespacedKey("advancedenchantments", "stattrak")
+    private val mobKillsKey = NamespacedKey("advancedenchantments", "mobtrak")
+    private val soulsKey = NamespacedKey("advancedenchantments", "souls")
+    private val slotsKey = NamespacedKey("advancedenchantments", "slots")
+    private val orbKey = NamespacedKey("advancedenchantments", "increasedorb")
     private val legacy = LegacyComponentSerializer.legacySection()
     private val plain = PlainTextComponentSerializer.plainText()
     // Existing minecraft:default providers in the distributed RusCrafting pack.
@@ -115,7 +123,6 @@ internal object EquipmentEnchantmentPresentation {
     ): ItemStack {
         val meta = item.itemMeta ?: return item
         val previous = meta.persistentDataContainer.get(recordKey, PersistentDataType.TAG_CONTAINER)
-        if (vanilla.isEmpty() && advanced.isEmpty() && previous == null) return item
         val lore = meta.lore().orEmpty()
         val serialized = meta.getLore().orEmpty()
         val oldRows = previous?.get(rowsKey, PersistentDataType.LIST.strings()).orEmpty()
@@ -182,7 +189,15 @@ internal object EquipmentEnchantmentPresentation {
         val afterGap = generated.isNotEmpty() && after.firstOrNull()?.let { !blank(it) } == true
         if (afterGap) combined += Component.empty()
         combined += after
+        val tags = meta.persistentDataContainer
+        val withIcons = combined.map { withCounterIcon(it, tags) }
+        if (generated.isEmpty() && previous == null && withIcons == lore) return item
         meta.lore(combined.takeIf { it.isNotEmpty() })
+        if (withIcons != combined) {
+            val nativeLore = meta.getLore()
+            meta.lore(withIcons)
+            if (meta.getLore() != nativeLore) meta.lore(combined)
+        }
         if (ownsHide) {
             if (vanilla.isNotEmpty()) meta.addItemFlags(ItemFlag.HIDE_ENCHANTS) else meta.removeItemFlags(ItemFlag.HIDE_ENCHANTS)
         }
@@ -203,6 +218,30 @@ internal object EquipmentEnchantmentPresentation {
             meta.persistentDataContainer.set(recordKey, PersistentDataType.TAG_CONTAINER, record)
         }
         return item.clone().also { it.itemMeta = meta }
+    }
+
+    private fun withCounterIcon(row: Component, tags: PersistentDataContainer): Component {
+        if ((row.children().firstOrNull() as? TranslatableComponent)?.key() == COUNTER_ICON_TRANSLATION) return row
+        val line = plain.serialize(row)
+        val glyph = when {
+            line.startsWith("Убийств: ") &&
+                tags.get(playerKillsKey, PersistentDataType.STRING)?.let { line == "Убийств: $it" } == true -> ""
+            line.startsWith("Мобов: ") &&
+                tags.get(mobKillsKey, PersistentDataType.STRING)?.let { line == "Мобов: $it" } == true -> ""
+            line.startsWith("Собрано Душ: ") &&
+                tags.get(soulsKey, PersistentDataType.INTEGER)?.let { line == "Собрано Душ: $it" } == true -> ""
+            line.startsWith("Осталось зачарований: ") && tags.has(slotsKey, PersistentDataType.INTEGER) &&
+                line.substringAfter(": ").toIntOrNull() != null -> ""
+            " Слотов Зачарования (Сфера [+" in line &&
+                tags.get(orbKey, PersistentDataType.INTEGER)?.let { line.endsWith("[+$it])") } == true -> ""
+            line == "ЗАЩИЩЕНО" && legacy.serialize(row) == "§f§lЗАЩИЩЕНО" -> ""
+            else -> return row
+        }
+        // The client pack translates the prefix to the glyph and a space. The server's
+        // empty fallback preserves the exact legacy text AE uses to update counters and protection.
+        val icon = Component.text(glyph, NamedTextColor.WHITE).decoration(TextDecoration.ITALIC, false)
+        val prefix = Component.translatable(COUNTER_ICON_TRANSLATION, "", icon)
+        return Component.empty().append(prefix).append(row)
     }
 
     private fun removeRows(
