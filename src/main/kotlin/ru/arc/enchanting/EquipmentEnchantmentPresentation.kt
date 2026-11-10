@@ -15,6 +15,7 @@ import org.bukkit.persistence.PersistentDataContainer
 import org.bukkit.persistence.PersistentDataType
 import ru.arc.dungeons.dungeonService
 import ru.arc.util.Logging
+import java.util.regex.Pattern
 
 /** Keeps AE's native rows intact: its upgrade/removal paths recognize their exact prefix. */
 internal object EquipmentEnchantmentPresentation {
@@ -25,8 +26,11 @@ internal object EquipmentEnchantmentPresentation {
     private val beforeGapKey = NamespacedKey("arc", "before_gap")
     private val afterGapKey = NamespacedKey("arc", "after_gap")
     private val middleGapKey = NamespacedKey("arc", "middle_gap")
+    private val statisticsHeadingKey = NamespacedKey("arc", "statistics_heading")
     private val commonStyle = NamespacedKey("lzblocks", "tooltip/common")
-    private const val COUNTER_ICON_TRANSLATION = "ruscrafting.item_lore.icon"
+    private const val ICON_TRANSLATION = "ruscrafting.item_lore.icon"
+    private const val ENCHANTMENT_ICON_TRANSLATION = "ruscrafting.item_lore.enchantment_icon"
+    private const val MAX_LORE_LINES = 256
     private val playerKillsKey = NamespacedKey("advancedenchantments", "stattrak")
     private val mobKillsKey = NamespacedKey("advancedenchantments", "mobtrak")
     private val soulsKey = NamespacedKey("advancedenchantments", "souls")
@@ -36,15 +40,29 @@ internal object EquipmentEnchantmentPresentation {
     private val plain = PlainTextComponentSerializer.plainText()
     // Existing minecraft:default providers in the distributed RusCrafting pack.
     private val advancedIcons = setOf('', '', '', '')
+    private val iconSegments = advancedIcons.associateWith { Pattern.compile("^" + Pattern.quote("$it ") + ".*", Pattern.DOTALL) }
     private val romanLevel = Regex("M{0,3}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})")
-    private data class AdvancedRows(val lines: List<Component>, val legacyDisplays: Map<String, String> = emptyMap())
+    private data class AdvancedRows(
+        val lines: List<Component>,
+        val legacyDisplays: Map<String, String> = emptyMap(),
+        val iconOverrides: Map<Int, String> = emptyMap(),
+    )
+    private enum class Statistic(val glyph: String) {
+        PLAYER_KILLS(""), MOB_KILLS(""), SOULS(""), ORB(""), SLOTS(""), PROTECTION(""),
+    }
+
     private var vanillaTitle: Component = Component.text("Зачарования", NamedTextColor.AQUA).decorate(TextDecoration.BOLD)
     private var advancedTitle: Component = Component.text("Дополнительные чары", NamedTextColor.LIGHT_PURPLE).decorate(TextDecoration.BOLD)
+    private var statisticsTitle: Component = Component.text("Состояние предмета", NamedTextColor.GOLD)
+        .decorate(TextDecoration.BOLD).decoration(TextDecoration.ITALIC, false)
+    private var categoryIcons = emptyMap<String, String>()
     private var failureLogged = false
 
     fun configure(config: EnchantingConfig) {
         vanillaTitle = config.text("equipment.vanilla-heading")
         advancedTitle = config.text("equipment.advanced-heading")
+        statisticsTitle = config.text("equipment.statistics-heading")
+        categoryIcons = config.equipmentIcons()
     }
 
     fun ordinary(item: ItemStack): ItemStack {
@@ -63,13 +81,15 @@ internal object EquipmentEnchantmentPresentation {
                 .append(enchantment.displayName(level))
                 .decoration(TextDecoration.ITALIC, false)
         }
-        return render(item, vanilla, advanced.lines, ordinary = true, beforeLore = null, legacyDisplays = advanced.legacyDisplays)
+        return render(item, vanilla, advanced.lines, ordinary = true, beforeLore = null,
+            legacyDisplays = advanced.legacyDisplays, iconOverrides = advanced.iconOverrides)
     }
 
     /** Called after EliteMobs has rebuilt its lore; item enchantment PDC remains authoritative. */
     fun advanced(item: ItemStack, beforeLore: String?): ItemStack {
         val rows = advancedRows(item) ?: return item
-        return render(item, emptyList(), rows.lines, ordinary = false, beforeLore = beforeLore, legacyDisplays = rows.legacyDisplays)
+        return render(item, emptyList(), rows.lines, ordinary = false, beforeLore = beforeLore,
+            legacyDisplays = rows.legacyDisplays, iconOverrides = rows.iconOverrides)
     }
 
     private fun advancedRows(item: ItemStack): AdvancedRows? {
@@ -78,26 +98,30 @@ internal object EquipmentEnchantmentPresentation {
         }
         return try {
             val legacyDisplays = mutableMapOf<String, String>()
-            val rows = AEAPI.getEnchantmentsOnItem(item).entries
-                .sortedWith { first, second ->
-                    AEAPI.compareRarity(first.key, second.key).takeIf { it != 0 }
-                        ?: first.key.compareTo(second.key)
-                }
-                .flatMap { (id, level) ->
-                    AEAPI.getEnchantLore(id, level).orEmpty().mapIndexed { index, line ->
+            val iconOverrides = mutableMapOf<Int, String>()
+            val enchants = AEAPI.getEnchantmentsOnItem(item).entries.sortedWith { first, second ->
+                AEAPI.compareRarity(first.key, second.key).takeIf { it != 0 }
+                    ?: first.key.compareTo(second.key)
+            }
+            val rows = buildList {
+                for ((id, level) in enchants) {
+                    AEAPI.getEnchantLore(id, level).orEmpty().forEachIndexed { index, line ->
                         val row = legacy.deserialize(line).decoration(TextDecoration.ITALIC, false)
-                        // Only the native display row for a current PDC enchant is a migration candidate.
-                        // Description rows and unknown/custom prefixes retain their original contract.
-                        if (index == 0 && plain.serialize(row).firstOrNull() in advancedIcons) {
-                            val encoded = legacy.serialize(row)
-                            val prefix = "§f${plain.serialize(row).first()} "
-                            if (encoded.startsWith(prefix)) legacyDisplays[encoded] = encoded.removePrefix(prefix)
+                        if (index == 0) {
+                            categoryIcons[id]?.let { iconOverrides[size] = it }
+                            // Only the display row for a current PDC enchant is a migration candidate.
+                            val prefix = nativeIconPrefix(row)
+                            if (prefix.isNotEmpty()) {
+                                val encoded = legacy.serialize(row)
+                                if (encoded.startsWith("§f$prefix")) legacyDisplays[encoded] = encoded.removePrefix("§f$prefix")
+                            }
                         }
-                        row
+                        add(row)
                     }
                 }
+            }
             failureLogged = false
-            AdvancedRows(rows, legacyDisplays)
+            AdvancedRows(rows, legacyDisplays, iconOverrides)
         } catch (failure: Exception) {
             reportFailure(failure)
             null
@@ -120,9 +144,11 @@ internal object EquipmentEnchantmentPresentation {
         ordinary: Boolean,
         beforeLore: String?,
         legacyDisplays: Map<String, String> = emptyMap(),
+        iconOverrides: Map<Int, String> = emptyMap(),
     ): ItemStack {
         val meta = item.itemMeta ?: return item
         val previous = meta.persistentDataContainer.get(recordKey, PersistentDataType.TAG_CONTAINER)
+        val tags = meta.persistentDataContainer
         val lore = meta.lore().orEmpty()
         val serialized = meta.getLore().orEmpty()
         val oldRows = previous?.get(rowsKey, PersistentDataType.LIST.strings()).orEmpty()
@@ -166,6 +192,9 @@ internal object EquipmentEnchantmentPresentation {
             previous?.get(middleGapKey, PersistentDataType.BOOLEAN) == true)
         // Fresh native AE rows may have been prepended by its apply/organize operation.
         body = removeRows(body, body.map(legacy::serialize), matchedAdvanced.map(legacy::serialize))
+        previous?.get(statisticsHeadingKey, PersistentDataType.STRING)?.let { heading ->
+            body = removeRows(body, body.map(legacy::serialize), listOf(legacy.serialize(legacy.deserialize(heading))))
+        }
         val generated = buildList {
             if (vanilla.isNotEmpty()) { add(vanillaTitle); addAll(vanilla) }
             if (advanced.isNotEmpty()) {
@@ -178,6 +207,8 @@ internal object EquipmentEnchantmentPresentation {
             (vanilla.isNotEmpty() && !meta.hasItemFlag(ItemFlag.HIDE_ENCHANTS)))
         val ownsStyle = ordinary && (meta.tooltipStyle == null ||
             (previous?.get(styleKey, PersistentDataType.BOOLEAN) == true && meta.tooltipStyle == commonStyle))
+        // Leave room for the heading and both optional gaps at the native lore limit.
+        if (body.size + generated.size <= MAX_LORE_LINES - 3) body = groupStatistics(body, tags)
         val insertion = if (ordinary) 0 else body.indexOfFirst { plain.serialize(it).trim() == beforeLore }.takeIf { it >= 0 } ?: body.size
         val combined = body.take(insertion).toMutableList()
         val beforeGap = generated.isNotEmpty() && (if (ordinary) combined.isEmpty() else combined.lastOrNull()?.let { !blank(it) } == true)
@@ -189,9 +220,16 @@ internal object EquipmentEnchantmentPresentation {
         val afterGap = generated.isNotEmpty() && after.firstOrNull()?.let { !blank(it) } == true
         if (afterGap) combined += Component.empty()
         combined += after
-        val tags = meta.persistentDataContainer
-        val withIcons = combined.map { withCounterIcon(it, tags) }
+        val withIcons = combined.map { row ->
+            statistic(row, tags)?.let { withIcon(row, "", it.glyph) } ?: row
+        }.toMutableList()
+        val advancedStart = generatedEnd - retainedAdvanced.size
+        for ((index, glyph) in iconOverrides) {
+            val position = advancedStart + index
+            withIcons[position] = withIcon(withIcons[position], nativeIconPrefix(advanced[index]), glyph)
+        }
         if (generated.isEmpty() && previous == null && withIcons == lore) return item
+        val statisticsHeading = combined.indexOfFirst { it === statisticsTitle }
         meta.lore(combined.takeIf { it.isNotEmpty() })
         if (withIcons != combined) {
             val nativeLore = meta.getLore()
@@ -202,10 +240,10 @@ internal object EquipmentEnchantmentPresentation {
             if (vanilla.isNotEmpty()) meta.addItemFlags(ItemFlag.HIDE_ENCHANTS) else meta.removeItemFlags(ItemFlag.HIDE_ENCHANTS)
         }
         if (ownsStyle) meta.tooltipStyle = if (generated.isNotEmpty()) commonStyle else null
-        if (generated.isEmpty()) {
-            meta.persistentDataContainer.remove(recordKey)
+        if (generated.isEmpty() && statisticsHeading < 0) {
+            tags.remove(recordKey)
         } else {
-            val record = meta.persistentDataContainer.adapterContext.newPersistentDataContainer()
+            val record = tags.adapterContext.newPersistentDataContainer()
             // Legacy snapshots also match after AE has flattened Adventure components through getLore/setLore.
             val ownedRows = meta.getLore().orEmpty().subList(generatedStart, generatedEnd)
                 .filter { plain.serialize(legacy.deserialize(it)).isNotBlank() }
@@ -215,33 +253,76 @@ internal object EquipmentEnchantmentPresentation {
             record.set(beforeGapKey, PersistentDataType.BOOLEAN, beforeGap)
             record.set(afterGapKey, PersistentDataType.BOOLEAN, afterGap)
             record.set(middleGapKey, PersistentDataType.BOOLEAN, vanilla.isNotEmpty() && advanced.isNotEmpty())
-            meta.persistentDataContainer.set(recordKey, PersistentDataType.TAG_CONTAINER, record)
+            if (statisticsHeading >= 0) {
+                record.set(statisticsHeadingKey, PersistentDataType.STRING, meta.getLore().orEmpty()[statisticsHeading])
+            }
+            tags.set(recordKey, PersistentDataType.TAG_CONTAINER, record)
         }
-        return item.clone().also { it.itemMeta = meta }
+        return if (meta == item.itemMeta) item else item.clone().also { it.itemMeta = meta }
     }
 
-    private fun withCounterIcon(row: Component, tags: PersistentDataContainer): Component {
-        if ((row.children().firstOrNull() as? TranslatableComponent)?.key() == COUNTER_ICON_TRANSLATION) return row
-        val line = plain.serialize(row)
-        val glyph = when {
-            line.startsWith("Убийств: ") &&
-                tags.get(playerKillsKey, PersistentDataType.STRING)?.let { line == "Убийств: $it" } == true -> ""
-            line.startsWith("Мобов: ") &&
-                tags.get(mobKillsKey, PersistentDataType.STRING)?.let { line == "Мобов: $it" } == true -> ""
-            line.startsWith("Собрано Душ: ") &&
-                tags.get(soulsKey, PersistentDataType.INTEGER)?.let { line == "Собрано Душ: $it" } == true -> ""
-            line.startsWith("Осталось зачарований: ") && tags.has(slotsKey, PersistentDataType.INTEGER) &&
-                line.substringAfter(": ").toIntOrNull() != null -> ""
-            " Слотов Зачарования (Сфера [+" in line &&
-                tags.get(orbKey, PersistentDataType.INTEGER)?.let { line.endsWith("[+$it])") } == true -> ""
-            line == "ЗАЩИЩЕНО" && legacy.serialize(row) == "§f§lЗАЩИЩЕНО" -> ""
-            else -> return row
+    private fun groupStatistics(body: List<Component>, tags: PersistentDataContainer): List<Component> {
+        val rows = body.map { it to statistic(it, tags) }
+        val start = rows.indexOfFirst { it.second != null }
+        if (start < 0) return body
+        return buildList {
+            addAll(body.take(start))
+            add(statisticsTitle)
+            addAll(rows.filter { it.second != null }.sortedBy { it.second }.map { it.first })
+            addAll(rows.drop(start).filter { it.second == null }.map { it.first })
         }
-        // The client pack translates the prefix to the glyph and a space. The server's
-        // empty fallback preserves the exact legacy text AE uses to update counters and protection.
+    }
+
+    private fun statistic(row: Component, tags: PersistentDataContainer): Statistic? {
+        val line = plain.serialize(row)
+        return when {
+            line.startsWith("Убийств: ") &&
+                tags.get(playerKillsKey, PersistentDataType.STRING)?.let { line == "Убийств: $it" } == true -> Statistic.PLAYER_KILLS
+            line.startsWith("Мобов: ") &&
+                tags.get(mobKillsKey, PersistentDataType.STRING)?.let { line == "Мобов: $it" } == true -> Statistic.MOB_KILLS
+            line.startsWith("Собрано Душ: ") &&
+                tags.get(soulsKey, PersistentDataType.INTEGER)?.let { line == "Собрано Душ: $it" } == true -> Statistic.SOULS
+            line.startsWith("Осталось зачарований: ") && tags.has(slotsKey, PersistentDataType.INTEGER) &&
+                line.substringAfter(": ").toIntOrNull() != null -> Statistic.SLOTS
+            " Слотов Зачарования (Сфера [+" in line &&
+                tags.get(orbKey, PersistentDataType.INTEGER)?.let { line.endsWith("[+$it])") } == true -> Statistic.ORB
+            line == "ЗАЩИЩЕНО" && legacy.serialize(row) == "§f§lЗАЩИЩЕНО" -> Statistic.PROTECTION
+            else -> null
+        }
+    }
+
+    private fun nativeIconPrefix(row: Component): String =
+        plain.serialize(row).take(2).takeIf { it.length == 2 && it.first() in advancedIcons && it.last() == ' ' }.orEmpty()
+
+    private fun withIcon(row: Component, fallback: String, glyph: String): Component {
         val icon = Component.text(glyph, NamedTextColor.WHITE).decoration(TextDecoration.ITALIC, false)
-        val prefix = Component.translatable(COUNTER_ICON_TRANSLATION, "", icon)
-        return Component.empty().append(prefix).append(row)
+        val key = if (fallback.isEmpty()) ICON_TRANSLATION else ENCHANTMENT_ICON_TRANSLATION
+        fun updatePrefix(component: Component?): TranslatableComponent? {
+            val translated = component as? TranslatableComponent ?: return null
+            if (translated.key() != key) return null
+            val original = translated.fallback() ?: return null
+            return if (fallback.isEmpty()) {
+                translated.takeIf { original.isEmpty() }?.arguments(icon)
+            } else {
+                translated.takeIf { original.startsWith(fallback) }?.arguments(icon, Component.text(original.removePrefix(fallback)))
+            }
+        }
+
+        updatePrefix(row)?.let { return it }
+        updatePrefix(row.children().firstOrNull())?.let { return row.children(listOf(it) + row.children().drop(1)) }
+        // AE compares legacy strings. Replace the entire styled segment so the
+        // server sees its original text and formatting even when glyph and label share a color.
+        if (fallback.isEmpty()) {
+            return Component.empty().append(Component.translatable(key, "", icon)).append(row)
+        }
+        if (fallback.first().toString() == glyph) return row
+        return row.replaceText { replacement ->
+            replacement.match(iconSegments.getValue(fallback.first())).once().replacement { match, original ->
+                val segment = match.group()
+                Component.translatable(key, segment, icon, Component.text(segment.removePrefix(fallback)))
+                    .style(original.build().style())
+            }
+        }
     }
 
     private fun removeRows(

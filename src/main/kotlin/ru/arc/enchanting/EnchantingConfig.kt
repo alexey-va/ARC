@@ -75,6 +75,15 @@ internal class EnchantingConfig(private val config: Config) {
         creativeTestPlayers = findTestOverrides.worldCacheCreativePlayers,
     )
 
+    fun equipmentIcons(): Map<String, String> = buildMap {
+        val path = "equipment.category-icons"
+        for (category in config.keys(path)) {
+            val glyph = config.string("$path.$category.glyph", "")
+            if (glyph.length != 1 || glyph.first() !in '\uE000'..'\uF8FF') continue
+            config.stringList("$path.$category.enchantments").forEach { put(it, glyph) }
+        }
+    }
+
     fun text(key: String, vararg resolvers: TagResolver): Component =
         config.component(key, TagResolver.resolver(*resolvers)).decoration(TextDecoration.ITALIC, false)
     companion object {

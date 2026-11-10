@@ -111,7 +111,7 @@ class EquipmentEnchantmentPresentationTest {
                 EquipmentEnchantmentPresentation.render(input, emptyList(), emptyList(), true, null)
 
             val decorated = render(item)
-            val row = decorated.lore()!!.first()
+            val row = decorated.lore()!![1]
             val icon = row.children().first() as TranslatableComponent
             assertEquals("ruscrafting.item_lore.icon", icon.key())
             assertEquals("", icon.fallback())
@@ -125,7 +125,69 @@ class EquipmentEnchantmentPresentationTest {
                 it.lore(listOf(updated, authored))
                 it.persistentDataContainer.set(killsKey, PersistentDataType.STRING, "1")
             }
-            assertEquals(updated, render(decorated).lore()!!.first().children().last())
+            assertEquals(updated, render(decorated).lore()!![1].children().last())
+        }
+    }
+
+    @Test
+    fun `old items group statistics once and keep native enchant strings through upgrade and removal`() {
+        MockBukkitTestRuntime.open().use {
+            val legacy = net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacySection()
+            val kills = NamespacedKey("advancedenchantments", "stattrak")
+            val mobs = NamespacedKey("advancedenchantments", "mobtrak")
+            val oldEnchant = "§fЛегкий III"
+            val nativeEnchant = "§f Легкий III"
+            val nextEnchant = "§f Легкий IV"
+            val poison = "§f Отрава II"
+            val authorLine = "§7Надпись мастера"
+            val item = ItemStack(Material.NETHERITE_SWORD).apply {
+                editMeta {
+                    it.setLore(listOf(oldEnchant, "§3Мобов: §f12", authorLine, "§eУбийств: §60"))
+                    it.persistentDataContainer.set(kills, PersistentDataType.STRING, "0")
+                    it.persistentDataContainer.set(mobs, PersistentDataType.STRING, "12")
+                }
+            }
+            fun render(input: ItemStack, enchants: List<String>, icons: Map<Int, String>, migrate: Boolean = false) =
+                EquipmentEnchantmentPresentation.render(input, emptyList(), enchants.map(legacy::deserialize), true, null,
+                    legacyDisplays = if (migrate) mapOf(nativeEnchant to oldEnchant) else emptyMap(), iconOverrides = icons)
+            val heading = "Состояние предмета"
+
+            val decorated = render(item, listOf(nativeEnchant), mapOf(0 to ""), migrate = true)
+            assertEquals(1, decorated.itemMeta.getLore()!!.count { it == nativeEnchant })
+            assertFalse(oldEnchant in decorated.itemMeta.getLore()!!)
+            val enchantRow = decorated.lore()!!.single { plain.serialize(it) == " Легкий III" }
+            val prefix = (enchantRow as? TranslatableComponent) ?: enchantRow.children().first() as TranslatableComponent
+            assertEquals("ruscrafting.item_lore.enchantment_icon", prefix.key())
+            assertEquals("", plain.serialize(prefix.args().first()))
+            assertEquals(listOf(heading, "Убийств: 0", "Мобов: 12", "Надпись мастера"),
+                decorated.lore()!!.takeLast(4).map(plain::serialize))
+            assertSame(decorated, render(decorated, listOf(nativeEnchant), mapOf(0 to ""), migrate = true))
+
+            val changed = decorated.clone().apply {
+                editMeta { meta ->
+                    // AE copies legacy rows, changes one level, adds a spell, then appends its updated counter.
+                    val body = meta.getLore()!!.filterNot { it == nativeEnchant || it.contains("Мобов: ") }
+                    meta.setLore(listOf(poison, nextEnchant) + body + "§3Мобов: §f13")
+                    meta.persistentDataContainer.set(mobs, PersistentDataType.STRING, "13")
+                }
+            }
+            val updated = render(changed, listOf(nextEnchant, poison), mapOf(0 to "", 1 to ""))
+            val text = updated.lore()!!.map(plain::serialize)
+            assertEquals(1, text.count { it == heading })
+            assertEquals(1, text.count { it == "Мобов: 13" })
+            assertTrue(updated.itemMeta.getLore()!!.containsAll(listOf(nextEnchant, poison)))
+            assertSame(updated, render(updated, listOf(nextEnchant, poison), mapOf(0 to "", 1 to "")))
+
+            updated.editMeta { meta ->
+                meta.setLore(meta.getLore()!!.filterNot { it.contains("Убийств:") || it.contains("Мобов:") })
+                meta.persistentDataContainer.remove(kills)
+                meta.persistentDataContainer.remove(mobs)
+            }
+            val cleaned = render(updated, listOf(poison), mapOf(0 to ""))
+            assertFalse(heading in cleaned.lore()!!.map(plain::serialize))
+            assertTrue(authorLine in cleaned.itemMeta.getLore()!!)
+            assertFalse(nextEnchant in cleaned.itemMeta.getLore()!!)
+            assertTrue(poison in cleaned.itemMeta.getLore()!!)
         }
     }
 

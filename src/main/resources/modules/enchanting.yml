@@ -1,6 +1,228 @@
 equipment:
   vanilla-heading: '<aqua><bold>Зачарования</bold></aqua>'
   advanced-heading: '<light_purple><bold>Дополнительные чары</bold></light_purple>'
+  statistics-heading: '<gold><bold>Состояние предмета</bold></gold>'
+  category-icons:
+    melee:
+      glyph: "\ue18b"
+      enchantments:
+        - ambit
+        - aqua
+        - barbarian
+        - beastslayer
+        - bleed
+        - bluntforce
+        - bonecrusher
+        - cleave
+        - critical
+        - deathpunch
+        - disintegrate
+        - doublestrike
+        - endmaster
+        - greatsword
+        - hunter
+        - immolate
+        - impact
+        - killaura
+        - netherling
+        - netherslayer
+        - plummet
+        - shatter
+        - shatterstrike
+        - slayer
+        - soulless
+        - strife
+        - twinge
+    ranged:
+      glyph: "\ue5c0"
+      enchantments:
+        - archer
+        - bowmaster
+        - deadshot
+        - explosive
+        - frenzy
+        - longbow
+        - marksman
+        - piercing
+        - poseidon
+        - sniper
+        - striker
+    fire:
+      glyph: "\ue5c1"
+      enchantments:
+        - hellfire
+        - immolation
+        - infernal
+        - inflame
+        - missile
+        - molten
+        - spark
+    frost:
+      glyph: "\ue5c2"
+      enchantments:
+        - frozen
+        - iceaspect
+        - nightwalker
+        - permafrost
+    poison:
+      glyph: "\ue5c3"
+      enchantments:
+        - chaos
+        - divert
+        - judgement
+        - perish
+        - poison
+        - poisoned
+        - reaper
+        - unholy
+        - virus
+        - wither
+    control:
+      glyph: "\ue5c4"
+      enchantments:
+        - allure
+        - blind
+        - confuse
+        - convulse
+        - crushingblow
+        - curse
+        - diminish
+        - disarm
+        - disarmor
+        - famine
+        - forcefield
+        - fuddle
+        - interrupt
+        - magnet
+        - neutralize
+        - paralyze
+        - scare
+        - shockwave
+        - snap
+        - snare
+        - suspend
+        - turmoil
+        - voodoo
+    movement:
+      glyph: "\ue5c5"
+      enchantments:
+        - aegis
+        - distance
+        - featherweight
+        - gears
+        - launch
+        - lavawalker
+        - momentum
+        - ragdoll
+        - rocketescape
+        - slingshot
+        - springs
+        - trickster
+        - waterwalker
+        - wings
+    defense:
+      glyph: "\ue5b3"
+      enchantments:
+        - armored
+        - arrowbreak
+        - arrowdeflect
+        - block
+        - chunky
+        - creeperarmor
+        - disappear
+        - dodge
+        - explosivedemise
+        - extinguish
+        - fumble
+        - guardians
+        - heavy
+        - jellylegs
+        - obsidianshield
+        - reflect
+        - reinforced
+        - safeguard
+        - smokebomb
+        - soulbound
+        - spirits
+        - swordsman
+        - tank
+        - undeadruse
+        - ward
+    sustain:
+      glyph: "\ue5c6"
+      enchantments:
+        - angelic
+        - aquatic
+        - devour
+        - exalted
+        - implants
+        - lifesteal
+        - lucid
+        - overload
+        - phoenix
+        - ravenous
+        - rebound
+        - rebreather
+        - replenish
+        - vampire
+    durability:
+      glyph: "\ue184"
+      enchantments:
+        - abiding
+        - blacksmith
+        - hardened
+        - immortal
+        - patch
+        - reforged
+        - restore
+        - unbreakable
+    gathering:
+      glyph: "\ue5c7"
+      enchantments:
+        - bait
+        - carrotplanter
+        - decapitation
+        - diploid
+        - haste
+        - hasten
+        - lucky
+        - multiplication
+        - planter
+        - potatoplanter
+        - replanter
+        - smelting
+        - timber
+        - trench
+        - veinminer
+    souls:
+      glyph: "\ue5b2"
+      enchantments:
+        - axeofspirits
+        - earthbreaker
+        - nulify
+        - rush
+        - soulgrind
+        - soulminer
+        - spectralslam
+        - spiritmaster
+        - voidcrush
+    xp:
+      glyph: "\ue1d1"
+      enchantments:
+        - experience
+        - hook
+        - inquisitive
+    special:
+      glyph: "\ue203"
+      enchantments:
+        - berserk
+        - deranged
+        - epicness
+        - glowing
+        - mjolnir
+        - nightowl
+        - strike
+        - thunderlord
 messages:
   white-scroll-survival-only: '<yellow>Примените белый свиток в режиме выживания.</yellow>'
   unavailable: '<red>Не удалось применить книгу. Проверьте инвентарь и попробуйте ещё раз.</red>'
