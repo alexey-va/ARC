@@ -32,6 +32,7 @@ import ru.arc.commands.arc.subcommands.GraveSubCommand
 import ru.arc.commands.arc.subcommands.HelpSubCommand
 import ru.arc.commands.arc.subcommands.HuntSubCommand
 import ru.arc.commands.arc.subcommands.InvestigationSubCommand
+import ru.arc.commands.arc.subcommands.InvlistSubCommand
 import ru.arc.commands.arc.subcommands.ItemsCatalogSubCommand
 import ru.arc.commands.arc.subcommands.JobsboostsSubCommand
 import ru.arc.commands.arc.subcommands.JoinMessageSubCommand
@@ -87,6 +88,7 @@ class ArcCommand(private val profile: ArcRuntimeProfile = ArcRuntimeProfile.FULL
                 CommandHideSubCommand(),
                 ContractsSubCommand,
                 InvestigationSubCommand,
+                InvlistSubCommand,
                 BaltopSubCommand,
                 AuditSubCommand,
                 RepoSubCommand,

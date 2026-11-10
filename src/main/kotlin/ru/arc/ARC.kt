@@ -28,6 +28,7 @@ import ru.arc.commands.arc.subcommands.BuySubCommand
 import ru.arc.commands.arc.subcommands.EliteLootSubCommand
 import ru.arc.commands.arc.subcommands.GiveBoostSubCommand
 import ru.arc.commands.arc.subcommands.HuntSubCommand
+import ru.arc.invsnapshots.InvlistCommand
 import ru.arc.commands.arc.subcommands.SoundFollowSubCommand
 import ru.arc.commands.arc.subcommands.TestSubCommand
 import ru.arc.commands.arc.subcommands.TreasuresSubCommand
@@ -251,6 +252,8 @@ open class ARC : JavaPlugin() {
         private set
     private var slimefunMenuAlias: Command? = null
     private var networkSpawnAlias: Command? = null
+    private var snapshotInventoryAlias: Command? = null
+    private var previousSnapshotInventoryCommand: Command? = null
     private var previousNetworkSpawnCommand: Command? = null
 
     var runtimeProfile: ArcRuntimeProfile = ArcRuntimeProfile.FULL
@@ -458,6 +461,7 @@ open class ARC : JavaPlugin() {
             attempt { server.servicesManager.unregisterAll(this) }
             attempt { unregisterSlimefunMenuAlias() }
             attempt { unregisterNetworkSpawnAlias() }
+            attempt { unregisterSnapshotInventoryAlias() }
             if (runtimeProfile == ArcRuntimeProfile.FULL) attempt { Portal.removeAll() }
             attempt { ModuleRegistry.shutdownAllChecked() }
             attempt { RtpPlayerRegistry.shutdown() }
@@ -719,6 +723,7 @@ open class ARC : JavaPlugin() {
         registerCommand("arc-reward-issue", CaseRewardIssueCommand(), null)
         getCommand("graves")?.setTabCompleter { _, _, _, _ -> emptyList() }
         registerLegacyCommands()
+        registerSnapshotInventoryAlias()
     }
 
     private fun registerLegacyCommands() {
@@ -752,6 +757,40 @@ open class ARC : JavaPlugin() {
             removeSlimefunMenuAlias(commandMap, alias)
             warn("Could not register /mm Slimefun menu alias")
         }
+    }
+
+    private fun registerSnapshotInventoryAlias() {
+        if (!server.pluginManager.isPluginEnabled("HuskSync")) return
+        val commandMap = server.commandMap
+        val previous = commandMap.getCommand("invlist")
+        val alias = InvlistCommand(this)
+        commandMap.register("arc", alias)
+        if (commandMap.getCommand("arc:invlist") !== alias) {
+            removeSnapshotInventoryAlias(commandMap, alias)
+            warn("Could not register /arc:invlist")
+            return
+        }
+        previousSnapshotInventoryCommand = previous
+        commandMap.knownCommands["invlist"] = alias
+        snapshotInventoryAlias = alias
+    }
+
+    private fun unregisterSnapshotInventoryAlias() {
+        snapshotInventoryAlias?.let { alias ->
+            val commandMap = server.commandMap
+            if (commandMap.getCommand("invlist") === alias) {
+                val previous = previousSnapshotInventoryCommand
+                if (previous == null) commandMap.knownCommands.remove("invlist") else commandMap.knownCommands["invlist"] = previous
+            }
+            removeSnapshotInventoryAlias(commandMap, alias)
+        }
+        snapshotInventoryAlias = null
+        previousSnapshotInventoryCommand = null
+    }
+
+    private fun removeSnapshotInventoryAlias(commandMap: org.bukkit.command.CommandMap, alias: Command) {
+        commandMap.knownCommands.filterValues { it === alias }.keys.toList().forEach { commandMap.knownCommands.remove(it) }
+        alias.unregister(commandMap)
     }
 
     private fun unregisterSlimefunMenuAlias() {

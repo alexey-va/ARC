@@ -39,6 +39,7 @@ object EnchantingModule : PluginModule {
     override fun init() {
         val config = EnchantingConfig.load(ARC.instance.dataPath)
         shutdown()
+        EquipmentEnchantmentPresentation.configure(config)
         val startup = LifecycleTaskScope(Tasks.scheduler).also { startupScope = it }
         val startupToken = startup.token()
         bindAdvancedBookPresentation()

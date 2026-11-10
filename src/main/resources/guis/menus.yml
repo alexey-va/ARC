@@ -2,6 +2,14 @@
 # rows, slots, regions, backgrounds, materials, names and lore composition.
 menus:
   layouts:
+    inventory-snapshot:
+      schema-version: 1
+      rows: 6
+      elements:
+        back: { slot: 45, template: snapshot-back }
+        summary: { slot: 49, template: snapshot-summary, kind: decoration }
+      regions:
+        snapshot-slots: { slots: [0, 1, 2, 3, 7, '9-44'] }
     investigation-hub:
       schema-version: 1
       rows: 3
@@ -286,6 +294,29 @@ menus:
         store-items: { slots: ['0-44'] }
 
   templates:
+    snapshot-back:
+      material: ARROW
+      name: '<italic:false><gray>‹ К сохранениям'
+      lore: []
+    snapshot-summary:
+      material: BOOK
+      name: '<italic:false><gold>Инвентарь <white><player>'
+      lore:
+        - '<italic:false><gray><date> МСК · <white><server>'
+        - '<italic:false><gray>Причина: <white><cause>'
+        - '<italic:false><dark_gray><id>'
+        - ''
+        - '<italic:false><gray>Сверху: шлем, нагрудник, поножи, ботинки.'
+        - '<italic:false><gray>Справа сверху — вторая рука.'
+        - '<italic:false><gray>Нижняя строка предметов — хотбар.'
+        - ''
+        - { text: '<italic:false><gray>Нужен полностью пустой слот у вас.', when: copy }
+        - { text: '<italic:false><green>[▶] ЛКМ по предмету <gray>— копия стака себе', when: copy }
+        - { text: '<italic:false><gray>Только просмотр: нет права на копирование.', unless: copy }
+    snapshot-empty:
+      material: LIGHT_GRAY_STAINED_GLASS_PANE
+      name: '<italic:false><gray><slot>'
+      lore: ['<italic:false><dark_gray>Пусто']
     personal-loot-cobblestone:
       material: COBBLESTONE
       name: '<italic:false><gray>Булыжник'

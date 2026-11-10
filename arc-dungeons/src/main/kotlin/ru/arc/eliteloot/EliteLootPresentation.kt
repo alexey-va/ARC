@@ -69,6 +69,26 @@ private fun sanitizeEliteLore(lines: List<Component>): List<Component> {
     )
 }
 
+internal fun separateEliteEffects(lines: List<Component>, effectHeading: String?): List<Component> = buildList {
+    for (line in lines) {
+        if (effectHeading != null && plainEliteTextSerializer.serialize(line).trim() == effectHeading &&
+            isNotEmpty() && plainEliteTextSerializer.serialize(last()).isNotBlank()) add(Component.empty())
+        add(line)
+    }
+}
+
+private fun eliteEffectHeading(): String? = ItemSettingsConfig.getLoreStructure()
+    .firstOrNull { it.contains("\$ifPotionEffects") }
+    ?.replace("\$ifPotionEffects", "")?.let(::plainEliteText)?.trim()?.takeIf(String::isNotEmpty)
+
+private fun finishEliteEquipmentLore(item: ItemStack) {
+    val heading = eliteEffectHeading()
+    item.editMeta { it.lore(separateEliteEffects(sanitizeEliteLore(it.lore().orEmpty()), heading)) }
+    val presented = ru.arc.enchanting.presentEquipmentEnchantments(item, heading)
+    if (presented !== item) item.itemMeta = presented.itemMeta
+    item.editMeta(::reindexEliteEnchantmentLore)
+}
+
 private val legacyAmpersandSerializer = LegacyComponentSerializer.legacyAmpersand()
 private val legacySectionSerializer = LegacyComponentSerializer.legacySection()
 private val plainEliteTextSerializer = PlainTextComponentSerializer.plainText()
@@ -242,6 +262,7 @@ internal fun presentEliteItem(
     StaffSpellsModule.itemConfig()?.let { config ->
         if (StaffEliteItems.present(item, config)) item.editMeta(::reindexEliteEnchantmentLore)
     }
+    finishEliteEquipmentLore(item)
     return item
 }
 
@@ -267,5 +288,6 @@ internal fun prepareEliteDrop(
     StaffSpellsModule.itemConfig()?.let { config ->
         if (StaffEliteItems.present(prepared, config)) prepared.editMeta(::reindexEliteEnchantmentLore)
     }
+    finishEliteEquipmentLore(prepared)
     return prepared
 }

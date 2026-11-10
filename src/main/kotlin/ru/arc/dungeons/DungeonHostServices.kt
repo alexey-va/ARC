@@ -64,6 +64,8 @@ object DungeonHostServices {
             }
             override fun presentAdvancedBook(item: ItemStack, viewer: Player) =
                 ru.arc.enchanting.presentAdvancedBook(item, viewer)
+            override fun presentEquipmentEnchantments(item: ItemStack, beforeLore: String?) =
+                ru.arc.enchanting.EquipmentEnchantmentPresentation.advanced(item, beforeLore)
             override fun admitCreativeBook(player: Player, book: ItemStack) = ru.arc.enchanting.admitCreativeBook(player, book)
             override fun applyBook(player: Player, targetSlot: Int, expectedTarget: ItemStack, expectedBook: ItemStack,
                 result: ItemStack?, bookInventorySlot: Int?) =

@@ -4,6 +4,13 @@
 # =============================================================================
 
 commands:
+  invlist:
+    name: invlist
+    aliases: []
+    permission: arc.invlist
+    player-only: true
+    description: Посмотреть сохранённые инвентари игрока
+    usage: /arc invlist <игрок> или /invlist <игрок>
   unbind:
     name: unbind
     aliases: []
@@ -272,6 +279,25 @@ commands:
     permission: arc.sound.follow
     usage: /arc soundfollow <player> <namespace:sound>
 messages:
+  invlist:
+    title: '<white>Сохранённые инвентари'
+    loading: '<gray>Загружаем сохранения…'
+    failed: '<red>Не удалось загрузить сохранения. Попробуйте позже.'
+    not-found: '<gray>У этого игрока нет записи в HuskSync.'
+    empty: '<gray>У этого игрока нет сохранённых инвентарей.'
+    unavailable: '<gray>Сохранённые инвентари недоступны на этом сервере: HuskSync не включён.'
+    entry: '<white><date> · <server> ›'
+    entry-tip: '<gray>Причина: <white><cause><newline><gray>ID: <white><id><newline><gray><inventory>'
+    previous: '<#92bed8>‹ Предыдущая страница'
+    next: '<#92bed8>Следующая страница ›'
+    list-summary: '<gray>Игрок: <white><player><newline><gray>Сохранений: <white><total><gray> · Страница <white><page>/<pages><newline><gray>Время — московское. Новые сохранения сверху.'
+    slot: '<gray>Исходный слот: <white><slot>'
+    copy-hint: '<green>[▶] ЛКМ <gray>— скопировать стак себе'
+    view-only: '<gray>Только просмотр'
+    no-inventory: '<gray>В этом сохранении нет данных инвентаря.'
+    copied: '<green>Стак скопирован в ваш инвентарь.'
+    full: '<yellow>Нужен один полностью пустой слот в вашем инвентаре.'
+    copy-denied: '<red>Для копирования требуется разрешение arc.invlist.copy.'
   classgrant:
     applied: '<#9bd48d>✔ Игроку <player> выдан класс <class> <#aaa49a>(<id>). <#e8dfd2>Повышены навыки: <skills>.'
     already: '<#e8dfd2>Игроку <player> уже доступен класс <class> <#aaa49a>(<id>).'

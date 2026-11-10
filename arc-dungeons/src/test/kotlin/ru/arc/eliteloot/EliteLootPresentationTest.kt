@@ -30,6 +30,14 @@ private fun elitePresentationRange(meta: org.bukkit.inventory.meta.ItemMeta): Pa
 }
 
 class EliteLootPresentationTest : FreeSpec({
+    "effects have one boundary gap after enchantments and retain existing authored gaps" {
+        val rows = listOf("Зачарования", " Колошматель 4", "Эффекты", "Слабость 2").map(Component::text)
+        val spaced = separateEliteEffects(rows, "Эффекты")
+        spaced.map(PlainTextComponentSerializer.plainText()::serialize) shouldBe
+            listOf("Зачарования", " Колошматель 4", "", "Эффекты", "Слабость 2")
+        separateEliteEffects(spaced, "Эффекты") shouldBe spaced
+        separateEliteEffects(rows, "Другое название эффектов") shouldBe rows
+    }
     "magic weapon lore replaces only its native physical DPS row and stays stable" {
         val plain = PlainTextComponentSerializer.plainText()
         val entry = "&f &cБазовый элитный DPS: &a\$EDPS"

@@ -135,6 +135,7 @@ permissions:
     description: Administer ARC
     default: op
     children:
+      arc.invlist: true
       arc.dungeon.admin.extract: true
       arc.dungeon.admin.classgrant: true
       arc.investigations.cooldown.bypass: true
@@ -142,6 +143,12 @@ permissions:
       arc.origin.spawn.build: true
   arc.audit:
     description: Inspect ARC audit data
+    default: op
+  arc.invlist:
+    description: Inspect retained HuskSync inventory snapshots
+    default: op
+  arc.invlist.copy:
+    description: Copy a selected snapshot stack to your own empty inventory slot
     default: op
   arc.audit.reset:
     description: Reset the network measurement period without clearing financial journals

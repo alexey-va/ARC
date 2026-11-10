@@ -8,6 +8,8 @@ public interface ArcDungeonItems {
     List<ItemStack> resolvePreset(String preset, int amount);
     MagicDust readMagicDust(ItemStack item);
     ItemStack presentAdvancedBook(ItemStack item, Player viewer);
+    /** Rebuild only AE's display rows from current enchantment metadata after a host lore refresh. */
+    default ItemStack presentEquipmentEnchantments(ItemStack item, String beforeLore) { return item; }
     Integer admitCreativeBook(Player player, ItemStack book);
     void applyBook(Player player, int targetSlot, ItemStack expectedTarget, ItemStack expectedBook,
                    ItemStack result, Integer bookInventorySlot);

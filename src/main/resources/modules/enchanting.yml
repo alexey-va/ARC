@@ -1,3 +1,6 @@
+equipment:
+  vanilla-heading: '<aqua><bold>Зачарования</bold></aqua>'
+  advanced-heading: '<light_purple><bold>Дополнительные чары</bold></light_purple>'
 messages:
   white-scroll-survival-only: '<yellow>Примените белый свиток в режиме выживания.</yellow>'
   unavailable: '<red>Не удалось применить книгу. Проверьте инвентарь и попробуйте ещё раз.</red>'

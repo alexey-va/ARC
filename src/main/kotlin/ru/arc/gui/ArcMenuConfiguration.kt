@@ -25,6 +25,7 @@ object ArcMenuSchema {
     val PARKOUR_CATEGORY = MenuId.of("parkour-category")
     val ITEM_CATALOG = MenuId.of("item-catalog")
     val GRAVE_CONTENTS = MenuId.of("grave-contents")
+    val INVENTORY_SNAPSHOT = MenuId.of("inventory-snapshot")
     val SCHEDULED_EDIT = MenuId.of("scheduled-edit")
     val BALTOP = MenuId.of("baltop")
     val JOIN_MESSAGES = MenuId.of("join-messages")
@@ -47,6 +48,7 @@ object ArcMenuSchema {
     val PARKOUR_COURSES = MenuRegionId.of("courses")
     val CATALOG_ITEMS = MenuRegionId.of("catalog-items")
     val GRAVE_ITEMS = MenuRegionId.of("grave-items")
+    val SNAPSHOT_SLOTS = MenuRegionId.of("snapshot-slots")
     val BALTOP_ENTRIES = MenuRegionId.of("baltop-entries")
     val JOIN_MESSAGE_ENTRIES = MenuRegionId.of("message-entries")
     val JOB_ENTRIES = MenuRegionId.of("jobs")
@@ -89,6 +91,10 @@ object ArcMenuSchema {
         GRAVE_CONTENTS to MenuContract(
             requiredElements = elements("summary", "claim", "previous", "next"),
             requiredRegions = setOf(GRAVE_ITEMS),
+        ),
+        INVENTORY_SNAPSHOT to MenuContract(
+            requiredElements = elements("summary", "back"),
+            requiredRegions = setOf(SNAPSHOT_SLOTS),
         ),
         SCHEDULED_EDIT to MenuContract(
             requiredElements = elements("command", "id", "schedule-value", "schedule-type", "servers", "enabled", "back", "save"),
@@ -144,6 +150,9 @@ object ArcMenuSchema {
     )
 
     val textContracts: Map<String, PaperMenuTextContract> = mapOf(
+        "snapshot-summary" to PaperMenuTextContract(values = setOf("player", "date", "server", "cause", "id"), flags = setOf("copy")),
+        "snapshot-back" to PaperMenuTextContract(),
+        "snapshot-empty" to PaperMenuTextContract(values = setOf("slot")),
         "background" to PaperMenuTextContract(),
         "store-back" to PaperMenuTextContract(),
         "investigation-start" to PaperMenuTextContract(
@@ -306,6 +315,7 @@ object ArcMenuConfiguration {
 
     /** Templates that host feature code renders directly rather than through a layout reference. */
     private val requiredTemplates = setOf(
+        "snapshot-empty",
         "investigation-witness",
         "investigation-verdict-one",
         "investigation-verdict-two",
@@ -350,9 +360,26 @@ object ArcMenuConfiguration {
     }
 
     /** Worker-only disk/YAML projection. Material validation remains in [bind] on Paper. */
-    internal fun prepare(dataRoot: Path): Config = filterToArcMenus(withGraveDefaults(Config(dataRoot, RESOURCE)))
+    internal fun prepare(dataRoot: Path): Config = filterToArcMenus(withSnapshotDefaults(withGraveDefaults(Config(dataRoot, RESOURCE))))
 
     internal fun bind(config: Config): PaperMenuConfiguration = parse(config)
+
+    /** Overlay the newly added inspector without replacing or saving operator-defined layouts. */
+    private fun withSnapshotDefaults(config: Config): Config {
+        val path = "$LAYOUT_ROOT.inventory-snapshot"
+        val templateIds = listOf("snapshot-summary", "snapshot-back", "snapshot-empty")
+        if (config.exists(path) && templateIds.all { config.exists("$TEMPLATE_ROOT.$it") }) return config
+        val bundled = requireNotNull(javaClass.classLoader.getResourceAsStream(RESOURCE)).use { stream ->
+            Load(LoadSettings.builder().build()).loadFromInputStream(stream) as Map<*, *>
+        }
+        val menus = bundled["menus"] as Map<*, *>
+        if (!config.exists(path)) config.setStructured(path, requireNotNull((menus["layouts"] as Map<*, *>)["inventory-snapshot"]))
+        val templates = menus["templates"] as Map<*, *>
+        templateIds.filterNot { config.exists("$TEMPLATE_ROOT.$it") }.forEach {
+            config.setStructured("$TEMPLATE_ROOT.$it", requireNotNull(templates[it]))
+        }
+        return config
+    }
 
     /** Older catalogs predate this screen. Overlay only its absent definition; never save the operator's file. */
     private fun withGraveDefaults(config: Config): Config {

@@ -5,6 +5,21 @@ without a confirmation inventory. Books stay provider-owned: EM books only apply
 to compatible EM gear, and AE retains its native enchantments, dust, scrolls and
 application validation. There is no conversion between the two providers.
 
+`EquipmentEnchantmentPresentation` groups enchantments on unstackable vanilla
+equipment and repaints anvil/grindstone/smithing results before they are taken.
+Native attributes stay visible. AE rows retain their native prefix so its apply,
+upgrade and removal operations still recognize them; counters and authored gaps
+remain in the original body. ARC records only its own rows and separators and
+removes that record and its owned flags/frame after all enchantments are removed.
+EliteMobs calls the same AE owner after rebuilding its lore, through
+`ArcDungeonItems.presentEquipmentEnchantments`; only real current AE PDC is shown.
+Deliver ARC 1.4.530 and ArcDungeons 0.1.63 together for that presentation method.
+An older host retains native EliteMobs lore and logs the missing method once.
+Focused checks: `:test --tests ru.arc.enchanting.EquipmentEnchantmentPresentationTest`
+and `:arc-dungeons:test --tests ru.arc.eliteloot.EliteLootPresentationTest`.
+The pinned MockBukkit cannot verify over-level native display names or persistence
+of `ItemMeta.tooltipStyle`; those two observations require real Paper/client QA.
+
 New ordinary books have 40–80% success and 1% destruction **conditional on failure**.
 EM rolls and persists these values once in INTEGER PDC keys `arc:elite_book_success`
 and `arc:elite_book_destroy`. The exact persisted chances appear on the book.

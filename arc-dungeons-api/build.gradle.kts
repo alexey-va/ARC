@@ -3,7 +3,7 @@ plugins {
     `maven-publish`
 }
 group = "ru.ruscrafting.arc"
-version = "0.1.2"
+version = "0.1.3"
 base.archivesName.set("arc-dungeons-api")
 repositories {
     maven("https://repo.papermc.io/repository/maven-public/")
