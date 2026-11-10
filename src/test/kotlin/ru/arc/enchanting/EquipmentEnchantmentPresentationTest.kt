@@ -95,6 +95,102 @@ class EquipmentEnchantmentPresentationTest {
     }
 
     @Test
+    fun `native display icon migrates an existing AE row once and preserves its component and unrelated lore`() {
+        MockBukkitTestRuntime.open().use { runtime ->
+            runtime.createSimplePlugin("AdvancedEnchantments")
+            Class.forName(AEAPI::class.java.name, true, AEAPI::class.java.classLoader)
+            mockkStatic(AEAPI::class)
+            try {
+                every { AEAPI.getEnchantmentsOnItem(any()) } returns hashMapOf("lightweight" to 3)
+                every { AEAPI.getEnchantLore("lightweight", 3) } returns listOf("§f §aЛегкий III", "§7Ускоряет атаку.")
+                val original = Component.text("Легкий III", NamedTextColor.GREEN)
+                    .append(Component.text(" [метка]", NamedTextColor.AQUA))
+                    .hoverEvent(Component.text("Подсказка"))
+                    .decoration(TextDecoration.ITALIC, false)
+                val body = listOf(Component.text("Легкий III — цитата"), Component.empty(), Component.text("Мобов: 2540"))
+                val authoredSameName = Component.text("Легкий III", NamedTextColor.GRAY)
+                val item = ItemStack(Material.NETHERITE_SWORD).apply {
+                    editMeta {
+                        it.lore(listOf(authoredSameName, original, Component.text("Ускоряет атаку.", NamedTextColor.GRAY)) + body)
+                        it.persistentDataContainer.set(aeKey, PersistentDataType.INTEGER, 3)
+                    }
+                }
+                val output = EquipmentEnchantmentPresentation.ordinary(item)
+                val expected = Component.text(" ", NamedTextColor.WHITE).append(original)
+                    .decoration(TextDecoration.ITALIC, false)
+                assertTrue(output.lore()!!.contains(expected))
+                assertTrue(output.lore()!!.contains(authoredSameName))
+                assertEquals(body, output.lore()!!.takeLast(body.size))
+                assertEquals(1, output.lore()!!.count { plain.serialize(it) == "Ускоряет атаку." })
+                assertEquals(3, output.itemMeta.persistentDataContainer.get(aeKey, PersistentDataType.INTEGER))
+                assertEquals(output, EquipmentEnchantmentPresentation.ordinary(output))
+                assertEquals(original, item.lore()!![1])
+            } finally { unmockkStatic(AEAPI::class) }
+        }
+    }
+
+    @Test
+    fun `first refresh after native upgrade removes only the exact old AE name style and valid Roman level`() {
+        MockBukkitTestRuntime.open().use { runtime ->
+            runtime.createSimplePlugin("AdvancedEnchantments")
+            Class.forName(AEAPI::class.java.name, true, AEAPI::class.java.classLoader)
+            mockkStatic(AEAPI::class)
+            try {
+                every { AEAPI.getEnchantmentsOnItem(any()) } returns hashMapOf("lightweight" to 4)
+                every { AEAPI.getEnchantLore("lightweight", 4) } returns listOf("§f §aЛегкий IV")
+                val authored = listOf(
+                    Component.text("Легкий III — история", NamedTextColor.GREEN),
+                    Component.text("Легкий III", NamedTextColor.GRAY),
+                    Component.text("Легкий IIV", NamedTextColor.GREEN),
+                    Component.text("Легкий iii", NamedTextColor.GREEN),
+                    Component.text("легкий III", NamedTextColor.GREEN),
+                )
+                val item = ItemStack(Material.NETHERITE_SWORD).apply {
+                    editMeta {
+                        it.lore(listOf(Component.text(" ", NamedTextColor.WHITE).append(Component.text("Легкий IV", NamedTextColor.GREEN)),
+                            Component.text("Легкий III", NamedTextColor.GREEN)) + authored)
+                        it.persistentDataContainer.set(aeKey, PersistentDataType.INTEGER, 4)
+                    }
+                }
+                val output = EquipmentEnchantmentPresentation.ordinary(item)
+                assertEquals(authored, output.lore()!!.takeLast(authored.size))
+                assertEquals(1, output.lore()!!.count { plain.serialize(it) == " Легкий IV" })
+                assertFalse(output.lore()!!.contains(Component.text("Легкий III", NamedTextColor.GREEN)))
+                assertEquals(output, EquipmentEnchantmentPresentation.ordinary(output))
+                assertEquals(4, output.itemMeta.persistentDataContainer.get(aeKey, PersistentDataType.INTEGER))
+            } finally { unmockkStatic(AEAPI::class) }
+        }
+    }
+
+    @Test
+    fun `icon migration requires the current PDC display and does not reinterpret descriptions or default names`() {
+        MockBukkitTestRuntime.open().use { runtime ->
+            runtime.createSimplePlugin("AdvancedEnchantments")
+            Class.forName(AEAPI::class.java.name, true, AEAPI::class.java.classLoader)
+            mockkStatic(AEAPI::class)
+            try {
+                every { AEAPI.getEnchantmentsOnItem(any()) } returns hashMapOf("lightweight" to 3)
+                every { AEAPI.getEnchantLore("lightweight", 3) } returns listOf("§aЛегкий III", "§f §7Справка II")
+                val authored = Component.text("Справка II", NamedTextColor.GRAY)
+                val item = ItemStack(Material.NETHERITE_SWORD).apply {
+                    editMeta {
+                        it.lore(listOf(Component.text("Легкий III", NamedTextColor.GREEN), authored))
+                        it.persistentDataContainer.set(aeKey, PersistentDataType.INTEGER, 3)
+                    }
+                }
+                val output = EquipmentEnchantmentPresentation.ordinary(item)
+                assertEquals(1, output.lore()!!.count { plain.serialize(it) == "Легкий III" })
+                assertTrue(output.lore()!!.contains(authored))
+                assertTrue(output.lore()!!.any { plain.serialize(it) == " Справка II" })
+                every { AEAPI.getEnchantmentsOnItem(any()) } returns hashMapOf()
+                val removedBeforeRefresh = item.clone().apply { editMeta { it.persistentDataContainer.remove(aeKey) } }
+                // With no PDC or previous ARC ownership an old row is indistinguishable from authored text.
+                assertEquals(removedBeforeRefresh, EquipmentEnchantmentPresentation.ordinary(removedBeforeRefresh))
+            } finally { unmockkStatic(AEAPI::class) }
+        }
+    }
+
+    @Test
     fun `native AE metadata restores its current rows after EliteMobs rebuild without changing price or binding`() {
         MockBukkitTestRuntime.open().use { runtime ->
             val plugin = runtime.createSimplePlugin("AdvancedEnchantments")

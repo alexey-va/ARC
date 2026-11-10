@@ -26,6 +26,10 @@ internal object EquipmentEnchantmentPresentation {
     private val commonStyle = NamespacedKey("lzblocks", "tooltip/common")
     private val legacy = LegacyComponentSerializer.legacySection()
     private val plain = PlainTextComponentSerializer.plainText()
+    // Existing minecraft:default providers in the distributed RusCrafting pack.
+    private val advancedIcons = setOf('', '', '', '')
+    private val romanLevel = Regex("M{0,3}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})")
+    private data class AdvancedRows(val lines: List<Component>, val legacyDisplays: Map<String, String> = emptyMap())
     private var vanillaTitle: Component = Component.text("Зачарования", NamedTextColor.AQUA).decorate(TextDecoration.BOLD)
     private var advancedTitle: Component = Component.text("Дополнительные чары", NamedTextColor.LIGHT_PURPLE).decorate(TextDecoration.BOLD)
     private var failureLogged = false
@@ -51,29 +55,41 @@ internal object EquipmentEnchantmentPresentation {
                 .append(enchantment.displayName(level))
                 .decoration(TextDecoration.ITALIC, false)
         }
-        return render(item, vanilla, advanced, ordinary = true, beforeLore = null)
+        return render(item, vanilla, advanced.lines, ordinary = true, beforeLore = null, legacyDisplays = advanced.legacyDisplays)
     }
 
     /** Called after EliteMobs has rebuilt its lore; item enchantment PDC remains authoritative. */
     fun advanced(item: ItemStack, beforeLore: String?): ItemStack {
         val rows = advancedRows(item) ?: return item
-        return render(item, emptyList(), rows, ordinary = false, beforeLore = beforeLore)
+        return render(item, emptyList(), rows.lines, ordinary = false, beforeLore = beforeLore, legacyDisplays = rows.legacyDisplays)
     }
 
-    private fun advancedRows(item: ItemStack): List<Component>? {
+    private fun advancedRows(item: ItemStack): AdvancedRows? {
         if (!Bukkit.getPluginManager().isPluginEnabled("AdvancedEnchantments")) {
-            return if (item.itemMeta?.persistentDataContainer?.keys?.any { it.namespace == "advancedenchantments" } == true) null else emptyList()
+            return if (item.itemMeta?.persistentDataContainer?.keys?.any { it.namespace == "advancedenchantments" } == true) null else AdvancedRows(emptyList())
         }
         return try {
+            val legacyDisplays = mutableMapOf<String, String>()
             val rows = AEAPI.getEnchantmentsOnItem(item).entries
                 .sortedWith { first, second ->
                     AEAPI.compareRarity(first.key, second.key).takeIf { it != 0 }
                         ?: first.key.compareTo(second.key)
                 }
-                .flatMap { (id, level) -> AEAPI.getEnchantLore(id, level).orEmpty() }
-                .map { legacy.deserialize(it).decoration(TextDecoration.ITALIC, false) }
+                .flatMap { (id, level) ->
+                    AEAPI.getEnchantLore(id, level).orEmpty().mapIndexed { index, line ->
+                        val row = legacy.deserialize(line).decoration(TextDecoration.ITALIC, false)
+                        // Only the native display row for a current PDC enchant is a migration candidate.
+                        // Description rows and unknown/custom prefixes retain their original contract.
+                        if (index == 0 && plain.serialize(row).firstOrNull() in advancedIcons) {
+                            val encoded = legacy.serialize(row)
+                            val prefix = "§f${plain.serialize(row).first()} "
+                            if (encoded.startsWith(prefix)) legacyDisplays[encoded] = encoded.removePrefix(prefix)
+                        }
+                        row
+                    }
+                }
             failureLogged = false
-            rows
+            AdvancedRows(rows, legacyDisplays)
         } catch (failure: Exception) {
             reportFailure(failure)
             null
@@ -95,6 +111,7 @@ internal object EquipmentEnchantmentPresentation {
         advanced: List<Component>,
         ordinary: Boolean,
         beforeLore: String?,
+        legacyDisplays: Map<String, String> = emptyMap(),
     ): ItemStack {
         val meta = item.itemMeta ?: return item
         val previous = meta.persistentDataContainer.get(recordKey, PersistentDataType.TAG_CONTAINER)
@@ -104,20 +121,44 @@ internal object EquipmentEnchantmentPresentation {
         val oldRows = previous?.get(rowsKey, PersistentDataType.LIST.strings()).orEmpty()
         // Preserve authored color, hover metadata and suffixes on existing native AE rows.
         val available = lore.toMutableList()
+        val matchedAdvanced = mutableListOf<Component>()
+        fun takeMatching(predicate: (Component) -> Boolean): Component? {
+            val index = available.indexOfFirst(predicate)
+            return if (index < 0) null else available.removeAt(index).also(matchedAdvanced::add)
+        }
         val retainedAdvanced = advanced.map { row ->
             val expected = plain.serialize(row)
-            val index = available.indexOfFirst {
+            val native = takeMatching {
                 val actual = plain.serialize(it)
                 actual == expected || actual.startsWith("$expected ")
             }
-            if (index < 0) row else available.removeAt(index)
+            val oldDisplay = legacyDisplays[legacy.serialize(row)]
+            if (oldDisplay == null) native ?: row else {
+                val old = takeMatching {
+                    val encoded = legacy.serialize(it)
+                    encoded == oldDisplay || (native == null && encoded.startsWith(oldDisplay) &&
+                        plain.serialize(legacy.deserialize(encoded.removePrefix(oldDisplay))).startsWith(" "))
+                }
+                // A native upgrade before the first refresh can leave its previous unprefixed level.
+                // Remove only an exact native-styled name + valid Roman level, with no authored suffix.
+                val level = oldDisplay.substringAfterLast(' ')
+                if (level.isNotEmpty() && romanLevel.matches(level)) {
+                    val stem = oldDisplay.substringBeforeLast(' ') + " "
+                    takeMatching {
+                        val encoded = legacy.serialize(it)
+                        val candidate = encoded.removePrefix(stem)
+                        encoded.startsWith(stem) && candidate.isNotEmpty() && romanLevel.matches(candidate)
+                    }
+                }
+                native ?: old?.let { Component.text(expected.take(2), NamedTextColor.WHITE).append(it) } ?: row
+            }
         }
         var body = removeRows(lore, serialized, oldRows,
             previous?.get(beforeGapKey, PersistentDataType.BOOLEAN) == true,
             previous?.get(afterGapKey, PersistentDataType.BOOLEAN) == true,
             previous?.get(middleGapKey, PersistentDataType.BOOLEAN) == true)
         // Fresh native AE rows may have been prepended by its apply/organize operation.
-        body = removeRows(body, body.map(legacy::serialize), retainedAdvanced.map(legacy::serialize))
+        body = removeRows(body, body.map(legacy::serialize), matchedAdvanced.map(legacy::serialize))
         val generated = buildList {
             if (vanilla.isNotEmpty()) { add(vanillaTitle); addAll(vanilla) }
             if (advanced.isNotEmpty()) {
