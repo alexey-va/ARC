@@ -73,8 +73,13 @@ internal object EquipmentEnchantmentPresentation {
         if (!owned && !meta.hasEnchants() && "advancedenchantments" !in namespaces) return item
         // Existing custom presentation and hidden native stats retain their own owner.
         if (!owned && (meta.hasItemFlag(ItemFlag.HIDE_ENCHANTS) || meta.hasCustomModelData() || meta.hasItemModel())) return item
-        if (namespaces.any { it in setOf("elitemobs", "magmacore", "itemsadder", "slimefun") } ||
-            dungeonService()?.isEliteItem(item) == true) return item
+        if (namespaces.any { it in setOf("elitemobs", "magmacore", "itemsadder", "slimefun") }) return item
+        // The service can register before EliteMobs finishes starting.
+        val keepOriginalLore = dungeonService()?.let { dungeons ->
+            if (dungeons.nativeReady()) dungeons.isEliteItem(item)
+            else Bukkit.getPluginManager().getPlugin("EliteMobs") != null
+        } == true
+        if (keepOriginalLore) return item
         val advanced = advancedRows(item) ?: return item
         val vanilla = meta.enchants.entries.sortedBy { it.key.key.toString() }.map { (enchantment, level) ->
             Component.text(" ", NamedTextColor.WHITE)

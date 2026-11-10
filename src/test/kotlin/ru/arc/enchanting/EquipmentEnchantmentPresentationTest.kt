@@ -4,12 +4,14 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
+import io.mockk.verify
 import net.advancedplugins.ae.api.AEAPI
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.TranslatableComponent
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.enchantments.Enchantment
@@ -18,8 +20,10 @@ import org.bukkit.inventory.InventoryView
 import org.bukkit.inventory.ItemFlag
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
+import org.bukkit.plugin.ServicePriority
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
+import ru.arc.dungeons.api.ArcDungeonsService
 import ru.arc.listeners.PickupListener
 import ru.arc.paper.testing.MockBukkitTestRuntime
 
@@ -56,6 +60,42 @@ class EquipmentEnchantmentPresentationTest {
             val cleaned = EquipmentEnchantmentPresentation.ordinary(cleared)
             val expected = original.clone().apply { enchantments.keys.forEach(::removeEnchantment) }
             assertEquals(expected, cleaned)
+        }
+    }
+
+    @Test
+    fun `ordinary presentation waits for the registered dungeon integration to become ready`() {
+        MockBukkitTestRuntime.open().use { runtime ->
+            runtime.createSimplePlugin("EliteMobs")
+            val plugin = runtime.createSimplePlugin("ArcDungeons")
+            val dungeons = mockk<ArcDungeonsService>()
+            every { dungeons.nativeReady() } returnsMany listOf(false, true, true)
+            every { dungeons.isEliteItem(any()) } returnsMany listOf(false, true)
+            Bukkit.getServicesManager().register(ArcDungeonsService::class.java, dungeons, plugin, ServicePriority.Normal)
+            val sword = ItemStack(Material.NETHERITE_SWORD).apply {
+                addUnsafeEnchantment(Enchantment.SHARPNESS, 3)
+            }
+
+            assertSame(sword, EquipmentEnchantmentPresentation.ordinary(sword))
+            verify(exactly = 0) { dungeons.isEliteItem(any()) }
+            assertTrue(EquipmentEnchantmentPresentation.ordinary(sword).itemMeta.hasItemFlag(ItemFlag.HIDE_ENCHANTS))
+            assertSame(sword, EquipmentEnchantmentPresentation.ordinary(sword))
+        }
+    }
+
+    @Test
+    fun `ordinary presentation works on a backend without EliteMobs`() {
+        MockBukkitTestRuntime.open().use { runtime ->
+            val plugin = runtime.createSimplePlugin("ArcDungeons")
+            val dungeons = mockk<ArcDungeonsService>()
+            every { dungeons.nativeReady() } returns false
+            Bukkit.getServicesManager().register(ArcDungeonsService::class.java, dungeons, plugin, ServicePriority.Normal)
+            val sword = ItemStack(Material.NETHERITE_SWORD).apply {
+                addUnsafeEnchantment(Enchantment.SHARPNESS, 3)
+            }
+
+            assertTrue(EquipmentEnchantmentPresentation.ordinary(sword).itemMeta.hasItemFlag(ItemFlag.HIDE_ENCHANTS))
+            verify(exactly = 0) { dungeons.isEliteItem(any()) }
         }
     }
 
