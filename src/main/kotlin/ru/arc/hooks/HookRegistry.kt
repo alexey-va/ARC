@@ -13,6 +13,7 @@ import ru.arc.hooks.auraskills.AuraSkillsHook
 import ru.arc.hooks.bank.BankHook
 import ru.arc.hooks.betterstructures.BSListener
 import ru.arc.hooks.citizens.CitizensHook
+import ru.arc.hooks.cmi.CmiIgnorePersistenceHook
 import ru.arc.hooks.economyshop.EconomyShopGuiPurchaseService
 import ru.arc.hooks.economyshop.EconomyShopGuiAuditListener
 import ru.arc.hooks.economyshop.FurnitureGalleryInteractionRuntime
@@ -82,6 +83,8 @@ class HookRegistry(
 
         @JvmField var cmiHook: CMIHook? = null
 
+        internal var cmiIgnorePersistenceHook: CmiIgnorePersistenceHook? = null
+
         @JvmField var itemsAdderHook: ItemsAdderHook? = null
 
         internal var chatGlyphGuard: ItemsAdderChatGuard? = null
@@ -131,6 +134,7 @@ class HookRegistry(
             huskHomesHook = null
             papiHook = null
             cmiHook = null
+            cmiIgnorePersistenceHook = null
             itemsAdderHook = null
             chatGlyphGuard = null
             citizensHook = null
@@ -214,6 +218,7 @@ class HookRegistry(
         var packetDrain = CompletableFuture.completedFuture<Void>(null)
         cleanup(failures) { auctionHook?.close() }
         cleanup(failures) { huskHomesHook?.close() }
+        cleanup(failures) { cmiIgnorePersistenceHook?.close() }
         cleanup(failures) { furnitureGalleryInteractionRuntime?.close() }
         cleanup(failures) { citizensHook?.close() }
         cleanup(failures) { packetDrain = oldPackets?.closeAsync() ?: packetDrain }
@@ -399,6 +404,16 @@ class HookRegistry(
             val hook = CMIHook()
             registerListener(CMIListener())
             cmiHook = hook
+            val ignorePersistence = CmiIgnorePersistenceHook(com.Zrips.CMI.CMI.getInstance())
+            try {
+                ignorePersistence.install()
+                registerListener(ignorePersistence)
+                cmiIgnorePersistenceHook = ignorePersistence
+                info("CMI ignore-list persistence integration installed")
+            } catch (failure: Throwable) {
+                ignorePersistence.close()
+                ru.arc.util.Logging.warn("CMI ignore persistence integration could not be installed", failure)
+            }
         }
         register("ViaVersion", true) { viaVersionHook = ViaVersionHook() }
         register("packetevents", true) { packetEventsHook = PacketEventsHook() }
