@@ -1,6 +1,7 @@
 package ru.arc.chestpreview
 
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.Color
 import org.bukkit.Location
 import org.bukkit.entity.Display
@@ -24,21 +25,21 @@ import kotlin.math.ceil
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/** Chest content and lid placement stay local; Core owns keyed parts, motion and packet lifecycle. */
+/** Chest content and a fixed world anchor stay local; Core owns keyed parts and packet lifecycle. */
 internal class ChestPreviewIcons(
     private val displays: PaperPacketDisplays,
     private val settings: ChestPreviewSettings,
 ) : AutoCloseable {
     private class ViewerState(
-        var anchor: InspectionHologramAnchor,
+        val anchor: InspectionHologramAnchor,
         val sourceAnchor: InspectionHologramAnchor,
-        var scale: Float,
-        var itemCount: Int,
+        val scale: Float,
         val options: ChestPreviewSettings,
         val scene: PacketDisplayScene<String>,
         val audience: SceneAudience.Private,
         var items: List<ItemStack> = emptyList(),
         var counts: List<Int> = emptyList(),
+        var visible: Boolean = false,
     )
 
     private val viewers = mutableMapOf<UUID, ViewerState>()
@@ -59,13 +60,21 @@ internal class ChestPreviewIcons(
 
         try {
             val effectiveScale = ChestPreviewIconGeometry.normalizeScale(scale)
-            val previous = viewers[player.uniqueId]?.takeIf {
-                it.sourceAnchor == target.anchor && it.options == options &&
-                    it.itemCount == items.size && it.scale == effectiveScale
-            }?.anchor
-            val anchor = ChestPreviewPlacement.place(player, target, items.size, effectiveScale, options, previous)
-            if (anchor == null) clear(player)
-            else render(player, anchor, target.anchor, items, counts, effectiveScale, options)
+            val id = player.uniqueId
+            if (viewers[id]?.let {
+                it.sourceAnchor != target.anchor || it.options != options || it.scale != effectiveScale
+            } == true) clear(id)
+            val state = viewers.getOrPut(id) {
+                ViewerState(
+                    ChestPreviewPlacement.place(player.eyeLocation, target, effectiveScale, options),
+                    target.anchor, effectiveScale, options, PacketDisplayScene(displays), SceneAudience.Private(id),
+                )
+            }
+            if (!ChestPreviewPlacement.visible(player, state.anchor)) {
+                // Keep the selected anchor while occluded; hiding must not start another placement search.
+                state.scene.hide()
+                state.visible = false
+            } else render(player, state, items, counts)
         } catch (failure: Exception) {
             try { clear(player) } catch (cleanup: Exception) { failure.addSuppressed(cleanup) }
             throw failure
@@ -76,28 +85,17 @@ internal class ChestPreviewIcons(
 
     private fun render(
         player: Player,
-        anchor: InspectionHologramAnchor,
-        sourceAnchor: InspectionHologramAnchor,
+        state: ViewerState,
         items: List<ItemStack>,
         counts: List<Int>,
-        scale: Float,
-        options: ChestPreviewSettings,
     ) {
-        val id = player.uniqueId
-        if (viewers[id]?.let { it.sourceAnchor != sourceAnchor || it.options != options } == true) {
-            // A different container has no authored travel path from the old one.
-            clear(id)
-        }
-        val state = viewers.getOrPut(id) {
-            ViewerState(anchor, sourceAnchor, scale, 0, options, PacketDisplayScene(displays), SceneAudience.Private(id))
-        }
-        // Access and live placement are still checked by every update. Only unchanged scene
+        val anchor = state.anchor
+        val scale = state.scale
+        val options = state.options
+        // Access and line of sight are still checked by every update. Only unchanged scene
         // construction is skipped; Core continues viewer/chunk/connection reconciliation.
-        if (state.anchor == anchor && state.scale == scale && state.items == items &&
+        if (state.visible && state.items == items &&
             state.counts == counts && state.scene.isValid()) return
-        val ticks = if (state.anchor != anchor &&
-            !ChestPreviewPlacement.clearPath(player, state.anchor, anchor, items.size, scale, options)) 0
-            else options.teleportTicks
         val at = Location(player.world, anchor.x, anchor.y, anchor.z)
         val style = SceneDisplayStyle(
             billboard = Display.Billboard.CENTER,
@@ -130,7 +128,8 @@ internal class ChestPreviewIcons(
                     Quaternionf(), Vector3f(options.countScale * scale / .25f), Quaternionf(),
                 )
                 parts += ScenePart.Text(
-                    "count-" + index, ScenePose(at, countTransform), style, Component.text("× " + counts[index]), countStyle,
+                    "count-" + index, ScenePose(at, countTransform), style,
+                    Component.text(counts[index], NamedTextColor.WHITE), countStyle,
                 )
             }
         }
@@ -141,7 +140,7 @@ internal class ChestPreviewIcons(
             val transform = Transformation(
                 Vector3f(
                     -ChestPreviewIconGeometry.BACKGROUND_CENTER_X_PIXELS * ChestPreviewIconGeometry.BACKGROUND_PIXEL_SIZE * scaleX,
-                    0f, -ChestPreviewIconGeometry.depth(scale, options),
+                    -bounds.height / 2f, -ChestPreviewIconGeometry.depth(scale, options),
                 ),
                 Quaternionf(), Vector3f(scaleX, scaleY, 1f), Quaternionf(),
             )
@@ -154,12 +153,10 @@ internal class ChestPreviewIcons(
                 ),
             )
         }
-        state.scene.apply(SceneFrame(parts, state.audience, ticks))
-        state.anchor = anchor
-        state.itemCount = items.size
-        state.scale = scale
+        state.scene.apply(SceneFrame(parts, state.audience, 0))
         state.items = items
         state.counts = counts
+        state.visible = true
     }
 
     private fun clear(playerId: UUID) {
@@ -187,7 +184,7 @@ internal class ChestPreviewIcons(
     }
 }
 
-/** Bottom-anchored, camera-facing offsets shared by rendering and offline visual previews. */
+/** Center-anchored, camera-facing offsets shared by rendering and offline visual previews. */
 internal data class ChestPreviewIconOffset(val x: Float, val y: Float)
 
 internal data class ChestPreviewPanelBounds(
@@ -197,9 +194,9 @@ internal data class ChestPreviewPanelBounds(
 
 /** One source of truth for icon geometry, the backdrop quad and offline preview exports. */
 internal object ChestPreviewIconGeometry {
-    const val COLUMNS = 3
-    const val CELL_SPACING = 0.48f
-    const val ICON_SCALE = 0.40f
+    const val COLUMNS = ChestPreviewSettings.DEFAULT_COLUMNS
+    const val CELL_SPACING = ChestPreviewSettings.DEFAULT_CELL_SPACING
+    const val ICON_SCALE = ChestPreviewSettings.DEFAULT_ICON_SCALE
     const val EDGE_PADDING = 0.08f
     // A small optical correction: authored block models read higher than flat item icons.
     const val ICON_VERTICAL_OFFSET = -0.04f
@@ -233,12 +230,12 @@ internal object ChestPreviewIconGeometry {
 
         val effectiveScale = normalizeScale(scale)
         val rows = ceil(itemCount / options.columns.toDouble()).toInt()
-        val bottomRowCenter = bottomRowCenter(options) * effectiveScale
+        val columns = min(options.columns, itemCount)
+        val bottomRowCenter = bottomRowCenter(options) * effectiveScale - panelBounds(itemCount, scale, options).height / 2f
         return List(itemCount) { index ->
             val row = index / options.columns
-            val columnsInRow = min(options.columns, itemCount - row * options.columns)
             val column = index % options.columns
-            val x = ((column - (columnsInRow - 1) / 2.0) * options.cellSpacing * effectiveScale).toFloat()
+            val x = ((column - (columns - 1) / 2.0) * options.cellSpacing * effectiveScale).toFloat()
             val y = bottomRowCenter + (rows - 1 - row) * options.cellSpacing * effectiveScale
             ChestPreviewIconOffset(x, y)
         }

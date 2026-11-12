@@ -102,8 +102,8 @@ internal data class ChestPreviewPreferences(
             return ChestPreviewPreferences(
                 enabled = boolean("enabled"),
                 scale = float("scale", 0.5f..2.0f),
-                maxItems = integer("max-items", 1..12),
-                columns = integer("columns", 1..6),
+                maxItems = integer("max-items", 1..ChestPreviewSettings.MAX_ITEMS),
+                columns = integer("columns", 1..ChestPreviewSettings.MAX_COLUMNS),
                 cellSpacing = float("cell-spacing", 0.3f..1.0f),
                 maxDistance = double("max-distance", 1.0..4.5),
                 verticalGap = double("vertical-gap", 0.0..0.5),

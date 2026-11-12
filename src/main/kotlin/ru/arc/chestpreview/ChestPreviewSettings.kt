@@ -26,8 +26,8 @@ internal data class ChestPreviewSettings(
 ) {
     init {
         require(scale in 0.5f..2.0f && scale.isFinite()) { "Chest preview scale must be in 0.5..2.0" }
-        require(maxItems in 1..12) { "Chest preview max-items must be in 1..12" }
-        require(columns in 1..6) { "Chest preview columns must be in 1..6" }
+        require(maxItems in 1..MAX_ITEMS) { "Chest preview max-items must be in 1..$MAX_ITEMS" }
+        require(columns in 1..MAX_COLUMNS) { "Chest preview columns must be in 1..$MAX_COLUMNS" }
         require(cellSpacing in 0.3f..1.0f && cellSpacing.isFinite()) { "Chest preview cell-spacing must be in 0.3..1.0" }
         require(maxDistance in 1.0..4.5 && maxDistance.isFinite()) {
             "Chest preview max-distance must be in 1.0..4.5"
@@ -51,24 +51,27 @@ internal data class ChestPreviewSettings(
 
     companion object {
         const val MAX_DISTANCE = 4.5
+        const val MAX_ITEMS = 54
+        const val MAX_COLUMNS = 9
         const val DEFAULT_ENABLED = true
         const val DEFAULT_SCALE = 0.9f
-        const val DEFAULT_MAX_ITEMS = 6
-        const val DEFAULT_COLUMNS = 3
-        const val DEFAULT_CELL_SPACING = 0.48f
+        const val DEFAULT_MAX_ITEMS = MAX_ITEMS
+        const val DEFAULT_COLUMNS = MAX_COLUMNS
+        const val DEFAULT_CELL_SPACING = 0.36f
         const val DEFAULT_MAX_DISTANCE = 4.5
         const val DEFAULT_VERTICAL_GAP = 0.15
-        const val DEFAULT_ICON_SCALE = 0.40f
+        const val DEFAULT_ICON_SCALE = 0.28f
         const val DEFAULT_DEPTH_SCALE = 0.15f
         const val DEFAULT_BLOCK_PITCH = 12.0f
         const val DEFAULT_BLOCK_YAW = 20.0f
         const val DEFAULT_SHOW_COUNTS = true
-        const val DEFAULT_COUNT_SCALE = 0.12f
-        const val DEFAULT_COUNT_OFFSET_Y = -0.28f
-        const val DEFAULT_TELEPORT_TICKS = 3
+        const val DEFAULT_COUNT_SCALE = 0.10f
+        const val DEFAULT_COUNT_OFFSET_Y = -0.22f
+        // Legacy settings remain readable; the fixed panel no longer teleports between poses.
+        const val DEFAULT_TELEPORT_TICKS = 0
         const val DEFAULT_STABILITY_THRESHOLD = 0.04
         const val DEFAULT_BRIGHTNESS = 15
-        const val DEFAULT_BACKGROUND_OPACITY = 40
+        const val DEFAULT_BACKGROUND_OPACITY = 0
         val DEFAULT_ITEM_TRANSFORM = ItemDisplay.ItemDisplayTransform.GUI
     }
 }

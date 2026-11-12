@@ -9,8 +9,8 @@ class ChestPreviewPreferencesTest : StringSpec({
         val server = ChestPreviewSettings(
             enabled = false,
             scale = 1.4f,
-            maxItems = 8,
-            columns = 4,
+            maxItems = 54,
+            columns = 9,
             showCounts = false,
             itemTransform = ItemDisplay.ItemDisplayTransform.FIXED,
         )
@@ -26,8 +26,8 @@ class ChestPreviewPreferencesTest : StringSpec({
         val preferences = ChestPreviewPreferences(
             enabled = false,
             scale = 1.5f,
-            maxItems = 9,
-            columns = 6,
+            maxItems = 54,
+            columns = 9,
             cellSpacing = 0.72f,
             maxDistance = 3.8,
             verticalGap = 0.44,
@@ -50,6 +50,30 @@ class ChestPreviewPreferencesTest : StringSpec({
             key shouldBe ChestPreviewPreferences.META_KEY
             preferences.stored()
         } shouldBe preferences
+    }
+
+    "legacy grid overrides stay explicit until reset to server defaults" {
+        val server = ChestPreviewSettings(maxItems = 54, columns = 9)
+        val preferences = ChestPreviewPreferences.fromStored { "max-items=6;columns=3" }
+
+        preferences.stored() shouldBe "max-items=6;columns=3"
+        preferences.applyTo(server) shouldBe server.copy(maxItems = 6, columns = 3)
+        val reset = ChestPreviewPreferences().stored()
+        reset shouldBe "default"
+        ChestPreviewPreferences.fromStored { reset }.applyTo(server) shouldBe server
+    }
+
+    "grid preference bounds ignore invalid overrides independently" {
+        ChestPreviewPreferences.fromStored { "max-items=1;columns=1" } shouldBe
+            ChestPreviewPreferences(maxItems = 1, columns = 1)
+        for (maxItems in listOf(0, 55)) {
+            ChestPreviewPreferences.fromStored { "max-items=$maxItems;columns=9" } shouldBe
+                ChestPreviewPreferences(columns = 9)
+        }
+        for (columns in listOf(0, 10)) {
+            ChestPreviewPreferences.fromStored { "max-items=54;columns=$columns" } shouldBe
+                ChestPreviewPreferences(maxItems = 54)
+        }
     }
 
     "malformed and out-of-range values are ignored independently" {

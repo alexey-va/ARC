@@ -1283,7 +1283,7 @@ class HelpCenterScreensTest {
         assertEquals("help.settings.container-preview", screen.id)
         assertTrue(body().contains("arc.chest-preview"))
         assertEquals(
-            listOf("container_preview_enabled", "container_preview_layout", "container_preview_appearance", "container_preview_motion", "container_preview_reset_all"),
+            listOf("container_preview_enabled", "container_preview_layout", "container_preview_appearance", "container_preview_reset_all"),
             screen.buttons.map { it.id.value },
         )
 
@@ -1293,15 +1293,16 @@ class HelpCenterScreensTest {
             listOf("cp_scale", "cp_max_items", "cp_columns", "cp_cell_spacing", "cp_max_distance", "cp_vertical_gap"),
             screen.numberInputs.map { it.id.value },
         )
+        assertEquals(54f, screen.numberInputs.single { it.id.value == "cp_max_items" }.end)
+        assertEquals(9f, screen.numberInputs.single { it.id.value == "cp_columns" }.end)
+        assertTrue(body().contains("54"))
         click("back")
         click("container_preview_appearance")
         assertEquals("help.settings.container-preview.appearance", screen.id)
         assertEquals(8, screen.numberInputs.size)
         assertTrue(body().contains("почти плоско"))
         click("back")
-        click("container_preview_motion")
-        assertEquals("help.settings.container-preview.motion", screen.id)
-        assertEquals(listOf("cp_teleport_ticks", "cp_stability_threshold"), screen.numberInputs.map { it.id.value })
+        assertTrue(screen.buttons.none { it.id.value == "container_preview_motion" })
     }
 
     @Test

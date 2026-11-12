@@ -5,18 +5,22 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 
 class ChestPreviewSettingsTest : StringSpec({
-    "defaults use six groups, normal reach and a small chest-top gap" {
+    "defaults show the full dense nine-column grid without a backdrop" {
         ChestPreviewSettings() shouldBe ChestPreviewSettings(
-            maxItems = 6,
+            maxItems = 54,
+            columns = 9,
             maxDistance = 4.5,
             verticalGap = 0.15,
-            backgroundOpacity = 40,
+            backgroundOpacity = 0,
         )
     }
 
     "group count and range stay bounded" {
-        for (value in listOf(0, 13)) {
+        for (value in listOf(0, 55)) {
             shouldThrow<IllegalArgumentException> { ChestPreviewSettings(maxItems = value) }
+        }
+        for (value in listOf(0, 10)) {
+            shouldThrow<IllegalArgumentException> { ChestPreviewSettings(columns = value) }
         }
         for (value in listOf(0.99, 4.5001, Double.NaN, Double.POSITIVE_INFINITY)) {
             shouldThrow<IllegalArgumentException> { ChestPreviewSettings(maxDistance = value) }

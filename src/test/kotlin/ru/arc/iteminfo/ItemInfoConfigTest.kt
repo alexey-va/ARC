@@ -27,9 +27,9 @@ class ItemInfoConfigTest : StringSpec({
             { it.setDouble("chest-preview.scale", 0.49) },
             { it.setDouble("chest-preview.scale", 2.01) },
             { it.setInt("chest-preview.max-items", 0) },
-            { it.setInt("chest-preview.max-items", 13) },
+            { it.setInt("chest-preview.max-items", 55) },
             { it.setInt("chest-preview.columns", 0) },
-            { it.setInt("chest-preview.columns", 7) },
+            { it.setInt("chest-preview.columns", 10) },
             { it.setDouble("chest-preview.cell-spacing", 0.29) },
             { it.setDouble("chest-preview.cell-spacing", 1.01) },
             { it.setDouble("chest-preview.max-distance", 4.6) },
@@ -74,8 +74,8 @@ class ItemInfoConfigTest : StringSpec({
         val config = ConfigManager.empty().apply {
             setBoolean("chest-preview.enabled", false)
             setDouble("chest-preview.scale", 1.25)
-            setInt("chest-preview.max-items", 10)
-            setInt("chest-preview.columns", 4)
+            setInt("chest-preview.max-items", 54)
+            setInt("chest-preview.columns", 9)
             setDouble("chest-preview.cell-spacing", 0.62)
             setDouble("chest-preview.max-distance", 3.5)
             setDouble("chest-preview.vertical-gap", 0.3)
@@ -96,8 +96,8 @@ class ItemInfoConfigTest : StringSpec({
         ItemInfoConfig(config).snapshot().chestPreview shouldBe ChestPreviewSettings(
             enabled = false,
             scale = 1.25f,
-            maxItems = 10,
-            columns = 4,
+            maxItems = 54,
+            columns = 9,
             cellSpacing = 0.62f,
             maxDistance = 3.5,
             verticalGap = 0.3,

@@ -470,10 +470,6 @@ internal class HelpCenterSettingsController(
                     text("settings-container-preview-appearance-tooltip")) {
                     openContainerPreviewAppearance(player, section)
                 },
-                button("container_preview_motion", text("settings-container-preview-motion-label"),
-                    text("settings-container-preview-motion-tooltip")) {
-                    openContainerPreviewMotion(player, section)
-                },
                 button("container_preview_reset_all", text("settings-container-preview-reset-all"),
                     text("settings-container-preview-reset-all-tooltip")) {
                     saveContainerPreview(player, ChestPreviewPreferences()) {
@@ -496,8 +492,8 @@ internal class HelpCenterSettingsController(
             body = listOf(PaperDialogBody(text("settings-container-preview-layout-body"), 468)),
             numberInputs = listOf(
                 previewInput("scale", "settings-container-preview-scale-label", 0.5f, 2.0f, current.scale, 0.05f),
-                previewInput("max_items", "settings-container-preview-max-items-label", 1f, 12f, current.maxItems.toFloat(), 1f),
-                previewInput("columns", "settings-container-preview-columns-label", 1f, 6f, current.columns.toFloat(), 1f),
+                previewInput("max_items", "settings-container-preview-max-items-label", 1f, ChestPreviewSettings.MAX_ITEMS.toFloat(), current.maxItems.toFloat(), 1f),
+                previewInput("columns", "settings-container-preview-columns-label", 1f, ChestPreviewSettings.MAX_COLUMNS.toFloat(), current.columns.toFloat(), 1f),
                 previewInput("cell_spacing", "settings-container-preview-cell-spacing-label", 0.3f, 1.0f, current.cellSpacing, 0.02f),
                 previewInput("max_distance", "settings-container-preview-max-distance-label", 1.0f, 4.5f, current.maxDistance.toFloat(), 0.1f),
                 previewInput("vertical_gap", "settings-container-preview-vertical-gap-label", 0.0f, 0.5f, current.verticalGap.toFloat(), 0.01f),
@@ -506,8 +502,8 @@ internal class HelpCenterSettingsController(
                 contextButton("container_preview_layout_apply", text("settings-container-preview-apply")) { context ->
                     saveContainerPreview(player, preferences.copy(
                         scale = previewNumber(context, "scale", current.scale, 0.5f, 2.0f),
-                        maxItems = previewNumber(context, "max_items", current.maxItems.toFloat(), 1f, 12f).toInt(),
-                        columns = previewNumber(context, "columns", current.columns.toFloat(), 1f, 6f).toInt(),
+                        maxItems = previewNumber(context, "max_items", current.maxItems.toFloat(), 1f, ChestPreviewSettings.MAX_ITEMS.toFloat()).toInt(),
+                        columns = previewNumber(context, "columns", current.columns.toFloat(), 1f, ChestPreviewSettings.MAX_COLUMNS.toFloat()).toInt(),
                         cellSpacing = previewNumber(context, "cell_spacing", current.cellSpacing, 0.3f, 1.0f),
                         maxDistance = previewNumber(context, "max_distance", current.maxDistance.toFloat(), 1.0f, 4.5f).toDouble(),
                         verticalGap = previewNumber(context, "vertical_gap", current.verticalGap.toFloat(), 0.0f, 0.5f).toDouble(),
@@ -604,38 +600,6 @@ internal class HelpCenterSettingsController(
         brightness = previewNumber(context, "brightness", current.brightness.toFloat(), 0f, 15f).toInt(),
         backgroundOpacity = previewNumber(context, "background_opacity", current.backgroundOpacity.toFloat(), 0f, 100f).toInt(),
     )
-
-    private fun openContainerPreviewMotion(player: Player, section: Section) {
-        navigation.visit(player) { openContainerPreviewMotion(player, section) }
-        val preferences = legacy.containerPreviewPreferences(player)
-        val current = legacy.containerPreviewSettings(player)
-        showDialog(player, PaperDialogScreen(
-            id = "help.settings.container-preview.motion",
-            title = text("settings-container-preview-motion-title"),
-            body = listOf(PaperDialogBody(text("settings-container-preview-motion-body"), 468)),
-            numberInputs = listOf(
-                previewInput("teleport_ticks", "settings-container-preview-teleport-ticks-label", 0f, 10f, current.teleportTicks.toFloat(), 1f),
-                previewInput("stability_threshold", "settings-container-preview-stability-threshold-label", 0f, 0.2f, current.stabilityThreshold.toFloat(), 0.01f),
-            ),
-            buttons = listOf(
-                contextButton("container_preview_motion_apply", text("settings-container-preview-apply")) { context ->
-                    saveContainerPreview(player, preferences.copy(
-                        teleportTicks = previewNumber(context, "teleport_ticks", current.teleportTicks.toFloat(), 0f, 10f).toInt(),
-                        stabilityThreshold = previewNumber(context, "stability_threshold", current.stabilityThreshold.toFloat(), 0f, 0.2f)
-                            .toDouble().coerceIn(0.0, 0.2),
-                    )) { openContainerPreviewMotion(player, section) }
-                },
-                button("container_preview_motion_reset", text("settings-container-preview-reset-page"),
-                    text("settings-container-preview-reset-page-tooltip")) {
-                    saveContainerPreview(player, preferences.copy(teleportTicks = null, stabilityThreshold = null)) {
-                        openContainerPreviewMotion(player, section)
-                    }
-                },
-            ),
-            exitButton = button("back", text("settings-interface-back-label")) { openContainerPreview(player, section) },
-            columns = 2,
-        ))
-    }
 
     private fun previewInput(
         id: String,

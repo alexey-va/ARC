@@ -5,7 +5,7 @@ Ender Chest contents use private ItemDisplay icons. `arc.chest-preview` remains
 required and defaults to false, including operators; the menu never grants it.
 Opening/access checks below always run before reading inventory contents.
 
-Similar stacks share one icon in first-slot order. Optional `× N` TextDisplays
+Similar stacks share one icon in first-slot order. Optional white numeric TextDisplays
 show the total across the entire bounded 54-slot inventory, including matching
 stacks beyond the displayed unique-item limit. Icons preserve their model and
 metadata with display amount one. There are no item names, titles or overflow
@@ -19,7 +19,7 @@ and display owner with the loaded settings; subsequent tuning needs no restart.
 The initial new plugin version still requires normal activation.
 
 `/mm` → Settings → Interface → Container preview has an independent enable switch
-and three tuning pages. It works independently of the ordinary item-info mode.
+and two tuning pages. It works independently of the ordinary item-info mode.
 Sparse personal overrides persist in LuckPerms meta
 `arc-chest-preview-preferences`. Unset fields follow the current server defaults;
 page/all reset removes those overrides semantically through the `default` sentinel.
@@ -27,16 +27,18 @@ Changes affect only the current player's private scene and apply on its next tic
 
 | Settings | Purpose |
 | --- | --- |
-| `enabled`, `scale`, `max-items`, `columns`, `cell-spacing` | Enable, overall size and grid layout (up to 12 icons) |
+| `enabled`, `scale`, `max-items`, `columns`, `cell-spacing` | Enable, overall size and grid layout (up to 54 icons and 9 columns) |
 | `max-distance`, `vertical-gap` | Bounded targeting reach and height above the lid |
 | `icon-scale`, `depth-scale`, `block-pitch`, `block-yaw` | Icon size, panel-local depth and fixed shallow ordinary block pose |
 | `item-transform` | Native ItemDisplay GUI, FIXED or NONE model context |
 | `show-counts`, `count-scale`, `count-offset-y` | Numeric label visibility, size and vertical position |
 | `background-opacity`, `brightness` | Background alpha and native display light level |
-| `teleport-ticks`, `stability-threshold` | Native movement interpolation and small safe-position deadband |
+| `teleport-ticks`, `stability-threshold` | Accepted legacy keys; unused by fixed placement and hidden from personal controls |
 
-Defaults use GUI, 12° top tilt / 20° side turn, 15% depth, 3-tick interpolation,
-6 icons in 3 columns, and numeric labels. Explicit custom models and flat items
+Defaults show all 54 distinct groups in 9 columns, with white numbers and no
+backdrop. Scale is 0.9, cell spacing 0.36, icon size 0.28, count size 0.10 and
+count offset −0.22. A partial last row keeps its column alignment. GUI uses
+12° top tilt / 20° side turn and 15% depth. Explicit custom models and flat items
 keep their authored pose; depth compression still applies to the whole icon.
 The local half-turn cancels ItemDisplay's native Y rotation. No camera angles
 are added to the icon quaternion: CENTER billboards already own camera facing.
@@ -50,21 +52,27 @@ packet owner's next snapshot, so container preferences remain independent.
 A higher-priority winner, access loss, target loss, suppression or reset clears
 the private scene. No Bukkit entities or synthetic inventory events are created.
 
-All parts retain handles and share one destination and native interpolation.
-Tiny safe changes can retain the prior anchor. Clearance search refines the free
-boundary instead of jumping by the coarse candidate stride. An obstructed
-movement corridor snaps rather than animating through a solid block; a new
-container or changed personal layout gets a fresh scene at its destination.
-Side placement reserves clearance for camera rotation during interpolation,
-so sliding along a neighbouring block does not repeatedly disable smoothing.
-The oriented grid volume must fit loaded/sent free space and have line of sight.
-Top placement is retried first only while the viewer's eyes are above the lid;
-lower views use the front even when the space above is free. A clear lid cannot
-remain latched to a distant side position after the viewer moves above it.
-If no position fits, the panel is hidden.
-Viewers with the test permission are inspected every tick; others keep the
-ordinary five-tick cadence. Native client smoothness remains separate from these
-geometry, lifecycle and packet checks.
+A scene acquires one world-fixed center in front of the selected container;
+a viewer directly over its footprint starts above the lid. It reserves the configured maximum grid height above the container's support
+plane, so adding rows cannot sink their counts into the floor. Initial placement
+clears the viewer-facing vertical surface including the pitched grid and
+icon/count depth, keeping ordinary views clear of a stacked container above.
+It does not search free space above, beside or around neighbouring blocks.
+
+The center remains fixed while looking around or changing item counts. Native
+CENTER billboarding owns camera-facing rotation; the server sends no placement
+updates during camera motion. Existing handles survive unchanged updates and
+content/count changes. Another container or changed personal layout starts a
+new scene at its destination with zero movement interpolation.
+
+The center ray must remain in loaded/sent space and unobstructed. If it is
+blocked or behind the camera, the scene hides while retaining its anchor and
+handles, then reappears there when visible. Individual edges may be naturally
+occluded by neighbouring blocks as the camera turns; they never force the
+whole grid to drift or seek another location. Target/access checks still run
+every tick for permitted viewers; others retain the ordinary five-tick cadence.
+No see-through rendering is used. Native client appearance remains separate
+from source geometry and lifecycle checks.
 
 ## Access boundary
 
@@ -117,8 +125,21 @@ unavailable chunks, lock/loot/obstruction, failed providers, stable aggregation,
 icon limits, ordinary and personal viewer isolation, cold personal lookup and
 admission-cap behavior. Icon-renderer and controller checks
 cover private audience, optional numeric labels, unchanged handle identity, independent
-preferences, cleanup, interpolation and opacity. Configuration tests reload every
+preferences, cleanup, fixed anchor/handle continuity, full 54-item grids and opacity. Configuration tests reload every
 new setting; preference and HelpCenter tests cover sparse overrides and reset.
+
+A source-derived offline preview can be exported during the placement tests by
+setting `CHEST_PREVIEW_EXPORT_DIR`, then rendered with:
+
+```bash
+python3 -B scripts/render-chest-preview.py --geometry build/chest-preview-export/geometry.json \
+  --ops-root /Users/alexey23/RusCrafting/ruscrafting-ops --output build/chest-preview-export/render
+```
+
+The adapter reuses the existing atelier renderer, native Minecraft models/textures
+and font. Its views preserve aim at the container and include a dense stacked
+container fixture, steep lower-side targeting and a partial row. They are frozen source poses, not native
+client lighting, model loading, packet visibility or billboarding acceptance.
 
 Native client acceptance after owner-controlled activation: grant only the test
 account `arc.chest-preview`, compare an allowed chest and a denied Lands/WG chest,

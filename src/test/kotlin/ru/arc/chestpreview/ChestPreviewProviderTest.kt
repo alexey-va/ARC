@@ -196,6 +196,24 @@ class ChestPreviewProviderTest : StringSpec({
         verify(exactly = 1) { second.blockInventory }
     }
 
+    "the default preview includes all fifty-four distinct item groups in slot order" {
+        val world = world(); val player = player(world)
+        val items = List(54) { index ->
+            ItemStack(Material.PAPER, index + 1).apply {
+                editMeta { it.displayName(Component.text("Item $index")) }
+            }
+        }
+        val first = chest(items.take(27).toTypedArray())
+        val second = chest(items.drop(27).toTypedArray())
+        val provider = ChestPreviewProvider(ChestPreviewSettings(), { _, _ ->
+            ChestPreviewTarget(listOf(first, second), InspectionHologramAnchor(world.uid, 0.5, 64.0, 0.5))
+        })
+        val frame = provider.selectedFrame(player) { provider.resolve(player) }!!
+        frame.items.size shouldBe 54
+        frame.counts shouldBe (1..54).toList()
+        frame.items.zip(items).all { (icon, original) -> icon.isSimilar(original) && icon.amount == 1 } shouldBe true
+    }
+
     "two-container scans stop at 54 physical slots" {
         val world = world(); val player = player(world)
         val first = chest(Array(32) { ItemStack(Material.PAPER) })

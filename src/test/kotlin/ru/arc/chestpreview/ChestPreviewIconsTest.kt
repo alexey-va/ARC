@@ -6,6 +6,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Color
 import org.bukkit.Location
@@ -43,7 +44,7 @@ class ChestPreviewIconsTest : StringSpec({
         val icon = harness.itemDisplays.single()
         val count = harness.textDisplays.single()
         renderer.update(viewer, initial.copy(counts = listOf(7)), 1f)
-        verify(exactly = 1) { count.text(Component.text("× 7")) }
+        verify(exactly = 1) { count.text(Component.text(7, NamedTextColor.WHITE)) }
 
         val changed = initial.copy(items = listOf(ItemStack(Material.EMERALD)), counts = listOf(7))
         renderer.update(viewer, changed, 1f)
@@ -105,98 +106,75 @@ class ChestPreviewIconsTest : StringSpec({
         verify(exactly = 1) { harness.owner.close() }
     }
 
-    "slow strafes past a front block retain display interpolation" {
+    "a full grid keeps its world anchor and every handle through camera motion" {
         val worldId = UUID.randomUUID()
         val viewer = player(worldId)
-        val world = viewer.world
-        val options = ChestPreviewSettings(teleportTicks = 4)
-        val chest = org.bukkit.util.BoundingBox(0.0, 0.0, 0.0, 1.0, 1.0, 1.0)
-        // Chest, stacked block (forces front placement), and one block directly in front.
-        val solids = setOf(Triple(0, 0, 0), Triple(0, 1, 0), Triple(0, 0, -1))
-        every { world.getBlockAt(any<Int>(), any<Int>(), any<Int>()) } answers {
-            val x = firstArg<Int>()
-            val y = secondArg<Int>()
-            val z = thirdArg<Int>()
-            val block = mockk<org.bukkit.block.Block>(relaxed = true)
-            every { block.isPassable } returns (Triple(x, y, z) !in solids)
-            every { block.collisionShape } returns mockk {
-                every { boundingBoxes } returns if (Triple(x, y, z) in solids)
-                    listOf(org.bukkit.util.BoundingBox(0.0, 0.0, 0.0, 1.0, 1.0, 1.0)) else emptyList()
-            }
-            every { block.boundingBox } returns org.bukkit.util.BoundingBox(
-                x.toDouble(), y.toDouble(), z.toDouble(),
-                x + 1.0, y + 1.0, z + 1.0,
-            )
-            block
-        }
-        fun eyeAt(x: Double) = Location(world, x, 1.3, -2.5).apply {
-            direction = chest.center.subtract(toVector())
-        }
-        var eye = eyeAt(0.2)
-        every { viewer.eyeLocation } answers { eye.clone() }
-
         val harness = DisplayHarness()
+        val options = ChestPreviewSettings()
         val renderer = ChestPreviewIcons(harness.owner, options)
-        val items = listOf(Material.PAPER, Material.STONE, Material.DIRT, Material.GRAVEL, Material.IRON_INGOT, Material.DIAMOND)
-            .map { ItemStack(it) }
-        val selected = frame(worldId, items).copy(
-            anchor = InspectionHologramAnchor(worldId, 0.5, 1.15, 0.5),
-            containerBounds = chest,
-        )
+        val selected = frame(worldId, List(54) { ItemStack(Material.PAPER) })
+            .copy(counts = (1..54).toList(), containerBounds = org.bukkit.util.BoundingBox(2.0, 69.0, -4.0, 3.0, 70.0, -3.0))
         renderer.update(viewer, selected, options.scale)
-        for (step in 1..12) {
-            eye = eyeAt(0.2 + step * 0.05)
+        for (step in 0..12) {
+            every { viewer.eyeLocation } returns Location(viewer.world, 1.9 + step * 0.1, 70.8, -6.5, (step - 6) * 2f, 15f)
             renderer.update(viewer, selected, options.scale)
         }
-
-        harness.itemDisplays.size shouldBe 6
+        harness.itemDisplays.size shouldBe 54
+        harness.textDisplays.size shouldBe 54
+        harness.textContents.map { PlainTextComponentSerializer.plainText().serialize(it) } shouldBe (1..54).map(Int::toString)
+        harness.textContents.all { it.color() == NamedTextColor.WHITE } shouldBe true
+        harness.itemTransforms.size shouldBe 54
         (harness.itemDisplays + harness.textDisplays).forEach { display ->
-            verify(atLeast = 1) { display.teleport(any<Location>()) }
-            verify(exactly = 0) { display.teleportDuration = 0 }
-            verify(atLeast = 2) { display.teleportDuration = options.teleportTicks }
+            verify(exactly = 0) { display.teleport(any<Location>()) }
+            verify(exactly = 0) { display.remove() }
+            verify { display.teleportDuration = 0 }
         }
         renderer.close()
     }
 
-    "exact stair collision pieces admit its empty upper half and a new full block hides the scene" {
+    "growing from one to fifty-four items retains the center and clears the floor" {
         val worldId = UUID.randomUUID()
         val viewer = player(worldId)
         val harness = DisplayHarness()
-        val options = ChestPreviewSettings(showCounts = false, backgroundOpacity = 0)
+        val options = ChestPreviewSettings()
         val renderer = ChestPreviewIcons(harness.owner, options)
-        val world = viewer.world
-        var pieces = listOf(
-            org.bukkit.util.BoundingBox(0.0, 0.0, 0.0, 1.0, 0.5, 1.0),
-            org.bukkit.util.BoundingBox(0.0, 0.5, 0.0, 0.5, 1.0, 1.0),
-        )
-        every { world.getBlockAt(2, 70, -4) } returns mockk {
-            every { isPassable } returns false
-            // The aggregate box intersects the grid; its real collision piece does not.
-            every { boundingBox } returns org.bukkit.util.BoundingBox(2.0, 70.0, -4.0, 3.0, 71.0, -3.0)
-            every { collisionShape } returns mockk { every { boundingBoxes } answers { pieces } }
-        }
-        val selected = frame(worldId, listOf(ItemStack(Material.DIAMOND))).copy(
-            anchor = InspectionHologramAnchor(worldId, 2.85, 70.6, -3.5),
-        )
-        val volumes = mutableListOf<ru.arc.paper.display.DisplayOrientedVolume>()
-        ChestPreviewPlacement.choose(viewer.eyeLocation, selected.anchor, null,
-            ChestPreviewIconGeometry.panelBounds(1, 1f, options), 1f, options) { _, volume ->
-            volumes += volume
-            true
-        }
-        val volume = volumes.single()
-        volume.overlaps(org.bukkit.util.BoundingBox(2.0, 70.0, -4.0, 3.0, 71.0, -3.0)) shouldBe true
-        volume.overlaps(org.bukkit.util.BoundingBox(2.0, 70.5, -4.0, 2.5, 71.0, -3.0)) shouldBe false
-        ru.arc.paper.scene.PaperSpatialSpace().clear(world, volume, viewer) shouldBe true
+        val selected = frame(worldId, listOf(ItemStack(Material.PAPER)))
+            .copy(containerBounds = org.bukkit.util.BoundingBox(2.0, 69.0, -4.0, 3.0, 70.0, -3.0))
+        renderer.update(viewer, selected, options.scale)
+        renderer.update(viewer, selected.copy(items = List(54) { ItemStack(Material.PAPER) }, counts = List(54) { 64 }), options.scale)
+        harness.itemDisplays.size shouldBe 54
+        harness.textDisplays.size shouldBe 54
+        harness.itemLocations.distinct().size shouldBe 1
+        val location = harness.itemLocations.first()
+        val bounds = ChestPreviewIconGeometry.panelBounds(54, options.scale, options)
+        (location.y - bounds.height / 2 - ChestPreviewIconGeometry.depth(options.scale, options) > 69.0) shouldBe true
+        verify(exactly = 0) { harness.itemDisplays.first().remove() }
+        verify(exactly = 0) { harness.itemDisplays.first().teleport(any()) }
+        renderer.close()
+    }
 
+    "a blocked center hides the scene without losing its anchor or handles" {
+        val worldId = UUID.randomUUID()
+        val viewer = player(worldId)
+        val world = viewer.world
+        val harness = DisplayHarness()
+        val renderer = ChestPreviewIcons(harness.owner, ChestPreviewSettings())
+        val selected = frame(worldId, listOf(ItemStack(Material.DIAMOND)))
+        renderer.update(viewer, selected, 1f)
+        val icon = harness.itemDisplays.single()
+        every { world.rayTraceBlocks(any(), any(), any(), any(), any<Boolean>(), any()) } returns
+            org.bukkit.util.RayTraceResult(org.bukkit.util.Vector(2.5, 70.0, -5.0))
+        renderer.update(viewer, selected, 1f)
+        renderer.update(viewer, selected, 1f)
+        val viewerId = viewer.uniqueId
+        verify(exactly = 1) { icon.hideFrom(viewerId) }
+        every { world.rayTraceBlocks(any(), any(), any(), any(), any<Boolean>(), any()) } returns null
+        every { viewer.eyeLocation } returns Location(viewer.world, 3.0, 71.0, -6.5, 5f, 20f)
         renderer.update(viewer, selected, 1f)
         harness.itemDisplays.size shouldBe 1
-        pieces = listOf(org.bukkit.util.BoundingBox(0.0, 0.0, 0.0, 1.0, 1.0, 1.0))
-        renderer.update(viewer, selected, 1f)
-        verify(exactly = 1) { harness.itemDisplays.single().remove() }
-        pieces = emptyList()
-        renderer.update(viewer, selected, 1f)
-        harness.itemDisplays.size shouldBe 2
+        verify(exactly = 2) { icon.showTo(viewerId) }
+        verify(exactly = 0) { icon.remove() }
+        verify(exactly = 0) { icon.teleport(any()) }
         renderer.close()
     }
 
@@ -295,7 +273,7 @@ class ChestPreviewIconsTest : StringSpec({
         val firstId = first.uniqueId
         val secondId = second.uniqueId
         val harness = DisplayHarness()
-        val renderer = ChestPreviewIcons(harness.owner, ChestPreviewSettings(showCounts = false, ))
+        val renderer = ChestPreviewIcons(harness.owner, ChestPreviewSettings(showCounts = false, backgroundOpacity = 40))
 
         renderer.update(first, frame(worldId, listOf(ItemStack(Material.PAPER))), 1f)
         renderer.update(second, frame(worldId, listOf(ItemStack(Material.BOOK))), 1f)
@@ -327,11 +305,11 @@ class ChestPreviewIconsTest : StringSpec({
         renderer.close()
     }
 
-    "counts update in place and every moving part shares native interpolation" {
+    "counts update in place without teleporting any part of the anchored panel" {
         val worldId = UUID.randomUUID()
         val viewer = player(worldId)
         val harness = DisplayHarness()
-        val options = ChestPreviewSettings(showCounts = true, teleportTicks = 4)
+        val options = ChestPreviewSettings(showCounts = true, backgroundOpacity = 40, teleportTicks = 4)
         val renderer = ChestPreviewIcons(harness.owner, options)
         val selected = frame(worldId, listOf(ItemStack(Material.DIAMOND))).copy(
             containerBounds = org.bukkit.util.BoundingBox(2.0, 69.0, -4.0, 3.0, 70.0, -3.0),
@@ -342,15 +320,15 @@ class ChestPreviewIconsTest : StringSpec({
         harness.itemDisplays.size shouldBe 1
         harness.textDisplays.size shouldBe 2
         val count = harness.textDisplays.first()
-        PlainTextComponentSerializer.plainText().serialize(harness.textContents.first()) shouldBe "× 76"
-        verify { count.text(Component.text("× 82")) }
+        PlainTextComponentSerializer.plainText().serialize(harness.textContents.first()) shouldBe "76"
+        verify { count.text(Component.text(82, NamedTextColor.WHITE)) }
         val all = harness.itemDisplays + harness.textDisplays
         all.forEach { verify(exactly = 0) { it.teleport(any()) } }
         every { viewer.eyeLocation } returns Location(viewer.world, 2.5, 72.0, -6.5, 0f, 40f)
         renderer.update(viewer, selected.copy(counts = listOf(82)), options.scale)
         all.forEach {
-            verify { it.teleportDuration = 4 }
-            verify(exactly = 1) { it.teleport(any()) }
+            verify { it.teleportDuration = 0 }
+            verify(exactly = 0) { it.teleport(any()) }
         }
         renderer.clear(viewer)
         all.forEach { verify(exactly = 1) { it.remove() } }
@@ -374,39 +352,35 @@ class ChestPreviewIconsTest : StringSpec({
         renderer.close()
     }
 
-    "bottom-anchored layout and backdrop bounds cover the twelve-icon maximum" {
-        val scale = 2f
-        val offsets = ChestPreviewIconGeometry.offsets(12, scale, ChestPreviewSettings(showCounts = false))
-        val bounds = ChestPreviewIconGeometry.panelBounds(12, scale, ChestPreviewSettings(showCounts = false))
-        val iconSize = ChestPreviewIconGeometry.ICON_SCALE * scale
-
-        offsets.size shouldBe 12
-        offsets.take(3).map { it.x } shouldBe listOf(-0.48f * scale, 0f, 0.48f * scale)
-        offsets.take(3).map { it.y }.distinct().size shouldBe 1
-        offsets.takeLast(3).map { it.y }.distinct().size shouldBe 1
-        val bottomEdge = offsets.minOf { it.y } - iconSize / 2f
-        val topEdge = offsets.maxOf { it.y } + iconSize / 2f
-        (bottomEdge > 0f) shouldBe true
-        (topEdge <= bounds.height) shouldBe true
-        bounds.width shouldBe 3.04f
-        (kotlin.math.abs(bounds.height - 3.92f) < 0.00001f) shouldBe true
-        ChestPreviewIconGeometry.itemBounds(scale).width shouldBe 1.12f
+    "full fifty-four item grid has nine columns and six rows with counts inside its bounds" {
+        val options = ChestPreviewSettings()
+        val scale = options.scale
+        val offsets = ChestPreviewIconGeometry.offsets(54, scale, options)
+        val bounds = ChestPreviewIconGeometry.panelBounds(54, scale, options)
+        offsets.size shouldBe 54
+        offsets.map { it.x }.distinct().size shouldBe 9
+        offsets.map { it.y }.distinct().size shouldBe 6
+        offsets.take(9).map { it.y }.distinct().size shouldBe 1
+        for (offset in offsets) {
+            (kotlin.math.abs(offset.x) + options.iconScale * scale / 2 <= bounds.width / 2) shouldBe true
+            (offset.y + options.iconScale * scale / 2 <= bounds.height / 2) shouldBe true
+            (offset.y + options.countOffsetY * scale >= -bounds.height / 2) shouldBe true
+        }
+        (bounds.width < 3.1f && bounds.height < 2.1f) shouldBe true
     }
 
-    "partial final row stays centered and one icon remains above the anchor" {
-        val four = ChestPreviewIconGeometry.offsets(4, 1f, ChestPreviewSettings(showCounts = false))
-        four.last().x shouldBe 0f
-        (kotlin.math.abs(four.last().y - 0.24f) < 0.00001f) shouldBe true
-
-        val one = ChestPreviewIconGeometry.offsets(1, 1f, ChestPreviewSettings(showCounts = false)).single()
-        one.x shouldBe 0f
-        (kotlin.math.abs(one.y - 0.24f) < 0.00001f) shouldBe true
+    "partial rows preserve the grid columns and a single item is centered" {
+        val partial = ChestPreviewIconGeometry.offsets(13, 1f)
+        partial.takeLast(4).map { it.x } shouldBe partial.take(4).map { it.x }
+        ChestPreviewIconGeometry.offsets(1, 1f).single().x shouldBe 0f
     }
+
 })
 
 private class DisplayHarness {
     val owner = mockk<PaperPacketDisplays>(relaxed = true)
     val itemPayloads = mutableListOf<ItemStack>()
+    val itemLocations = mutableListOf<Location>()
     val itemDisplays = mutableListOf<PacketItemDisplay>()
     val itemTransforms = mutableListOf<Transformation>()
     val textContents = mutableListOf<Component>()
@@ -415,9 +389,13 @@ private class DisplayHarness {
     init {
         every { owner.spawnItem(any(), any()) } answers {
             itemPayloads += secondArg<ItemStack>().clone()
+            var location = firstArg<Location>().clone()
+            itemLocations += location.clone()
             mockk<PacketItemDisplay>(relaxed = true).also { display ->
                 itemDisplays += display
                 every { display.isValid } returns true
+                every { display.location } answers { location.clone() }
+                every { display.teleport(any<Location>()) } answers { location = firstArg<Location>().clone() }
                 every { display.transformation = any() } answers {
                     itemTransforms += firstArg<Transformation>()
                 }
@@ -425,8 +403,11 @@ private class DisplayHarness {
         }
         every { owner.spawnText(any(), any()) } answers {
             textContents += secondArg<Component>()
+            var location = firstArg<Location>().clone()
             mockk<PacketTextDisplay>(relaxed = true).also { display ->
                 every { display.isValid } returns true
+                every { display.location } answers { location.clone() }
+                every { display.teleport(any<Location>()) } answers { location = firstArg<Location>().clone() }
                 textDisplays += display
             }
         }
