@@ -5,7 +5,7 @@ Node 22.14.0 and Plugwright 2.0.4. The disposable server binds only to
 127.0.0.1:25565; do not run another Paper test suite on that port concurrently.
 Fixtures live under `build/plugwright` and are recreated for each run. The
 official Vault 1.7.3 plugin supplies the API required during ARC bootstrap.
-The E2E task starts an isolated `RedisTestService` container with a random
+The default E2E profile starts an isolated `RedisTestService` container with a random
 mapped port and copies the resolved RedisEconomy 4.5.12 JAR (SHA-256
 `7ccd1c5fbc43ab1a3345f4c9705b71aa39fbbbd457647c1808629bc86884e51f`) into the
 disposable server. No production Redis or credentials are used.
@@ -44,6 +44,19 @@ ahead, waits for each plate to release after creation, and physically walks onto
 it. No administrative checkpoint advancement is used. The native plate state,
 player position and ARC HUD packets are observed; generated course JSON is
 retained with the CI artifacts.
+
+## Container preview acceptance
+
+Run `TEST_TIMEOUT=60000 ./gradlew --no-daemon plugwrightTest -PcontainerPreviewE2e=true -Pe2eMinecraftVersion=26.1.2`.
+This isolated profile disables Redis and runs only `container-preview.spec.js`.
+Two non-OP Mineflayer clients compare real furnace, blast-furnace and smoker slots
+with ARC's private item-display and count packets. Another client's ordinary
+shulker window must propagate a changed item count to the observer's preview; a closed obstructed lid
+must hide it. The dedicated permission fixture grants preview only to non-OPs,
+so toggling one client OP checks denial while the other still receives its scene.
+Normal window opening exercises native viewer handling, but this fixture does
+not directly read Bukkit's `isOpen` or `inventory.viewers` properties and does
+not establish native-client visual acceptance.
 
 ## Entity cleanup acceptance
 

@@ -80,7 +80,6 @@ internal class ChestPreviewAccess(
                     // omitted even if the viewer might have a key for an actual interaction.
                     if (state.isLocked || (state is LootableBlockInventory && state.lootTable != null)) return null
                     if (state is Chest && state.isBlocked) return null
-                    if (state is ShulkerBox && !shulkerCanOpen(player, half, state)) return null
                 }
                 is EnderChest -> if (state.isBlocked) return null
                 else -> return null
@@ -90,6 +89,10 @@ internal class ChestPreviewAccess(
         if (blocks.any { !protectedAccess(player, it) }) return null
         val marker = combinePersonalLootMarkers(blocks.map(personalLootMarker))
         if (marker == PersonalLootChestMarker.Invalid) return null
+        // Shulker viewers require its live inventory: inspect them only after every access gate.
+        for ((index, state) in states.withIndex()) {
+            if (state is ShulkerBox && !shulkerCanOpen(player, blocks[index], state)) return null
+        }
         val personalLootChestUuid = (marker as? PersonalLootChestMarker.Marked)?.chestUuid
         val bounds = blocks.drop(1).fold(BoundingBox.of(blocks.first())) { current, next ->
             current.union(BoundingBox.of(next))
@@ -109,7 +112,9 @@ internal class ChestPreviewAccess(
     }
 
     private fun shulkerCanOpen(player: Player, block: Block, state: ShulkerBox): Boolean {
-        if (state.isOpen) return true
+        // Paper's isOpen is the API-forced lid flag, not normal players viewing the inventory.
+        // An occupied box is already open; testing its lid sweep can collide with its own lid.
+        if (state.isOpen || state.inventory.viewers.isNotEmpty()) return true
         val facing = (state.blockData as? Directional)?.facing ?: return false
         if (facing == BlockFace.SELF) return false
         val x = block.x + facing.modX
@@ -162,6 +167,7 @@ private fun isChest(type: Material): Boolean =
 
 private fun isSupportedContainer(type: Material): Boolean =
     isChest(type) || type == Material.BARREL || type == Material.ENDER_CHEST ||
+        type == Material.FURNACE || type == Material.BLAST_FURNACE || type == Material.SMOKER ||
         type == Material.SHULKER_BOX ||
         (type.isBlock && type.name.endsWith("_SHULKER_BOX") && !type.name.startsWith("LEGACY_"))
 

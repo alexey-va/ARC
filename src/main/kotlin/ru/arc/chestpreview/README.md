@@ -1,7 +1,7 @@
 # Private container inspection
 
-Ordinary, trapped and copper chests, barrels, shulkers and the viewer's own
-Ender Chest contents use private ItemDisplay icons. `arc.chest-preview` remains
+Ordinary, trapped and copper chests, barrels, shulkers, furnaces, blast furnaces,
+smokers and the viewer's own Ender Chest contents use private ItemDisplay icons. `arc.chest-preview` remains
 required and defaults to false, including operators; the menu never grants it.
 Opening/access checks below always run before reading inventory contents.
 
@@ -89,11 +89,19 @@ its session bypass and separate sign-chest protection, and Lands'
 Installed-but-disabled or incompatible providers fail closed. Access is not
 cached between viewers or refreshes.
 
-Closed shulkers check the native half-block lid sweep with Paper's
-`Entity.wouldCollideUsing`; its bounds match vanilla 1.21.11's opening check and
+Shulkers opened by another player remain inspectable after the preview viewer
+passes protection. Paper's `ShulkerBox.isOpen` reports the API-forced lid flag;
+normal open inventories are detected with `inventory.viewers`. This inventory
+access waits until protection and managed-container checks have passed; no slots
+are read by the access check. Either actual viewers or the forced-open flag skip
+the lid sweep, which could otherwise collide with the already extended lid.
+
+Closed, unoccupied shulkers check the native half-block lid sweep with Paper's
+`Entity.wouldCollideUsing`; its bounds match vanilla 26.1.2's opening check and
 are deflated by `1e-6` to avoid counting touching faces. This also checks entity
-collisions and the viewer's world border. Already-open shulkers skip that sweep.
-The query's neighbouring chunks are verified loaded and sent first.
+collisions and the viewer's world border. The query's neighbouring chunks are
+verified loaded and sent first. After the last viewer closes a shulker, its
+closing lid may briefly suppress the preview until the sweep is clear.
 
 PersonalLoot uses the viewer's persisted remaining loot rather than a shared
 physical inventory. Its UUID marker must match on both halves, and the normal

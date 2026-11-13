@@ -140,7 +140,7 @@ jobs:
 
   e2e:
     name: >-
-      Paper ${{ matrix.minecraft }} / ${{ matrix.dungeons-only == 'true' && 'ArcDungeons' || matrix.crash-only == 'true' && 'contract crash' || matrix.dialog-only == 'true' && 'dialog designs' || matrix.cleanup-only == 'true' && 'entity cleanup' || matrix.parkour-only == 'true' && 'Parkour' || 'contracts and Parkour' }}
+      Paper ${{ matrix.minecraft }} / ${{ matrix.container-preview-only == 'true' && 'container preview' || matrix.dungeons-only == 'true' && 'ArcDungeons' || matrix.crash-only == 'true' && 'contract crash' || matrix.dialog-only == 'true' && 'dialog designs' || matrix.cleanup-only == 'true' && 'entity cleanup' || matrix.parkour-only == 'true' && 'Parkour' || 'contracts and Parkour' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
@@ -155,6 +155,11 @@ jobs:
             cleanup-only: 'false'
             parkour-only: 'true'
             dialog-only: 'false'
+          - minecraft: '26.1.2'
+            cleanup-only: 'false'
+            parkour-only: 'false'
+            dialog-only: 'false'
+            container-preview-only: 'true'
           - minecraft: '1.21.11'
             cleanup-only: 'true'
             parkour-only: 'false'
@@ -188,7 +193,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p build
-          ./gradlew --no-daemon plugwrightTest -Pe2eMinecraftVersion=${{ matrix.minecraft }} -PcleanupE2e=${{ matrix.cleanup-only }} -PparkourE2e=${{ matrix.parkour-only }} -PdialogE2e=${{ matrix.dialog-only }} -PdungeonsE2e=${{ matrix.dungeons-only || 'false' }} -PcontractCrashE2e=${{ matrix.crash-only || 'false' }} 2>&1 | tee build/plugwright-e2e.log
+          ./gradlew --no-daemon plugwrightTest -Pe2eMinecraftVersion=${{ matrix.minecraft }} -PcleanupE2e=${{ matrix.cleanup-only }} -PparkourE2e=${{ matrix.parkour-only }} -PdialogE2e=${{ matrix.dialog-only }} -PdungeonsE2e=${{ matrix.dungeons-only || 'false' }} -PcontractCrashE2e=${{ matrix.crash-only || 'false' }} -PcontainerPreviewE2e=${{ matrix.container-preview-only || 'false' }} 2>&1 | tee build/plugwright-e2e.log
           git diff --exit-code -- src/test/e2e/package-lock.json
       - name: Reject LinkageError in Paper log
         if: always()
@@ -219,7 +224,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: arc-paper-e2e-${{ matrix.minecraft }}-cleanup-${{ matrix.cleanup-only }}-parkour-${{ matrix.parkour-only }}-dialog-${{ matrix.dialog-only }}-dungeons-${{ matrix.dungeons-only || 'false' }}-crash-${{ matrix.crash-only || 'false' }}
+          name: arc-paper-e2e-${{ matrix.minecraft }}-cleanup-${{ matrix.cleanup-only }}-parkour-${{ matrix.parkour-only }}-dialog-${{ matrix.dialog-only }}-dungeons-${{ matrix.dungeons-only || 'false' }}-crash-${{ matrix.crash-only || 'false' }}-container-${{ matrix.container-preview-only || 'false' }}
           retention-days: 7
           path: |
             build/plugwright-e2e.log

@@ -76,7 +76,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.536"
+version = "1.4.537"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.81"
@@ -572,10 +572,11 @@ val dialogE2e = providers.gradleProperty("dialogE2e").map(String::toBoolean).orE
 val parkourE2e = providers.gradleProperty("parkourE2e").map(String::toBoolean).orElse(false).get()
 val dungeonsE2e = providers.gradleProperty("dungeonsE2e").map(String::toBoolean).orElse(false).get()
 val contractCrashE2e = providers.gradleProperty("contractCrashE2e").map(String::toBoolean).orElse(false).get()
+val containerPreviewE2e = providers.gradleProperty("containerPreviewE2e").map(String::toBoolean).orElse(false).get()
 val e2eMinecraftVersion = providers.gradleProperty("e2eMinecraftVersion").orElse("26.1.2").get()
 val standardE2eTestFiles = fileTree("src/test/e2e") {
     include("**/*.spec.js")
-    exclude("**/dungeons-real-paper.spec.js", "**/node_modules/**")
+    exclude("**/dungeons-real-paper.spec.js", "**/container-preview.spec.js", "**/node_modules/**")
 }.files.map { it.name.removeSuffix(".spec.js") }.sorted().joinToString(",")
 
 fun pinnedE2eDownload(taskName: String, destination: File, url: String, sha256: String) = tasks.register(taskName) {
@@ -679,7 +680,11 @@ plugwright {
     writeFiles {
         file("plugins/ArcCore-$arcCorePluginVersion.jar", extractedJar("ArcCore").get().asFile)
         file("server.properties", projectDir.resolve("src/test/e2e/fixtures/server.properties"))
-        file("permissions.yml", projectDir.resolve("src/test/e2e/fixtures/permissions.yml"))
+        file("permissions.yml", projectDir.resolve(if (containerPreviewE2e) {
+            "src/test/e2e/fixtures/container-preview-permissions.yml"
+        } else {
+            "src/test/e2e/fixtures/permissions.yml"
+        }))
         file("plugins/ARC/modules/entity-cleanup.yml", projectDir.resolve("src/test/e2e/fixtures/entity-cleanup.yml"))
         file("plugins/ARC/modules/parkour.yml", projectDir.resolve("src/test/e2e/fixtures/parkour.yml"))
         file("plugins/Parkour/config.yml", projectDir.resolve("src/test/e2e/fixtures/parkour-config.yml"))
@@ -691,7 +696,7 @@ plugwright {
             file("plugins/ArcDungeons-$arcDungeonsPluginVersion.jar", projectDir.resolve("arc-dungeons/build/libs/ArcDungeons-$arcDungeonsPluginVersion.jar"))
             file("plugins/ArcDungeonsE2eFixture.jar", arcDungeonsE2eFixtureJar.get().archiveFile.get().asFile)
             file("plugins/Citizens-2.0.43-b4246.jar", contractCitizensJar.get().asFile)
-        } else if (cleanupE2e || parkourE2e || dialogE2e) {
+        } else if (cleanupE2e || parkourE2e || dialogE2e || containerPreviewE2e) {
             file("plugins/ARC/modules/redis.yml", projectDir.resolve("src/test/e2e/fixtures/entity-cleanup-redis.yml"))
             if (cleanupE2e) {
                 file("plugins/Citizens-2.0.43-b4246.jar", contractCitizensJar.get().asFile)
@@ -859,7 +864,9 @@ tasks.named<me.drownek.plugwright.PlugwrightTestTask>("plugwrightTest") {
         dependsOn(it)
         serverJarPath.set(requireNotNull(e2ePaperJar).map { jar -> jar.asFile.absolutePath })
     }
-    if (dialogE2e) {
+    if (containerPreviewE2e) {
+        testFiles.set("container-preview")
+    } else if (dialogE2e) {
         testFiles.set("dialog-designs")
     } else if (cleanupE2e) {
         dependsOn(prepareContractCitizens)

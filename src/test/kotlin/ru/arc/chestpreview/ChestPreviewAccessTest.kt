@@ -2,6 +2,7 @@ package ru.arc.chestpreview
 
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.confirmVerified
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -21,6 +22,7 @@ import org.bukkit.block.EnderChest
 import org.bukkit.block.ShulkerBox
 import org.bukkit.block.data.type.Chest as ChestData
 import org.bukkit.entity.Player
+import org.bukkit.inventory.Inventory
 import org.bukkit.util.BoundingBox
 import ru.arc.paper.api.InspectionHologramAnchor
 import java.util.UUID
@@ -168,31 +170,124 @@ class ChestPreviewAccessTest : StringSpec({
         f.verifyNoContents()
     }
 
-    "shulker checks the facing swept volume and accepts an already-open box" {
-        val f = PreviewChestFixture()
-        val state = mockk<ShulkerBox>()
-        val data = mockk<org.bukkit.block.data.Directional>()
+    "a closed unoccupied shulker checks the facing swept volume after protection" {
+        val s = PreviewShulkerFixture()
+        val f = s.container
         val sweptBounds = slot<BoundingBox>()
-        val shulker = f.special(Material.SHULKER_BOX, state)
-        every { state.isLocked } returns false
-        every { state.lootTable } returns null
-        every { state.isOpen } returns false
-        every { state.blockData } returns data
-        every { data.facing } returns BlockFace.NORTH
         every { f.player.wouldCollideUsing(capture(sweptBounds)) } returns true
 
         var protectionCalls = 0
         val access = previewAccess { _, _ -> protectionCalls++; true }
-        access.resolveBlock(f.player, shulker) shouldBe null
+        access.resolveBlock(f.player, s.block) shouldBe null
         sweptBounds.captured shouldBe BoundingBox(8.000001, 64.000001, 7.500001, 8.999999, 64.999999, 7.999999)
-        protectionCalls shouldBe 0
+        protectionCalls shouldBe 1
         every { f.player.wouldCollideUsing(any()) } returns false
-        access.resolveBlock(f.player, shulker)!!.states shouldBe listOf(state)
-        every { state.isOpen } returns true
-        access.resolveBlock(f.player, shulker)!!.states shouldBe listOf(state)
+        access.resolveBlock(f.player, s.block)!!.states shouldBe listOf(s.state)
         protectionCalls shouldBe 2
         verify(exactly = 2) { f.player.wouldCollideUsing(any()) }
+        verify(exactly = 2) { s.inventory.viewers }
+        confirmVerified(s.inventory)
+    }
+
+    "a shulker viewed by another player skips its own extended lid collision with isOpen false" {
+        val s = PreviewShulkerFixture()
+        val f = s.container
+        val otherPlayer = mockk<Player>()
+        every { s.inventory.viewers } returns listOf(otherPlayer)
+        every { f.player.wouldCollideUsing(any()) } returns true
+
+        previewAccess { _, _ -> true }.resolveBlock(f.player, s.block)!!.states shouldBe listOf(s.state)
+
+        verify(exactly = 1) { s.state.isOpen }
+        verify(exactly = 1) { s.inventory.viewers }
+        verify(exactly = 0) { f.player.wouldCollideUsing(any()) }
+        confirmVerified(s.inventory)
+    }
+
+    "an API forced-open shulker with no viewers skips both inventory access and lid collision" {
+        val s = PreviewShulkerFixture()
+        val f = s.container
+        every { s.state.isOpen } returns true
+        every { f.player.wouldCollideUsing(any()) } returns true
+
+        previewAccess { _, _ -> true }.resolveBlock(f.player, s.block)!!.states shouldBe listOf(s.state)
+
+        verify(exactly = 0) { f.player.wouldCollideUsing(any()) }
         f.verifyNoContents()
+        confirmVerified(s.inventory)
+    }
+
+    "another player's open shulker inventory is not inspected when this viewer lacks protection access" {
+        val s = PreviewShulkerFixture()
+        val f = s.container
+        val otherPlayer = mockk<Player>()
+        every { s.inventory.viewers } returns listOf(otherPlayer)
+        var protectionCalls = 0
+        var markerReads = 0
+        val access = ChestPreviewAccess(
+            protectedAccess = { viewer, block ->
+                viewer shouldBe f.player
+                block shouldBe s.block
+                protectionCalls++
+                viewer === otherPlayer
+            },
+            personalLootMarker = {
+                markerReads++
+                PersonalLootChestMarker.Unmarked
+            },
+        )
+
+        access.resolveBlock(f.player, s.block) shouldBe null
+
+        protectionCalls shouldBe 1
+        markerReads shouldBe 0
+        f.verifyNoContents()
+        verify(exactly = 0) { f.player.wouldCollideUsing(any()) }
+        confirmVerified(s.inventory)
+    }
+
+    "locked loot-table and invalid managed shulkers never inspect their inventory viewers" {
+        val s = PreviewShulkerFixture()
+        val f = s.container
+        every { s.inventory.viewers } returns listOf(mockk<Player>())
+        var protectionCalls = 0
+        val access = ChestPreviewAccess(
+            protectedAccess = { _, _ -> protectionCalls++; true },
+            personalLootMarker = { PersonalLootChestMarker.Invalid },
+        )
+
+        every { s.state.isLocked } returns true
+        access.resolveBlock(f.player, s.block) shouldBe null
+        protectionCalls shouldBe 0
+        every { s.state.isLocked } returns false
+        every { s.state.lootTable } returns mockk()
+        access.resolveBlock(f.player, s.block) shouldBe null
+        protectionCalls shouldBe 0
+        every { s.state.lootTable } returns null
+        access.resolveBlock(f.player, s.block) shouldBe null
+        protectionCalls shouldBe 1
+
+        f.verifyNoContents()
+        verify(exactly = 0) { f.player.wouldCollideUsing(any()) }
+        confirmVerified(s.inventory)
+    }
+
+    "a closed shulker never queries collision through unloaded or unsent neighbouring chunks" {
+        val s = PreviewShulkerFixture(facing = BlockFace.EAST, x = 14)
+        val f = s.container
+        val access = previewAccess { _, _ -> true }
+        every { f.world.isChunkLoaded(1, 0) } returns false
+
+        access.resolveBlock(f.player, s.block) shouldBe null
+
+        every { f.world.isChunkLoaded(1, 0) } returns true
+        every { f.player.isChunkSent(Chunk.getChunkKey(1, 0)) } returns false
+
+        access.resolveBlock(f.player, s.block) shouldBe null
+
+        verify(exactly = 0) { f.player.wouldCollideUsing(any()) }
+        verify(exactly = 2) { s.inventory.viewers }
+        confirmVerified(s.inventory)
     }
 
     "all 17 shulker materials resolve through the container state API" {
@@ -276,7 +371,28 @@ class ChestPreviewAccessTest : StringSpec({
     }
 })
 
-private class PreviewChestFixture {
+private class PreviewShulkerFixture(facing: BlockFace = BlockFace.NORTH, x: Int = 8) {
+    val container = PreviewChestFixture()
+    val state = mockk<ShulkerBox>()
+    val inventory = mockk<Inventory>()
+    val block = container.block(Material.SHULKER_BOX, x = x)
+
+    init {
+        val data = mockk<org.bukkit.block.data.Directional>()
+        every { block.getState(false) } returns state
+        container.states[block] = state
+        every { state.isLocked } returns false
+        every { state.lootTable } returns null
+        every { state.isOpen } returns false
+        every { state.inventory } returns inventory
+        every { inventory.viewers } returns emptyList()
+        every { state.blockData } returns data
+        every { data.facing } returns facing
+        every { container.player.wouldCollideUsing(any()) } returns false
+    }
+}
+
+internal class PreviewChestFixture {
     val world = mockk<World>()
     val player = mockk<Player>()
     val states = linkedMapOf<Block, BlockState>()

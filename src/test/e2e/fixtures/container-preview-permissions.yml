@@ -1,0 +1,4 @@
+arc.e2e.container-preview:
+  default: notop
+  children:
+    arc.chest-preview: true
