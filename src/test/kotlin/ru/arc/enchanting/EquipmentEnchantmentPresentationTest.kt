@@ -10,6 +10,7 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.TranslatableComponent
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
+import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Bukkit
 import org.bukkit.Material
@@ -30,6 +31,94 @@ import ru.arc.paper.testing.MockBukkitTestRuntime
 class EquipmentEnchantmentPresentationTest {
     private val plain = PlainTextComponentSerializer.plainText()
     private val aeKey = NamespacedKey("advancedenchantments", "ae_enchantment-lightweight")
+
+    @Test
+    fun `owned vanilla rows recover the production legacy rewrite without losing authored lore`() {
+        MockBukkitTestRuntime.open().use { runtime ->
+            runtime.createSimplePlugin("AdvancedEnchantments")
+            Class.forName(AEAPI::class.java.name, true, AEAPI::class.java.classLoader)
+            mockkStatic(AEAPI::class)
+            try {
+                every { AEAPI.getEnchantmentsOnItem(any()) } returns hashMapOf()
+                val mini = MiniMessage.miniMessage()
+                // Exact literal-row shape from the affected Survival shovel. Names and levels
+                // lost their inherited gray while the intervening space retained it.
+                fun orphan(name: String, level: String = "") = mini.deserialize(
+                    "<!italic><!underlined><!strikethrough><!bold><!obfuscated><white> </white></!obfuscated></!bold></!strikethrough></!underlined></!italic>" +
+                        "<!italic>$name" + if (level.isEmpty()) "" else "</!italic><!italic><gray> </gray></!italic><!italic>$level",
+                )
+                val authored = listOf(
+                    Component.text("Надпись мастера"),
+                    orphan("Efficiency", "V").append(Component.text(" — история")),
+                    orphan("Efficiency", "V").hoverEvent(Component.text("Подсказка мастера")),
+                    Component.text(" Efficiency V", NamedTextColor.GREEN),
+                    Component.text("Efficiency V", NamedTextColor.GRAY),
+                    orphan("Efficiency", "IIV"),
+                    Component.empty(), Component.empty(),
+                )
+                val souls = NamespacedKey("advancedenchantments", "souls")
+                val source = ItemStack(Material.DIAMOND_SHOVEL).apply {
+                    addUnsafeEnchantment(Enchantment.EFFICIENCY, 5)
+                    addUnsafeEnchantment(Enchantment.FORTUNE, 3)
+                    addUnsafeEnchantment(Enchantment.MENDING, 1)
+                    addUnsafeEnchantment(Enchantment.UNBREAKING, 1)
+                    editMeta {
+                        it.displayName(Component.text("Яросрал"))
+                        it.lore(authored)
+                        it.persistentDataContainer.set(souls, PersistentDataType.INTEGER, 13443)
+                    }
+                }
+                val expected = EquipmentEnchantmentPresentation.ordinary(source)
+                val nativeRows = listOf(orphan("Efficiency", "V"), orphan("Fortune", "III"), orphan("Mending"), orphan("Unbreaking", "I"))
+                val damaged = expected.clone().apply {
+                    editMeta { meta ->
+                        val partial = nativeRows.drop(1)
+                        meta.lore(meta.lore()!!.dropLast(authored.size) + nativeRows + Component.empty() + nativeRows + Component.empty() +
+                            nativeRows + Component.empty() + partial + Component.empty() + partial + Component.empty() +
+                            orphan("Efficiency", "IV") + authored)
+                        val record = meta.persistentDataContainer.adapterContext.newPersistentDataContainer()
+                        record.set(NamespacedKey("arc", "rows"), PersistentDataType.LIST.strings(), listOf(
+                            "§b§lЗачарования", "§f §7Efficiency§r V", "§f §7Fortune§r III", "§f §7Mending", "§f §7Unbreaking§r I",
+                        ))
+                        for (key in listOf("before_gap", "after_gap", "hide_enchants")) {
+                            record.set(NamespacedKey("arc", key), PersistentDataType.BOOLEAN, true)
+                        }
+                        for (key in listOf("middle_gap", "tooltip_style")) {
+                            record.set(NamespacedKey("arc", key), PersistentDataType.BOOLEAN, false)
+                        }
+                        meta.persistentDataContainer.set(NamespacedKey("arc", "equipment_enchantment_presentation"), PersistentDataType.TAG_CONTAINER, record)
+                    }
+                }
+
+                val cleaned = EquipmentEnchantmentPresentation.ordinary(damaged)
+                assertEquals(expected, cleaned)
+                repeat(3) { assertEquals(cleaned, EquipmentEnchantmentPresentation.ordinary(cleaned)) }
+                val nativeRewrite = cleaned.clone().apply {
+                    editMeta { meta ->
+                        // Round-trip the generated block through the same legacy API used by AE.
+                        // Keep authored components outside that operation, including their hover data.
+                        val body = meta.lore()!!.drop(6)
+                        meta.setLore(meta.getLore()!!.take(6))
+                        meta.lore(meta.lore()!! + body)
+                    }
+                }
+                assertNotEquals(cleaned.lore()!![2], nativeRewrite.lore()!![2])
+                assertEquals(expected, EquipmentEnchantmentPresentation.ordinary(nativeRewrite))
+                val upgraded = cleaned.clone().apply { addUnsafeEnchantment(Enchantment.EFFICIENCY, 4) }
+                val refreshed = EquipmentEnchantmentPresentation.ordinary(upgraded)
+                assertEquals(authored, refreshed.lore()!!.takeLast(authored.size))
+                assertEquals(refreshed, EquipmentEnchantmentPresentation.ordinary(refreshed))
+                val disenchanted = refreshed.clone().apply { enchantments.keys.forEach(::removeEnchantment) }
+                val bare = source.clone().apply { enchantments.keys.forEach(::removeEnchantment) }
+                assertEquals(bare, EquipmentEnchantmentPresentation.ordinary(disenchanted))
+
+                val unowned = damaged.clone().apply {
+                    editMeta { it.persistentDataContainer.remove(NamespacedKey("arc", "equipment_enchantment_presentation")) }
+                }
+                assertSame(unowned, EquipmentEnchantmentPresentation.ordinary(unowned))
+            } finally { unmockkStatic(AEAPI::class) }
+        }
+    }
 
     @Test
     fun `ordinary gear keeps native labels stats counters and authored spacing across refresh and disenchantment`() {

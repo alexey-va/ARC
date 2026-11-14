@@ -42,6 +42,7 @@ internal object EquipmentEnchantmentPresentation {
     private val advancedIcons = setOf('', '', '', '')
     private val iconSegments = advancedIcons.associateWith { Pattern.compile("^" + Pattern.quote("$it ") + ".*", Pattern.DOTALL) }
     private val romanLevel = Regex("M{0,3}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})")
+    private val nonVanillaFormatting = Regex("§[^f7cr]")
     private data class AdvancedRows(
         val lines: List<Component>,
         val legacyDisplays: Map<String, String> = emptyMap(),
@@ -194,7 +195,9 @@ internal object EquipmentEnchantmentPresentation {
         var body = removeRows(lore, serialized, oldRows,
             previous?.get(beforeGapKey, PersistentDataType.BOOLEAN) == true,
             previous?.get(afterGapKey, PersistentDataType.BOOLEAN) == true,
-            previous?.get(middleGapKey, PersistentDataType.BOOLEAN) == true)
+            previous?.get(middleGapKey, PersistentDataType.BOOLEAN) == true,
+            recoverVanilla = ordinary && previous?.get(hideKey, PersistentDataType.BOOLEAN) == true,
+            currentVanilla = vanilla)
         // Fresh native AE rows may have been prepended by its apply/organize operation.
         body = removeRows(body, body.map(legacy::serialize), matchedAdvanced.map(legacy::serialize))
         previous?.get(statisticsHeadingKey, PersistentDataType.STRING)?.let { heading ->
@@ -333,23 +336,52 @@ internal object EquipmentEnchantmentPresentation {
     private fun removeRows(
         lines: List<Component>, serialized: List<String>, owned: List<String>,
         beforeGap: Boolean = false, afterGap: Boolean = false, middleGap: Boolean = false,
+        recoverVanilla: Boolean = false,
+        currentVanilla: List<Component> = emptyList(),
     ): List<Component> {
-        val remaining = owned.groupingBy { it }.eachCount().toMutableMap()
+        fun canonical(line: String) = legacy.serialize(legacy.deserialize(line))
+        val remaining = owned.groupingBy(::canonical).eachCount().toMutableMap()
+        val vanillaComponents = currentVanilla.map { it.decoration(TextDecoration.ITALIC, false).compact() }.toSet()
+        val vanillaNames = if (!recoverVanilla) emptySet() else owned.filter { it.startsWith("§f ") }.mapTo(hashSetOf()) {
+            val label = plain.serialize(legacy.deserialize(it)).removePrefix(" ")
+            label.substringBeforeLast(' ').takeIf { validLevel(label.substringAfterLast(' ')) } ?: label
+        }
         val removed = lines.indices.filter { index ->
-            val key = serialized.getOrNull(index)
+            val encoded = serialized.getOrNull(index) ?: return@filter false
+            val key = canonical(encoded)
             val count = remaining[key] ?: 0
-            if (count == 0) false else { remaining[key!!] = count - 1; true }
+            if (count > 0) { remaining[key] = count - 1; true }
+            else recoverVanilla && (lines[index].compact() in vanillaComponents ||
+                (vanillaNames.isNotEmpty() && recoverVanillaRow(lines[index], encoded, vanillaNames)))
         }.toMutableSet()
-        val first = serialized.indexOf(owned.firstOrNull()).takeIf { it >= 0 }
+        val first = removed.minOrNull()
         val last = removed.maxOrNull()
         if (first != null && last != null) {
             if (beforeGap && first > 0 && blank(lines[first - 1])) removed += first - 1
             if (afterGap && last < lines.lastIndex && blank(lines[last + 1])) removed += last + 1
+            // Repeated old ARC blocks each left one owned separator behind.
+            if (recoverVanilla) removed.sorted().zipWithNext().forEach { (left, right) ->
+                if (right == left + 2 && blank(lines[left + 1])) removed += left + 1
+            }
             if (middleGap) (first..last).firstOrNull { index ->
                 blank(lines[index]) && index - 1 in removed && index + 1 in removed
             }?.let { removed += it }
         }
         return lines.filterIndexed { index, _ -> index !in removed }
+    }
+
+    private fun validLevel(level: String): Boolean = level.isNotEmpty() && romanLevel.matches(level)
+
+    private fun recoverVanillaRow(row: Component, encoded: String, names: Set<String>): Boolean {
+        // Paper's legacy getLore path can lose inherited translation colors after a
+        // native rewrite. Recover only ARC's white glyph + recorded vanilla name,
+        // native colors and an optional valid historical level, never authored extras.
+        if (!encoded.startsWith("§f ") || nonVanillaFormatting.containsMatchIn(encoded)) return false
+        fun authored(component: Component): Boolean = component.hoverEvent() != null || component.clickEvent() != null ||
+            component.insertion() != null || component.font() != null || component.children().any(::authored)
+        if (authored(row)) return false
+        val label = plain.serialize(legacy.deserialize(encoded)).removePrefix(" ")
+        return label in names || (validLevel(label.substringAfterLast(' ')) && label.substringBeforeLast(' ') in names)
     }
 
     private fun blank(line: Component): Boolean = plain.serialize(line).isBlank()
