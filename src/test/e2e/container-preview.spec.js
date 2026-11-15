@@ -134,3 +134,95 @@ test('native shulker preview refreshes while another player views it and hides b
     if (opener.bot.currentWindow) await opener.bot.closeWindow(opener.bot.currentWindow);
   }
 });
+
+test('native container preview follows a physical full orbit without replacing its icons or counts', async context => {
+  const { player, signal } = context;
+  const { opener, position, contents, place, target } = await fixture(context);
+  const bot = player.bot;
+  await opener.teleport(7.5, 65, 7.5);
+  await place('barrel');
+  await waitPreview(player, contents, signal);
+  const center = position.offset(0.5, 0.5, 0.5);
+  const metadata = (entity, key) => entity.metadata[bot.registry.entitiesByName[entity.name].metadataKeys.indexOf(key)];
+  const item = entity => bot.registry.items[metadata(entity, 'item_stack')?.itemId]?.name;
+  const text = entity => plain(unwrap(metadata(entity, 'text')));
+  const names = contents.map(([name]) => name).sort();
+  const counts = contents.map(([, count]) => String(count)).sort();
+  const displays = Object.values(bot.entities);
+  const icons = displays.filter(entity => entity.name === 'item_display' && names.includes(item(entity)));
+  assert.equal(icons.length, contents.length, 'The orbit must start with exactly the selected content icons');
+  const labels = displays.filter(entity => entity.name === 'text_display' && counts.includes(text(entity)) &&
+    entity.position.distanceTo(icons[0].position) < 0.001);
+  assert.equal(labels.length, contents.length, 'Track only the count entities at this preview anchor');
+  const iconIds = icons.map(entity => entity.id), labelIds = labels.map(entity => entity.id);
+  const ids = [...iconIds, ...labelIds], destroyed = new Set(), samples = [];
+  const removed = packet => packet.entityIds.forEach(id => { if (ids.includes(id)) destroyed.add(id); });
+  bot._client.on('entity_destroy', removed);
+  const parts = () => {
+    assert.equal(destroyed.size, 0, `Orbit removed preview entities: ${[...destroyed]}`);
+    const current = ids.map(id => bot.entities[id]);
+    assert.ok(current.every(Boolean), `Orbit lost preview entity IDs: ${ids.filter(id => !bot.entities[id])}`);
+    assert.deepEqual(iconIds.map(id => item(bot.entities[id])).sort(), names);
+    assert.ok(iconIds.every(id => metadata(bot.entities[id], 'item_stack').itemCount === 1));
+    assert.deepEqual(labelIds.map(id => text(bot.entities[id])).sort(), counts);
+    return current;
+  };
+  let travel = 0;
+  const sample = async mark => {
+    let anchor;
+    await waitUntil(() => {
+      const current = parts();
+      anchor = current[0].position.clone();
+      const viewer = bot.entity.position;
+      const facing = (anchor.x - center.x) * (viewer.x - center.x) + (anchor.z - center.z) * (viewer.z - center.z);
+      return current.every(entity => entity.position.distanceTo(anchor) < 0.001) && facing > 0;
+    }, { signal, timeout: 3000, interval: 25, message: `Orbit ${mark}: all parts must share a viewer-facing world anchor` });
+    samples.push({ mark, anchor, viewer: bot.entity.position.clone() });
+    console.log('Container orbit sample', JSON.stringify(samples.at(-1)));
+    return anchor;
+  };
+  try {
+    const initial = await sample(0);
+    const yaw = bot.entity.yaw, pitch = bot.entity.pitch;
+    for (const delta of [-0.04, 0.04]) {
+      await bot.look(yaw + delta, pitch, true);
+      await bot.waitForTicks(4);
+      assert.equal(bot.blockAtCursor(4.5)?.name, 'barrel', 'Head-only motion must keep the same barrel targeted');
+      const anchor = await sample(`head ${delta}`);
+      assert.ok(anchor.distanceTo(initial) < 0.001, 'Head-only rotation must not translate the panel');
+    }
+    await target(player);
+    let previous = Math.atan2(bot.entity.position.z - center.z, bot.entity.position.x - center.x);
+    let mark = 90;
+    for (let tick = 0; tick < 400 && mark <= 360; tick++) {
+      await target(player);
+      const radius = Math.hypot(bot.entity.position.x - center.x, bot.entity.position.z - center.z);
+      assert.ok(radius > 2.4 && radius < 3.9, `Orbit left its reachable walking ring: ${radius}`);
+      bot.setControlState('right', true);
+      bot.setControlState('forward', radius > 3.1);
+      bot.setControlState('back', radius < 2.9);
+      await bot.waitForTicks(1);
+      const angle = Math.atan2(bot.entity.position.z - center.z, bot.entity.position.x - center.x);
+      travel += Math.atan2(Math.sin(angle - previous), Math.cos(angle - previous));
+      previous = angle;
+      parts();
+      if (Math.abs(travel) >= mark * Math.PI / 180) {
+        bot.clearControlStates();
+        await bot.waitForTicks(3);
+        await target(player);
+        await sample(mark);
+        mark += 90;
+      }
+    }
+    assert.deepEqual(samples.filter(entry => typeof entry.mark === 'number').map(entry => entry.mark), [0, 90, 180, 270, 360],
+      `The client must physically walk a full orbit; travelled ${travel * 180 / Math.PI} degrees`);
+    assert.ok(samples.some(entry => entry.anchor.distanceTo(initial) > 0.05), 'Walking around the barrel must change the world anchor');
+  } catch (failure) {
+    console.error('Container orbit diagnostics', JSON.stringify({ degrees: travel * 180 / Math.PI,
+      viewer: bot.entity.position, destroyed: [...destroyed], samples }).slice(0, 6000));
+    throw failure;
+  } finally {
+    bot.clearControlStates();
+    bot._client.off('entity_destroy', removed);
+  }
+});

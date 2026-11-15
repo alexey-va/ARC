@@ -33,7 +33,7 @@ Changes affect only the current player's private scene and apply on its next tic
 | `item-transform` | Native ItemDisplay GUI, FIXED or NONE model context |
 | `show-counts`, `count-scale`, `count-offset-y` | Numeric label visibility, size and vertical position |
 | `background-opacity`, `brightness` | Background alpha and native display light level |
-| `teleport-ticks`, `stability-threshold` | Accepted legacy keys; unused by fixed placement and hidden from personal controls |
+| `teleport-ticks`, `stability-threshold` | Older records still parse these keys. Orbit motion has a fixed two-tick cadence. |
 
 Defaults show all 54 distinct groups in 9 columns, with white numbers and no
 backdrop. Scale is 0.9, cell spacing 0.36, icon size 0.28, count size 0.10 and
@@ -52,22 +52,27 @@ packet owner's next snapshot, so container preferences remain independent.
 A higher-priority winner, access loss, target loss, suppression or reset clears
 the private scene. No Bukkit entities or synthetic inventory events are created.
 
-A scene acquires one world-fixed center in front of the selected container;
-a viewer directly over its footprint starts above the lid. It reserves the configured maximum grid height above the container's support
-plane, so adding rows cannot sink their counts into the floor. Initial placement
-clears the viewer-facing vertical surface including the pitched grid and
-icon/count depth, keeping ordinary views clear of a stacked container above.
-It does not search free space above, beside or around neighbouring blocks.
+As the player walks around a selected container, the private grid follows its
+near side. Its bearing comes from the viewer's eye coordinates relative to the
+center of the entire container, including both halves of a double chest.
+Turning the head in place leaves this world position unchanged. Native CENTER
+billboards rotate the icons and counts toward the camera.
 
-The center remains fixed while looking around or changing item counts. Native
-CENTER billboarding owns camera-facing rotation; the server sends no placement
-updates during camera motion. Existing handles survive unchanged updates and
-content/count changes. Another container or changed personal layout starts a
-new scene at its destination with zero movement interpolation.
+The center clears the projected container face and the depth of the pitched
+grid. It reserves the configured maximum row height above the support plane,
+so adding rows keeps the bottom counts above the floor. Approaching from above
+raises the grid clear of the lid and draws it toward the center as the viewer
+crosses the container footprint.
+
+All parts move together on their existing handles. After at least two ticks
+and 0.02 blocks of center displacement, the client receives the next world
+position with two ticks of teleport interpolation. Counts and contents can
+refresh independently on any tick. Another container or a changed personal
+layout starts a new scene at its destination.
 
 The center ray must remain in loaded/sent space and unobstructed. If it is
-blocked or behind the camera, the scene hides while retaining its anchor and
-handles, then reappears there when visible. Individual edges may be naturally
+blocked or behind the camera, the scene hides while retaining its handles and
+reappears on the viewer's current side once clear. Individual edges may be naturally
 occluded by neighbouring blocks as the camera turns; they never force the
 whole grid to drift or seek another location. Target/access checks still run
 every tick for permitted viewers; others retain the ordinary five-tick cadence.
@@ -133,7 +138,8 @@ unavailable chunks, lock/loot/obstruction, failed providers, stable aggregation,
 icon limits, ordinary and personal viewer isolation, cold personal lookup and
 admission-cap behavior. Icon-renderer and controller checks
 cover private audience, optional numeric labels, unchanged handle identity, independent
-preferences, cleanup, fixed anchor/handle continuity, full 54-item grids and opacity. Configuration tests reload every
+preferences, cleanup, movement around the viewer-facing side on retained handles,
+stationary head turns, full 54-item grids and opacity. Configuration tests reload every
 new setting; preference and HelpCenter tests cover sparse overrides and reset.
 
 A source-derived offline preview can be exported during the placement tests by
@@ -144,10 +150,14 @@ python3 -B scripts/render-chest-preview.py --geometry build/chest-preview-export
   --ops-root /Users/alexey23/RusCrafting/ruscrafting-ops --output build/chest-preview-export/render
 ```
 
-The adapter reuses the existing atelier renderer, native Minecraft models/textures
-and font. Its views preserve aim at the container and include a dense stacked
-container fixture, steep lower-side targeting and a partial row. They are frozen source poses, not native
-client lighting, model loading, packet visibility or billboarding acceptance.
+The adapter reuses the existing atelier renderer, Minecraft models, textures and
+font. The six-second first-person orbit uses 121 camera and anchor samples from
+the runtime placement and cadence functions. Aim stays on the lower chest in a
+stack. The controls switch between 54 items and one, scrub the circle, or hold
+the center at its initial position for a matched comparison. Static views include
+steep lower-side targeting and a partial row. Native interpolation and lighting
+remain approximations. At 2.5 blocks and 70° vertical FOV, the upper edges of the
+first row briefly extend above the viewport with the default physical scale.
 
 Native client acceptance after owner-controlled activation: grant only the test
 account `arc.chest-preview`, compare an allowed chest and a denied Lands/WG chest,

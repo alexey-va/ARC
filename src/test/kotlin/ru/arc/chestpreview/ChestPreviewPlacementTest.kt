@@ -12,6 +12,8 @@ import ru.arc.paper.api.InspectionHologramAnchor
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
+import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -66,9 +68,77 @@ class ChestPreviewPlacementTest : StringSpec({
         (anchor.z < chest.minZ) shouldBe true
     }
 
-    "source geometry export covers dense front, diagonal, overhead, steep side and partial views" {
+    "one orbit follows eye position around single and rectangular double chests without a yaw seam" {
+        for (box in listOf(chest, BoundingBox(0.0, 0.0, 0.0, 2.0, 1.0, 1.0))) {
+            val source = above.copy(x = box.centerX, z = box.centerZ)
+            var first: Vector? = null
+            var previous: Vector? = null
+            for (degree in 0..360) {
+                val angle = Math.toRadians(degree.toDouble())
+                val x = sin(angle)
+                val z = -cos(angle)
+                val eye = Location(null, box.centerX + 3.5 * x, 1.62, box.centerZ + 3.5 * z)
+                eye.direction = box.center.subtract(eye.toVector())
+                val at = ChestPreviewPlacement.choose(eye, source, box, panel, options.scale)
+                ChestPreviewPlacement.choose(eye.clone().apply { yaw += 15f; pitch -= 10f },
+                    source, box, panel, options.scale) shouldBe at
+                val delta = Vector(at.x - box.centerX, at.y, at.z - box.centerZ)
+                (abs(delta.x * z - delta.z * x) < 1e-8) shouldBe true
+                (delta.x * x + delta.z * z > (abs(x) * box.widthX + abs(z) * box.widthZ) / 2) shouldBe true
+                previous?.let { (delta.distance(it) < .04) shouldBe true }
+                if (degree == 0) first = delta
+                if (degree == 360) (delta.distance(first!!) < 1e-8) shouldBe true
+                previous = delta
+            }
+        }
+    }
+
+    "a walk across the lid centers overhead and crosses both footprint edges continuously" {
+        var previous: Vector? = null
+        for (step in -100..100) {
+            val eye = Location(null, chest.centerX + step / 100.0, 3.1, chest.centerZ)
+            val at = ChestPreviewPlacement.choose(eye, above, chest, panel, options.scale)
+            val next = Vector(at.x, at.y, at.z)
+            previous?.let { (next.distance(it) < .06) shouldBe true }
+            if (step == 0) {
+                at.x shouldBe chest.centerX
+                at.z shouldBe chest.centerZ
+                (at.y > chest.maxY) shouldBe true
+            }
+            previous = next
+        }
+    }
+
+    "motion coalesces one tick and sub-pixel jitter against the last accepted world position" {
+        val moved = above.copy(x = above.x + 0.05)
+        ChestPreviewPlacement.follow(null, above, 0) shouldBe above
+        ChestPreviewPlacement.follow(above, moved, 1) shouldBe above
+        ChestPreviewPlacement.follow(above, above.copy(z = above.z + 0.003), 10) shouldBe above
+        ChestPreviewPlacement.follow(above, moved, 2) shouldBe moved
+    }
+
+    "source geometry export includes the actual orbit path, timing and representative static views" {
+        // One 6-second walking circuit, then the same starting viewpoint. At each tick the
+        // first-person camera points at the lower container, including when the distance changes.
+        val orbit = mutableListOf<Map<String, Any>>()
+        var previousAnchor: InspectionHologramAnchor? = null
+        var moveTick = 0
+        for (tick in 0..120) {
+            val bearing = tick * 2.0 * PI / 120
+            val radius = 3.15 + 0.65 * cos(bearing)
+            val eye = Location(null, chest.centerX + radius * sin(bearing), 1.62, chest.centerZ - radius * cos(bearing))
+            eye.direction = chest.center.subtract(eye.toVector())
+            (chest.rayTrace(eye.toVector(), eye.direction, options.maxDistance) != null) shouldBe true
+            chest.clone().shift(0.0, 1.0, 0.0).rayTrace(eye.toVector(), eye.direction, options.maxDistance) shouldBe null
+            val desired = ChestPreviewPlacement.choose(eye, above, chest, panel, options.scale, options)
+            val anchor = ChestPreviewPlacement.follow(previousAnchor, desired, tick - moveTick)
+            if (anchor != previousAnchor) moveTick = tick
+            previousAnchor = anchor
+            orbit += mapOf("tick" to tick, "camera" to listOf(eye.x, eye.y, eye.z),
+                "anchor" to listOf(anchor.x, anchor.y, anchor.z), "yaw" to eye.yaw, "pitch" to eye.pitch)
+        }
         val states = listOf(
-            Triple("front-54", 0f, 18f), Triple("diagonal-54", 40f, 18f),
+            Triple("front-54", 0f, 18f), Triple("single-1", 0f, 18f), Triple("diagonal-54", 40f, 18f),
             Triple("overhead-54", 0f, 90f), Triple("steep-side-54", 0f, 56f), Triple("partial-13", 0f, 18f),
         ).map { (id, yaw, pitch) ->
             // An overhead ray selects the upper container; the steep side ray can reach the lower one.
@@ -81,7 +151,7 @@ class ChestPreviewPlacementTest : StringSpec({
                 subtract(direction.multiply(3.5))
             }
             val anchor = ChestPreviewPlacement.choose(eye, source, selected, panel, options.scale, options)
-            val count = if (id == "partial-13") 13 else 54
+            val count = when (id) { "single-1" -> 1; "partial-13" -> 13; else -> 54 }
             val offsets = ChestPreviewIconGeometry.offsets(count, options.scale, options)
             offsets.size shouldBe count
             mapOf(
@@ -103,6 +173,8 @@ class ChestPreviewPlacementTest : StringSpec({
                     .let { listOf(it.x, it.y, it.z, it.w) },
                 "flatRotation" to ChestPreviewIconGeometry.guiFacingRotation(false)
                     .let { listOf(it.x, it.y, it.z, it.w) },
+                "orbit" to orbit,
+                "motionTicks" to ChestPreviewPlacement.MOTION_TICKS,
                 "states" to states,
             )
             Files.writeString(output.resolve("geometry.json"), GsonBuilder().setPrettyPrinting().create().toJson(exported))

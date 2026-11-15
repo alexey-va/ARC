@@ -25,13 +25,12 @@ import kotlin.math.ceil
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/** Chest content and a fixed world anchor stay local; Core owns keyed parts and packet lifecycle. */
+/** ARC places the private grid around its container; Core moves its keyed display handles together. */
 internal class ChestPreviewIcons(
     private val displays: PaperPacketDisplays,
     private val settings: ChestPreviewSettings,
 ) : AutoCloseable {
     private class ViewerState(
-        val anchor: InspectionHologramAnchor,
         val sourceAnchor: InspectionHologramAnchor,
         val scale: Float,
         val options: ChestPreviewSettings,
@@ -40,6 +39,8 @@ internal class ChestPreviewIcons(
         var items: List<ItemStack> = emptyList(),
         var counts: List<Int> = emptyList(),
         var visible: Boolean = false,
+        var anchor: InspectionHologramAnchor? = null,
+        var lastMoveTick: Int = 0,
     )
 
     private val viewers = mutableMapOf<UUID, ViewerState>()
@@ -66,15 +67,20 @@ internal class ChestPreviewIcons(
             } == true) clear(id)
             val state = viewers.getOrPut(id) {
                 ViewerState(
-                    ChestPreviewPlacement.place(player.eyeLocation, target, effectiveScale, options),
                     target.anchor, effectiveScale, options, PacketDisplayScene(displays), SceneAudience.Private(id),
                 )
             }
-            if (!ChestPreviewPlacement.visible(player, state.anchor)) {
-                // Keep the selected anchor while occluded; hiding must not start another placement search.
+            val desired = ChestPreviewPlacement.place(player.eyeLocation, target, effectiveScale, options)
+            val previous = state.anchor
+            val tick = player.ticksLived
+            val anchor = ChestPreviewPlacement.follow(previous.takeIf { state.visible }, desired, tick - state.lastMoveTick)
+            if (!ChestPreviewPlacement.visible(player, anchor)) {
                 state.scene.hide()
                 state.visible = false
-            } else render(player, state, items, counts)
+            } else {
+                render(player, state, anchor, items, counts)
+                if (anchor != previous) state.lastMoveTick = tick
+            }
         } catch (failure: Exception) {
             try { clear(player) } catch (cleanup: Exception) { failure.addSuppressed(cleanup) }
             throw failure
@@ -86,15 +92,15 @@ internal class ChestPreviewIcons(
     private fun render(
         player: Player,
         state: ViewerState,
+        anchor: InspectionHologramAnchor,
         items: List<ItemStack>,
         counts: List<Int>,
     ) {
-        val anchor = state.anchor
         val scale = state.scale
         val options = state.options
         // Access and line of sight are still checked by every update. Only unchanged scene
         // construction is skipped; Core continues viewer/chunk/connection reconciliation.
-        if (state.visible && state.items == items &&
+        if (state.visible && state.anchor == anchor && state.items == items &&
             state.counts == counts && state.scene.isValid()) return
         val at = Location(player.world, anchor.x, anchor.y, anchor.z)
         val style = SceneDisplayStyle(
@@ -153,7 +159,8 @@ internal class ChestPreviewIcons(
                 ),
             )
         }
-        state.scene.apply(SceneFrame(parts, state.audience, 0))
+        state.scene.apply(SceneFrame(parts, state.audience, ChestPreviewPlacement.MOTION_TICKS))
+        state.anchor = anchor
         state.items = items
         state.counts = counts
         state.visible = true

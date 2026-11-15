@@ -26,7 +26,7 @@ chest-preview:
   show-counts: true
   count-scale: 0.10
   count-offset-y: -0.22
-  # Legacy compatibility keys; fixed world anchors do not use motion settling.
+  # Legacy compatibility keys. Orbit motion follows the display update cadence.
   teleport-ticks: 0
   stability-threshold: 0.04
   brightness: 15

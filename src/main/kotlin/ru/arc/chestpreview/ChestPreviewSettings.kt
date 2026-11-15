@@ -67,7 +67,7 @@ internal data class ChestPreviewSettings(
         const val DEFAULT_SHOW_COUNTS = true
         const val DEFAULT_COUNT_SCALE = 0.10f
         const val DEFAULT_COUNT_OFFSET_Y = -0.22f
-        // Legacy settings remain readable; the fixed panel no longer teleports between poses.
+        // Older preference records still parse these keys. Orbit motion follows the display update cadence.
         const val DEFAULT_TELEPORT_TICKS = 0
         const val DEFAULT_STABILITY_THRESHOLD = 0.04
         const val DEFAULT_BRIGHTNESS = 15

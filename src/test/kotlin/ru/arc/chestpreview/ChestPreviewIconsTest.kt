@@ -106,28 +106,42 @@ class ChestPreviewIconsTest : StringSpec({
         verify(exactly = 1) { harness.owner.close() }
     }
 
-    "a full grid keeps its world anchor and every handle through camera motion" {
+    "all fifty-four icon and count handles move together around both halves of one double chest" {
         val worldId = UUID.randomUUID()
         val viewer = player(worldId)
+        val world = viewer.world
         val harness = DisplayHarness()
         val options = ChestPreviewSettings()
         val renderer = ChestPreviewIcons(harness.owner, options)
+        val bounds = org.bukkit.util.BoundingBox(2.0, 69.0, -4.0, 4.0, 70.0, -3.0)
         val selected = frame(worldId, List(54) { ItemStack(Material.PAPER) })
-            .copy(counts = (1..54).toList(), containerBounds = org.bukkit.util.BoundingBox(2.0, 69.0, -4.0, 3.0, 70.0, -3.0))
-        renderer.update(viewer, selected, options.scale)
-        for (step in 0..12) {
-            every { viewer.eyeLocation } returns Location(viewer.world, 1.9 + step * 0.1, 70.8, -6.5, (step - 6) * 2f, 15f)
-            renderer.update(viewer, selected, options.scale)
+            .copy(anchor = InspectionHologramAnchor(worldId, bounds.centerX, 70.15, bounds.centerZ),
+                counts = (1..54).toList(), containerBounds = bounds)
+        var tick = 0
+        var eye = Location(world, 0.0, 0.0, 0.0)
+        every { viewer.ticksLived } answers { tick }
+        every { viewer.eyeLocation } answers { eye.clone() }
+        for (step in 0..8) {
+            val angle = Math.toRadians(step * 45.0)
+            val x = kotlin.math.sin(angle)
+            val z = -kotlin.math.cos(angle)
+            tick = step * 4
+            eye = Location(world, bounds.centerX + 3.5 * x, 70.62, bounds.centerZ + 3.5 * z).apply {
+                direction = bounds.center.apply { this.x += if (step % 2 == 0) -.4 else .4 }.subtract(toVector())
+            }
+            renderer.update(viewer, selected.copy(containerBounds = bounds.clone()), options.scale)
+            val root = harness.itemDisplays.first().location
+            ((root.x - bounds.centerX) * x + (root.z - bounds.centerZ) * z > 0.5) shouldBe true
+            (harness.itemDisplays + harness.textDisplays).all { it.location == root } shouldBe true
         }
         harness.itemDisplays.size shouldBe 54
         harness.textDisplays.size shouldBe 54
         harness.textContents.map { PlainTextComponentSerializer.plainText().serialize(it) } shouldBe (1..54).map(Int::toString)
         harness.textContents.all { it.color() == NamedTextColor.WHITE } shouldBe true
-        harness.itemTransforms.size shouldBe 54
         (harness.itemDisplays + harness.textDisplays).forEach { display ->
-            verify(exactly = 0) { display.teleport(any<Location>()) }
+            verify(exactly = 8) { display.teleport(any<Location>()) }
             verify(exactly = 0) { display.remove() }
-            verify { display.teleportDuration = 0 }
+            verify { display.teleportDuration = ChestPreviewPlacement.MOTION_TICKS }
         }
         renderer.close()
     }
@@ -153,13 +167,14 @@ class ChestPreviewIconsTest : StringSpec({
         renderer.close()
     }
 
-    "a blocked center hides the scene without losing its anchor or handles" {
+    "a blocked center hides the scene and the same handles return on the current visible side" {
         val worldId = UUID.randomUUID()
         val viewer = player(worldId)
         val world = viewer.world
         val harness = DisplayHarness()
         val renderer = ChestPreviewIcons(harness.owner, ChestPreviewSettings())
-        val selected = frame(worldId, listOf(ItemStack(Material.DIAMOND)))
+        val selected = frame(worldId, listOf(ItemStack(Material.DIAMOND))).copy(
+            containerBounds = org.bukkit.util.BoundingBox(2.0, 69.0, -4.0, 3.0, 70.0, -3.0))
         renderer.update(viewer, selected, 1f)
         val icon = harness.itemDisplays.single()
         every { world.rayTraceBlocks(any(), any(), any(), any(), any<Boolean>(), any()) } returns
@@ -169,12 +184,13 @@ class ChestPreviewIconsTest : StringSpec({
         val viewerId = viewer.uniqueId
         verify(exactly = 1) { icon.hideFrom(viewerId) }
         every { world.rayTraceBlocks(any(), any(), any(), any(), any<Boolean>(), any()) } returns null
-        every { viewer.eyeLocation } returns Location(viewer.world, 3.0, 71.0, -6.5, 5f, 20f)
+        every { viewer.eyeLocation } returns Location(world, 5.5, 71.0, -3.5, 90f, 20f)
         renderer.update(viewer, selected, 1f)
         harness.itemDisplays.size shouldBe 1
         verify(exactly = 2) { icon.showTo(viewerId) }
         verify(exactly = 0) { icon.remove() }
-        verify(exactly = 0) { icon.teleport(any()) }
+        (icon.location.x > 3.0) shouldBe true
+        verify(exactly = 1) { icon.teleport(any()) }
         renderer.close()
     }
 
@@ -305,7 +321,7 @@ class ChestPreviewIconsTest : StringSpec({
         renderer.close()
     }
 
-    "counts update in place without teleporting any part of the anchored panel" {
+    "changing counts or turning the head at a fixed eye position never translates the panel" {
         val worldId = UUID.randomUUID()
         val viewer = player(worldId)
         val harness = DisplayHarness()
@@ -324,10 +340,12 @@ class ChestPreviewIconsTest : StringSpec({
         verify { count.text(Component.text(82, NamedTextColor.WHITE)) }
         val all = harness.itemDisplays + harness.textDisplays
         all.forEach { verify(exactly = 0) { it.teleport(any()) } }
-        every { viewer.eyeLocation } returns Location(viewer.world, 2.5, 72.0, -6.5, 0f, 40f)
+        val world = viewer.world
+        every { viewer.ticksLived } returns 6
+        every { viewer.eyeLocation } returns Location(world, 2.5, 70.8, -6.5, 8f, 16f)
         renderer.update(viewer, selected.copy(counts = listOf(82)), options.scale)
         all.forEach {
-            verify { it.teleportDuration = 0 }
+            verify { it.teleportDuration = ChestPreviewPlacement.MOTION_TICKS }
             verify(exactly = 0) { it.teleport(any()) }
         }
         renderer.clear(viewer)

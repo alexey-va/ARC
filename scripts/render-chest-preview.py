@@ -88,7 +88,7 @@ def main():
     archive = vanilla.SafeArchive(str(client))
     baker = vanilla.Baker(archive)
     palette = {"version": manifest["minecraft-version"], "blocks": {}, "textures": {}}
-    for block in ("minecraft:stone_bricks", "minecraft:barrel", "minecraft:oak_planks"):
+    for block in ("minecraft:stone_bricks", "minecraft:chest", "minecraft:barrel", "minecraft:oak_planks"):
         palette["blocks"][block] = baker.bake_block(block)
     models = []
     for name in BLOCKS:
@@ -103,7 +103,11 @@ def main():
     palette["textures"].update(baker.textures)
     archive.close()
     states = []
-    for state in exported["states"]:
+    static_states = exported["states"]
+    first = exported["orbit"][0]
+    orbit_states = [dict(next(s for s in static_states if s["id"] == source_id), **first, id=orbit_id, orbit=True)
+                    for source_id, orbit_id in (("front-54", "orbit-54"), ("single-1", "orbit-1"))]
+    for state in orbit_states + static_states:
         yaw, pitch = math.radians(state["yaw"]), math.radians(state["pitch"])
         right = [-math.cos(yaw), 0, -math.sin(yaw)]
         up = [-math.sin(yaw) * math.sin(pitch), math.cos(pitch), math.cos(yaw) * math.sin(pitch)]
@@ -112,10 +116,15 @@ def main():
         def world(local):
             return [.5 + sum(local[index] * basis[dimension] for index, basis in enumerate((right, up, normal))) for dimension in range(3)]
 
-        pieces = [dict(key="floor", material="minecraft:stone_bricks", x=.5, y=-.1, z=.5, width=8, height=.2, depth=8),
-                  dict(key="container", material="minecraft:barrel", x=.5, y=.5, z=.5, width=1, height=1, depth=1),
-                  dict(key="stacked-container", material="minecraft:barrel", x=.5, y=1.5, z=.5, width=1, height=1, depth=1),
-                  dict(key="back-wall", material="minecraft:oak_planks", x=.5, y=1.5, z=1.1, width=4, height=3, depth=.2)]
+        pieces = [dict(key="floor", material="minecraft:stone_bricks", x=.5, y=-.1, z=.5, width=10, height=.2, depth=10),
+                  dict(key="container", material="minecraft:chest", x=.5, y=.5, z=.5, width=1, height=1, depth=1),
+                  dict(key="stacked-container", material="minecraft:chest", x=.5, y=1.5, z=.5, width=1, height=1, depth=1)]
+        if state.get("orbit"):
+            # Outside the footpath, these familiar blocks make near/far and 180° legible.
+            for index, (x, z) in enumerate(((-3.5, 3.5), (4.5, .5), (3.5, -3.5))):
+                pieces.append(dict(key=f"landmark-{index}", material="minecraft:barrel", x=x, y=.5, z=z, width=1, height=1, depth=1))
+        else:
+            pieces.append(dict(key="back-wall", material="minecraft:oak_planks", x=.5, y=1.5, z=1.1, width=4, height=3, depth=.2))
         for index, offset in enumerate(state["offsets"]):
             source, gui, block = models[index]
             quads = []
@@ -149,22 +158,33 @@ def main():
             palette["blocks"][material] = {"quads": [quad], "occludes": False}
             pieces.append(dict(key=f"count-{index}", material=material, x=state["anchor"][0], y=state["anchor"][1], z=state["anchor"][2], width=1, height=1, depth=1, fullBright=True))
         count = len(state["offsets"])
-        states.append(dict(id=state["id"], title=f"{count} предметов · {state['id']}",
-                           role="Камера направлена на контейнер. Замороженная поза из runtime, текстуры и шрифт Minecraft; не нативный клиент.",
+        moving = state.get("orbit", False)
+        title = ("Обход · " + ("1 предмет" if count == 1 else "54 предмета")) if moving else state["id"]
+        states.append(dict(id=state["id"], title=title, orbit=moving,
+                           role="6 секунд · камера на нижнем сундуке" if moving else "Камера направлена на выбранный контейнер.",
                            camera=dict(position=dict(zip("xyz", state["camera"])), target=dict(zip("xyz", state["target"])), fovDegrees=70), pieces=pieces))
     source_files = [root / "src/main/kotlin/ru/arc/chestpreview" / name for name in ("ChestPreviewSettings.kt", "ChestPreviewPlacement.kt", "ChestPreviewIcons.kt")]
-    scene = dict(states=states, scope=exported["scope"], source={str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest() for path in source_files}, geometrySha256=hashlib.sha256(args.geometry.read_bytes()).hexdigest(), clientSha1=manifest["minecraft-client-sha1"],
-                 approximation="Frozen native billboard poses; generated item front faces omit thin extrusion, lighting is approximate. Actual source coordinates and vanilla textures/font.")
+    scene = dict(states=states, orbit=exported["orbit"], motionTicks=exported["motionTicks"], scope=exported["scope"],
+                 source={str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest() for path in source_files}, geometrySha256=hashlib.sha256(args.geometry.read_bytes()).hexdigest(), clientSha1=manifest["minecraft-client-sha1"],
+                 approximation="20-Hz source poses with ideal linear interpolation, camera billboarding and approximate lighting. Vanilla models/textures/font, flat generated-item front faces. Network timing and the native client renderer are outside this preview.")
     (output / "scene.json").write_text(json.dumps(scene, ensure_ascii=False, indent=2))
     (output / "palette.json").write_text(json.dumps(palette))
     template = (atelier / "workshop-preview.template.html").read_text()
     template = template.replace("Мебельная мастерская", "Превью контейнера").replace("Состояние мастерской", "Ракурс контейнера")
-    template = template.replace("Техническое превью: станки, этапы и готовая мебель; пол условный, без мира и NPC", "54 предмета · 9 колонок · фиксированный центр. Офлайн-превью из исходной геометрии.")
+    template = template.replace("Техническое превью: станки, этапы и готовая мебель; пол условный, без мира и NPC", "Офлайн-превью движения · геометрия ARC, модели и шрифт Minecraft")
     template = template.replace('.diagnostics-panel.ok{', '.diagnostics-panel.ok{display:none;')
     template = template.replace('data-view="front" aria-pressed="true"', 'data-view="front" aria-pressed="false"').replace('data-view="player" aria-pressed="false"', 'data-view="player" aria-pressed="true"')
     template = replace_once(template, 'const material = new THREE.MeshStandardMaterial({map:texture,vertexColors:true,roughness:0.96,alphaTest:0.1,side:THREE.DoubleSide});',
                             'const material = piece.fullBright ? new THREE.MeshBasicMaterial({map:texture,vertexColors:true,alphaTest:0.1,side:THREE.DoubleSide}) : new THREE.MeshStandardMaterial({map:texture,vertexColors:true,roughness:0.96,alphaTest:0.1,side:THREE.DoubleSide});')
     template = replace_once(template, 'mesh.castShadow = !fluid;', 'mesh.castShadow = !fluid && !piece.fullBright;')
+    template = replace_once(template, 'work.add(pieceGroup);', 'pieceGroup.userData.panel = !!piece.fullBright; work.add(pieceGroup);')
+    template = replace_once(template, '<div id="viewport"></div>', '<div id="viewport"></div><i id="crosshair" aria-hidden="true">+</i>')
+    template = replace_once(template, '</style>', '#crosshair{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font:14px monospace;color:#fff;opacity:.7;pointer-events:none;text-shadow:0 0 2px #111}#orbitControls{display:flex;align-items:center;gap:8px}#orbitControls[hidden]{display:none}</style>')
+    template = replace_once(template, '<div class="view-buttons">', '''<div id="orbitControls">
+      <button id="orbitPlay">Пауза</button><input id="orbitTime" type="range" min="0" max="6" step="0.005" value="0" aria-label="Положение на круге">
+      <label><input id="oldAnchor" type="checkbox"> Закрепить в первой точке</label></div><div class="view-buttons">''')
+    template = replace_once(template, '      function animate() {', (root / 'scripts/chest-preview-orbit.js').read_text() + '\n      function animate() {')
+    template = replace_once(template, '        controls.update();\n        renderer.render(scene,camera);', '        updateOrbit();\n        renderer.render(scene,camera);')
     (output / "template.html").write_text(template)
     subprocess.run(["node", str(atelier / "build-workshop-preview.mjs"), "--scene", str(output / "scene.json"), "--palette", str(output / "palette.json"), "--template", str(output / "template.html"), "--output", str(output / "index.html")], check=True)
     print(output / "index.html")
