@@ -10,7 +10,7 @@ import java.util.concurrent.CompletionStage
 internal const val SNAPSHOT_VIEW_PERMISSION = "arc.invlist"
 internal const val SNAPSHOT_COPY_PERMISSION = "arc.invlist.copy"
 
-/** Detached copies only: this feature has no target-player or persistence write port. */
+/** Snapshots are detached. All mutations are scoped to the inspecting player. */
 internal class InventorySnapshot(
     val id: UUID,
     val timestamp: Instant,
@@ -18,10 +18,38 @@ internal class InventorySnapshot(
     val cause: String,
     val pinned: Boolean,
     contents: List<ItemStack?>?,
+    heldItemSlot: Int = 0,
+    val exactSlotOrder: Boolean = true,
 ) {
-    private val slots = contents?.map { it?.clone() }
-    val hasInventory: Boolean get() = slots != null
-    fun item(slot: Int): ItemStack? = slots?.getOrNull(slot)?.takeUnless { it.type.isAir }?.clone()
+    val inventory = contents?.let { SnapshotInventory(it, heldItemSlot) }
+    val hasInventory: Boolean get() = inventory != null
+    fun item(slot: Int): ItemStack? = inventory?.item(slot)
+}
+
+internal class SnapshotInventory(contents: List<ItemStack?>, private val heldItemSlot: Int) {
+    private val slots = contents.map { it?.takeUnless(ItemStack::isEmpty)?.clone() }
+    // HuskSync 3.8.x supplies 41-slot historical inventories. Modern Paper also exposes BODY and SADDLE.
+    fun fits(player: Player): Boolean =
+        (slots.size == 41 || slots.size == 43) && slots.size <= player.inventory.size && heldItemSlot in 0..8
+    fun item(slot: Int): ItemStack? = slots.getOrNull(slot)?.clone()
+
+    fun matches(player: Player): Boolean {
+        val current = player.inventory
+        return current.heldItemSlot == heldItemSlot && current.contents.let { actual ->
+            actual.size >= slots.size && slots.indices.all { slots[it] == actual[it]?.takeUnless(ItemStack::isEmpty) }
+        }
+    }
+
+    fun apply(player: Player) {
+        for (slot in slots.indices) player.inventory.setItem(slot, item(slot))
+        player.inventory.heldItemSlot = heldItemSlot
+        player.updateInventory()
+        check(matches(player)) { "Inventory load did not restore all slots" }
+    }
+
+    companion object {
+        fun capture(player: Player) = SnapshotInventory(player.inventory.contents.asList(), player.inventory.heldItemSlot)
+    }
 }
 
 internal data class SnapshotHistory(
@@ -33,6 +61,9 @@ internal data class SnapshotHistory(
 internal fun interface InventorySnapshotSource {
     fun find(playerName: String): CompletionStage<SnapshotHistory?>
 }
+
+internal fun Player.canCopySnapshot(): Boolean =
+    hasPermission(SNAPSHOT_VIEW_PERMISSION) && hasPermission(SNAPSHOT_COPY_PERMISSION)
 
 internal enum class SnapshotCopyResult { COPIED, DENIED, STALE, UNSUPPORTED_CLICK, EMPTY, FULL }
 
@@ -48,9 +79,7 @@ internal object SnapshotCopy {
         audit: (ItemStack) -> Unit,
     ): SnapshotCopyResult {
         if (actor !== viewer || !viewer.isOnline || !currentView) return SnapshotCopyResult.STALE
-        if (!viewer.hasPermission(SNAPSHOT_VIEW_PERMISSION) || !viewer.hasPermission(SNAPSHOT_COPY_PERMISSION)) {
-            return SnapshotCopyResult.DENIED
-        }
+        if (!viewer.canCopySnapshot()) return SnapshotCopyResult.DENIED
         if (click != ClickType.LEFT) return SnapshotCopyResult.UNSUPPORTED_CLICK
         val item = snapshot.item(slot)?.takeIf { it.amount > 0 } ?: return SnapshotCopyResult.EMPTY
         // An empty storage slot is deliberate: no partial merge, overflow or dropped remainder.

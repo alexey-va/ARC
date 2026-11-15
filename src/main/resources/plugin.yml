@@ -148,7 +148,7 @@ permissions:
     description: Inspect retained HuskSync inventory snapshots
     default: op
   arc.invlist.copy:
-    description: Copy a selected snapshot stack to your own empty inventory slot
+    description: Copy a snapshot stack or load a full inventory into your own inventory with a HuskSync backup
     default: op
   arc.audit.reset:
     description: Reset the network measurement period without clearing financial journals

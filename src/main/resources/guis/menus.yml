@@ -5,11 +5,14 @@ menus:
     inventory-snapshot:
       schema-version: 1
       rows: 6
+      background: { template: background }
       elements:
-        back: { slot: 45, template: snapshot-back }
+        back: { slot: 45, template: catalog-back }
         summary: { slot: 49, template: snapshot-summary, kind: decoration }
+        load: { slot: 53, template: snapshot-load }
       regions:
         snapshot-slots: { slots: [0, 1, 2, 3, 7, '9-44'] }
+        snapshot-extra: { slots: [5, 6] }
     investigation-hub:
       schema-version: 1
       rows: 3
@@ -296,27 +299,45 @@ menus:
   templates:
     snapshot-back:
       material: ARROW
-      name: '<italic:false><gray>‹ К сохранениям'
-      lore: []
+      name: '<italic:false><#92bed8>К сохранениям'
+      lore:
+        - ''
+        - '<italic:false><dark_gray>[<#92bed8>▶<dark_gray>] <#92bed8>ЛКМ <gray>— вернуться к списку'
     snapshot-summary:
       material: BOOK
-      name: '<italic:false><gold>Инвентарь <white><player>'
+      name: '<italic:false><#e6cf91>Снимок <white><player>'
       lore:
-        - '<italic:false><gray><date> МСК · <white><server>'
-        - '<italic:false><gray>Причина: <white><cause>'
-        - '<italic:false><dark_gray><id>'
         - ''
-        - '<italic:false><gray>Сверху: шлем, нагрудник, поножи, ботинки.'
-        - '<italic:false><gray>Справа сверху — вторая рука.'
-        - '<italic:false><gray>Нижняя строка предметов — хотбар.'
+        - '<italic:false><gray>Время <dark_gray>· <white><date> МСК'
+        - '<italic:false><gray>Сервер <dark_gray>· <white><server>'
+        - '<italic:false><gray>Причина <dark_gray>· <white><cause>'
+        - '<italic:false><gray>ID <dark_gray>· <#aebac4><id>'
         - ''
-        - { text: '<italic:false><gray>Нужен полностью пустой слот у вас.', when: copy }
-        - { text: '<italic:false><green>[▶] ЛКМ по предмету <gray>— копия стака себе', when: copy }
-        - { text: '<italic:false><gray>Только просмотр: нет права на копирование.', unless: copy }
+        - { text: '<italic:false><gray>Для копии стака нужен полностью пустой слот.', when: copy }
+        - { text: '<italic:false><#92bed8>ЛКМ по предмету <gray>— скопировать стак.', when: copy }
+        - { text: '<italic:false><gray>Только просмотр', unless: copy }
+    snapshot-load:
+      material: LIME_BUNDLE
+      name: '<italic:false><#a8e6a3><bold>Загрузить себе'
+      lore:
+        - ''
+        - { text: '<italic:false><#d8dddf>Заменит ваш инвентарь и экипировку', when: copy }
+        - { text: '<italic:false><#d8dddf>предметами из этого снимка.', when: copy }
+        - { text: '', when: copy }
+        - { text: '<italic:false><gray>Ваш прежний инвентарь будет', when: copy }
+        - { text: '<italic:false><gray>закреплён в ваших сохранениях.', when: copy }
+        - { text: '', when: copy }
+        - { text: '<italic:false><dark_gray>[<#a8e6a3>▶<dark_gray>] <#a8e6a3>ЛКМ <gray>— загрузить снимок', when: copy }
+        - { text: '<italic:false><#e6cf91>Снимок со старой версии Minecraft.', when: legacy }
+        - { text: '<italic:false><gray>Исходные позиции предметов неизвестны.', when: legacy }
+        - { text: '', when: legacy }
+        - { text: '<italic:false><gray>Предметы можно копировать по одному.', when: legacy }
+        - { text: '<italic:false><gray>Только просмотр · нет права на загрузку.', when: view-only }
     snapshot-empty:
       material: LIGHT_GRAY_STAINED_GLASS_PANE
       name: '<italic:false><gray><slot>'
-      lore: ['<italic:false><dark_gray>Пусто']
+      hide-tooltip: true
+      lore: []
     personal-loot-cobblestone:
       material: COBBLESTONE
       name: '<italic:false><gray>Булыжник'

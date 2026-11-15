@@ -4,6 +4,7 @@ import ru.arc.config.Config
 import ru.arc.menu.MenuContract
 import ru.arc.menu.MenuElementId
 import ru.arc.menu.MenuId
+import ru.arc.menu.MenuLayoutParser
 import ru.arc.menu.MenuRegionId
 import ru.arc.paper.menu.PaperMenuConfiguration
 import ru.arc.paper.menu.PaperMenuConfigurationParser
@@ -49,6 +50,7 @@ object ArcMenuSchema {
     val CATALOG_ITEMS = MenuRegionId.of("catalog-items")
     val GRAVE_ITEMS = MenuRegionId.of("grave-items")
     val SNAPSHOT_SLOTS = MenuRegionId.of("snapshot-slots")
+    val SNAPSHOT_EXTRA = MenuRegionId.of("snapshot-extra")
     val BALTOP_ENTRIES = MenuRegionId.of("baltop-entries")
     val JOIN_MESSAGE_ENTRIES = MenuRegionId.of("message-entries")
     val JOB_ENTRIES = MenuRegionId.of("jobs")
@@ -93,8 +95,8 @@ object ArcMenuSchema {
             requiredRegions = setOf(GRAVE_ITEMS),
         ),
         INVENTORY_SNAPSHOT to MenuContract(
-            requiredElements = elements("summary", "back"),
-            requiredRegions = setOf(SNAPSHOT_SLOTS),
+            requiredElements = elements("summary", "back", "load"),
+            requiredRegions = setOf(SNAPSHOT_SLOTS, SNAPSHOT_EXTRA),
         ),
         SCHEDULED_EDIT to MenuContract(
             requiredElements = elements("command", "id", "schedule-value", "schedule-type", "servers", "enabled", "back", "save"),
@@ -152,6 +154,7 @@ object ArcMenuSchema {
     val textContracts: Map<String, PaperMenuTextContract> = mapOf(
         "snapshot-summary" to PaperMenuTextContract(values = setOf("player", "date", "server", "cause", "id"), flags = setOf("copy")),
         "snapshot-back" to PaperMenuTextContract(),
+        "snapshot-load" to PaperMenuTextContract(flags = setOf("copy", "legacy", "view-only")),
         "snapshot-empty" to PaperMenuTextContract(values = setOf("slot")),
         "background" to PaperMenuTextContract(),
         "store-back" to PaperMenuTextContract(),
@@ -360,20 +363,42 @@ object ArcMenuConfiguration {
     }
 
     /** Worker-only disk/YAML projection. Material validation remains in [bind] on Paper. */
-    internal fun prepare(dataRoot: Path): Config = filterToArcMenus(withSnapshotDefaults(withGraveDefaults(Config(dataRoot, RESOURCE))))
+    internal fun prepare(dataRoot: Path): Config = withSnapshotDefaults(filterToArcMenus(withGraveDefaults(Config(dataRoot, RESOURCE))))
 
     internal fun bind(config: Config): PaperMenuConfiguration = parse(config)
 
     /** Overlay the newly added inspector without replacing or saving operator-defined layouts. */
     private fun withSnapshotDefaults(config: Config): Config {
         val path = "$LAYOUT_ROOT.inventory-snapshot"
-        val templateIds = listOf("snapshot-summary", "snapshot-back", "snapshot-empty")
-        if (config.exists(path) && templateIds.all { config.exists("$TEMPLATE_ROOT.$it") }) return config
+        val templateIds = listOf("snapshot-summary", "snapshot-back", "snapshot-empty", "snapshot-load")
+        if (config.exists("$path.elements.load") && config.exists("$path.regions.snapshot-extra") && templateIds.all { config.exists("$TEMPLATE_ROOT.$it") }) return config
         val bundled = requireNotNull(javaClass.classLoader.getResourceAsStream(RESOURCE)).use { stream ->
             Load(LoadSettings.builder().build()).loadFromInputStream(stream) as Map<*, *>
         }
         val menus = bundled["menus"] as Map<*, *>
-        if (!config.exists(path)) config.setStructured(path, requireNotNull((menus["layouts"] as Map<*, *>)["inventory-snapshot"]))
+        val layout = (menus["layouts"] as Map<*, *>)["inventory-snapshot"] as Map<*, *>
+        if (!config.exists(path)) config.setStructured(path, layout)
+        else if (!config.exists("$path.elements.load") || !config.exists("$path.regions.snapshot-extra")) {
+            // Locate free slots using the same parser as the runtime, including operator-defined positions and patterns.
+            val menu = ArcMenuSchema.INVENTORY_SNAPSHOT
+            val oldContracts = ArcMenuSchema.contracts + (menu to MenuContract(allowUnknownElements = true, allowUnknownRegions = true))
+            val existing = MenuLayoutParser.require(config, LAYOUT_ROOT, oldContracts).require(menu)
+            val free = (0 until existing.rows * 9).toMutableSet()
+            existing.elements.values.forEach { element -> element.slots.forEach { free.remove(it.index) } }
+            existing.regions.values.forEach { region -> region.slots.forEach { free.remove(it.index) } }
+            fun reserve(preferred: Int): Int {
+                val slot = preferred.takeIf(free::contains) ?: free.lastOrNull()
+                    ?: error("inventory-snapshot needs a free slot for its new load or equipment controls")
+                free.remove(slot)
+                return slot
+            }
+            if (!config.exists("$path.elements.load")) {
+                config.setStructured("$path.elements.load", mapOf("slot" to reserve(53), "template" to "snapshot-load"))
+            }
+            if (!config.exists("$path.regions.snapshot-extra")) {
+                config.setStructured("$path.regions.snapshot-extra", mapOf("slots" to listOf(reserve(5), reserve(6))))
+            }
+        }
         val templates = menus["templates"] as Map<*, *>
         templateIds.filterNot { config.exists("$TEMPLATE_ROOT.$it") }.forEach {
             config.setStructured("$TEMPLATE_ROOT.$it", requireNotNull(templates[it]))

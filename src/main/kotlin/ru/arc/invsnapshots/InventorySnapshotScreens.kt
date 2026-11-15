@@ -1,9 +1,13 @@
 package ru.arc.invsnapshots
 
+import io.papermc.paper.datacomponent.DataComponentTypes
+import net.kyori.adventure.key.Key
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
+import org.bukkit.Material
+import org.bukkit.inventory.ItemFlag
 import org.bukkit.inventory.ItemStack
 import ru.arc.commands.arc.CommandConfig
 import ru.arc.paper.menu.DialogTextLayout
@@ -46,11 +50,16 @@ internal object InventorySnapshotScreens {
         val buttons = history.snapshots.drop(page * PAGE_SIZE).take(PAGE_SIZE).mapIndexed { index, snapshot ->
             PaperDialogButton(
                 id = PaperDialogActionId.of("snapshot_$index"),
-                label = SnapshotText.get("entry", "<white><date> · <server> ›",
-                    "date" to timestamp(snapshot), "server" to snapshot.server),
+                label = if (snapshot.pinned) SnapshotText.get("pinned-entry", "<#e6cf91>★ <white><date> · <server> <gray>· <short_id>",
+                    "date" to timestamp(snapshot), "server" to snapshot.server, "short_id" to snapshot.id.toString().take(8))
+                else SnapshotText.get("entry", "<white><date> · <server> ›", "date" to timestamp(snapshot), "server" to snapshot.server),
                 tooltip = SnapshotText.get("entry-tip", "<gray>Причина: <white><cause>\n<gray>ID: <white><id>\n<gray><inventory>",
                     "cause" to snapshot.cause, "id" to snapshot.id.toString(),
-                    "inventory" to if (snapshot.hasInventory) "Открыть исходные слоты" else "В снимке нет инвентаря"),
+                    "inventory" to when {
+                        !snapshot.hasInventory -> "В снимке нет инвентаря"
+                        !snapshot.exactSlotOrder -> "Предметы после обновления версии · исходные позиции неизвестны"
+                        else -> "Открыть исходные слоты"
+                    }),
                 width = 310,
                 closeDialogBeforeAction = true,
                 onClick = { select(snapshot) },
@@ -77,11 +86,38 @@ internal object InventorySnapshotScreens {
         )
     }
 
+    private val emptyEquipment = mapOf(
+        39 to Material.CHAINMAIL_HELMET,
+        38 to Material.CHAINMAIL_CHESTPLATE,
+        37 to Material.CHAINMAIL_LEGGINGS,
+        36 to Material.CHAINMAIL_BOOTS,
+        40 to Material.SHIELD,
+    )
+
+    fun emptySlot(slot: Int, storagePlaceholder: () -> ItemStack): ItemStack {
+        val material = emptyEquipment[slot] ?: return storagePlaceholder().apply {
+            // A menu entry must be non-air. Vanilla's air model keeps empty storage cells visually empty.
+            editMeta { it.isHideTooltip = true }
+            setData(DataComponentTypes.ITEM_MODEL, Key.key("minecraft:air"))
+        }
+        return ItemStack.of(material).apply {
+            editMeta { meta ->
+                meta.displayName(SnapshotText.get("equipment-empty", "<#aab8c0><slot> <dark_gray>· <gray>пусто",
+                    "slot" to slotLabel(slot).substringBefore(" (")))
+                meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ADDITIONAL_TOOLTIP)
+            }
+        }
+    }
+
     fun preview(snapshot: InventorySnapshot, slot: Int, canCopy: Boolean): ItemStack? = snapshot.item(slot)?.also { item ->
         item.editMeta { meta ->
-            meta.lore((meta.lore().orEmpty()) + listOf(
-                Component.empty(),
-                SnapshotText.get("slot", "<gray>Исходный слот: <white><slot>", "slot" to slotLabel(slot)),
+            meta.displayName()?.let { meta.displayName(it.decoration(TextDecoration.ITALIC, false)) }
+            val originalLore = meta.lore().orEmpty().map { it.decoration(TextDecoration.ITALIC, false) }
+            meta.lore(originalLore + listOf(
+                Component.empty().decoration(TextDecoration.ITALIC, false),
+                if (snapshot.exactSlotOrder) SnapshotText.get("slot", "<gray>Исходный слот: <white><slot>", "slot" to slotLabel(slot))
+                else SnapshotText.get("legacy-slot", "<gray>Исходная позиция неизвестна"),
+                Component.empty().decoration(TextDecoration.ITALIC, false),
                 if (canCopy) SnapshotText.get("copy-hint", "<green>[▶] ЛКМ <gray>— скопировать стак себе")
                 else SnapshotText.get("view-only", "<gray>Только просмотр"),
             ))
@@ -94,6 +130,8 @@ internal object InventorySnapshotScreens {
         37 -> "Поножи (37)"
         36 -> "Ботинки (36)"
         40 -> "Вторая рука (40)"
+        41 -> "Снаряжение тела (41)"
+        42 -> "Седло (42)"
         in 0..8 -> "Хотбар ${slot + 1} ($slot)"
         else -> "Инвентарь ($slot)"
     }

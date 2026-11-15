@@ -50,8 +50,9 @@ class InventorySnapshotMenuTest : FunSpec({
                     ClickType.CREATIVE to InventoryAction.CLONE_STACK,
                 ).forEach { (type, action) -> click(0, type, action).isCancelled shouldBe true }
                 click(54, ClickType.SHIFT_LEFT, InventoryAction.MOVE_TO_OTHER_INVENTORY).isCancelled shouldBe true
-                paper.callEvent(InventoryDragEvent(viewer.openInventory, ItemStack.empty(), ItemStack(Material.STONE), false,
-                    mapOf(0 to ItemStack(Material.STONE)))).isCancelled shouldBe true
+                // Dragging two stones into two empty cells is a native drag; the occupied helmet cannot accept a stone.
+                paper.callEvent(InventoryDragEvent(viewer.openInventory, ItemStack.empty(), ItemStack(Material.STONE, 2), false,
+                    mapOf(1 to ItemStack(Material.STONE), 2 to ItemStack(Material.STONE)))).isCancelled shouldBe true
                 copies shouldBe 0
                 val event = click(0, ClickType.LEFT, InventoryAction.PICKUP_ALL)
                 event.isCancelled shouldBe true

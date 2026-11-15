@@ -1,7 +1,7 @@
 package ru.arc.invsnapshots
 
 import net.kyori.adventure.text.Component
-import net.kyori.adventure.text.format.NamedTextColor
+import net.kyori.adventure.text.format.TextColor
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import org.bukkit.event.inventory.ClickType
@@ -13,6 +13,7 @@ import ru.arc.core.whenCompleteSync
 import ru.arc.gui.ArcMenuSchema
 import ru.arc.gui.ArcMenus
 import ru.arc.paper.menu.PaperMenuClickContext
+import ru.arc.paper.menu.PaperMenuEntry
 import ru.arc.paper.menu.PaperMenuItemRenderContext
 
 internal object InventorySnapshotInspector {
@@ -77,11 +78,13 @@ internal object InventorySnapshotInspector {
             return
         }
         val canCopy = viewer.hasPermission(SNAPSHOT_COPY_PERMISSION)
-        val entries = InventorySnapshotScreens.SLOT_ORDER.map { slot ->
+        fun entry(slot: Int): PaperMenuEntry {
             val preview = InventorySnapshotScreens.preview(snapshot, slot, canCopy)
-            if (preview == null) ArcMenus.entry(ArcMenus.item("snapshot-empty", PaperMenuItemRenderContext(
-                values = mapOf("slot" to Component.text(InventorySnapshotScreens.slotLabel(slot))),
-            )), enabled = false)
+            return if (preview == null) ArcMenus.entry(InventorySnapshotScreens.emptySlot(slot) {
+                ArcMenus.item("snapshot-empty", PaperMenuItemRenderContext(
+                    values = mapOf("slot" to Component.text(InventorySnapshotScreens.slotLabel(slot))),
+                ))
+            }, enabled = false)
             else ArcMenus.entryWithContext(preview, acceptedClicks = setOf(ClickType.LEFT)) { context ->
                 val result = SnapshotCopy.copy(viewer, context.player, currentView(viewer, context), context.event.click, snapshot, slot) { item ->
                     ARC.instance.logger.info("[SnapshotCopy] actor=${viewer.name} actorUuid=${viewer.uniqueId} " +
@@ -106,10 +109,30 @@ internal object InventorySnapshotInspector {
             ),
             flags = if (canCopy) setOf("copy") else emptySet(),
         ))
+        val archive by lazy { HuskSyncInventorySnapshotSource() }
+        val loader = SnapshotLoad({ archive.ready(it) }, { archive.backup(it) })
+        val loadState = when {
+            !canCopy -> "view-only"
+            !snapshot.exactSlotOrder -> "legacy"
+            else -> "copy"
+        }
+        val load = ArcMenus.item(ArcMenuSchema.INVENTORY_SNAPSHOT, "load", PaperMenuItemRenderContext(flags = setOf(loadState)))
         ArcMenus.open(viewer, ArcMenuSchema.INVENTORY_SNAPSHOT,
-            Component.text("${history.playerName} · ${InventorySnapshotScreens.compactTimestamp(snapshot)}", NamedTextColor.DARK_GRAY),
+            Component.text("${history.playerName} · ${InventorySnapshotScreens.compactTimestamp(snapshot)}", TextColor.color(0x20252b)),
             elements = mapOf(
                 "summary" to ArcMenus.entry(summary, enabled = false),
+                "load" to ArcMenus.entryWithContext(load, enabled = loadState == "copy", acceptedClicks = setOf(ClickType.LEFT)) { context ->
+                    loader.start(viewer, context.player, context.event.click, { currentView(viewer, context) }, snapshot) { result, backup ->
+                        viewer.sendMessage(SnapshotText.get(result.key, result.message,
+                            "viewer" to viewer.name, "backup" to (backup?.toString()?.take(8) ?: "")))
+                        if (result == SnapshotLoadResult.LOADED || result == SnapshotLoadResult.APPLY_FAILED ||
+                            result == SnapshotLoadResult.BACKUP_FAILED) {
+                            ARC.instance.logger.info("[SnapshotLoad] actor=${viewer.uniqueId} target=${history.playerId} " +
+                                "source=${snapshot.id} backup=$backup result=$result")
+                        }
+                        if (result == SnapshotLoadResult.LOADED) context.session.close()
+                    }
+                },
                 "back" to ArcMenus.entryWithContext(ArcMenus.item(ArcMenuSchema.INVENTORY_SNAPSHOT, "back"), acceptedClicks = setOf(ClickType.LEFT)) { context ->
                     // Opening/closing a native inventory from its click handler is unsafe; verify again next tick.
                     Tasks.scheduler.runLater(1) {
@@ -121,7 +144,10 @@ internal object InventorySnapshotInspector {
                     }
                 },
             ),
-            regions = mapOf(ArcMenuSchema.SNAPSHOT_SLOTS to entries),
+            regions = mapOf(
+                ArcMenuSchema.SNAPSHOT_SLOTS to InventorySnapshotScreens.SLOT_ORDER.map(::entry),
+                ArcMenuSchema.SNAPSHOT_EXTRA to listOf(41, 42).dropLastWhile { snapshot.item(it) == null }.map(::entry),
+            ),
         )
     }
 
