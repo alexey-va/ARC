@@ -164,11 +164,12 @@ class HelpCenterScreensTest {
     }
 
     private fun open(page: HelpCenterPage) { controller.open(player, page); paper.performTicks(2) }
-    private fun click(id: String, input: String = "") {
-        val context = mockk<PaperDialogClickContext>()
+    private fun click(id: String, input: String = ""): PaperDialogClickContext {
+        val context = mockk<PaperDialogClickContext>(relaxUnitFun = true)
         every { context.text(any()) } returns input
         (screen.buttons + listOfNotNull(screen.exitButton)).single { it.id.value == id }.onClick.handle(context)
         paper.performTicks(2)
+        return context
     }
     private fun plain(component: Component) = PlainTextComponentSerializer.plainText().serialize(component)
     private fun body() = screen.body.joinToString("\n") { plain(it.text) }
@@ -1623,7 +1624,8 @@ class HelpCenterScreensTest {
         open(HelpCenterPage.WARPS)
         click("warp_0")
         assertFalse(screen.buttons.single { it.id.value == "teleport" }.closeDialogBeforeAction)
-        click("teleport")
+        val teleport = click("teleport")
+        verify(exactly = 1) { teleport.reportOutcome("rejected", "revalidation_failed", "warp:1") }
         assertEquals("help.travel.warp", screen.id)
         assertTrue(body().contains("изменились"))
         assertEquals(0, dialogCloses)
@@ -1689,7 +1691,8 @@ class HelpCenterScreensTest {
         every { gateway.teleportWarp(player, any()) } answers { assertEquals(0, dialogCloses); true }
         open(HelpCenterPage.WARPS)
         click("warp_0")
-        click("teleport")
+        val teleport = click("teleport")
+        verify(exactly = 1) { teleport.reportOutcome("requested", null, "warp:1") }
         assertEquals(1, dialogCloses)
     }
 

@@ -1,5 +1,6 @@
 package ru.arc.ops
 
+import com.google.gson.JsonParser
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.assertions.throwables.shouldThrow
@@ -220,11 +221,27 @@ class OpsHttpServerTest : FreeSpec({
                 server.start()
                 try {
                     val index = open("http://127.0.0.1:${server.actualPort}/ops/", token = config.token)
-                    readBody(index).contains("/ops/telemetry/events") shouldBe expected
+                    val routes = JsonParser.parseString(readBody(index)).asJsonObject
+                        .getAsJsonArray("routes").map { it.asString }
+                    for (route in listOf("events", "summary")) {
+                        val advertised = routes.singleOrNull { it.startsWith("GET /ops/telemetry/$route?") }
+                        (advertised != null) shouldBe expected
+                        if (expected) advertised.orEmpty() shouldContain "&legacy="
+                    }
                     val catalog = open("http://127.0.0.1:${server.actualPort}/ops/telemetry/catalog", token = config.token)
                     catalog.responseCode shouldBe if (expected) 200 else 403
-                    if (expected) readBody(catalog) shouldContain "from is inclusive"
-                    else readBody(catalog) shouldContain "Player-telemetry read endpoint disabled"
+                    val body = readBody(catalog)
+                    if (expected) {
+                        body shouldContain "from is inclusive"
+                        val response = JsonParser.parseString(body).asJsonObject
+                        val families = response.getAsJsonArray("eventFamilies").associate { family ->
+                            val entry = family.asJsonObject
+                            entry["source"].asString to entry.getAsJsonArray("events").map { it.asString }
+                        }
+                        response.getAsJsonObject("storage")["current"].asString shouldBe "arc_player_events_v2"
+                        families["menu"] shouldBe listOf("menu.view", "menu.action", "menu.result", "menu.end")
+                        families.getValue("proxy").filter { "command" in it } shouldBe listOf("command")
+                    } else body shouldContain "Player-telemetry read endpoint disabled"
                 } finally {
                     server.stop()
                 }
@@ -242,6 +259,7 @@ class OpsHttpServerTest : FreeSpec({
                     "?from=2026-10-01T00:00:00Z&until=2026-10-02T00:00:00Z&event=death&event=teleport",
                     "?from=2026-10-01T00:00:00Z&until=2026-10-02T00:00:00Z&unknown=value",
                     "?from=2026-10-01T00:00:00Z&until=2026-10-02T00:00:00Z&include-qa=yes",
+                    "?from=2026-10-01T00:00:00Z&until=2026-10-02T00:00:00Z&legacy=yes",
                     "?from=2026-10-01T00:00:00Z&until=2026-10-02T00:00:00Z&cursor-at=2026-10-01T00:00:00Z",
                 ).forEach { suffix ->
                     open("$base$suffix", token = testConfig.token).responseCode shouldBe 400
@@ -249,6 +267,14 @@ class OpsHttpServerTest : FreeSpec({
             } finally {
                 server.stop()
             }
+        }
+
+        "should select legacy telemetry only when explicitly requested" {
+            val range = "from=2026-10-01T00:00:00Z&until=2026-10-02T00:00:00Z"
+            OpsTelemetryHandlers.eventsQuery(range).legacy shouldBe false
+            OpsTelemetryHandlers.eventsQuery("$range&legacy=true").legacy shouldBe true
+            OpsTelemetryHandlers.summaryQuery(range).legacy shouldBe false
+            OpsTelemetryHandlers.summaryQuery("$range&legacy=true").legacy shouldBe true
         }
 
         "should gate and advertise the Slimefun catalog with item reads" {

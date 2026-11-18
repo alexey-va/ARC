@@ -5,8 +5,7 @@ import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import org.bukkit.entity.Player
-import ru.arc.metrics.ProductUiKind
-import ru.arc.metrics.ProductUiView
+import ru.arc.metrics.ProductMenuEvent
 import ru.arc.telemetry.PlayerTelemetryEvent
 import ru.arc.telemetry.PlayerTelemetryStore
 import java.util.UUID
@@ -31,6 +30,8 @@ class PlayerTelemetryNativeAdmissionTest : StringSpec({
         val trackerEvents = mutableListOf<String>()
         val playerId = UUID.randomUUID()
         val offlineProducerId = UUID.randomUUID()
+        val view = ProductMenuEvent(playerId.toString(), UUID.randomUUID().toString(), "arc:help.root",
+            "menu.view", System.currentTimeMillis(), details = mapOf("buttons" to "warps=0"))
 
         try {
             contexts.clear()
@@ -52,10 +53,7 @@ class PlayerTelemetryNativeAdmissionTest : StringSpec({
             every { untrackedPlayer.uniqueId } returns playerId
             PlayerTelemetryModule.recordNative(playerId, "player", "teleport") shouldBe false
             PlayerTelemetryModule.action(untrackedPlayer, "interact") shouldBe false
-            PlayerTelemetryModule.ui(
-                playerId.toString(), "visit", ProductUiKind.OPEN,
-                ProductUiView("arc:help.root", "0123456789ab", emptyMap()), "", 0, System.currentTimeMillis(),
-            )
+            PlayerTelemetryModule.menu(view)
             captured shouldBe emptyList()
 
             PlayerTelemetryModule.record(offlineProducerId, "arcfarms", "farm.observed") shouldBe true
@@ -69,6 +67,11 @@ class PlayerTelemetryNativeAdmissionTest : StringSpec({
             contexts[playerId] = context
             PlayerTelemetryModule.recordNative(playerId, "player", "teleport") shouldBe true
             captured.last().sessionId shouldBe context.sessionId
+            PlayerTelemetryModule.menu(view)
+            captured.last().source shouldBe "menu"
+            captured.last().world shouldBe null
+            captured.last().attributes["visitId"] shouldBe view.visit
+            captured.last().attributes["buttons"] shouldBe "warps=0"
         } finally {
             contexts.clear()
             contexts.putAll(oldContexts)

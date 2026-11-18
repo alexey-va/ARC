@@ -70,7 +70,7 @@ class DungeonAdventureMenusTest : FreeSpec({
         main.buttons.filter { it.id.value in setOf("catalog", "party", "current") }.forEach { button ->
             button.closeDialogBeforeAction shouldBe false
             plain.serialize(button.tooltip).isNotBlank() shouldBe true
-            button.onClick.handle(mockk())
+            button.onClick.handle(mockk(relaxUnitFun = true))
             screens.last().id shouldBe "dungeon.main"
         }
         main.buttons.single { it.id.value == "stats" }.onClick.handle(mockk())
@@ -113,7 +113,7 @@ class DungeonAdventureMenusTest : FreeSpec({
         menus.catalog(player)
         screens.last().columns shouldBe 2
         screens.last().buttons.count { it.id.value.startsWith("dungeon_") } shouldBe 10
-        val input = mockk<PaperDialogClickContext>()
+        val input = mockk<PaperDialogClickContext>(relaxUnitFun = true)
         every { input.text(any()) } returns "Пещера"
         screens.last().buttons.single { it.id.value == "search" }.onClick.handle(input)
         screens.last().inputs.single().initial shouldBe "Пещера"
@@ -174,10 +174,10 @@ class DungeonAdventureMenusTest : FreeSpec({
         val screens = mutableListOf<PaperDialogScreen>()
         val menus = DungeonSaveMenus(dungeon, adventure = data) { _, screen, _ -> screens += screen }
         menus.catalog(player)
-        screens.last().buttons.single { it.id.value == "dungeon_0" }.onClick.handle(mockk())
+        screens.last().buttons.single { it.id.value == "dungeon_0" }.onClick.handle(mockk(relaxUnitFun = true))
         screens.last().buttons.single { it.id.value == "enter_0" }.also {
             it.closeDialogBeforeAction shouldBe false
-            it.onClick.handle(mockk())
+            it.onClick.handle(mockk(relaxUnitFun = true))
         }
         verify(exactly = 0) { data.enter(any(), any(), any(), any()) }
         menus.travelMenu(player)
@@ -226,12 +226,13 @@ class DungeonAdventureMenusTest : FreeSpec({
         val (menus, data, screens) = fixture(player, listOf(dungeon))
         every { data.enter(player, dungeon.id, "hard_id", 45) } returns DungeonAdventureActionResult.REQUESTED
         menus.catalog(player)
-        screens.last().buttons.single { it.id.value == "dungeon_0" }.onClick.handle(mockk())
+        screens.last().buttons.single { it.id.value == "dungeon_0" }.onClick.handle(mockk(relaxUnitFun = true))
         screens.last().numberInputs.single().step shouldBe 5f
-        val selected = mockk<PaperDialogClickContext>()
+        val selected = mockk<PaperDialogClickContext>(relaxUnitFun = true)
         every { selected.number(any()) } returns 45f
         screens.last().buttons.single { it.id.value == "enter_0" }.onClick.handle(selected)
         verify(exactly = 1) { data.enter(player, dungeon.id, "hard_id", 45) }
+        verify(exactly = 1) { selected.reportOutcome("requested", null, "dungeon:${dungeon.id}") }
     }
 
     "resolved production components export representative layouts with real frame glyphs" {
@@ -240,7 +241,7 @@ class DungeonAdventureMenusTest : FreeSpec({
         val selected = mutableListOf<PaperDialogScreen>()
         menus.main(player); selected += screens.last()
         menus.catalog(player); selected += screens.last()
-        screens.last().buttons.single { it.id.value == "dungeon_0" }.onClick.handle(mockk()); selected += screens.last()
+        screens.last().buttons.single { it.id.value == "dungeon_0" }.onClick.handle(mockk(relaxUnitFun = true)); selected += screens.last()
         menus.skills(player); selected += screens.last()
         screens.last().buttons.single { it.id.value == "next" }.onClick.handle(mockk()); selected += screens.last()
         menus.statistics(player); selected += screens.last()

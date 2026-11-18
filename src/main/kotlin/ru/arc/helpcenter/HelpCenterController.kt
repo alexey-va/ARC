@@ -921,7 +921,7 @@ internal class HelpCenterController(
         )
     }
 
-    private fun openWarps(player: Player, requestedPage: Int = 0) {
+    private fun openWarps(player: Player, requestedPage: Int = 0, context: PaperDialogClickContext? = null) {
         markNavigation(player) { openWarps(player, requestedPage) }
         if (availableCatalog(player).none { it.id == "warps" }) {
             present(player, PaperDialogScreen(
@@ -931,6 +931,7 @@ internal class HelpCenterController(
                 buttons = emptyList(),
                 exitButton = backButton("back", player, ::openTravel),
             ))
+            context?.reportOutcome("rejected", "catalog_unavailable", "help.travel.warps")
             return
         }
         val warps = runCatching { gateway.loadWarps(player) }.getOrElse { failure ->
@@ -939,9 +940,10 @@ internal class HelpCenterController(
                 id = "help.travel.warps",
                 title = text("warps-title"),
                 body = listOf(PaperDialogBody(text("warps-error"), width = 500)),
-                buttons = listOf(button("retry", text("warps-retry-label")) { openWarps(player, requestedPage) }),
+                buttons = listOf(contextButton("retry", text("warps-retry-label")) { openWarps(player, requestedPage, it) }),
                 exitButton = backButton("back", player, ::openTravel),
             ))
+            context?.reportOutcome("failed", "catalog_load_failed", "help.travel.warps")
             return
         }
         val pages = maxOf(1, (warps.size + PUBLIC_HOMES_PAGE_SIZE - 1) / PUBLIC_HOMES_PAGE_SIZE)
@@ -955,17 +957,19 @@ internal class HelpCenterController(
                 "count" to warps.size.toString(), "page" to (page + 1).toString(), "pages" to pages.toString(),
             ), width = 500)),
             buttons = visible.mapIndexed { index, warp ->
-                button("warp_$index", text("warp-label", "warp" to warp.name),
+                contextButton("warp_$index", text("warp-label", "warp" to warp.name),
                     text("warp-tooltip", "owner" to warp.owner, "world" to warp.world)) {
                     openWarp(player, warp, page)
+                    it.reportOutcome("succeeded", null, "warp:${warp.id}")
                 }
             } + buildList {
-                if (page > 0) add(button("previous", text("page-previous-label")) { openWarps(player, page - 1) })
-                if (page + 1 < pages) add(button("next", text("page-next-label")) { openWarps(player, page + 1) })
+                if (page > 0) add(contextButton("previous", text("page-previous-label")) { openWarps(player, page - 1, it) })
+                if (page + 1 < pages) add(contextButton("next", text("page-next-label")) { openWarps(player, page + 1, it) })
             },
             exitButton = backButton("back", player, ::openTravel),
             columns = 2,
         ))
+        context?.reportOutcome("succeeded", if (warps.isEmpty()) "empty_catalog" else null, "help.travel.warps")
     }
 
     private fun openWarp(player: Player, warp: HelpCenterWarp, page: Int, changed: Boolean = false) {
@@ -985,15 +989,21 @@ internal class HelpCenterController(
             id = "help.travel.warp",
             title = text("warp-title", "warp" to warp.name),
             body = body,
-            buttons = if (changed) listOf(button("refresh", text("warps-refresh-label")) { openWarps(player, page) }) else listOf(
-                button("teleport", text("warp-teleport-label"), text("warp-teleport-tooltip")) {
+            buttons = if (changed) listOf(contextButton("refresh", text("warps-refresh-label")) { openWarps(player, page, it) }) else listOf(
+                contextButton("teleport", text("warp-teleport-label"), text("warp-teleport-tooltip")) { context ->
                     val sent = runCatching { gateway.teleportWarp(player, warp) }.onFailure { failure ->
                         ru.arc.util.Logging.error("Could not request warp {} for {}", warp.id, player.name, failure)
-                    }.getOrDefault(false)
-                    if (sent) closeDialog(player) else openWarp(player, warp, page, changed = true)
+                    }.getOrNull()
+                    val target = "warp:${warp.id}"
+                    when (sent) {
+                        true -> context.reportOutcome("requested", null, target)
+                        false -> context.reportOutcome("rejected", "revalidation_failed", target)
+                        null -> context.reportOutcome("failed", "warp_request_failed", target)
+                    }
+                    if (sent == true) closeDialog(player) else openWarp(player, warp, page, changed = true)
                 },
             ),
-            exitButton = backButton("back", player, action = { openWarps(it, page) }),
+            exitButton = contextButton("back", text("back-label")) { openWarps(player, page, it) },
         ))
     }
 
@@ -1251,7 +1261,7 @@ internal class HelpCenterController(
     }
 
     private fun travelButtons(player: Player): List<PaperDialogButton> = listOf(
-        button("warps", text("warps-label"), commandTooltip("warps")) { executeCatalog(player, "warps") },
+        contextButton("warps", text("warps-label"), commandTooltip("warps")) { executeCatalog(player, "warps", it) },
         button("public_homes", text("public-homes-label"), text("public-homes-tooltip")) { openPublicHomes(player) },
         button("spawn", text("spawn-label"), commandTooltip("spawn")) { executeCatalog(player, "spawn") }.closing(),
         button("rtp", text("rtp-label"), text("rtp-tooltip")) { openRtp(player) },
@@ -1281,13 +1291,13 @@ internal class HelpCenterController(
                 text("command-${command.id}-label")
             else -> text("command-label", "label" to command.label)
         }
-        val result = button(
+        val result = contextButton(
             "command_${command.id}",
             label,
             if (command.id == "slimefun") text("search-result-tooltip", "description" to command.description)
             else text("command-tooltip", "description" to command.description, "command" to command.command),
         ) {
-            if (command.id == "privat") open(player, HelpCenterPage.PRIVAT) else executeCatalog(player, command.id)
+            if (command.id == "privat") open(player, HelpCenterPage.PRIVAT) else executeCatalog(player, command.id, it)
         }
         return if (command.id == "privat" || command.opensDialog || command.opensInventory) {
             result
@@ -1333,16 +1343,17 @@ internal class HelpCenterController(
         if (command.opensInventory) executeInventory(player, command.command)
         else execute(player, command.command)
 
-    private fun executeCatalog(player: Player, id: String) {
+    private fun executeCatalog(player: Player, id: String, context: PaperDialogClickContext? = null) {
         val command = availableCatalog(player).firstOrNull { it.id == id }
         if (command == null) {
+            if (id == "warps") context?.reportOutcome("rejected", "catalog_unavailable", "help.travel.warps")
             player.sendMessage(text("action-unavailable"))
             return
         }
         if (id == "rules") {
             openRules(player)
         } else if (id == "warps") {
-            openWarps(player)
+            openWarps(player, context = context)
         } else if (id == "builder") {
             openBuilder(player)
         } else if (id == "dungeons") {

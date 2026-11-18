@@ -12,13 +12,14 @@ import org.bukkit.event.server.PluginEnableEvent
 import org.bukkit.inventory.Inventory
 import org.bukkit.plugin.Plugin
 import ru.arc.metrics.core.MetricPoint
+import ru.arc.metrics.telemetry.PlayerTelemetryModule
 import java.util.Locale
 import java.util.UUID
 
 interface ProductUiObservation {
     fun open(player: Player, inventory: Inventory, view: ProductUiView)
     fun click(player: Player, inventory: Inventory, buttonId: String, accepted: Boolean)
-    fun attempt(player: Player, inventory: Inventory, buttonId: String)
+    fun attempt(player: Player, inventory: Inventory, buttonId: String, details: Map<String, String>)
     fun close(player: Player, inventory: Inventory)
 }
 
@@ -30,9 +31,8 @@ internal class ProductUiListener(private val plugin: Plugin, private val product
     private data class NativeView(val id: String, val inventory: Inventory, val view: ProductUiView)
     private val nativeViews = mutableMapOf<UUID, NativeView>()
     private val coverage = linkedMapOf<String, Boolean>()
-    private val tracker = ProductUiTracker { player, visit, kind, view, button, duration, at ->
+    private val tracker = ProductUiTracker(PlayerTelemetryModule::menu) { player, _, kind, view, button, duration, at ->
         product?.ui(player, kind, view, button, duration, at)
-        ru.arc.metrics.telemetry.PlayerTelemetryModule.ui(player, visit, kind, view, button, duration, at)
     }
     private val zMenu = ProductZMenuAdapter(plugin, this)
 
@@ -63,6 +63,12 @@ internal class ProductUiListener(private val plugin: Plugin, private val product
             val slot = (rawSlot as? Number)?.toInt()?.takeIf { it in 0..127 } ?: return@mapNotNull null
             key to ProductUiButton(slot, productUiFeature(surface, key))
         }.toMap()
+        val visibleSlots = (data["visibleSlotButtons"] as? Map<*, *>)?.takeIf { it.size <= 128 }
+            ?.entries?.mapNotNull { (rawSlot, rawKey) ->
+                val slot = (rawSlot as? Number)?.toInt()?.takeIf { it in 0..127 } ?: return@mapNotNull null
+                val key = (rawKey as? String)?.takeIf(ProductUiCodec.ID::matches) ?: return@mapNotNull null
+                slot to key
+            }?.toMap()
         coverage[owner] = true
         val details = buildMap<String, String> {
             listOf("rawSlot", "regionIndex", "pageIndex", "pageCount", "amount").forEach { key ->
@@ -71,16 +77,33 @@ internal class ProductUiListener(private val plugin: Plugin, private val product
             listOf("clickType", "action", "material").forEach { key ->
                 (data[key] as? String)?.takeIf { it.length <= 96 && it.all { c -> c.isLetterOrDigit() || c in "_:.-/" } }?.let { put(key, it) }
             }
+            (data["target"] as? String)?.takeIf(ProductUiCodec.ID::matches)?.let { put("target", it) }
+            (data["state"] as? String)?.takeIf { it in MENU_STATES }?.let { put("state", it) }
+            (data["reason"] as? String)?.takeIf(MENU_REASON::matches)?.let { put("reason", it) }
+            safeUuid(data["triggerAttemptId"])?.let { put("triggerAttemptId", it) }
+            (data["disabledSlots"] as? Collection<*>)?.takeIf { it.size <= 128 }
+                ?.mapNotNull { (it as? Number)?.toInt()?.takeIf { slot -> slot in 0..127 } }
+                ?.distinct()?.sorted()?.takeIf { it.isNotEmpty() }
+                ?.let { put("disabledSlots", it.joinToString(",")) }
         }
-        val view = ProductUiView(surface, revision, buttons, details)
+        val view = ProductUiView(surface, revision, buttons, details, visibleSlots)
+        val actionId = safeUuid(data["attemptId"])
         when (data["phase"]) {
             "open" -> tracker.open(player, visit, view, now)
             "render" -> tracker.render(player, visit, view, now)
             "click", "blocked" -> (data["button"] as? String)?.let {
-                tracker.click(player, visit, view, it, data["phase"] == "click", now)
+                tracker.click(player, visit, view, it, data["phase"] == "click", now, actionId)
             }
-            "close", "censored" -> tracker.close(player, visit, now,
-                censored = data["phase"] == "censored" || data["reason"] != "user")
+            "result" -> {
+                val outcome = (data["outcome"] as? String)?.takeIf { it in MENU_OUTCOMES } ?: return
+                if (actionId == null) return
+                PlayerTelemetryModule.menu(ProductMenuEvent(player, visit, surface, "menu.result", now, actionId,
+                    details.filterKeys { it == "reason" || it == "target" } + ("outcome" to outcome)))
+            }
+            "close", "censored" -> {
+                val reason = details["reason"] ?: "unknown"
+                tracker.close(player, visit, now, censored = data["phase"] == "censored" || reason != "user", reason = reason)
+            }
         }
     }
 
@@ -90,7 +113,7 @@ internal class ProductUiListener(private val plugin: Plugin, private val product
     }
     @EventHandler(priority = EventPriority.LOWEST)
     fun onQuit(event: PlayerQuitEvent) {
-        tracker.close(event.player.uniqueId.toString(), null, System.currentTimeMillis(), censored = true)
+        tracker.close(event.player.uniqueId.toString(), null, System.currentTimeMillis(), censored = true, reason = "quit")
         nativeViews.remove(event.player.uniqueId)
         zMenu.forget(event.player.uniqueId)
     }
@@ -99,7 +122,8 @@ internal class ProductUiListener(private val plugin: Plugin, private val product
     @EventHandler(priority = EventPriority.MONITOR)
     fun onClose(event: InventoryCloseEvent) {
         val player = event.player as? Player ?: return
-        close(player, event.inventory, event.reason != InventoryCloseEvent.Reason.PLAYER)
+        val reason = if (event.reason == InventoryCloseEvent.Reason.PLAYER) "user" else event.reason.name.lowercase(Locale.ROOT)
+        close(player, event.inventory, reason)
         zMenu.forget(player.uniqueId, event.inventory)
     }
 
@@ -113,14 +137,14 @@ internal class ProductUiListener(private val plugin: Plugin, private val product
         val current = nativeViews[player.uniqueId]?.takeIf { it.inventory === inventory } ?: return
         tracker.click(player.uniqueId.toString(), current.id, current.view, buttonId, accepted, System.currentTimeMillis())
     }
-    override fun attempt(player: Player, inventory: Inventory, buttonId: String) {
+    override fun attempt(player: Player, inventory: Inventory, buttonId: String, details: Map<String, String>) {
         val current = nativeViews[player.uniqueId]?.takeIf { it.inventory === inventory } ?: return
-        tracker.attempt(player.uniqueId.toString(), current.id, current.view, buttonId, System.currentTimeMillis())
+        tracker.attempt(player.uniqueId.toString(), current.id, current.view.copy(details = details), buttonId, System.currentTimeMillis())
     }
-    override fun close(player: Player, inventory: Inventory) = close(player, inventory, false)
-    private fun close(player: Player, inventory: Inventory, censored: Boolean) {
+    override fun close(player: Player, inventory: Inventory) = close(player, inventory, "user")
+    private fun close(player: Player, inventory: Inventory, reason: String) {
         val current = nativeViews[player.uniqueId]?.takeIf { it.inventory === inventory } ?: return
-        tracker.close(player.uniqueId.toString(), current.id, System.currentTimeMillis(), censored = censored)
+        tracker.close(player.uniqueId.toString(), current.id, System.currentTimeMillis(), censored = reason != "user", reason = reason)
         nativeViews.remove(player.uniqueId)
     }
     @Volatile
@@ -144,13 +168,24 @@ internal class ProductUiListener(private val plugin: Plugin, private val product
         "zmenuFailures" to zMenu.failures,
         "zmenuAcceptance" to "Physical presses are attempts; zMenu calls its native click observer before requirements. Accepted clicks and results are unsupported",
         "dynamicRows" to "Repeated region items are grouped by semantic region, not by player/item identity")
+    fun finishVisits(reason: String) {
+        tracker.shutdown(System.currentTimeMillis(), reason)
+        nativeViews.clear()
+    }
+
     override fun close() {
         zMenu.close()
-        tracker.shutdown(System.currentTimeMillis())
-        nativeViews.clear()
+        finishVisits("shutdown")
         HandlerList.unregisterAll(this)
     }
     companion object {
         private val CORE_PRODUCER = Regex("(?:arc[a-z0-9_-]{0,32}|trails)", RegexOption.IGNORE_CASE)
+        private val MENU_REASON = Regex("[a-z][a-z0-9_]{0,47}")
+        private val MENU_STATES = setOf("ready", "loading", "empty", "locked", "error")
+        private val MENU_OUTCOMES = setOf("requested", "succeeded", "rejected", "failed")
+
+        private fun safeUuid(value: Any?): String? = (value as? String)?.takeIf {
+            runCatching { UUID.fromString(it).toString() == it }.getOrDefault(false)
+        }
     }
 }

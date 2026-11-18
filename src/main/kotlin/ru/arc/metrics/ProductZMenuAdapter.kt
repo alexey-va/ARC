@@ -89,7 +89,8 @@ internal class ProductZMenuAdapter(private val plugin: Plugin, private val obser
             ProductUiButton(positions.first(), productUiFeature(surface, id))
         }
         views[player.uniqueId] = View(inventory, slots)
-        observer.open(player, inventory, ProductUiView(surface, revision, buttons, mapOf("revisionBasis" to "rendered_buttons")))
+        observer.open(player, inventory, ProductUiView(surface, revision, buttons,
+            mapOf("revisionBasis" to "rendered_buttons"), visibleSlots = slots.toMap()))
     }
 
     /** Called once at LOWEST, before native click handlers can replace/close this inventory. */
@@ -97,7 +98,8 @@ internal class ProductZMenuAdapter(private val plugin: Plugin, private val obser
         val player = event.whoClicked as? Player ?: return
         val view = views[player.uniqueId]?.takeIf { it.inventory === event.view.topInventory } ?: return
         val button = view.slots[event.rawSlot] ?: return
-        observer.attempt(player, view.inventory, button)
+        observer.attempt(player, view.inventory, button, mapOf("rawSlot" to event.rawSlot.toString(),
+            "clickType" to event.click.name))
     }
 
     fun forget(player: UUID, inventory: Inventory? = null) {

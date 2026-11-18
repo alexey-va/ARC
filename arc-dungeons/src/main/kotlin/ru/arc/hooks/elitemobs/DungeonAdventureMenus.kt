@@ -69,10 +69,15 @@ internal class DungeonAdventureMenus(
         if (!catalogReady) body += PaperDialogBody(noLocalDungeons(), 500)
         feedback?.let { body += PaperDialogBody(it, 500) }
         val buttons = listOf(
-            if (catalogReady) button("catalog", "catalog-label", "<#ffb277>Каталог данжей ›", "Поиск, уровни и выбор похода") { catalog(player) }
+            if (catalogReady) button("catalog", "catalog-label", "<#ffb277>Каталог данжей ›", "Поиск, уровни и выбор похода") {
+                catalog(player, context = it)
+            }
             else PaperDialogButton(PaperDialogActionId.of("catalog"), text("catalog-unavailable-label", "<white>Каталог недоступен"),
-                noLocalDungeons(), onClick = {
-                    if (data.catalog(player).isNotEmpty()) catalog(player) else main(player)
+                noLocalDungeons(), onClick = { context ->
+                    if (data.catalog(player).isNotEmpty()) catalog(player, context = context) else {
+                        context.reportOutcome("rejected", "catalog_unavailable", "dungeon.catalog")
+                        main(player)
+                    }
                 }),
             button("quests", "quests-label", "<#c4abff>Задания ›", "Прогресс, отслеживание и управление заданиями") { local.quests(player) },
             if (partyReady) button("party", "party-label", "<#e5ba73>Группа ›", "Собрать группу и пригласить друзей") { local.party(player) }
@@ -119,8 +124,14 @@ internal class DungeonAdventureMenus(
             body = body, buttons = buttons, exitButton = rootExit(player), columns = 3)) { main(player) }
     }
 
-    fun catalog(player: Player, requested: DungeonCatalogQuery = DungeonCatalogQuery(), feedback: Component? = null) {
-        val entries = filterDungeonCatalog(data.catalog(player), requested)
+    fun catalog(
+        player: Player,
+        requested: DungeonCatalogQuery = DungeonCatalogQuery(),
+        feedback: Component? = null,
+        context: PaperDialogClickContext? = null,
+    ) {
+        val allEntries = data.catalog(player)
+        val entries = filterDungeonCatalog(allEntries, requested)
         val pages = ceil(entries.size.toDouble() / pageSize).toInt().coerceAtLeast(1)
         val query = requested.copy(page = requested.page.coerceIn(0, pages - 1))
         val listed = entries.drop(query.page * pageSize).take(pageSize)
@@ -137,28 +148,28 @@ internal class DungeonAdventureMenus(
             val selected = kind == query.kind
             button("filter_$kind", "filter-$kind-${if (selected) "on" else "off"}",
                 "${if (selected) "<#9bd48d>✔" else "<white>○"} $fallback", "Показать: $fallback") {
-                catalog(player, DungeonCatalogQuery(entered(it), kind))
+                catalog(player, DungeonCatalogQuery(entered(it), kind), context = it)
             }
         } + button("search", "search-label", "<white>Найти", "Применить поисковую строку") {
-            catalog(player, query.copy(search = entered(it), page = 0))
+            catalog(player, query.copy(search = entered(it), page = 0), context = it)
         } + listed.mapIndexed { index, entry ->
             PaperDialogButton(PaperDialogActionId.of("dungeon_$index"),
                 text("catalog-card", "<white><name> <#ffb277>· <level> ›", "name" to Component.text(clean(entry.name)), "level" to Component.text(levelRange(entry))),
                 text("catalog-card-tooltip", "<#e8dfd2><type> · уровень <level><newline><newline><description><newline><newline><#ffb277>Открыть подробности похода",
                     "type" to typeLabel(entry), "level" to Component.text(levelRange(entry)),
                     "description" to Component.text(entry.description.map(::clean).joinToString("\n").ifBlank { clean(entry.name) })),
-                width = 230, onClick = { detail(player, entry.id, query) })
+                width = 230, onClick = { detail(player, entry.id, query, context = it) })
         }
         val buttons = if (pages > 1) paginatedButtons(
             contentButtons,
-            refresh { catalog(player, query) },
+            refresh { catalog(player, query, context = it) },
             button("previous", "previous-label", "<#92bed8>‹ Предыдущая страница", "Вернуться на предыдущую страницу") {
                 val search = entered(it)
-                catalog(player, query.copy(search = search, page = if (search == query.search) (query.page - 1 + pages) % pages else 0))
+                catalog(player, query.copy(search = search, page = if (search == query.search) (query.page - 1 + pages) % pages else 0), context = it)
             },
             button("next", "next-label", "<#92bed8>Следующая страница ›", "Открыть следующую страницу") {
                 val search = entered(it)
-                catalog(player, query.copy(search = search, page = if (search == query.search) (query.page + 1) % pages else 0))
+                catalog(player, query.copy(search = search, page = if (search == query.search) (query.page + 1) % pages else 0), context = it)
             },
         ) else contentButtons
         show(player, PaperDialogScreen(id = "dungeon.catalog", title = text("catalog-title", "<#ffb277>Каталог данжей"),
@@ -166,10 +177,27 @@ internal class DungeonAdventureMenus(
                 initial = query.search, maxLength = 80, width = 468)), buttons = buttons, exitButton = back { main(player) }, columns = 2)) {
             catalog(player, query)
         }
+        val reason = when {
+            allEntries.isEmpty() -> "empty_catalog"
+            entries.isEmpty() -> "no_matches"
+            else -> null
+        }
+        context?.reportOutcome("succeeded", reason, "dungeon.catalog")
     }
 
-    private fun detail(player: Player, id: String, query: DungeonCatalogQuery, feedback: Component? = null) {
-        val entry = data.catalog(player).firstOrNull { it.id == id } ?: run { catalog(player, query, changed()); return }
+    private fun detail(
+        player: Player,
+        id: String,
+        query: DungeonCatalogQuery,
+        feedback: Component? = null,
+        context: PaperDialogClickContext? = null,
+    ) {
+        val target = "dungeon:${id.lowercase(Locale.ROOT)}"
+        val entry = data.catalog(player).firstOrNull { it.id == id } ?: run {
+            context?.reportOutcome("rejected", "missing", target)
+            catalog(player, query, changed())
+            return
+        }
         val blocked = dungeon.insideInstance(player)
         val rows = listOf(
             label("type", "Тип похода") to typeLabel(entry),
@@ -188,11 +216,17 @@ internal class DungeonAdventureMenus(
             button("enter_$index", "enter-label", if (permitted) "<#9bd48d><difficulty> · войти" else "<white>[Недоступно] Войти",
                 "Подготовить поход на выбранной сложности", close = permitted) { context ->
                 val level = if (entry.dynamic) context.number(levelInput)?.toInt() ?: entry.level else null
-                if (!permitted) detail(player, id, query, if (blocked) leaveFirst() else noPermission())
-                else {
-                    val result = data.enter(player, id, difficulty.id.takeIf { it.isNotBlank() }, level)
-                    if (result !in ACCEPTED_ACTIONS) detail(player, id, query, resultText(result))
+                val result = when {
+                    permitted -> data.enter(player, id, difficulty.id.takeIf { it.isNotBlank() }, level)
+                    blocked -> DungeonAdventureActionResult.IN_INSTANCE
+                    else -> DungeonAdventureActionResult.NO_PERMISSION
                 }
+                when (result) {
+                    DungeonAdventureActionResult.REQUESTED -> context.reportOutcome("requested", null, target)
+                    DungeonAdventureActionResult.FAILED -> context.reportOutcome("failed", "entry_failed", target)
+                    else -> context.reportOutcome("rejected", result.name.lowercase(Locale.ROOT), target)
+                }
+                if (result !in ACCEPTED_ACTIONS) detail(player, id, query, resultText(result))
             }.copy(label = if (permitted && difficulty.id.isBlank()) text("enter-default", "<#9bd48d>Войти в данж")
                 else if (permitted) text("enter-difficulty", "<#9bd48d><difficulty> · войти", "difficulty" to Component.text(clean(difficulty.name)))
                 else text("enter-disabled", "<white>[Недоступно] <difficulty>", "difficulty" to Component.text(clean(difficulty.name))))
@@ -206,6 +240,7 @@ internal class DungeonAdventureMenus(
                 text("level-input", "<white>Уровень похода"), entry.availableLevels.first().toFloat(), entry.availableLevels.last().toFloat(),
                 initial = entry.availableLevels.minBy { kotlin.math.abs(it - entry.level) }.toFloat(), step = 5f, width = 320)) else emptyList(),
             buttons = buttons, exitButton = back { catalog(player, query) }, columns = 2)) { detail(player, id, query) }
+        context?.reportOutcome("succeeded", null, target)
     }
 
     private fun lobbies(player: Player, content: String, query: DungeonCatalogQuery, requestedPage: Int = 0, feedback: Component? = null) {
@@ -399,7 +434,8 @@ internal class DungeonAdventureMenus(
     private fun rootExit(player: Player) = PaperDialogButton(PaperDialogActionId.of(if (MenuEscapeBehavior.goesBack(player)) "back" else "close"),
         text(if (MenuEscapeBehavior.goesBack(player)) "back-label" else "close-label", if (MenuEscapeBehavior.goesBack(player)) "<white>‹ Назад" else "<white>Закрыть"), width = 200, closeDialogBeforeAction = !MenuEscapeBehavior.goesBack(player), onClick = {})
     private fun back(returnTo: () -> Unit) = PaperDialogButton(PaperDialogActionId.of("back"), text("back-label", "<white>‹ Назад"), width = 200, onClick = { returnTo() })
-    private fun refresh(action: () -> Unit) = button("refresh", "refresh-label", "<white>Обновить", "Получить текущие данные") { action() }
+    private fun refresh(action: (PaperDialogClickContext) -> Unit) =
+        button("refresh", "refresh-label", "<white>Обновить", "Получить текущие данные", action = action)
 
     /** Refresh is a real utility action on every page; the flat grid needs no parity filler. */
     private fun paginatedButtons(

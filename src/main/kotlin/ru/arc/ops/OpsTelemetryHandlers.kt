@@ -96,7 +96,7 @@ internal object OpsTelemetryHandlers {
     private const val MAX_LIMIT = 500
     private val eventQueryFields = setOf(
         "from", "until", "player-id", "player-name", "session-id", "server", "source", "event", "subject",
-        "include-qa", "limit", "cursor-at", "cursor-event-id",
+        "include-qa", "legacy", "limit", "cursor-at", "cursor-event-id",
     )
     private val summaryQueryFields = eventQueryFields - setOf("cursor-at", "cursor-event-id")
 
@@ -127,6 +127,7 @@ internal object OpsTelemetryHandlers {
                 occurredAt = parseTime(cursorAt, "cursor-at"),
                 eventId = cursorEventId!!,
             ),
+            legacy = parseBoolean(query["legacy"], "legacy"),
         )
     }
 
@@ -144,17 +145,21 @@ internal object OpsTelemetryHandlers {
             subject = query["subject"],
             includeQa = parseBoolean(query["include-qa"], "include-qa"),
             limit = parseLimit(query["limit"]),
+            legacy = parseBoolean(query["legacy"], "legacy"),
         )
     }
 
     fun catalog(): Map<String, Any?> = linkedMapOf(
         "schemaVersion" to PlayerTelemetryEvent.CURRENT_SCHEMA_VERSION,
+        "storage" to mapOf("current" to "arc_player_events_v2", "legacy" to "arc_player_events"),
         "timeSemantics" to "from is inclusive; until is exclusive; timestamps require an explicit UTC offset and millisecond precision",
         "sampling" to linkedMapOf(
             "activity" to "movement/idle/resume transitions; idle-after-seconds defaults to 60",
             "position.sample" to "sample-interval-seconds defaults to 1; movement is coalesced by position-interval-seconds (15)",
             "inventory" to "open/close transitions and click actions; no periodic inventory polling",
-            "ui" to "open/impression/click/attempt/blocked/close/censored/no_choice events; identifiers and numeric/enumerated details only",
+            "ui" to "historical UI capture; select legacy=true",
+            "menu" to "query source=menu for compact view, action, result and end records; no historical menu rows copied",
+            "actionCounts" to "Paper interact, block.break, block.place and inventory.click count matching actions within five-second windows",
             "resourcePack" to "status timing includes an explicit timingBasis; accepted-to-status is not client-side full download latency",
         ),
         "eventFamilies" to listOf(
@@ -162,12 +167,13 @@ internal object OpsTelemetryHandlers {
             mapOf("source" to "inventory", "events" to listOf("inventory.open", "inventory.close")),
             mapOf("source" to "paper", "events" to listOf("resource_pack.status")),
             mapOf("source" to "ui", "events" to listOf("ui.open", "ui.impression", "ui.click", "ui.attempt", "ui.blocked", "ui.close", "ui.censored", "ui.no_choice")),
+            mapOf("source" to "menu", "events" to listOf("menu.view", "menu.action", "menu.result", "menu.end")),
             mapOf("source" to "arc", "events" to listOf("node.started", "mechanic.observation", "mechanic.outcome", "feature.interest")),
             mapOf("source" to "mounts", "events" to listOf("mount.ride_started", "mount.ride_ended", "mount.purchase.<persistedstage>")),
             mapOf("source" to "treasure", "events" to listOf("treasure.chest_claimed")),
             mapOf("source" to "dungeons", "events" to listOf("dungeon.started", "dungeon.finished")),
             mapOf("source" to "economy", "events" to listOf("economy.observed")),
-            mapOf("source" to "proxy", "events" to listOf("connection.login", "connection.resume", "connection.end", "server.connected", "server.denied", "server.kick", "resource_pack.sent", "resource_pack.status")),
+            mapOf("source" to "proxy", "events" to listOf("connection.login", "connection.resume", "connection.end", "server.connected", "server.denied", "server.kick", "command", "resource_pack.sent", "resource_pack.status")),
             mapOf("source" to "arcecojobs", "events" to listOf("job_boost_purchased", "job_boost_activated", "work_blocked_afk", "work_blocked_farm", "mechanic.observation")),
             mapOf("source" to "arcfarms", "events" to listOf("farm_reward_claimed", "worksite_started", "worksite_start_rejected", "worksite_completed", "mechanic.observation")),
             mapOf("source" to "arcvotes", "events" to listOf("vote_reward_claimed", "mechanic.observation")),
@@ -182,6 +188,8 @@ internal object OpsTelemetryHandlers {
         "dataBoundaries" to listOf(
             "Chat event records contain no message text; command capture is root-only.",
             "Paper session IDs represent backend visits; Proxy connection IDs represent proxy sessions. They are distinct scopes unless an event supplies an explicit shared correlation ID.",
+            "Menu views record stable button identifiers and slots. Action, result and triggered view rows share the attempt ID in operationId when the producer observes that link.",
+            "A requested menu result records submission to the owning mechanic. zMenu reports attempts only. Paper does not report dialog dismissal via Escape.",
             "Resource-pack timing is reported with its timingBasis; direct Proxy plugin sends do not expose full client download/apply latency through the standard API.",
             "Resource-pack capture on Proxy records backend-origin sends only; direct plugin-to-client sends are not observable here.",
             "Some source modules only emit events after their own durable or committed transition. Telemetry itself is an asynchronous observation and does not certify the upstream operation or financial effect.",
@@ -189,6 +197,7 @@ internal object OpsTelemetryHandlers {
             "crate_offers_rerolled is not currently emitted because its producer transition has no service callsite.",
             "Event names are observations from their owning module and may expand as module versions change; use the returned source and event fields when filtering.",
             "Collection starts at activation. Existing logs and aggregates are not replayed into this event history.",
+            "Windowed actions carry count and, when applicable, lastAtMs. Queries include the full count of each row whose first observation is within the requested bounds.",
         ),
     )
 

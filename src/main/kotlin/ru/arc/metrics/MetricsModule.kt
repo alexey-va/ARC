@@ -218,6 +218,10 @@ object MetricsModule : PluginModule {
         if (productUi == null) productUi = ProductUiListener(ARC.instance, productInterest).also(ProductUiListener::start)
     }
 
+    internal fun finishUiVisits(reason: String) {
+        productUi?.finishVisits(reason)
+    }
+
     internal fun observeExternalUi(payload: Map<String, Any>) {
         productUi?.receive(payload)
     }

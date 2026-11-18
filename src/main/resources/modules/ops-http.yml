@@ -51,6 +51,7 @@ economy-audit-read-enabled: true
 product-interest-read-enabled: true
 
 # GET /ops/telemetry/{health,catalog,events,summary} — authenticated typed player journey reads.
+# events/summary use the compact history by default. Add legacy=true to query the previous store.
 player-telemetry-read-enabled: true
 
 # Authenticated Economy V2 manual-review evidence. Preview is read-only;

@@ -65,7 +65,7 @@ internal class PlayerTelemetryListener : AutoCloseable {
             }
             events.on<BlockBreakEvent>(EventPriority.MONITOR, ignoreCancelled = false) {
                 PlayerTelemetryModule.action(it.player, "block.break", it.block.type.key.toString(),
-                    mapOf("cancelled" to it.isCancelled.toString(), "targetX" to it.block.x.toString(), "targetY" to it.block.y.toString(), "targetZ" to it.block.z.toString()))
+                    mapOf("cancelled" to it.isCancelled.toString()))
             }
             events.on<BlockPlaceEvent>(EventPriority.MONITOR, ignoreCancelled = false) {
                 PlayerTelemetryModule.action(it.player, "block.place", it.block.type.key.toString(), mapOf("cancelled" to it.isCancelled.toString()))

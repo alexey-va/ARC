@@ -50,7 +50,7 @@ class ProductUiTest : StringSpec({
         events.count { it.first == ProductUiKind.CLICK } shouldBe 0
         events.count { it.first == ProductUiKind.NO_CHOICE } shouldBe 0
         tracker.open("player", "other", view, now + 5)
-        tracker.shutdown(now + 6)
+        tracker.shutdown(now + 6, "shutdown")
         events.count { it.first == ProductUiKind.NO_CHOICE } shouldBe 0
         events.count { it.first == ProductUiKind.CENSORED } shouldBe 1
     }
@@ -79,6 +79,38 @@ class ProductUiTest : StringSpec({
         tracker.render("player", "visit", refreshed, now + 1)
         tracker.click("player", "visit", refreshed, "homes", true, now + 2)
         seen.single() shouldBe refreshed
+    }
+
+    "menu history snapshots a changed frame once and links attempts to that frame and the destination" {
+        val journal = mutableListOf<ProductMenuEvent>()
+        val tracker = ProductUiTracker({ journal += it }) { _, _, _, _, _, _, _ -> }
+        val screen = ProductUiView("arc:help.root", revision,
+            mapOf("warps" to ProductUiButton(1), "homes" to ProductUiButton(0)))
+        val nextPage = screen.copy(details = mapOf("pageIndex" to "1", "disabledSlots" to "2"),
+            visibleSlots = mapOf(0 to "homes", 1 to "region:mounts", 2 to "region:mounts"))
+        tracker.open("player", "first", screen, now)
+        tracker.render("player", "first", screen, now + 1)
+        tracker.render("player", "first", nextPage, now + 2)
+        tracker.click("player", "first", nextPage, "homes", true, now + 3, "click-id")
+        tracker.open("player", "second", screen.copy(surface = "arc:help.homes",
+            details = mapOf("triggerAttemptId" to "click-id")), now + 4)
+
+        journal.map { it.event } shouldBe listOf("menu.view", "menu.view", "menu.action", "menu.end", "menu.view")
+        journal.first().details["buttons"] shouldBe "homes=0,warps=1"
+        journal[1].details["buttons"] shouldBe "homes=0,region:mounts=1,region:mounts=2"
+        journal[1].details["disabledSlots"] shouldBe "2"
+        journal[2].details["frame"] shouldBe "1"
+        journal[2].details["disabledSlots"] shouldBe null
+        journal[2].actionId shouldBe "click-id"
+        journal[3].details["reason"] shouldBe "replaced"
+        journal[4].actionId shouldBe "click-id"
+        journal[4].details["previousVisitId"] shouldBe "first"
+
+        tracker.shutdown(now + 5, "reload")
+        tracker.shutdown(now + 6, "shutdown")
+        journal.size shouldBe 6
+        journal.last().event shouldBe "menu.end"
+        journal.last().details["reason"] shouldBe "reload"
     }
 
     "unique clickers deduplicate across days and servers and survive persistence" {

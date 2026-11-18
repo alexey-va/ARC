@@ -2205,8 +2205,8 @@ class OpsHttpServer(
         if (cfg.playerTelemetryReadEnabled) {
             routes += "GET /ops/telemetry/health"
             routes += "GET /ops/telemetry/catalog"
-            routes += "GET /ops/telemetry/events?from=&until=&player-id=&player-name=&session-id=&server=&source=&event=&subject=&include-qa=&limit=&cursor-at=&cursor-event-id="
-            routes += "GET /ops/telemetry/summary?from=&until=&player-id=&player-name=&session-id=&server=&source=&event=&subject=&include-qa=&limit="
+            routes += "GET /ops/telemetry/events?from=&until=&player-id=&player-name=&session-id=&server=&source=&event=&subject=&include-qa=&legacy=&limit=&cursor-at=&cursor-event-id="
+            routes += "GET /ops/telemetry/summary?from=&until=&player-id=&player-name=&session-id=&server=&source=&event=&subject=&include-qa=&legacy=&limit="
         }
         if (cfg.contractReconciliationReadEnabled) {
             routes += "GET /ops/economy/contracts/reconciliations?limit="

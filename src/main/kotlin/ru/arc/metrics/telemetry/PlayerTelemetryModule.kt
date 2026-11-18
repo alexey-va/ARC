@@ -10,11 +10,11 @@ import ru.arc.metrics.loadTelemetryConfig
 import ru.arc.core.PluginModule
 import ru.arc.core.ScheduledTask
 import ru.arc.core.Tasks
+import ru.arc.metrics.MetricsModule
 import ru.arc.metrics.MetricsWorkQueue
 import ru.arc.metrics.NativeTelemetryBatch
 import ru.arc.metrics.ProductInterestConfig
-import ru.arc.metrics.ProductUiKind
-import ru.arc.metrics.ProductUiView
+import ru.arc.metrics.ProductMenuEvent
 import ru.arc.telemetry.PlayerTelemetryEvent
 import ru.arc.telemetry.PlayerTelemetrySettings
 import ru.arc.telemetry.PlayerTelemetryStore
@@ -41,6 +41,8 @@ object PlayerTelemetryModule : PluginModule {
     private var tracker: PlayerJourneyTracker? = null
     private var listener: PlayerTelemetryListener? = null
     private var sampler: ScheduledTask? = null
+    private var actionBuffer: PlayerTelemetryActionBuffer? = null
+    private var actionFlush: ScheduledTask? = null
     private var nativeCapture: NativeTelemetryBatch? = null
     private var qaNames: Set<String> = emptySet()
 
@@ -86,6 +88,13 @@ object PlayerTelemetryModule : PluginModule {
                 if (generation.get() != epoch || lifecycle !== owner) return@Runnable
                 store = instance
                 qaNames = capturedQaNames
+                val actions = PlayerTelemetryActionBuffer(serverName, pendingSince = instance::setBufferedCaptureSince) { snapshot ->
+                    offer(instance, snapshot)
+                }
+                actionBuffer = actions
+                actionFlush = Tasks.scheduler.runTimer(20L, 20L, Runnable {
+                    if (actionBuffer === actions) actions.flushExpired(System.currentTimeMillis())
+                })
                 tracker = PlayerJourneyTracker(
                     idleMillis,
                     positionMillis,
@@ -93,7 +102,7 @@ object PlayerTelemetryModule : PluginModule {
                     { id, context -> if (context == null) contexts.remove(id) else contexts[id] = context },
                 )
                 listener = PlayerTelemetryListener().also { it.start() }
-                ru.arc.metrics.MetricsModule.ensureUiCapture()
+                MetricsModule.ensureUiCapture()
                 val batch = NativeTelemetryBatch().also { nativeCapture = it }
                 batch.start(Bukkit.getOnlinePlayers().map { it.uniqueId }) { id ->
                     if (!contexts.containsKey(id)) Bukkit.getPlayer(id)?.let { join(it, true) }
@@ -144,8 +153,13 @@ object PlayerTelemetryModule : PluginModule {
     private fun stopCapture(reason: String): CompletableFuture<Unit> {
         generation.incrementAndGet()
         sampler?.cancel(); sampler = null
+        actionFlush?.cancel(); actionFlush = null
         listener?.close(); listener = null
         nativeCapture?.close(); nativeCapture = null
+        actionBuffer?.flushAll()
+        actionBuffer = null
+        // MetricsModule owns the listener and shuts down after the telemetry store.
+        if (store != null) MetricsModule.finishUiVisits(reason)
         val previousTracker = tracker
         tracker = null
         val finalActions = observedActions.toMap()
@@ -167,17 +181,25 @@ object PlayerTelemetryModule : PluginModule {
 
     internal fun join(player: Player, resumed: Boolean = false) {
         if (player.hasMetadata("NPC")) return
-        tracker?.join(player.uniqueId, player.name,
+        val playerId = player.uniqueId
+        actionBuffer?.flushPlayer(playerId)
+        tracker?.join(playerId, player.name,
             player.name.lowercase() in qaNames, player.location.position(), System.currentTimeMillis(), resumed)
     }
 
     internal fun leave(player: Player) {
-        observedActions.remove(player.uniqueId)?.let { tracker?.activity(player.uniqueId, it.first, it.second) }
-        tracker?.relocate(player.uniqueId, player.location.position(), System.currentTimeMillis())
-        tracker?.leave(player.uniqueId, System.currentTimeMillis(), "quit", false)
+        val playerId = player.uniqueId
+        actionBuffer?.flushPlayer(playerId)
+        observedActions.remove(playerId)?.let { tracker?.activity(playerId, it.first, it.second) }
+        tracker?.relocate(playerId, player.location.position(), System.currentTimeMillis())
+        tracker?.leave(playerId, System.currentTimeMillis(), "quit", false)
     }
 
-    internal fun relocate(player: Player, location: Location) = tracker?.relocate(player.uniqueId, location.position(), System.currentTimeMillis())
+    internal fun relocate(player: Player, location: Location) {
+        val playerId = player.uniqueId
+        actionBuffer?.flushPlayer(playerId)
+        tracker?.relocate(playerId, location.position(), System.currentTimeMillis())
+    }
 
     /** Optional cross-plugin ingress: no live Bukkit access, blocking operations or exceptions escape to gameplay. */
     fun record(playerId: UUID, source: String, event: String, subject: String? = null,
@@ -217,19 +239,31 @@ object PlayerTelemetryModule : PluginModule {
     }
 
     internal fun action(player: Player, event: String, subject: String? = null, attributes: Map<String, String> = emptyMap()): Boolean {
-        val context = contexts[player.uniqueId] ?: return false
-        markActivity(player.uniqueId, event, System.currentTimeMillis())
-        return capture(context, "player", event, subject, null, attributes, System.currentTimeMillis(), player.uniqueId)
+        val playerId = player.uniqueId
+        val context = contexts[playerId] ?: return false
+        val at = System.currentTimeMillis()
+        markActivity(playerId, event, at)
+        val buffer = actionBuffer
+        if (buffer != null && event in PlayerTelemetryActionBuffer.EVENTS && Bukkit.isPrimaryThread()) {
+            buffer.add(context, player.world.name, event, subject, attributes, at)
+            return true
+        }
+        return capture(context, "player", event, subject, null, attributes, at, playerId)
     }
 
-    internal fun ui(playerId: String, visit: String, kind: ProductUiKind, view: ProductUiView, button: String, duration: Long, at: Long) {
-        val player = runCatching { UUID.fromString(playerId) }.getOrNull() ?: return
+    internal fun menu(observation: ProductMenuEvent) {
+        val player = runCatching { UUID.fromString(observation.player) }.getOrNull() ?: return
         val context = contexts[player] ?: return
-        if (kind in setOf(ProductUiKind.CLICK, ProductUiKind.ATTEMPT, ProductUiKind.BLOCKED))
-            markActivity(player, "ui.${kind.name.lowercase()}", at)
-        val details = view.details + mapOf("visitId" to visit, "button" to button, "revision" to view.revision,
-            "durationMs" to duration.toString()) + (view.buttons[button]?.let { mapOf("slot" to it.slot.toString()) } ?: emptyMap())
-        capture(context, "ui", "ui.${kind.name.lowercase()}", view.surface, null, details, at, player)
+        if (observation.event == "menu.action") {
+            val activity = when (observation.details["admission"]) {
+                "accepted" -> "ui.click"
+                "blocked" -> "ui.blocked"
+                else -> "ui.attempt"
+            }
+            markActivity(player, activity, observation.at)
+        }
+        capture(context, "menu", observation.event, observation.surface, observation.actionId,
+            observation.details + ("visitId" to observation.visit), observation.at, player)
     }
 
     private fun markActivity(player: UUID, event: String, at: Long) {
@@ -241,18 +275,22 @@ object PlayerTelemetryModule : PluginModule {
                         attributes: Map<String, String>, at: Long, playerId: UUID? = context?.playerId,
                         playerName: String? = context?.playerName, targetStore: PlayerTelemetryStore? = store): Boolean {
         val instance = targetStore ?: run { unavailableCaptures.incrementAndGet(); return false }
-        return runCatching {
+        return offer(instance) {
             val id = UUID.randomUUID().toString()
-            instance.offer(PlayerTelemetryEvent(eventId = id, occurredAt = at, server = ARC.serverName ?: "unknown",
+            val position = context?.position?.takeUnless { source == "menu" }
+            PlayerTelemetryEvent(eventId = id, occurredAt = at, server = ARC.serverName ?: "unknown",
                 playerId = playerId?.toString(), playerName = playerName, sessionId = context?.sessionId,
                 source = source, event = event, subject = subject, operationId = operationId,
-                world = context?.position?.world, x = context?.position?.x, y = context?.position?.y, z = context?.position?.z,
-                qa = context?.qa ?: (playerName?.lowercase() in qaNames), attributes = attributes.toMap()))
-        }.onFailure {
+                world = position?.world, x = position?.x, y = position?.y, z = position?.z,
+                qa = context?.qa ?: (playerName?.lowercase() in qaNames), attributes = attributes.toMap())
+        }
+    }
+
+    private inline fun offer(instance: PlayerTelemetryStore, snapshot: () -> PlayerTelemetryEvent): Boolean =
+        runCatching { instance.offer(snapshot()) }.onFailure {
             invalidCaptures.incrementAndGet()
             instance.noteCaptureLoss()
         }.getOrDefault(false)
-    }
 
     internal fun Location.position() = JourneyPosition(world.name, x, y, z)
 }

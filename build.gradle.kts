@@ -76,10 +76,10 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.540"
+version = "1.4.541"
 description = "ARC"
 val pluginVersion = version.toString()
-val arcCoreVersion = "2.7.81"
+val arcCoreVersion = "2.7.84"
 val arcCorePluginVersion: String by project
 val arcDungeonsPluginVersion: String by project
 val landsJar = providers.gradleProperty("landsJar").orNull?.let(::file)
