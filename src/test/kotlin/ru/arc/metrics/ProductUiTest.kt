@@ -3,14 +3,21 @@ package ru.arc.metrics
 import com.google.gson.Gson
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.mockk
 import java.nio.file.Files
 import java.time.Instant
 import java.time.ZoneId
+import java.util.UUID
 
 class ProductUiTest : StringSpec({
     val now = Instant.parse("2026-09-05T10:00:00Z").toEpochMilli()
     val config = ProductInterestConfig(networkEnabled = false, zoneId = ZoneId.of("UTC"))
     val revision = "0123456789ab"
+    fun observation(owner: String, surface: String, player: String, visit: String, button: String) = mapOf(
+        "protocol" to 1, "owner" to owner, "surface" to surface, "playerId" to player, "visitId" to visit,
+        "revision" to revision, "buttons" to mapOf(button to 0),
+    )
+    fun id() = UUID.randomUUID().toString()
     fun event(player: String, kind: ProductUiKind, button: String = "_menu", at: Long = now,
               surface: String = "arc:help.root", feature: String? = null) = ProductUiSignal(
         ProductPseudonym.eventId(), "spawn", ProductPseudonym.of(player), at, kind, surface, revision, button, feature)
@@ -111,6 +118,86 @@ class ProductUiTest : StringSpec({
         journal.size shouldBe 6
         journal.last().event shouldBe "menu.end"
         journal.last().details["reason"] shouldBe "reload"
+    }
+
+    "legacy ArcFarms open uses only an admitted same-player dispatch and keeps explicit attribution" {
+        val journal = mutableListOf<ProductMenuEvent>()
+        val listener = ProductUiListener(mockk(), null) { journal += it }
+        val player = id()
+        val otherPlayer = id()
+        val attempt = id()
+        val explicit = id()
+        val source = observation("ARC", "help.category.activities", player, id(), "command_farms")
+        val marker = source - "buttons" + mapOf("attemptId" to attempt, "started" to true)
+        fun receive(payload: Map<String, Any>, phase: String) = listener.receive(payload + ("phase" to phase), now)
+        fun openLegacy(viewer: String) = observation("ArcFarms", "farms.main", viewer, id(), "farm")
+
+        receive(source, "open")
+        receive(source + mapOf("attemptId" to attempt, "button" to "command_farms"), "click")
+        receive(marker - "started", "dispatch_start")
+        receive(openLegacy(player), "open")
+        receive(marker, "dispatch_start")
+        receive(openLegacy(otherPlayer), "open")
+
+        val nested = marker + mapOf("attemptId" to id(), "playerId" to otherPlayer)
+        receive(nested, "dispatch_start")
+        receive(openLegacy(player), "open")
+        receive(nested, "dispatch_end")
+        val speculative = marker + mapOf("attemptId" to id(), "started" to false)
+        receive(speculative, "dispatch_start")
+        receive(openLegacy(player), "open")
+        receive(speculative, "dispatch_end")
+
+        val destination = openLegacy(player)
+        receive(destination, "open")
+        receive(destination, "open")
+        receive(openLegacy(player) + ("triggerAttemptId" to explicit), "open")
+        receive(source + mapOf("attemptId" to attempt, "outcome" to "requested", "target" to "command:farms"), "result")
+        receive(marker, "dispatch_end")
+        receive(openLegacy(player), "open")
+
+        val views = journal.filter { it.event == "menu.view" && it.surface == "arcfarms:farms.main" }
+        views.map { it.actionId } shouldBe listOf(null, null, null, null, attempt, explicit, null)
+        views.filter { it.actionId == attempt }.single().details["buttons"] shouldBe "farm=0"
+        journal.filter { it.event == "menu.action" }.single().actionId shouldBe attempt
+        val result = journal.filter { it.event == "menu.result" }.single()
+        result.actionId shouldBe attempt
+        result.details shouldBe mapOf("target" to "command:farms", "outcome" to "requested")
+        journal.any { it.event.startsWith("dispatch_") } shouldBe false
+    }
+
+    "generated history back reports only its first confirmed destination while its inner scope is active" {
+        val journal = mutableListOf<ProductMenuEvent>()
+        val listener = ProductUiListener(mockk(), null) { journal += it }
+        val player = id()
+        val attempt = id()
+        val sourceVisit = id()
+        val source = observation("ARC", "help.travel", player, sourceVisit, "back")
+        val marker = source - "buttons" + mapOf("attemptId" to attempt, "started" to true)
+        val footer = marker + ("historyFooter" to true)
+        fun receive(payload: Map<String, Any>, phase: String) = listener.receive(payload + ("phase" to phase), now)
+        fun open(surface: String) = receive(observation("ARC", surface, player, id(), "_close"), "open")
+
+        receive(source, "open")
+        receive(source + mapOf("attemptId" to attempt, "button" to "back"), "click")
+        receive(marker, "dispatch_start")
+        open("help.dismissal")
+        receive(footer, "dispatch_start")
+        receive(observation("ARC", "help.other", player, id(), "_close") + ("triggerAttemptId" to id()), "open")
+        open("help.root")
+        open("help.followup")
+        receive(footer, "dispatch_end")
+        open("help.dismissal_late")
+        receive(marker, "dispatch_end")
+        open("help.unrelated")
+
+        val result = journal.filter { it.event == "menu.result" }.single()
+        result.visit shouldBe sourceVisit
+        result.surface shouldBe "arc:help.travel"
+        result.actionId shouldBe attempt
+        result.details shouldBe mapOf("outcome" to "succeeded", "reason" to "footer_back", "target" to "arc:help.root")
+        journal.single { it.event == "menu.view" && it.surface == "arc:help.dismissal_late" }.actionId shouldBe attempt
+        journal.single { it.event == "menu.view" && it.surface == "arc:help.unrelated" }.actionId shouldBe null
     }
 
     "unique clickers deduplicate across days and servers and survive persistence" {

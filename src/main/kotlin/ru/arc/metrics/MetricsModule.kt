@@ -223,7 +223,7 @@ object MetricsModule : PluginModule {
     }
 
     internal fun observeExternalUi(payload: Map<String, Any>) {
-        productUi?.receive(payload)
+        if (Bukkit.isPrimaryThread()) productUi?.receive(payload)
     }
 
     /** Ops HTTP worker only; a gameplay caller must use the asynchronous product facade. */

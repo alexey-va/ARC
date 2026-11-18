@@ -236,7 +236,7 @@ private fun graveSettingsJourney(block: (GraveSettingsJourney) -> Unit) {
                 val footerBack = MenuEscapeBehavior.footerGoesBack(screen, true)
                 dialogs.open(viewer, ArcMenus.prepareDialog(screen, footerBack, close),
                     navigation.returnTarget(viewer), { navigation.visit(viewer) }, !footerBack)
-            }, { _, _ -> error("Unexpected external command") }, { _, _ -> error("Unexpected inventory") }, {})
+            }, { _, _, _ -> error("Unexpected external command") }, { _, _ -> error("Unexpected inventory") }, {})
             f.open = { dialogs.beginFlow(player); f.controller.open(player); paper.performTicks(2) }
             f.dispatchClick = { id, input ->
                 val button = (f.screen.buttons + listOfNotNull(f.screen.exitButton)).single { it.id.value == id }

@@ -255,7 +255,7 @@ internal class HelpCenterController(
                     }
                     add(button("now", text("now-label"), text("now-tooltip")) { openNow(player) })
                     availableCatalog(player).firstOrNull { it.id == "teams" }?.let { teams ->
-                        add(button("teams", text("teams-label"), commandTooltip(teams.id)) { executeCatalog(player, teams.id) })
+                        add(contextButton("teams", text("teams-label"), commandTooltip(teams.id)) { executeCatalog(player, teams.id, it) })
                     }
                     add(button("travel", text("travel-label"), text("travel-tooltip")) { openTravel(player) })
                     add(button("privat", text("privat-label"), text("privat-tooltip")) { open(player, HelpCenterPage.PRIVAT) })
@@ -267,12 +267,12 @@ internal class HelpCenterController(
                     }
                     for (id in listOf("rank", "jobs", "skills", "quests", "enchants")) {
                         if (id in available) {
-                            add(button(id, text("main-$id-label"), commandTooltip(id)) { executeCatalog(player, id) })
+                            add(contextButton(id, text("main-$id-label"), commandTooltip(id)) { executeCatalog(player, id, it) })
                         }
                     }
                     available["mounts"]?.let {
-                        add(button("mounts", text("main-mounts-label"), commandTooltip("mounts")) {
-                            executeCatalog(player, "mounts")
+                        add(contextButton("mounts", text("main-mounts-label"), commandTooltip("mounts")) {
+                            executeCatalog(player, "mounts", it)
                         })
                     }
                     if (cosmetics?.canOpen(player) == true) add(button("cosmetics", text("main-cosmetics-label"), text("cosmetics-tooltip")) {
@@ -441,8 +441,8 @@ internal class HelpCenterController(
                 title = text("guide-title"),
                 body = listOf(presentation.panel(text("guide-body"), 468)),
                 buttons = listOf(
-                    button("kit", text("kit-label"), commandTooltip("kit")) { executeCatalog(player, "kit") }.closing(),
-                    button("jobs", text("jobs-label"), commandTooltip("jobs")) { executeCatalog(player, "jobs") },
+                    contextButton("kit", text("kit-label"), commandTooltip("kit")) { executeCatalog(player, "kit", it) }.closing(),
+                    contextButton("jobs", text("jobs-label"), commandTooltip("jobs")) { executeCatalog(player, "jobs", it) },
                     button("home", text("travel-label"), text("travel-tooltip")) { openTravel(player) },
                     button("privat", text("privat-label"), text("privat-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
                     button("rules", text("rules-label"), text("rules-tooltip")) { openRules(player) },
@@ -1263,9 +1263,9 @@ internal class HelpCenterController(
     private fun travelButtons(player: Player): List<PaperDialogButton> = listOf(
         contextButton("warps", text("warps-label"), commandTooltip("warps")) { executeCatalog(player, "warps", it) },
         button("public_homes", text("public-homes-label"), text("public-homes-tooltip")) { openPublicHomes(player) },
-        button("spawn", text("spawn-label"), commandTooltip("spawn")) { executeCatalog(player, "spawn") }.closing(),
+        contextButton("spawn", text("spawn-label"), commandTooltip("spawn")) { executeCatalog(player, "spawn", it) }.closing(),
         button("rtp", text("rtp-label"), text("rtp-tooltip")) { openRtp(player) },
-        button("back_command", text("back-command-label"), commandTooltip("back")) { executeCatalog(player, "back") }.closing(),
+        contextButton("back_command", text("back-command-label"), commandTooltip("back")) { executeCatalog(player, "back", it) }.closing(),
     ).filter { it.id.value != "warps" || availableCatalog(player).any { command -> command.id == "warps" } }
 
     private fun categoryButton(player: Player, category: HelpCenterCategory): PaperDialogButton =
@@ -1343,10 +1343,11 @@ internal class HelpCenterController(
         if (command.opensInventory) executeInventory(player, command.command)
         else execute(player, command.command)
 
-    private fun executeCatalog(player: Player, id: String, context: PaperDialogClickContext? = null) {
+    private fun executeCatalog(player: Player, id: String, context: PaperDialogClickContext) {
+        val target = if (id == "warps") "help.travel.warps" else "command:$id"
         val command = availableCatalog(player).firstOrNull { it.id == id }
         if (command == null) {
-            if (id == "warps") context?.reportOutcome("rejected", "catalog_unavailable", "help.travel.warps")
+            context.reportOutcome("rejected", "catalog_unavailable", target)
             player.sendMessage(text("action-unavailable"))
             return
         }
@@ -1365,7 +1366,11 @@ internal class HelpCenterController(
         } else if (id == "slimefun") {
             val returnTo = navigation.returnTarget(player) ?: { openRoot(player) }
             openFeatureGuide(player, "slimefun", returnTo)
-        } else executeCommand(player, command)
+        } else if (executeCommand(player, command)) {
+            context.reportOutcome("requested", null, target)
+        } else {
+            context.reportOutcome("failed", "command_not_dispatched", target)
+        }
     }
 
     private fun executeInventory(player: Player, command: String): Boolean {

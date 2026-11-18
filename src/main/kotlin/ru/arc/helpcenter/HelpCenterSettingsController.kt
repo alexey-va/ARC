@@ -38,7 +38,7 @@ internal class HelpCenterSettingsController(
     private val legacy: HelpCenterLegacySettings,
     private val navigation: HelpCenterNavigation,
     private val showDialog: (Player, PaperDialogScreen) -> Unit,
-    private val executeCatalog: (Player, String) -> Unit,
+    private val executeCatalog: (Player, String, PaperDialogClickContext) -> Unit,
     private val executeInventory: (Player, String) -> Boolean,
     private val openRoot: (Player) -> Unit,
 ) : AutoCloseable {
@@ -101,16 +101,16 @@ internal class HelpCenterSettingsController(
                         if (!gateway.execute(player, settings.action("quest-display"))) player.sendMessage(text("action-failed"))
                     }
                 } else null
-                "particles" -> if (HelpCenterFeature.PLAYER_PARTICLES in features && snapshot.particlesEnabled != null) button("setting_particles", text("setting-particles-current", "state" to booleanState(snapshot.particlesEnabled)), text("setting-particles-tooltip")) {
-                    executeCatalog(player, "particles")
+                "particles" -> if (HelpCenterFeature.PLAYER_PARTICLES in features && snapshot.particlesEnabled != null) contextButton("setting_particles", text("setting-particles-current", "state" to booleanState(snapshot.particlesEnabled)), text("setting-particles-tooltip")) {
+                    executeCatalog(player, "particles", it)
                     openSection(player, section)
                 } else null
                 "trails" -> {
                     val enabled = snapshot.trailsEnabled
                     if (HelpCenterFeature.TRAILS !in features || enabled == null) return@mapNotNull null
                     val action = if (enabled == true) "trails-off" else "trails-on"
-                    button("setting_$action", text("setting-trails-current", "state" to booleanState(enabled)), text("setting-$action-tooltip")) {
-                        executeCatalog(player, action)
+                    contextButton("setting_$action", text("setting-trails-current", "state" to booleanState(enabled)), text("setting-$action-tooltip")) {
+                        executeCatalog(player, action, it)
                         openSection(player, section)
                     }
                 }

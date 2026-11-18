@@ -1470,11 +1470,27 @@ class HelpCenterScreensTest {
                 screen.buttons.single { it.id.value == buttonId }.closeDialogBeforeAction,
                 "$id must keep the parent dialog and cursor during native navigation",
             )
-            click(buttonId)
+            val context = click(buttonId)
             assertEquals(command, executed.last())
+            verify(exactly = 1) { context.reportOutcome("requested", null, "command:$id") }
         }
         open(HelpCenterPage.ACTIVITIES)
         assertTrue(screen.buttons.single { it.id.value == "command_vote" }.closeDialogBeforeAction)
+    }
+
+    @Test
+    fun `farm catalog reports dispatch failure and rechecks provider availability`() {
+        every { gateway.execute(player, "arcfarms") } returns false
+        open(HelpCenterPage.ROOT)
+        click("root_activities")
+
+        val failed = click("command_farms")
+        verify(exactly = 1) { failed.reportOutcome("failed", "command_not_dispatched", "command:farms") }
+
+        every { gateway.features() } returns HelpCenterFeature.entries.toSet() - HelpCenterFeature.FARMS
+        val rejected = click("command_farms")
+        verify(exactly = 1) { rejected.reportOutcome("rejected", "catalog_unavailable", "command:farms") }
+        verify(exactly = 1) { gateway.execute(player, "arcfarms") }
     }
 
     @Test

@@ -13,6 +13,7 @@ import ru.arc.onboarding.OnboardingService
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
 import ru.arc.paper.menu.PaperDialogButton
+import ru.arc.paper.menu.PaperDialogClickContext
 import ru.arc.paper.menu.PaperDialogScreen
 
 /** Secondary hub surfaces kept out of the primary navigation controller. */
@@ -20,7 +21,7 @@ internal class HelpCenterHubController(
     private val settings: HelpCenterSettings,
     private val gateway: HelpCenterGateway,
     private val availableCatalog: (Player) -> List<HelpCenterCommand>,
-    private val executeCatalog: (Player, String) -> Unit,
+    private val executeCatalog: (Player, String, PaperDialogClickContext) -> Unit,
     private val executeRaw: (Player, String) -> Unit,
     private val openPage: (Player, HelpCenterPage) -> Unit,
     private val navigation: HelpCenterNavigation,
@@ -48,7 +49,9 @@ internal class HelpCenterHubController(
                     ),
                 ),
                 buttons = listOf(
-                    button("run_action", text(if (command.opensInventory || command.opensDialog) "action-open-label" else "action-run-label")) { executeCatalog(player, command.id) }
+                    contextButton("run_action", text(if (command.opensInventory || command.opensDialog) "action-open-label" else "action-run-label")) {
+                        executeCatalog(player, command.id, it)
+                    }
                         .let { if (command.opensInventory || command.opensDialog) it else it.closing() },
                 ),
                 exitButton = button("back", text("back-label"), action = returnTo),
@@ -102,7 +105,9 @@ internal class HelpCenterHubController(
                     button("item_recipe", text("item-recipe-label")) { executeInventory(player, command) }
                 }
                 else -> catalog[actionId]?.let { command ->
-                    button("item_$actionId", text("command-label", "label" to command.label)) { executeCatalog(player, actionId) }.let { if (command.opensInventory || command.opensDialog) it else it.closing() }
+                    contextButton("item_$actionId", text("command-label", "label" to command.label)) {
+                        executeCatalog(player, actionId, it)
+                    }.let { if (command.opensInventory || command.opensDialog) it else it.closing() }
                 }
             }
         }
@@ -208,8 +213,8 @@ internal class HelpCenterHubController(
                     ),
                 ) + listOfNotNull(notice?.let { PaperDialogBody(text(it), width = 500) }),
                 buttons = responseButtons + ids.mapNotNull { id -> entries[id]?.let { command ->
-                    button("request_$id", requestLabel(id, command.label)) {
-                        if (id == "privat") openPage(player, HelpCenterPage.PRIVAT) else executeCatalog(player, id)
+                    contextButton("request_$id", requestLabel(id, command.label)) {
+                        if (id == "privat") openPage(player, HelpCenterPage.PRIVAT) else executeCatalog(player, id, it)
                     }.let { if (id == "privat" || command.opensInventory || command.opensDialog) it else it.closing() }
                 } },
                 exitButton = backTo(player, returnTo),
@@ -286,8 +291,8 @@ internal class HelpCenterHubController(
                 buttons = ((if (goal == HelpCenterGoal.TOGETHER) listOf(
                     button("goal_players", text("players-label")) { openPage(player, HelpCenterPage.PLAYERS) },
                 ) else emptyList()) + commands.map { command ->
-                    button("goal_action_${command.id}", text("command-label", "label" to command.label)) {
-                        if (command.id == "privat") openPage(player, HelpCenterPage.PRIVAT) else executeCatalog(player, command.id)
+                    contextButton("goal_action_${command.id}", text("command-label", "label" to command.label)) {
+                        if (command.id == "privat") openPage(player, HelpCenterPage.PRIVAT) else executeCatalog(player, command.id, it)
                     }.let { if (command.id == "privat" || command.opensInventory || command.opensDialog) it else it.closing() }
                 }).ifEmpty { listOf(button("empty_search", text("commands-label")) { openPage(player, HelpCenterPage.COMMANDS) }) },
                 exitButton = button("back", text("back-label")) { openGoals(player, returnTo) },
@@ -317,7 +322,11 @@ internal class HelpCenterHubController(
         button("back", text("back-label")) { openPage(player, page) }
 
     private fun button(id: String, label: Component, tooltip: Component = Component.empty(), action: () -> Unit): PaperDialogButton =
-        PaperDialogButton(PaperDialogActionId.of(id.replace('-', '_')), label, tooltip, width = 230, onClick = { action() })
+        contextButton(id, label, tooltip) { action() }
+
+    private fun contextButton(id: String, label: Component, tooltip: Component = Component.empty(),
+                              action: (PaperDialogClickContext) -> Unit): PaperDialogButton =
+        PaperDialogButton(PaperDialogActionId.of(id.replace('-', '_')), label, tooltip, width = 230, onClick = action)
 
     private fun PaperDialogButton.closing(): PaperDialogButton = copy(closeDialogBeforeAction = true)
 

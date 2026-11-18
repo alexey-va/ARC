@@ -24,14 +24,26 @@ interface ProductUiObservation {
 }
 
 /** ARC-owned sink for bounded UI observations received through ArcTelemetryProvider. */
-internal class ProductUiListener(private val plugin: Plugin, private val product: ProductInterestTelemetry?) :
-    Listener,
-    AutoCloseable,
-    ProductUiObservation {
+internal class ProductUiListener(
+    private val plugin: Plugin,
+    private val product: ProductInterestTelemetry?,
+    private val emitMenu: (ProductMenuEvent) -> Unit = PlayerTelemetryModule::menu,
+) : Listener, AutoCloseable, ProductUiObservation {
     private data class NativeView(val id: String, val inventory: Inventory, val view: ProductUiView)
+    private data class DispatchScope(
+        val player: String,
+        val visit: String,
+        val surface: String,
+        val attemptId: String,
+        val started: Boolean,
+        val historyFooter: Boolean,
+    ) {
+        var backReported = false
+    }
     private val nativeViews = mutableMapOf<UUID, NativeView>()
+    private val dispatches = ArrayDeque<DispatchScope>()
     private val coverage = linkedMapOf<String, Boolean>()
-    private val tracker = ProductUiTracker(PlayerTelemetryModule::menu) { player, _, kind, view, button, duration, at ->
+    private val tracker = ProductUiTracker(emitMenu) { player, _, kind, view, button, duration, at ->
         product?.ui(player, kind, view, button, duration, at)
     }
     private val zMenu = ProductZMenuAdapter(plugin, this)
@@ -56,6 +68,17 @@ internal class ProductUiListener(private val plugin: Plugin, private val product
         val visit = data["visitId"] as? String ?: return
         if (!ProductUiCodec.ID.matches(surface) || !ProductUiCodec.REVISION.matches(revision) ||
             runCatching { UUID.fromString(player); UUID.fromString(visit) }.isFailure) return
+        val phase = data["phase"]
+        val actionId = safeUuid(data["attemptId"])
+        if (phase == "dispatch_start" || phase == "dispatch_end") {
+            if (actionId == null) return
+            val started = data["started"] as? Boolean ?: return
+            val scope = DispatchScope(player, visit, surface, actionId, started, data["historyFooter"] == true)
+            if (phase == "dispatch_start") dispatches.addLast(scope)
+            else if (dispatches.lastOrNull() == scope) dispatches.removeLast()
+            else dispatches.clear()
+            return
+        }
         val rawButtons = data["buttons"] as? Map<*, *> ?: return
         if (rawButtons.size > 128) return
         val buttons = rawButtons.entries.mapNotNull { (rawKey, rawSlot) ->
@@ -87,24 +110,34 @@ internal class ProductUiListener(private val plugin: Plugin, private val product
                 ?.let { put("disabledSlots", it.joinToString(",")) }
         }
         val view = ProductUiView(surface, revision, buttons, details, visibleSlots)
-        val actionId = safeUuid(data["attemptId"])
-        when (data["phase"]) {
-            "open" -> tracker.open(player, visit, view, now)
+        when (phase) {
+            "open" -> observeOpen(player, visit, view, now)
             "render" -> tracker.render(player, visit, view, now)
             "click", "blocked" -> (data["button"] as? String)?.let {
-                tracker.click(player, visit, view, it, data["phase"] == "click", now, actionId)
+                tracker.click(player, visit, view, it, phase == "click", now, actionId)
             }
             "result" -> {
                 val outcome = (data["outcome"] as? String)?.takeIf { it in MENU_OUTCOMES } ?: return
                 if (actionId == null) return
-                PlayerTelemetryModule.menu(ProductMenuEvent(player, visit, surface, "menu.result", now, actionId,
+                emitMenu(ProductMenuEvent(player, visit, surface, "menu.result", now, actionId,
                     details.filterKeys { it == "reason" || it == "target" } + ("outcome" to outcome)))
             }
             "close", "censored" -> {
                 val reason = details["reason"] ?: "unknown"
-                tracker.close(player, visit, now, censored = data["phase"] == "censored" || reason != "user", reason = reason)
+                tracker.close(player, visit, now, censored = phase == "censored" || reason != "user", reason = reason)
             }
         }
+    }
+
+    private fun observeOpen(player: String, visit: String, view: ProductUiView, now: Long) {
+        val dispatch = dispatches.lastOrNull()?.takeIf { it.started && it.player == player }
+        val trigger = view.details["triggerAttemptId"] ?: dispatch?.attemptId
+        val linked = if (trigger == null) view else view.copy(details = view.details + ("triggerAttemptId" to trigger))
+        if (!tracker.open(player, visit, linked, now)) return
+        if (dispatch == null || !dispatch.historyFooter || dispatch.backReported || dispatch.attemptId != trigger) return
+        dispatch.backReported = true
+        emitMenu(ProductMenuEvent(player, dispatch.visit, dispatch.surface, "menu.result", now, trigger,
+            mapOf("outcome" to "succeeded", "reason" to "footer_back", "target" to view.surface)))
     }
 
     @EventHandler fun onPluginEnable(event: PluginEnableEvent) {
@@ -131,7 +164,7 @@ internal class ProductUiListener(private val plugin: Plugin, private val product
         val previous = nativeViews[player.uniqueId]
         val id = previous?.takeIf { it.inventory === inventory }?.id ?: UUID.randomUUID().toString()
         nativeViews[player.uniqueId] = NativeView(id, inventory, view)
-        tracker.open(player.uniqueId.toString(), id, view, System.currentTimeMillis())
+        observeOpen(player.uniqueId.toString(), id, view, System.currentTimeMillis())
     }
     override fun click(player: Player, inventory: Inventory, buttonId: String, accepted: Boolean) {
         val current = nativeViews[player.uniqueId]?.takeIf { it.inventory === inventory } ?: return
@@ -169,6 +202,7 @@ internal class ProductUiListener(private val plugin: Plugin, private val product
         "zmenuAcceptance" to "Physical presses are attempts; zMenu calls its native click observer before requirements. Accepted clicks and results are unsupported",
         "dynamicRows" to "Repeated region items are grouped by semantic region, not by player/item identity")
     fun finishVisits(reason: String) {
+        dispatches.clear()
         tracker.shutdown(System.currentTimeMillis(), reason)
         nativeViews.clear()
     }

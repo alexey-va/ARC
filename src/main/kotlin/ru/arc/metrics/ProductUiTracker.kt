@@ -21,15 +21,20 @@ internal class ProductUiTracker(
         val impressed: MutableSet<String> = linkedSetOf(), var selected: Boolean = false, var frame: Int = 0)
     private val visits = linkedMapOf<String, Visit>()
 
-    fun open(player: String, id: String, view: ProductUiView, now: Long) {
+    /** Returns whether the open produced a new visit and its first view. */
+    fun open(player: String, id: String, view: ProductUiView, now: Long): Boolean {
         val current = visits[player]
-        if (current?.id == id) { render(player, id, view, now); return }
+        if (current?.id == id) {
+            render(player, id, view, now)
+            return false
+        }
         if (current != null) close(player, current.id, now, censored = true, reason = "replaced")
         val visit = Visit(id, view, now)
         visits[player] = visit
         screen(player, visit, now, current?.id)
         record(player, id, ProductUiKind.OPEN, view, "_menu", 0, now)
         impressions(player, visit, view, now)
+        return true
     }
 
     fun render(player: String, id: String, view: ProductUiView, now: Long) {
