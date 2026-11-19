@@ -16,6 +16,8 @@ import ru.arc.integrations.mounts.mountService
 import ru.arc.ARC
 import ru.arc.config.ConfigManager
 import ru.arc.util.TextUtil
+import java.lang.reflect.Method
+import java.util.logging.Level
 
 enum class MenuShortcutAction(val id: String, val page: HelpCenterPage? = null) {
     MAIN("main", HelpCenterPage.ROOT),
@@ -44,6 +46,14 @@ class MenuShortcutController(
         it.javaClass.name == "com.magmaguy.elitemobs.advancedcombat.input.ClassAbilityInputRouter"
     },
 ) : Listener, AutoCloseable {
+    private val firearmSettingsMethod = object : ClassValue<Method?>() {
+        override fun computeValue(type: Class<*>): Method? = try {
+            type.getMethod("tryOpenFirearmSettings", Player::class.java)
+        } catch (_: NoSuchMethodException) {
+            null
+        }
+    }
+
     init {
         plugin.server.pluginManager.registerEvents(this, plugin)
         moveEliteMobsAbilityListenerAfterShortcut()
@@ -77,6 +87,10 @@ class MenuShortcutController(
             return
         }
         if (event.isCancelled) return
+        if (openHeldFirearmSettings(event.player)) {
+            event.isCancelled = true
+            return
+        }
         val action = selection(event.player)
         if (action == MenuShortcutAction.DISABLED) return
         // Cancel before opening a screen: the selected action must never also swap items.
@@ -89,6 +103,18 @@ class MenuShortcutController(
                 "<red>Назначенное действие сейчас недоступно. Выберите другое в настройках меню.",
             ), true,
         ))
+    }
+
+    private fun openHeldFirearmSettings(player: Player): Boolean {
+        // ArcEvents already depends on ARC. Resolve the optional entry on its current plugin instance.
+        val provider = player.server.pluginManager.getPlugin("ArcEvents")?.takeIf { it.isEnabled } ?: return false
+        val open = firearmSettingsMethod.get(provider.javaClass) ?: return false
+        return try {
+            open.invoke(provider, player) == true
+        } catch (failure: ReflectiveOperationException) {
+            provider.logger.log(Level.WARNING, "ArcEvents could not open firearm settings from Shift+F", failure)
+            false
+        }
     }
 
     private fun isClaimBlockShortcut(player: Player): Boolean =

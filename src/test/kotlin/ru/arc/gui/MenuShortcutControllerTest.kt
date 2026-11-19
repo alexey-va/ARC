@@ -10,6 +10,7 @@ import io.mockk.verify
 import org.bukkit.GameMode
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
+import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
@@ -17,12 +18,80 @@ import org.bukkit.event.player.PlayerSwapHandItemsEvent
 import org.bukkit.inventory.ItemStack
 import org.bukkit.metadata.FixedMetadataValue
 import org.bukkit.persistence.PersistentDataType
+import org.bukkit.plugin.PluginDescriptionFile
+import org.bukkit.plugin.java.JavaPlugin
 import org.junit.jupiter.api.Test
+import org.mockbukkit.mockbukkit.MockBukkit
 import ru.arc.landsui.LandsUiModule
 import ru.arc.helpcenter.HelpCenterPage
 import ru.arc.paper.testing.MockBukkitTestRuntime
 
 class MenuShortcutControllerTest {
+    @Test
+    fun `held firearm claims shift F before the personal binding and after protected routes`() {
+        MockBukkitTestRuntime.open().use { paper ->
+            val player = paper.addPlayer("firearm-shortcut")
+            val firearm = ItemStack(Material.CROSSBOW).apply {
+                editMeta { meta ->
+                    meta.persistentDataContainer.set(
+                        NamespacedKey("arcevents", "firearm-fixture"), PersistentDataType.STRING, "fixture",
+                    )
+                }
+            }
+            val arcEvents = MockBukkit.loadWith(
+                FirearmShortcutFixture::class.java,
+                PluginDescriptionFile("ArcEvents", "1.0", FirearmShortcutFixture::class.java.name),
+            ).also { it.firearm = firearm }
+            var insideDungeon = false
+            var personalOpens = 0
+            var dungeonOpens = 0
+            MenuShortcutController(
+                paper.createSimplePlugin("arc-firearm-shortcut"),
+                selection = { MenuShortcutAction.MAIN },
+                openMenu = { _, _ -> personalOpens++; true },
+                inDungeon = { insideDungeon },
+                openDungeonMenu = { dungeonOpens++ },
+            ).use {
+                fun swap(cancelled: Boolean = false) = PlayerSwapHandItemsEvent(
+                    player, player.inventory.itemInOffHand, player.inventory.itemInMainHand,
+                ).also { it.isCancelled = cancelled }.also(paper::callEvent)
+
+                player.inventory.setItemInMainHand(firearm)
+                swap().isCancelled shouldBe false
+                arcEvents.opens shouldBe 0
+
+                player.isSneaking = true
+                swap().isCancelled shouldBe true
+                arcEvents.opens shouldBe 1
+                personalOpens shouldBe 0
+
+                insideDungeon = true
+                swap().isCancelled shouldBe true
+                dungeonOpens shouldBe 1
+                insideDungeon = false
+                val arcBuilder = paper.createSimplePlugin("ArcBuilder")
+                player.setMetadata("arcbuilder-display-editor", FixedMetadataValue(arcBuilder, true))
+                swap().isCancelled shouldBe true
+                player.removeMetadata("arcbuilder-display-editor", arcBuilder)
+                swap(cancelled = true).isCancelled shouldBe true
+                arcEvents.opens shouldBe 1
+                personalOpens shouldBe 0
+
+                player.inventory.setItemInMainHand(ItemStack(Material.CROSSBOW))
+                player.inventory.setItemInOffHand(firearm)
+                swap().isCancelled shouldBe true
+                arcEvents.opens shouldBe 1
+                personalOpens shouldBe 1
+
+                paper.server.pluginManager.disablePlugin(arcEvents)
+                player.inventory.setItemInMainHand(firearm)
+                swap().isCancelled shouldBe true
+                arcEvents.opens shouldBe 1
+                personalOpens shouldBe 2
+            }
+        }
+    }
+
     @Test
     fun `ArcBuilder display editor owns plain and shift F before every ARC route and EliteMobs`() {
         MockBukkitTestRuntime.open().use { paper ->
@@ -330,5 +399,17 @@ class MenuShortcutControllerTest {
                 unmockkObject(LandsUiModule)
             }
         }
+    }
+}
+
+open class FirearmShortcutFixture : JavaPlugin() {
+    lateinit var firearm: ItemStack
+    var opens = 0
+        private set
+
+    fun tryOpenFirearmSettings(player: Player): Boolean {
+        if (player.inventory.itemInMainHand != firearm) return false
+        opens++
+        return true
     }
 }
