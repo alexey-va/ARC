@@ -35,7 +35,7 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
         val loaded = mutableSetOf<Key>()
         val resetGenerations = mutableMapOf<UUID, Long>()
         val resetting = mutableMapOf<UUID, CompletableFuture<Unit>>()
-        val hud = OptionalQuestHud(config::text)
+        val hud = OptionalQuestHud(config::text, config.areas.getValue(OptionalQuestStep.FARM_VISITED))
         val guidance = OptionalQuestGuidance(config)
         lateinit var menu: OptionalQuestDialog
     }
@@ -191,9 +191,15 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
 
     internal fun refreshTracking(player: Player) { runtime?.let { refreshHud(it, player) } }
 
+    internal fun refreshAfterTeleport(player: Player) {
+        val current = runtime ?: return
+        current.tasks.runLater(1L) { refreshHud(current, player) }
+    }
+
     internal fun resume(player: Player) {
         val current = runtime ?: return
         if (!valid(current, player)) return
+        refreshHud(current, player)
         OptionalQuestKind.entries.forEach { kind ->
             request(current, player, kind, { current.store.load(player.uniqueId, kind) }) { progress ->
                 if (progress != null) observeLocation(current, player)
@@ -289,7 +295,7 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
             val before = current.players[key] ?: return@forEach
             if (before.completed || key in current.locationPending) return@forEach
             val steps = current.config.areas.filter { (step, area) -> step.kind == kind && step !in before.steps &&
-                area.contains(player.world.name, location.x, location.y, location.z) }.keys
+                area.contains(location) }.keys
             if (steps.isEmpty()) return@forEach
             current.locationPending += key
             val pending = enqueue(current, key) {

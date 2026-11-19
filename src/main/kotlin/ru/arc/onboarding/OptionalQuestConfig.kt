@@ -1,6 +1,7 @@
 package ru.arc.onboarding
 
 import net.kyori.adventure.text.Component
+import org.bukkit.Location
 import ru.arc.config.Config
 import java.util.Locale
 
@@ -21,6 +22,9 @@ internal data class OptionalQuestArea(
 
     fun contains(worldName: String, x: Double, y: Double, z: Double): Boolean =
         worldName.trim().lowercase(Locale.ROOT) == world && x in minX..maxX && y in minY..maxY && z in minZ..maxZ
+
+    fun contains(location: Location): Boolean =
+        location.world?.let { contains(it.name, location.x, location.y, location.z) } == true
 }
 
 internal class OptionalQuestConfig(private val source: Config) {

@@ -36,6 +36,7 @@ internal class OnboardingPlayerListener : Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onTeleport(event: PlayerTeleportEvent) {
         OnboardingService.refreshAfterTeleport(event.player)
+        OptionalOnboardingService.refreshAfterTeleport(event.player)
     }
 }
 

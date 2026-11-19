@@ -188,21 +188,25 @@ class OnboardingHudTest : FreeSpec({
 
     "world and successful teleport events use the existing guide refresh paths" {
         val player = hudPlayer()
-        mockkObject(OnboardingService)
+        mockkObject(OnboardingService, OptionalOnboardingService)
         try {
             every { OnboardingService.resume(player) } returns Unit
             every { OnboardingService.refreshAfterTeleport(player) } returns Unit
+            every { OptionalOnboardingService.resume(player) } returns Unit
+            every { OptionalOnboardingService.refreshAfterTeleport(player) } returns Unit
             val listener = OnboardingPlayerListener()
             listener.onWorldChanged(mockk<PlayerChangedWorldEvent> { every { this@mockk.player } returns player })
             listener.onTeleport(mockk<PlayerTeleportEvent> { every { this@mockk.player } returns player })
             verify(exactly = 1) { OnboardingService.resume(player) }
             verify(exactly = 1) { OnboardingService.refreshAfterTeleport(player) }
+            verify(exactly = 1) { OptionalOnboardingService.resume(player) }
+            verify(exactly = 1) { OptionalOnboardingService.refreshAfterTeleport(player) }
             val handler = OnboardingPlayerListener::class.java.getDeclaredMethod("onTeleport", PlayerTeleportEvent::class.java)
                 .getAnnotation(EventHandler::class.java)
             handler.priority shouldBe EventPriority.MONITOR
             handler.ignoreCancelled shouldBe true
         } finally {
-            unmockkObject(OnboardingService)
+            unmockkObject(OnboardingService, OptionalOnboardingService)
         }
     }
 })
@@ -223,6 +227,7 @@ private fun hudPlayer() = mockk<Player>(relaxed = true) {
 
 private fun hudItem(material: Material, bookId: String? = null, claimOwner: String? = null, claimRadius: Int? = null, bookSchema: Int? = 6): ItemStack {
     val data = mockk<PersistentDataContainer>()
+    every { data.get(NamespacedKey("arc", "claim_block"), PersistentDataType.BYTE) } returns null
     every { data.get(NamespacedKey("arc", "build_book_id"), PersistentDataType.STRING) } returns bookId
     every { data.get(NamespacedKey("arc", "build_book_schema"), PersistentDataType.INTEGER) } returns bookSchema
     every { data.get(NamespacedKey("lands", "type"), PersistentDataType.STRING) } returns if (claimRadius != null) "CLAIM_BLOCK" else null

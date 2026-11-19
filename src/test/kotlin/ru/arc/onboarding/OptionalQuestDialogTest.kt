@@ -13,6 +13,8 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import org.bukkit.Location
+import org.bukkit.World
 import org.bukkit.entity.Player
 import ru.arc.paper.menu.DialogTextLayout
 import ru.arc.core.LifecycleTaskScope
@@ -244,9 +246,12 @@ class OptionalQuestDialogTest : FreeSpec({
     }
 
     "the HUD reuses its bar and cleans it up when the quest ends or the player dies" {
+        val farm = OptionalQuestArea("sp11", 109.0, -64.0, 363.0, 298.0, 139.0, 575.0)
+        val world = mockk<World> { every { name } returns farm.world }
+        every { player.location } returns Location(world, 200.0, 70.0, 400.0)
         val shownBars = mutableListOf<BossBar>()
         every { player.showBossBar(capture(shownBars)) } returns Unit
-        OptionalQuestHud(::text).use { hud ->
+        OptionalQuestHud(::text, farm).use { hud ->
             hud.refresh(player, view(OptionalQuestKind.FARM).copy(accepted = false))
             shownBars.size shouldBe 0
             hud.refresh(player, view(OptionalQuestKind.FARM))

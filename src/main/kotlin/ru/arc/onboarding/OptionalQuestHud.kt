@@ -11,20 +11,22 @@ import java.util.UUID
 /** One explicitly tracked story; holograms accompany its ordinary progress bar. */
 internal class OptionalQuestHud(
     private val text: (String) -> Component,
+    private val farmArea: OptionalQuestArea,
     private val hologram: QuestHologramHud = QuestHologramHud(QuestGuidanceHudService.Source.OPTIONAL),
 ) : AutoCloseable {
     private val bars = mutableMapOf<UUID, Pair<Player, BossBar>>()
 
     fun refresh(player: Player, view: OptionalQuestView?) {
         val instruction = view?.let(::optionalQuestInstruction)
-        if (view == null || !player.isOnline || player.isDead || instruction == null) {
+        if (view == null || !player.isOnline || player.isDead || instruction == null ||
+            (optionalQuestNextStep(view) == OptionalQuestStep.FARM_SHIFT_COMPLETE && !farmArea.contains(player.location))) {
             clear(player.uniqueId)
             return
         }
+        if (bars[player.uniqueId]?.first?.let { it !== player } == true) clear(player.uniqueId)
         val title = text("goal-$instruction").colorIfAbsent(BODY).decoration(TextDecoration.ITALIC, false)
         val hint = text("hint-$instruction").colorIfAbsent(BODY).decoration(TextDecoration.ITALIC, false)
         hologram.refresh(player, title.append(Component.newline()).append(hint))
-        if (bars[player.uniqueId]?.first?.let { it !== player } == true) clear(player.uniqueId)
         val bar = bars.getOrPut(player.uniqueId) {
             val created = BossBar.bossBar(title, 1f, BossBar.Color.GREEN, BossBar.Overlay.PROGRESS)
             player.showBossBar(created)
