@@ -16,6 +16,7 @@ from PIL import Image, __version__ as PILLOW_VERSION
 
 
 FONT_PATHS = ("assets/minecraft/font/default.json", "assets/minecraft/font/uniform.json")
+WARHAMMER_TEXTURES = "assets/arc_warhammer/textures/"
 MAX_SHEET_SIZE = 2048
 # Largest supported RGBA16 cell, including a bound for Adam7 filter bytes.
 MAX_PNG_DECODE_BYTES = 2048 * 2048 * 8 + 2048 * 8
@@ -229,8 +230,41 @@ def _make_sheet(glyphs: list[_Glyph], files: dict[str, bytes]) -> tuple[dict[str
     return provider, path, data
 
 
-def optimize_fonts(files: dict[str, bytes]) -> tuple[dict[str, bytes], dict[str, Any]]:
-    """Group the effective default/uniform fonts, preserving all original assets.
+def _remove_unused_warhammer_textures(files: dict[str, bytes], copied: set[str]) -> int:
+    candidates = {path for path in copied if path + ".mcmeta" not in files}
+    if not candidates:
+        return 0
+
+    def retain_references(value: Any) -> None:
+        if isinstance(value, str):
+            if value.startswith("arc_warhammer:"):
+                resource = value.removeprefix("arc_warhammer:").removeprefix("textures/").removesuffix(".png")
+                candidates.discard(WARHAMMER_TEXTURES + resource + ".png")
+            else:
+                candidates.discard(value)
+        elif isinstance(value, list):
+            for item in value:
+                retain_references(item)
+        elif isinstance(value, dict):
+            for key, item in value.items():
+                retain_references(key)
+                retain_references(item)
+
+    for path, data in files.items():
+        if path.endswith((".json", ".mcmeta")):
+            try:
+                retain_references(json.loads(data, object_pairs_hook=_unique_object))
+            except (ValueError, RecursionError):
+                return 0
+    for path in candidates:
+        del files[path]
+    return len(candidates)
+
+
+def optimize_fonts(
+    files: dict[str, bytes], *, prune_warhammer_sources: bool = False,
+) -> tuple[dict[str, bytes], dict[str, Any]]:
+    """Group the effective default/uniform fonts after atlas expansion.
 
     Unknown providers, absent textures and unproven encodings are run barriers.
     A repeated codepoint also ends the run, preserving provider precedence.
@@ -246,6 +280,7 @@ def optimize_fonts(files: dict[str, bytes]) -> tuple[dict[str, bytes], dict[str,
     }
     reasons: Counter[str] = Counter()
     bitmaps: dict[str, tuple[int, int] | str] = {}
+    copied_stickers: set[str] = set()
     for font_path in FONT_PATHS:
         if font_path not in files:
             continue
@@ -281,6 +316,11 @@ def optimize_fonts(files: dict[str, bytes]) -> tuple[dict[str, bytes], dict[str,
                     result[path] = data
                     providers.append(provider)
                     stats["fontGroupsMerged"] += 1
+                    if prune_warhammer_sources:
+                        copied_stickers.update(
+                            glyph.texture for glyph in chunk
+                            if glyph.texture.startswith(WARHAMMER_TEXTURES + "stickers/")
+                        )
             run.clear()
             seen.clear()
 
@@ -306,4 +346,5 @@ def optimize_fonts(files: dict[str, bytes]) -> tuple[dict[str, bytes], dict[str,
             result[font_path] = (json.dumps(document, separators=(",", ":")) + "\n").encode("utf-8")
             stats["fontsOptimized"] += 1
     stats["fontSkipReasons"] = dict(sorted(reasons.items()))
+    stats["warhammerOriginalTexturesRemoved"] = _remove_unused_warhammer_textures(result, copied_stickers)
     return result, stats

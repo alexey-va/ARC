@@ -568,7 +568,7 @@ def _variant_files(
         totals["atlasesOptimized"] += int(rewritten != data)
     # Expand atlas directories first so generated font sheets cannot enter them.
     try:
-        effective, font_stats = optimize_fonts(effective)
+        effective, font_stats = optimize_fonts(effective, prune_warhammer_sources=not totals["atlasesSkipped"])
     except FontOptimizationError as exc:
         raise PackError(f"font optimization failed: {exc}") from exc
     metadata_copy = json.loads(json.dumps(metadata))

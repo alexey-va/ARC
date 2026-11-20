@@ -69,10 +69,12 @@ The optimizer copies each complete original RGBA cell, including transparent
 margins and hidden RGB, without resampling, alpha blending or drawing. It keeps
 codepoints, cell dimensions, height, ascent, filters and provider precedence.
 References, space providers, external textures and unsupported definitions remain
-unchanged barriers. Original PNG resources are retained. Generated sheets are
-reused between identical fonts; no extra reference-font or FontSet is introduced.
-The unknown-client universal archive retains its original font definitions and
-compatibility overlays.
+unchanged barriers. Generated sheets are reused between identical fonts.
+For catalogued clients, the publisher omits a Warhammer sticker PNG once its
+cell has been copied into a sheet, all atlas directories have been resolved,
+and no remaining resource declaration or texture metadata needs the original
+path. It records the count in `warhammerOriginalTexturesRemoved`.
+The universal archive keeps its original font definitions, PNGs and overlays.
 
 Pillow is the image-decoder dependency, declared in the bundled
 `resourcepack-requirements.txt` (`>=9.0.1,<13`, tested with production 9.0.1 and

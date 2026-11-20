@@ -318,6 +318,61 @@ class ResourcePackVariantsTest(unittest.TestCase):
         self.assertEqual(manifest["packs"][1]["stats"]["fontProvidersBefore"], 2)
         self.assertEqual(manifest["packs"][1]["stats"]["fontProvidersAfter"], 1)
 
+    def test_prunes_only_replaced_unreferenced_warhammer_stickers_from_variants(self):
+        cell = io.BytesIO()
+        Image.new("RGBA", (3, 2), (12, 34, 56, 0)).save(cell, format="PNG")
+        textures = "assets/arc_warhammer/textures/stickers/"
+        stickers = ["merged", "other_font", "atlas", "model", "with_metadata"]
+        resources = [f"arc_warhammer:stickers/{name}.png" for name in stickers] + ["demo:font/other.png"]
+        providers = [
+            {"type": "bitmap", "file": resource, "height": 48, "ascent": 8, "chars": [character]}
+            for resource, character in zip(resources, "abcdef", strict=True)
+        ]
+        font = json.dumps({"providers": providers}).encode()
+        original_images = {textures + name + ".png": cell.getvalue() for name in stickers + ["untouched"]}
+        original_images["assets/demo/textures/font/other.png"] = cell.getvalue()
+        files = {
+            "pack.mcmeta": json.dumps(pack_metadata()).encode(),
+            "assets/minecraft/font/default.json": font,
+            "assets/minecraft/font/uniform.json": font,
+            "assets/demo/font/secondary.json": json.dumps({"providers": [providers[1]]}).encode(),
+            "assets/demo/atlases/items.json": make_atlas([
+                {"type": "single", "resource": "arc_warhammer:stickers/atlas", "sprite": "demo:sticker"},
+            ]),
+            "assets/demo/models/item/demo.json": b'{"textures":{"layer0":"arc_warhammer:stickers/model"}}',
+            textures + "with_metadata.png.mcmeta": b'{"texture":{"blur":true}}',
+            **original_images,
+        }
+        self.write_catalog()
+
+        for case, extra_file in (
+            ("resolved", {}),
+            ("unknown_atlas_source", {"assets/demo/atlases/unknown.json": make_atlas([{"type": "future"}])}),
+            ("invalid_consumer_json", {"assets/demo/models/item/malformed.json": b"{"}),
+        ):
+            with self.subTest(case=case):
+                write_pack(self.input_zip, files | extra_file)
+                manifest = self.build(case)
+                with zipfile.ZipFile(self.root / case / manifest["packs"][0]["file"]) as archive:
+                    self.assertEqual(archive.read("assets/minecraft/font/default.json"), font)
+                    for path, data in original_images.items():
+                        self.assertEqual(archive.read(path), data)
+                with zipfile.ZipFile(self.root / case / manifest["packs"][1]["file"]) as archive:
+                    names = set(archive.namelist())
+                    removed = {textures + "merged.png"} if case == "resolved" else set()
+                    self.assertEqual(set(original_images) - names, removed)
+                    self.assertEqual(manifest["packs"][1]["stats"]["warhammerOriginalTexturesRemoved"], len(removed))
+                    for path in set(original_images) - removed:
+                        self.assertEqual(archive.read(path), original_images[path])
+                    default = archive.read("assets/minecraft/font/default.json")
+                    self.assertEqual(archive.read("assets/minecraft/font/uniform.json"), default)
+                    provider, = json.loads(default)["providers"]
+                    self.assertEqual((provider["chars"], provider["height"], provider["ascent"]), (["abcdef"], 48, 8))
+                    sheet = "assets/arc/textures/" + provider["file"].removeprefix("arc:")
+                    with Image.open(io.BytesIO(archive.read(sheet))) as image:
+                        self.assertEqual(image.size, (18, 2))
+                        self.assertEqual(image.tobytes(), bytes([12, 34, 56, 0]) * 36)
+
     def test_missing_single_resource_does_not_replace_an_existing_sprite(self):
         textures = {"demo:items/present"}
         sources = [
