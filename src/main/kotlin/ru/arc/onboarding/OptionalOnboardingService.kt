@@ -59,15 +59,24 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
         if (Bukkit.getPluginManager().isPluginEnabled("Citizens")) {
             config.npcIds.filterValues { it >= 0 }.forEach { (kind, npcId) ->
                 current.npcs[kind] = OnboardingQuestNpc(ARC.instance, npcId,
-                    visible = { it.uniqueId !in current.resetting && Key(it.uniqueId, kind) in current.loaded &&
-                        current.players[Key(it.uniqueId, kind)] == null },
+                    visible = { player ->
+                        val key = Key(player.uniqueId, kind)
+                        val progress = current.players[key]
+                        player.uniqueId !in current.resetting && key in current.loaded &&
+                            (progress == null || progress.expired(System.currentTimeMillis()))
+                    },
                     eligible = { runtime === current }, open = { open(it, kind) }).also { it.start() }
             }
         }
-        current.tasks.runTimer(20L, 20L) { Bukkit.getOnlinePlayers().forEach {
-            observeLocation(current, it)
-            refreshHud(current, it)
-        } }
+        var lastTickMillis = System.currentTimeMillis()
+        current.tasks.runTimer(20L, 20L) {
+            val now = System.currentTimeMillis()
+            Bukkit.getOnlinePlayers().forEach { player ->
+                observeLocation(current, player, now, lastTickMillis)
+                refreshHud(current, player)
+            }
+            lastTickMillis = now
+        }
         Bukkit.getOnlinePlayers().forEach(::resume)
     }
 
@@ -159,9 +168,9 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
         val current = runtime ?: return null
         if (player.uniqueId in current.resetting || Key(player.uniqueId, kind) !in current.loaded) return null
         val progress = current.players[Key(player.uniqueId, kind)]
-        return OptionalQuestView(kind, progress != null, progress?.completed == true, progress?.steps.orEmpty(),
-            current.trials[player.uniqueId]?.toMap().orEmpty(),
-            if (kind == OptionalQuestKind.ADVENTURE && progress?.completed == false)
+        val view = OptionalQuestView.from(kind, progress, System.currentTimeMillis())
+        return view.copy(trialStates = current.trials[player.uniqueId]?.toMap().orEmpty(),
+            primisStage = if (kind == OptionalQuestKind.ADVENTURE && view.accepted && !view.completed)
                 Bukkit.getServicesManager().load(ru.ruscrafting.onboarding.api.PrimisQuestGuidanceService::class.java)?.stage(player.uniqueId)
                     ?: ru.ruscrafting.onboarding.api.PrimisQuestGuidanceService.Stage.UNAVAILABLE
             else ru.ruscrafting.onboarding.api.PrimisQuestGuidanceService.Stage.UNAVAILABLE)
@@ -172,7 +181,10 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
     internal fun activeView(player: Player): OptionalQuestView? {
         val current = runtime ?: return null
         if (player.uniqueId in current.resetting) return null
-        val active = OptionalQuestKind.entries.filter { kind -> current.players[Key(player.uniqueId, kind)]?.completed == false }
+        val now = System.currentTimeMillis()
+        val active = OptionalQuestKind.entries.filter { kind ->
+            current.players[Key(player.uniqueId, kind)]?.let { !it.completed && !it.expired(now) } == true
+        }
         val kind = active.firstOrNull { StoryQuestJournal.isTracked(player, it.id) } ?: return null
         return view(player, kind)
     }
@@ -253,7 +265,7 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
         val current = runtime ?: return
         if (!valid(current, player)) return
         val expectedGeneration = generation(current, player.uniqueId)
-        val progress = current.players[Key(player.uniqueId, kind)]
+        val progress = current.players[Key(player.uniqueId, kind)]?.takeUnless { it.expired(System.currentTimeMillis()) }
         when (action) {
             OptionalQuestAction.GUILD -> if (kind == OptionalQuestKind.ADVENTURE) command(player, "ag")
             OptionalQuestAction.PRIMIS -> if (kind == OptionalQuestKind.ADVENTURE && progress != null && OptionalQuestStep.GUILD_VISITED in progress.steps)
@@ -286,13 +298,20 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
 
     private fun command(player: Player, command: String) { ArcMenus.closeDialog(player); player.performCommand(command) }
 
-    private fun observeLocation(current: Runtime, player: Player) {
+    private fun observeLocation(current: Runtime, player: Player, now: Long = System.currentTimeMillis(), previousTick: Long = now) {
         if (!valid(current, player)) return
         val expectedGeneration = generation(current, player.uniqueId)
         val location = player.location
         OptionalQuestKind.entries.forEach { kind ->
             val key = Key(player.uniqueId, kind)
             val before = current.players[key] ?: return@forEach
+            if (before.expired(now)) {
+                if (requireNotNull(before.expiresAtMillis) > previousTick) {
+                    current.npcs[kind]?.refresh(player)
+                    current.menu.refreshExpired(player, kind)
+                }
+                return@forEach
+            }
             if (before.completed || key in current.locationPending) return@forEach
             val steps = current.config.areas.filter { (step, area) -> step.kind == kind && step !in before.steps &&
                 area.contains(location) }.keys
@@ -314,7 +333,7 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
     private fun reconcileTrials(current: Runtime, player: Player) {
         if (!valid(current, player)) return
         val key = Key(player.uniqueId, OptionalQuestKind.CASINO)
-        val runId = current.players[key]?.runId ?: return
+        val runId = current.players[key]?.takeUnless { it.completed || it.expired(System.currentTimeMillis()) }?.runId ?: return
         val expectedGeneration = generation(current, player.uniqueId)
         val provider = Bukkit.getServicesManager().load(CasinoIntroService::class.java) ?: return
         CasinoIntroService.Game.entries.forEach { game ->
@@ -379,8 +398,13 @@ object OptionalOnboardingService : OptionalOnboardingProgressService {
         // Progress is append-only: an earlier read callback may never hide a later accepted step.
         if (updated != null) {
             val before = current.players[key]
-            current.players[key] = if (before?.runId == updated.runId)
-                OptionalQuestProgress.create(updated.kind, updated.runId, before.steps + updated.steps) else updated
+            val now = System.currentTimeMillis()
+            if (before?.runId == updated.runId) {
+                current.players[key] = OptionalQuestProgress.create(updated.kind, updated.runId, before.steps + updated.steps,
+                    updated.acceptedAtMillis ?: before.acceptedAtMillis)
+            } else if (before == null || !updated.expired(now) || before.expired(now)) {
+                current.players[key] = updated
+            }
         }
         current.npcs[key.kind]?.refresh(player)
         refreshHud(current, player)

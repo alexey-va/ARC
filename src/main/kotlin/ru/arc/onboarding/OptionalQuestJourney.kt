@@ -3,6 +3,9 @@ package ru.arc.onboarding
 import ru.ruscrafting.onboarding.api.CasinoIntroService
 import java.util.Collections
 import java.util.UUID
+import java.time.Duration
+import kotlin.time.Instant
+import kotlin.uuid.Uuid
 
 internal enum class OptionalQuestKind(val id: String) {
     ADVENTURE("adventure"), CASINO("casino"), FARM("farm");
@@ -39,8 +42,11 @@ internal data class OptionalQuestProgress private constructor(
     val kind: OptionalQuestKind,
     val runId: String,
     val steps: Set<OptionalQuestStep>,
+    val acceptedAtMillis: Long?,
 ) {
     val completed: Boolean get() = steps.containsAll(kind.steps)
+    val expiresAtMillis: Long? get() = acceptedAtMillis?.plus(TIME_LIMIT_MILLIS)
+    fun expired(nowMillis: Long): Boolean = !completed && expiresAtMillis?.let { nowMillis >= it } == true
 
     fun observe(step: OptionalQuestStep): OptionalQuestProgress {
         require(step.kind == kind) { "Optional quest step belongs to another quest" }
@@ -51,18 +57,26 @@ internal data class OptionalQuestProgress private constructor(
             OptionalQuestStep.FARM_SHIFT_COMPLETE -> setOf(OptionalQuestStep.FARM_VISITED, step)
             else -> setOf(step)
         }
-        return create(kind, runId, steps + additions)
+        return create(kind, runId, steps + additions, acceptedAtMillis)
     }
 
     companion object {
-        fun accepted(kind: OptionalQuestKind): OptionalQuestProgress = create(kind, UUID.randomUUID().toString(), emptySet())
+        private val TIME_LIMIT_MILLIS = Duration.ofDays(1).toMillis()
 
-        fun create(kind: OptionalQuestKind, runId: String, steps: Set<OptionalQuestStep>): OptionalQuestProgress {
-            require(UUID.fromString(runId).toString() == runId) { "Invalid optional quest identity" }
+        // The v1 reader accepts a UUID but rejects additional fields. UUIDv7 keeps its creation time on every node.
+        @OptIn(kotlin.uuid.ExperimentalUuidApi::class, kotlin.time.ExperimentalTime::class)
+        fun accepted(kind: OptionalQuestKind, nowMillis: Long): OptionalQuestProgress =
+            create(kind, Uuid.generateV7NonMonotonicAt(Instant.fromEpochMilliseconds(nowMillis)).toString(), emptySet())
+
+        fun create(kind: OptionalQuestKind, runId: String, steps: Set<OptionalQuestStep>, legacyStart: Long? = null): OptionalQuestProgress {
+            val uuid = UUID.fromString(runId)
+            require(uuid.toString() == runId) { "Invalid optional quest identity" }
             require(steps.all { it.kind == kind }) { "Optional quest contains a foreign step" }
             require(OptionalQuestStep.PRIMIS_INTRO_COMPLETE !in steps || OptionalQuestStep.PRIMIS_VISITED in steps)
             require(OptionalQuestStep.FARM_SHIFT_COMPLETE !in steps || OptionalQuestStep.FARM_VISITED in steps)
-            return OptionalQuestProgress(kind, runId, Collections.unmodifiableSet(LinkedHashSet(steps)))
+            val acceptedAt = if (uuid.version() == 7) uuid.mostSignificantBits ushr 16 else legacyStart
+            require(acceptedAt == null || acceptedAt in 0..0xffff_ffff_ffffL) { "Invalid optional quest acceptance time" }
+            return OptionalQuestProgress(kind, runId, Collections.unmodifiableSet(LinkedHashSet(steps)), acceptedAt)
         }
     }
 }
@@ -76,4 +90,15 @@ internal data class OptionalQuestView(
     val steps: Set<OptionalQuestStep>,
     val trialStates: Map<CasinoIntroService.Game, CasinoIntroService.State> = emptyMap(),
     val primisStage: ru.ruscrafting.onboarding.api.PrimisQuestGuidanceService.Stage = ru.ruscrafting.onboarding.api.PrimisQuestGuidanceService.Stage.UNAVAILABLE,
-)
+    val expiresAtMillis: Long? = null,
+    val expired: Boolean = false,
+) {
+    companion object {
+        fun from(kind: OptionalQuestKind, progress: OptionalQuestProgress?, nowMillis: Long): OptionalQuestView {
+            val expired = progress?.expired(nowMillis) == true
+            val visible = progress?.takeUnless { expired }
+            return OptionalQuestView(kind, visible != null, visible?.completed == true, visible?.steps.orEmpty(),
+                expiresAtMillis = visible?.expiresAtMillis, expired = expired)
+        }
+    }
+}

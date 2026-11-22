@@ -15,6 +15,9 @@ import ru.arc.paper.menu.PaperDialogButton
 import ru.arc.paper.menu.PaperDialogScreen
 import ru.ruscrafting.onboarding.api.CasinoIntroService
 import ru.ruscrafting.onboarding.api.PrimisQuestGuidanceService
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
@@ -34,14 +37,24 @@ internal class OptionalQuestDialog(
     private val tasks: LifecycleTaskScope = LifecycleTaskScope(),
 ) : AutoCloseable {
     private val pending = mutableMapOf<UUID, Pair<OptionalQuestKind, Long>>()
+    private val activeScreens = mutableMapOf<UUID, Pair<OptionalQuestKind, Long>>()
     private var sequence = 0L
 
     fun open(player: Player, kind: OptionalQuestKind, notice: String? = null) {
         forget(player.uniqueId)
-        showDialog(player, screen(kind, view(player, kind), notice, isTracked(player, kind.id)), { open(player, kind) }, {})
+        val snapshot = view(player, kind)
+        val visit = kind to ++sequence
+        if (snapshot?.accepted == true && !snapshot.completed) activeScreens[player.uniqueId] = visit
+        showDialog(player, screen(kind, snapshot, notice, isTracked(player, kind.id)), { open(player, kind) },
+            { activeScreens.remove(player.uniqueId, visit) })
+    }
+
+    fun refreshExpired(player: Player, kind: OptionalQuestKind) {
+        if (activeScreens[player.uniqueId]?.first == kind) open(player, kind)
     }
 
     fun beginPending(player: Player, kind: OptionalQuestKind): Long {
+        activeScreens.remove(player.uniqueId)
         val visit = ++sequence
         pending[player.uniqueId] = kind to visit
         showDialog(player, screen(kind, null).copy(body = listOf(panel(copy("pending")))),
@@ -57,8 +70,8 @@ internal class OptionalQuestDialog(
         if (isCurrent(player, kind, visit)) open(player, kind, notice)
     }
 
-    fun forget(playerId: UUID) { pending.remove(playerId) }
-    override fun close() { pending.clear(); tasks.close() }
+    fun forget(playerId: UUID) { pending.remove(playerId); activeScreens.remove(playerId) }
+    override fun close() { pending.clear(); activeScreens.clear(); tasks.close() }
 
     internal fun screen(kind: OptionalQuestKind, snapshot: OptionalQuestView?, notice: String? = null, tracked: Boolean = false): PaperDialogScreen {
         val current = snapshot?.takeIf { it.kind == kind }
@@ -78,7 +91,7 @@ internal class OptionalQuestDialog(
 
     private fun body(kind: OptionalQuestKind, snapshot: OptionalQuestView?): List<PaperDialogBody> = buildList {
         val instruction = snapshot?.let(::optionalQuestInstruction)
-        add(panel(when {
+        val description = when {
             snapshot == null -> copy("unavailable")
             snapshot.completed -> copy("complete-${kind.id}")
             !snapshot.accepted -> copy("offer-${kind.id}")
@@ -87,7 +100,16 @@ internal class OptionalQuestDialog(
                 .append(copy("hint-$instruction"))
                 .append(Component.newline()).append(Component.newline())
                 .append(copy("progress")).append(Component.text(" ${snapshot.steps.count { it.kind == kind }} / ${kind.steps.size}", BODY))
-        }))
+        }
+        val deadline = when {
+            snapshot == null || snapshot.completed -> null
+            !snapshot.accepted -> copy("time-limit")
+            else -> snapshot.expiresAtMillis?.let {
+                copy("deadline").append(Component.text(" ${DEADLINE_FORMAT.format(Instant.ofEpochMilli(it))} МСК", BODY))
+            }
+        }
+        add(panel(listOfNotNull(if (snapshot?.expired == true) copy("expired") else null, description, deadline)
+            .reduce { previous, line -> previous.append(Component.newline()).append(line) }))
         if (kind == OptionalQuestKind.CASINO && snapshot != null && !snapshot.completed &&
             (!snapshot.accepted || optionalQuestNextStep(snapshot)?.trialGame() != null)) {
             add(panel(copy("trial-rules")))
@@ -107,7 +129,7 @@ internal class OptionalQuestDialog(
     private fun buttons(kind: OptionalQuestKind, snapshot: OptionalQuestView?, tracked: Boolean): List<PaperDialogButton> = buildList {
         if (snapshot == null) return@buildList
         if (!snapshot.accepted && !snapshot.completed) add(PaperDialogButton(
-            id = PaperDialogActionId.of("accept"), label = copy("accept"), width = WIDTH,
+            id = PaperDialogActionId.of("accept"), label = copy(if (snapshot.expired) "retake" else "accept"), width = WIDTH,
             onClick = { context ->
                 val current = view(context.player, kind)
                 if (current?.kind == kind && !current.accepted && !current.completed) accept(context.player, kind)
@@ -153,6 +175,7 @@ internal class OptionalQuestDialog(
     companion object {
         private const val WIDTH = 270
         private val BODY = TextColor.color(0xE8DFD2)
+        private val DEADLINE_FORMAT = DateTimeFormatter.ofPattern("dd.MM, HH:mm").withZone(ZoneId.of("Europe/Moscow"))
 
         internal val DEFAULT_TEXT = linkedMapOf(
             "title-adventure" to "<#c4abff>Первое приключение",
@@ -177,6 +200,10 @@ internal class OptionalQuestDialog(
             "untrack-tip" to "<#e8dfd2>Скрыть этот сюжет с табло и боссбара.",
             "tracking-failed" to "Не удалось сохранить отслеживание. Попробуйте ещё раз.",
             "accept" to "<#9bd48d>Начать поручение",
+            "retake" to "<#9bd48d>Начать заново",
+            "time-limit" to "<#e8dfd2>На выполнение — 24 часа с момента принятия.",
+            "deadline" to "<#e8dfd2>Срок до",
+            "expired" to "<#ffb277>Срок предыдущей попытки истёк.",
             "close" to "<white>Закрыть",
             "action-guild" to "<#92bed8>В гильдию",
             "action-primis" to "<#92bed8>На остров Примис",
@@ -230,7 +257,7 @@ internal class OptionalQuestDialog(
             "goal-farm-visited" to "<#77ee94>Побывайте на ферме",
             "hint-farm-visited" to "<#e8dfd2>Пройдите в подсвеченный портал фермы",
             "goal-farm-shift-complete" to "<#77ee94>Завершите первую смену",
-            "hint-farm-shift-complete" to "<#e8dfd2>Работайте до конца смены",
+            "hint-farm-shift-complete" to "<#e8dfd2>На спавне войдите в портал «Ферма»",
         )
     }
 }

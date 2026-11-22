@@ -16,7 +16,11 @@ import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
 /** Independent, network-wide opt-in records. Reset deletes only this player's three quest fields. */
-internal class OptionalQuestStore(private val redis: RedisOperations, gson: Gson = Common.gson) {
+internal class OptionalQuestStore(
+    private val redis: RedisOperations,
+    gson: Gson = Common.gson,
+    private val clockMillis: () -> Long = System::currentTimeMillis,
+) {
     private val codec = codec(gson)
     private val updater = RedisHashUpdater(redis, HASH_KEY, codec)
 
@@ -24,10 +28,33 @@ internal class OptionalQuestStore(private val redis: RedisOperations, gson: Gson
         redis.loadMapEntries(HASH_KEY, key(playerId, kind)).thenApply { values ->
             require(values.size == 1)
             values.single()?.let { codec.decode(it).toProgress().also { progress -> require(progress.kind == kind) } }
-        }
+        }.thenCompose(::withLegacyStart)
 
     fun accept(playerId: UUID, kind: OptionalQuestKind): CompletableFuture<OptionalQuestProgress> =
-        update(playerId, kind) { it ?: OptionalQuestProgress.accepted(kind) }.thenApply(::requireNotNull)
+        load(playerId, kind).thenCompose { before ->
+            if (before != null && !before.expired(clockMillis())) return@thenCompose CompletableFuture.completedFuture(before)
+            update(playerId, kind) { current ->
+                if (current == null || current.runId == before?.runId && !current.completed)
+                    OptionalQuestProgress.accepted(kind, clockMillis())
+                else current
+            }.thenCompose(::withLegacyStart).thenApply(::requireNotNull)
+        }
+
+    // Pre-deadline rows have random UUIDs and no dates. Give an unfinished legacy run one
+    // durable grace period without replacing its ID or changing the strict v1 record.
+    private fun withLegacyStart(progress: OptionalQuestProgress?): CompletableFuture<OptionalQuestProgress?> {
+        if (progress == null || progress.completed || progress.acceptedAtMillis != null)
+            return CompletableFuture.completedFuture(progress)
+        val run = progress.runId
+        fun read() = redis.loadMapEntries(LEGACY_STARTS, run).thenApply { it.single()?.toLong() }
+        return read().thenCompose { stored ->
+            if (stored != null) return@thenCompose CompletableFuture.completedFuture(stored)
+            val now = clockMillis()
+            redis.compareAndSetMapEntry(LEGACY_STARTS, run, null, now.toString()).thenCompose { won ->
+                if (won) CompletableFuture.completedFuture(now) else read().thenApply(::requireNotNull)
+            }
+        }.thenApply { OptionalQuestProgress.create(progress.kind, run, progress.steps, it) }
+    }
 
     fun reset(playerId: UUID): CompletableFuture<Unit> = redis.saveMapEntries(HASH_KEY,
         *OptionalQuestKind.entries.flatMap { listOf(key(playerId, it), null) }.toTypedArray(),
@@ -36,12 +63,20 @@ internal class OptionalQuestStore(private val redis: RedisOperations, gson: Gson
     fun observe(playerId: UUID, kind: OptionalQuestKind, step: OptionalQuestStep,
         expectedRunId: String? = null): CompletableFuture<OptionalQuestProgress?> {
         require(step.kind == kind)
-        // Freeze the run before entering the retrying CAS. A reset/reaccept must not inherit an old observation.
-        if (expectedRunId == null) return load(playerId, kind).thenCompose { current ->
-            if (current == null) CompletableFuture.completedFuture(null)
-            else observe(playerId, kind, step, current.runId)
+        // Freeze both the run and its original deadline before the retrying CAS. Another node
+        // may complete or retake this quest while the observation is waiting.
+        return load(playerId, kind).thenCompose { before ->
+            if (before == null || expectedRunId != null && before.runId != expectedRunId || before.expired(clockMillis()))
+                return@thenCompose CompletableFuture.completedFuture(null)
+            if (before.completed) return@thenCompose CompletableFuture.completedFuture(before)
+            update(playerId, kind) { current ->
+                current?.takeIf { it.runId == before.runId && (it.completed || !before.expired(clockMillis())) }?.observe(step)
+            }.thenApply { updated ->
+                if (updated != null && !updated.completed && updated.acceptedAtMillis == null)
+                    OptionalQuestProgress.create(kind, updated.runId, updated.steps, before.acceptedAtMillis)
+                else updated
+            }
         }
-        return update(playerId, kind) { it?.takeIf { current -> current.runId == expectedRunId }?.observe(step) }
     }
 
     private fun update(
@@ -62,6 +97,7 @@ internal class OptionalQuestStore(private val redis: RedisOperations, gson: Gson
 
     companion object {
         const val HASH_KEY = "arc.onboarding.optional.v1"
+        private const val LEGACY_STARTS = "arc.onboarding.optional.legacy-start.v1"
         private fun key(playerId: UUID, kind: OptionalQuestKind) = "$playerId:${kind.id}"
 
         private fun codec(gson: Gson): BoundedJsonCodec<OptionalQuestWire> {

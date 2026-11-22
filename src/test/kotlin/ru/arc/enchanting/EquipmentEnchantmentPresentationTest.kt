@@ -7,6 +7,7 @@ import io.mockk.unmockkStatic
 import io.mockk.verify
 import net.advancedplugins.ae.api.AEAPI
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.ComponentIteratorType
 import net.kyori.adventure.text.TranslatableComponent
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
@@ -31,6 +32,107 @@ import ru.arc.paper.testing.MockBukkitTestRuntime
 class EquipmentEnchantmentPresentationTest {
     private val plain = PlainTextComponentSerializer.plainText()
     private val aeKey = NamespacedKey("advancedenchantments", "ae_enchantment-lightweight")
+
+    @Test
+    fun `Doran repair preserves one copy of the vanilla pickaxe and sword rows and one icon per AE counter`() {
+        MockBukkitTestRuntime.open().use {
+            val mini = MiniMessage.miniMessage()
+            val reset = "<!italic><!underlined><!strikethrough><!bold><!obfuscated><white>"
+            val iconKey = "ruscrafting.item_lore.icon"
+            val mobs = NamespacedKey("advancedenchantments", "mobtrak")
+            val souls = NamespacedKey("advancedenchantments", "souls")
+            val orb = NamespacedKey("advancedenchantments", "increasedorb")
+            val slots = NamespacedKey("advancedenchantments", "slots")
+            val recordKey = NamespacedKey("arc", "equipment_enchantment_presentation")
+            val rowsKey = NamespacedKey("arc", "rows")
+            // Both forms were read from the two affected Spawn items. Denizen preserves
+            // translation keys but expands inherited styles and splits the component children.
+            val stats = listOf(
+                "" to "<dark_aqua>Мобов: </dark_aqua><white>6569", "" to "<red>Собрано Душ: 59",
+                "" to "<green>11 Слотов Зачарования </green><gray>(Сфера [</gray><green>+4</green><gray>])",
+                "" to "<yellow>Осталось зачарований</yellow><gray>: 0", "" to "<bold><white>ЗАЩИЩЕНО",
+            )
+            val pickaxe = linkedMapOf(Enchantment.EFFICIENCY to 5, Enchantment.FORTUNE to 3,
+                Enchantment.MENDING to 1, Enchantment.UNBREAKING to 3)
+            val sword = linkedMapOf(Enchantment.FIRE_ASPECT to 10, Enchantment.LOOTING to 10, Enchantment.SHARPNESS to 20)
+            for ((type, enchants) in listOf(Material.DIAMOND_PICKAXE to pickaxe, Material.NETHERITE_SWORD to sword)) {
+                val hasCounters = type == Material.NETHERITE_SWORD
+                val vanilla = enchants.map { (enchant, level) ->
+                    val suffix = if (enchant.maxLevel == 1 && level == 1) "" else " <lang:enchantment.level.$level>"
+                    mini.deserialize("<!italic><white> <gray><lang:${enchant.translationKey()}>$suffix")
+                }
+                val expanded = enchants.map { (enchant, level) ->
+                    val suffix = if (enchant.maxLevel == 1 && level == 1) "" else "/></gray><gray> </gray><gray><lang:enchantment.level.$level"
+                    mini.deserialize("$reset<white> </white><gray><lang:${enchant.translationKey()}$suffix>")
+                }
+                val authored = expanded.first().hoverEvent(Component.text("Подсказка владельца"))
+                val ae = if (hasCounters) listOf(mini.deserialize("<white> <gray>Обезглавливание III")) else emptyList()
+                val base = ItemStack(type).apply {
+                    addUnsafeEnchantments(enchants)
+                    editMeta { meta ->
+                        meta.lore(listOf(authored))
+                        if (hasCounters) {
+                            meta.persistentDataContainer.set(mobs, PersistentDataType.STRING, "6569")
+                            meta.persistentDataContainer.set(souls, PersistentDataType.INTEGER, 59)
+                            meta.persistentDataContainer.set(slots, PersistentDataType.INTEGER, 0)
+                            meta.persistentDataContainer.set(orb, PersistentDataType.INTEGER, 4)
+                            meta.persistentDataContainer.set(aeKey, PersistentDataType.INTEGER, 3)
+                        }
+                    }
+                }
+                fun render(item: ItemStack) = EquipmentEnchantmentPresentation.render(item, vanilla, ae, true, null)
+                val broken = render(base).apply {
+                    editMeta { meta ->
+                        val regenerated = meta.lore()!!.dropLast(1)
+                        val doubleIcons = if (!hasCounters) emptyList() else stats.map { (glyph, text) ->
+                            mini.deserialize("<lang_or:$iconKey::'<!italic><white>$glyph'/>" +
+                                "$reset<white><lang_or:$iconKey::'<white>$glyph'/></white>$text")
+                        }
+                        meta.lore(regenerated + expanded + listOf(Component.empty(), authored) + doubleIcons)
+                        // The Paper legacy API stores localized snapshots. MockBukkit serializes translation keys.
+                        val record = meta.persistentDataContainer.get(recordKey, PersistentDataType.TAG_CONTAINER)!!
+                        val native = if (hasCounters) listOf("Fire Aspect§r X", "Looting§r X", "Sharpness§r enchantment.level.20")
+                            else listOf("Efficiency§r V", "Fortune§r III", "Mending", "Unbreaking§r III")
+                        val rows = record.get(rowsKey, PersistentDataType.LIST.strings())!!
+                        record.set(rowsKey, PersistentDataType.LIST.strings(), listOf(rows.first()) + native.map { "§f §7$it" } + rows.drop(1 + native.size))
+                        meta.persistentDataContainer.set(recordKey, PersistentDataType.TAG_CONTAINER, record)
+                    }
+                }
+                val fixed = render(broken)
+                val lore = fixed.lore()!!
+                for (enchant in enchants.keys) {
+                    val key = enchant.translationKey()
+                    assertEquals(1, lore.filter { it != authored }.count { row ->
+                        row.iterable(ComponentIteratorType.DEPTH_FIRST).any { it is TranslatableComponent && it.key() == key }
+                    }, key)
+                }
+                assertTrue(authored in lore)
+                assertEquals(enchants, fixed.enchantments)
+                if (hasCounters) {
+                    assertEquals(1, lore.count { plain.serialize(it) == " Обезглавливание III" })
+                    assertEquals(3, fixed.itemMeta.persistentDataContainer.get(aeKey, PersistentDataType.INTEGER))
+                    for ((glyph, text) in stats) {
+                        val label = plain.serialize(mini.deserialize(text))
+                        val line = lore.singleOrNull { plain.serialize(it) == label }
+                        assertNotNull(line, "Expected counter '$label' in ${lore.map(plain::serialize)}")
+                        val icons = line!!.iterable(ComponentIteratorType.DEPTH_FIRST).filterIsInstance<TranslatableComponent>()
+                            .filter { it.key() == iconKey }
+                        assertEquals(listOf(glyph), icons.map { plain.serialize(it.args().single()) }, label)
+                        // Purpur emits the same exact native AE string only if the retained
+                        // icon stays inside Denizen's styled span. MockBukkit omits its legacy reset.
+                        assertTrue(line.iterable(ComponentIteratorType.DEPTH_FIRST).any { span ->
+                            span.color() == NamedTextColor.WHITE && span.decoration(TextDecoration.BOLD) == TextDecoration.State.FALSE &&
+                                span.iterable(ComponentIteratorType.DEPTH_FIRST).any { it === icons.single() }
+                        }, label)
+                    }
+                    val sharp = lore.flatMap { it.iterable(ComponentIteratorType.DEPTH_FIRST) }.filterIsInstance<TranslatableComponent>()
+                        .single { it.key() == "enchantment.level.20" }
+                    assertEquals("20", sharp.fallback())
+                }
+                assertSame(fixed, render(fixed))
+            }
+        }
+    }
 
     @Test
     fun `owned vanilla rows recover the production legacy rewrite without losing authored lore`() {

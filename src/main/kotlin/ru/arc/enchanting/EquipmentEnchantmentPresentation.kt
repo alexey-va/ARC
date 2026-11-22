@@ -2,7 +2,9 @@ package ru.arc.enchanting
 
 import net.advancedplugins.ae.api.AEAPI
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.ComponentIteratorType
 import net.kyori.adventure.text.TranslatableComponent
+import net.kyori.adventure.text.flattener.ComponentFlattener
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
@@ -37,6 +39,11 @@ internal object EquipmentEnchantmentPresentation {
     private val slotsKey = NamespacedKey("advancedenchantments", "slots")
     private val orbKey = NamespacedKey("advancedenchantments", "increasedorb")
     private val legacy = LegacyComponentSerializer.legacySection()
+    // Compare the native translation keys and their colors, independent of Paper's locale,
+    // optional level fallback, and how Denizen divided the text between component children.
+    private val vanillaIdentity = LegacyComponentSerializer.builder().character('§').flattener(
+        ComponentFlattener.basic().toBuilder().mapper(TranslatableComponent::class.java, TranslatableComponent::key).build(),
+    ).build()
     private val plain = PlainTextComponentSerializer.plainText()
     // Existing minecraft:default providers in the distributed RusCrafting pack.
     private val advancedIcons = setOf('', '', '', '')
@@ -204,7 +211,16 @@ internal object EquipmentEnchantmentPresentation {
             body = removeRows(body, body.map(legacy::serialize), listOf(legacy.serialize(legacy.deserialize(heading))))
         }
         val generated = buildList {
-            if (vanilla.isNotEmpty()) { add(vanillaTitle); addAll(vanilla) }
+            if (vanilla.isNotEmpty()) {
+                add(vanillaTitle)
+                addAll(vanilla.map { row ->
+                    mapTranslations(row) { part ->
+                        // Vanilla provides Roman numerals for I–X. Let a pack translate higher levels too.
+                        val level = part.key().removePrefix("enchantment.level.")
+                        if (part.key() != level && (level.toIntOrNull() ?: 0) > 10 && part.fallback() == null) part.fallback(level) else part
+                    }
+                })
+            }
             if (advanced.isNotEmpty()) {
                 if (isNotEmpty()) add(Component.empty())
                 add(advancedTitle)
@@ -304,25 +320,30 @@ internal object EquipmentEnchantmentPresentation {
 
     private fun withIcon(row: Component, fallback: String, glyph: String): Component {
         val icon = Component.text(glyph, NamedTextColor.WHITE).decoration(TextDecoration.ITALIC, false)
-        val key = if (fallback.isEmpty()) ICON_TRANSLATION else ENCHANTMENT_ICON_TRANSLATION
+        if (fallback.isEmpty()) {
+            fun counterIcon(part: Component) = part is TranslatableComponent && part.key() == ICON_TRANSLATION && part.fallback() == ""
+            var remaining = row.iterable(ComponentIteratorType.DEPTH_FIRST).count(::counterIcon)
+            if (remaining == 0) return Component.empty().append(Component.translatable(ICON_TRANSLATION, "", icon)).append(row)
+            // Denizen nests the original icon in a styled span. Retain that innermost
+            // icon: its legacy formatting is part of the native AE counter string.
+            return mapTranslations(row) { part ->
+                if (!counterIcon(part)) part
+                else if (--remaining == 0) part.arguments(icon)
+                else Component.empty().style(part.style()).children(part.children())
+            }
+        }
+        val key = ENCHANTMENT_ICON_TRANSLATION
         fun updatePrefix(component: Component?): TranslatableComponent? {
             val translated = component as? TranslatableComponent ?: return null
             if (translated.key() != key) return null
             val original = translated.fallback() ?: return null
-            return if (fallback.isEmpty()) {
-                translated.takeIf { original.isEmpty() }?.arguments(icon)
-            } else {
-                translated.takeIf { original.startsWith(fallback) }?.arguments(icon, Component.text(original.removePrefix(fallback)))
-            }
+            return translated.takeIf { original.startsWith(fallback) }?.arguments(icon, Component.text(original.removePrefix(fallback)))
         }
 
         updatePrefix(row)?.let { return it }
         updatePrefix(row.children().firstOrNull())?.let { return row.children(listOf(it) + row.children().drop(1)) }
         // AE compares legacy strings. Replace the entire styled segment so the
         // server sees its original text and formatting even when glyph and label share a color.
-        if (fallback.isEmpty()) {
-            return Component.empty().append(Component.translatable(key, "", icon)).append(row)
-        }
         if (fallback.first().toString() == glyph) return row
         return row.replaceText { replacement ->
             replacement.match(iconSegments.getValue(fallback.first())).once().replacement { match, original ->
@@ -333,6 +354,14 @@ internal object EquipmentEnchantmentPresentation {
         }
     }
 
+    private fun mapTranslations(row: Component, transform: (TranslatableComponent) -> Component): Component {
+        val updated = if (row is TranslatableComponent) transform(row) else row
+        val children = updated.children()
+        if (children.isEmpty()) return updated
+        val mapped = children.map { mapTranslations(it, transform) }
+        return if (mapped == children) updated else updated.children(mapped)
+    }
+
     private fun removeRows(
         lines: List<Component>, serialized: List<String>, owned: List<String>,
         beforeGap: Boolean = false, afterGap: Boolean = false, middleGap: Boolean = false,
@@ -341,7 +370,7 @@ internal object EquipmentEnchantmentPresentation {
     ): List<Component> {
         fun canonical(line: String) = legacy.serialize(legacy.deserialize(line))
         val remaining = owned.groupingBy(::canonical).eachCount().toMutableMap()
-        val vanillaComponents = currentVanilla.map { it.decoration(TextDecoration.ITALIC, false).compact() }.toSet()
+        val vanillaRows = currentVanilla.mapTo(hashSetOf(), vanillaIdentity::serialize)
         val vanillaNames = if (!recoverVanilla) emptySet() else owned.filter { it.startsWith("§f ") }.mapTo(hashSetOf()) {
             val label = plain.serialize(legacy.deserialize(it)).removePrefix(" ")
             label.substringBeforeLast(' ').takeIf { validLevel(label.substringAfterLast(' ')) } ?: label
@@ -351,8 +380,9 @@ internal object EquipmentEnchantmentPresentation {
             val key = canonical(encoded)
             val count = remaining[key] ?: 0
             if (count > 0) { remaining[key] = count - 1; true }
-            else recoverVanilla && (lines[index].compact() in vanillaComponents ||
-                (vanillaNames.isNotEmpty() && recoverVanillaRow(lines[index], encoded, vanillaNames)))
+            else recoverVanilla && !authored(lines[index]) && (
+                (vanillaRows.isNotEmpty() && vanillaIdentity.serialize(lines[index]) in vanillaRows) ||
+                    (vanillaNames.isNotEmpty() && recoverVanillaRow(key, vanillaNames)))
         }.toMutableSet()
         val first = removed.minOrNull()
         val last = removed.maxOrNull()
@@ -370,16 +400,21 @@ internal object EquipmentEnchantmentPresentation {
         return lines.filterIndexed { index, _ -> index !in removed }
     }
 
-    private fun validLevel(level: String): Boolean = level.isNotEmpty() && romanLevel.matches(level)
+    private fun validLevel(level: String): Boolean {
+        if (level.isNotEmpty() && romanLevel.matches(level)) return true
+        val number = level.removePrefix("enchantment.level.")
+        return number.toIntOrNull()?.let { it > 10 && it.toString() == number } == true
+    }
 
-    private fun recoverVanillaRow(row: Component, encoded: String, names: Set<String>): Boolean {
+    private fun authored(component: Component): Boolean = component.hoverEvent() != null || component.clickEvent() != null ||
+        component.insertion() != null || component.font() != null || component.shadowColor() != null ||
+        (component is TranslatableComponent && component.arguments().isNotEmpty()) || component.children().any(::authored)
+
+    private fun recoverVanillaRow(encoded: String, names: Set<String>): Boolean {
         // Paper's legacy getLore path can lose inherited translation colors after a
         // native rewrite. Recover only ARC's white glyph + recorded vanilla name,
         // native colors and an optional valid historical level, never authored extras.
         if (!encoded.startsWith("§f ") || nonVanillaFormatting.containsMatchIn(encoded)) return false
-        fun authored(component: Component): Boolean = component.hoverEvent() != null || component.clickEvent() != null ||
-            component.insertion() != null || component.font() != null || component.children().any(::authored)
-        if (authored(row)) return false
         val label = plain.serialize(legacy.deserialize(encoded)).removePrefix(" ")
         return label in names || (validLevel(label.substringAfterLast(' ')) && label.substringBeforeLast(' ') in names)
     }

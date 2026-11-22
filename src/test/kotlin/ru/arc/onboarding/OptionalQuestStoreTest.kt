@@ -11,6 +11,94 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 class OptionalQuestStoreTest : FreeSpec({
+    "each unfinished attempt expires exactly 24 wall-clock hours after acceptance and can be retaken" {
+        val redis = InMemoryRedis()
+        val player = UUID.randomUUID()
+        val farm = OptionalQuestKind.FARM
+        val start = 1_800_000_000_000L
+        val day = TimeUnit.DAYS.toMillis(1)
+        var now = start
+        val store = OptionalQuestStore(redis, Gson()) { now }
+        val first = store.accept(player, farm).join()
+        first.acceptedAtMillis shouldBe start
+        first.expiresAtMillis shouldBe start + day
+        val complete = store.accept(player, OptionalQuestKind.CASINO).join()
+        OptionalQuestKind.CASINO.steps.forEach { store.observe(player, complete.kind, it).join() }
+        redis.setHash("casino.entitlements", mapOf(player.toString() to "settled-once"))
+        now += day - 1
+        val next = store.accept(player, OptionalQuestKind.ADVENTURE).join()
+        val lastMinute = store.observe(player, farm, OptionalQuestStep.FARM_VISITED).join()!!
+        lastMinute.expired(now) shouldBe false
+        store.accept(player, farm).join() shouldBe lastMinute
+        now++
+        val restarted = OptionalQuestStore(redis, Gson()) { now }
+        restarted.load(player, farm).join()!!.expired(now) shouldBe true
+        restarted.observe(player, farm, OptionalQuestStep.FARM_SHIFT_COMPLETE).join() shouldBe null
+        restarted.load(player, next.kind).join()!!.expired(now) shouldBe false
+        restarted.accept(player, complete.kind).join().completed shouldBe true
+        val retaken = restarted.accept(player, farm).join()
+        (retaken.runId == first.runId) shouldBe false
+        retaken.steps shouldBe emptySet()
+        retaken.expiresAtMillis shouldBe now + day
+        restarted.observe(player, farm, OptionalQuestStep.FARM_SHIFT_COMPLETE, first.runId).join() shouldBe null
+        restarted.observe(player, farm, OptionalQuestStep.FARM_SHIFT_COMPLETE, retaken.runId).join()!!.completed shouldBe true
+        now += day
+        restarted.accept(player, farm).join().runId shouldBe retaken.runId
+        redis.getHash("casino.entitlements")[player.toString()] shouldBe "settled-once"
+    }
+
+    "a completion that wins the Redis race at the deadline survives a concurrent retake" {
+        val redis = InMemoryRedis()
+        val player = UUID.randomUUID()
+        val farm = OptionalQuestKind.FARM
+        val beforeDeadline = OptionalQuestStore(redis, Gson()) { 1_800_000_000_000L }
+        val original = beforeDeadline.accept(player, farm).join()
+        val intercept = AtomicBoolean(true)
+        val racing = object : RedisOperations by redis {
+            override fun compareAndSetMapEntry(key: String, mapKey: String, expectedValue: String?,
+                replacementValue: String?): CompletableFuture<Boolean> {
+                if (intercept.compareAndSet(true, false)) {
+                    beforeDeadline.observe(player, farm, OptionalQuestStep.FARM_SHIFT_COMPLETE, original.runId).join()
+                }
+                return redis.compareAndSetMapEntry(key, mapKey, expectedValue, replacementValue)
+            }
+        }
+        val atDeadline = OptionalQuestStore(racing, Gson()) { requireNotNull(original.expiresAtMillis) }
+        val winner = atDeadline.accept(player, farm).join()
+        winner.runId shouldBe original.runId
+        winner.completed shouldBe true
+        atDeadline.load(player, farm).join() shouldBe winner
+    }
+
+    "unfinished v1 records keep their identity and progress with a single durable grace period" {
+        val redis = InMemoryRedis()
+        val player = UUID.randomUUID()
+        val id = UUID.randomUUID().toString()
+        val raw = """{"version":1,"kind":"farm","runId":"$id","steps":["FARM_VISITED"]}"""
+        val field = "$player:farm"
+        redis.setHash(OptionalQuestStore.HASH_KEY, mapOf(field to raw))
+        val start = 1_800_000_000_000L
+        var now = start
+        fun store() = OptionalQuestStore(redis, Gson()) { now }
+        val imported = store().load(player, OptionalQuestKind.FARM).join()!!
+        imported.runId shouldBe id
+        imported.steps shouldBe setOf(OptionalQuestStep.FARM_VISITED)
+        imported.acceptedAtMillis shouldBe start
+        now += TimeUnit.HOURS.toMillis(12)
+        store().accept(player, imported.kind).join() shouldBe imported
+        now += TimeUnit.HOURS.toMillis(12)
+        store().observe(player, imported.kind, OptionalQuestStep.FARM_SHIFT_COMPLETE, id).join() shouldBe null
+        redis.getHash(OptionalQuestStore.HASH_KEY)[field] shouldBe raw
+        (store().accept(player, imported.kind).join().runId == id) shouldBe false
+        val completed = raw.replace("\"FARM_VISITED\"", "\"FARM_VISITED\",\"FARM_SHIFT_COMPLETE\"")
+        redis.setHash(OptionalQuestStore.HASH_KEY, mapOf(field to completed))
+        val permanent = store().accept(player, imported.kind).join()
+        permanent.completed shouldBe true
+        permanent.runId shouldBe id
+        permanent.expired(now + TimeUnit.DAYS.toMillis(10)) shouldBe false
+        redis.getHash(OptionalQuestStore.HASH_KEY)[field] shouldBe completed
+    }
+
     "reset removes all three completed stories and preserves other players and independent ledgers" {
         val redis = InMemoryRedis()
         val store = OptionalQuestStore(redis, Gson())
@@ -56,11 +144,12 @@ class OptionalQuestStoreTest : FreeSpec({
         store.load(player, OptionalQuestKind.FARM).join() shouldBe accepted
     }
 
-    "an old observation cannot resurrect a deleted quest or move its CAS retry into a newly accepted run" {
-        for (reaccept in listOf(false, true)) {
+    "a racing observation cannot resurrect a reset or cross into a new run after a reset or timeout" {
+        for (change in listOf("reset", "reset and retake", "expire and retake")) {
             val redis = InMemoryRedis()
             val player = UUID.randomUUID()
-            val normal = OptionalQuestStore(redis, Gson())
+            var now = 1_800_000_000_000L
+            val normal = OptionalQuestStore(redis, Gson()) { now }
             val before = normal.accept(player, OptionalQuestKind.ADVENTURE).join()
             val entered = CompletableFuture<Unit>()
             val release = CompletableFuture<Unit>()
@@ -72,11 +161,11 @@ class OptionalQuestStoreTest : FreeSpec({
                         release.thenCompose { redis.compareAndSetMapEntry(key, mapKey, expectedValue, replacementValue) }
                     } else redis.compareAndSetMapEntry(key, mapKey, expectedValue, replacementValue)
             }
-            val late = OptionalQuestStore(delayed, Gson()).observe(player, OptionalQuestKind.ADVENTURE, OptionalQuestStep.GUILD_VISITED)
+            val late = OptionalQuestStore(delayed, Gson()) { now }.observe(player, OptionalQuestKind.ADVENTURE, OptionalQuestStep.GUILD_VISITED)
             try {
                 entered.get(5, TimeUnit.SECONDS)
-                normal.reset(player).join()
-                val fresh = if (reaccept) normal.accept(player, OptionalQuestKind.ADVENTURE).join() else null
+                if (change == "expire and retake") now += TimeUnit.DAYS.toMillis(1) else normal.reset(player).join()
+                val fresh = if (change == "reset") null else normal.accept(player, OptionalQuestKind.ADVENTURE).join()
                 (fresh?.runId == before.runId) shouldBe false
                 release.complete(Unit)
                 late.get(5, TimeUnit.SECONDS) shouldBe null

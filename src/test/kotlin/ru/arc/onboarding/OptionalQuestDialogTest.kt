@@ -147,6 +147,41 @@ class OptionalQuestDialogTest : FreeSpec({
         }
     }
 
+    "the farm points to its spawn portal and an expired attempt is offered again without active guidance" {
+        val farm = OptionalQuestKind.FARM
+        val start = java.time.Instant.parse("2026-11-22T09:30:00Z").toEpochMilli()
+        val progress = OptionalQuestProgress.accepted(farm, start).observe(OptionalQuestStep.FARM_VISITED)
+        val deadline = progress.expiresAtMillis!!
+        current = OptionalQuestView.from(farm, null, start)
+        plain(dialog.screen(farm, current).body.first().text) shouldContain "24 часа с момента принятия"
+        current = OptionalQuestView.from(farm, progress, deadline - 1)
+        dialog.open(player, farm)
+        val active = shown!!
+        val closeActive = dismiss!!
+        plain(active.body.first().text) shouldContain "Завершите первую смену"
+        plain(active.body.first().text) shouldContain "На спавне войдите в портал «Ферма»"
+        plain(active.body.first().text) shouldContain "23.11, 12:30 МСК"
+        current = OptionalQuestView.from(farm, progress, deadline)
+        optionalQuestGuideLines(current!!, ::text) shouldBe emptyList()
+        dialog.refreshExpired(player, farm)
+        val offer = shown!!
+        plain(offer.body.first().text) shouldContain "Срок предыдущей попытки истёк."
+        offer.buttons.map { it.id.value } shouldContainExactly listOf("accept", "farm")
+        plain(offer.buttons.first().label) shouldBe "Начать заново"
+        click(offer)
+        actions shouldContainExactly listOf("accept:farm")
+        click(active, "track")
+        actions shouldContainExactly listOf("accept:farm")
+        current = OptionalQuestView.from(farm, progress, deadline - 1)
+        dialog.open(player, farm)
+        closeActive()
+        dismiss!!.invoke()
+        val dismissed = shown
+        current = OptionalQuestView.from(farm, progress, deadline)
+        dialog.refreshExpired(player, farm)
+        (shown === dismissed) shouldBe true
+    }
+
     "safe NPC destinations remain available before acceptance and after completion" {
         for ((kind, destinations) in listOf(
             OptionalQuestKind.ADVENTURE to listOf("guild", "primis"),
@@ -208,7 +243,7 @@ class OptionalQuestDialogTest : FreeSpec({
             samples["${kind.id}-offer"] = view(kind).copy(accepted = false)
             var steps = emptySet<OptionalQuestStep>()
             for (step in kind.steps) {
-                val snapshot = view(kind, steps)
+                val snapshot = view(kind, steps).copy(expiresAtMillis = java.time.Instant.parse("2026-11-23T09:30:00Z").toEpochMilli())
                 samples[step.name.lowercase()] = snapshot
                 step.trialGame()?.let { game ->
                     for (state in CasinoIntroService.State.entries) {
@@ -218,6 +253,7 @@ class OptionalQuestDialogTest : FreeSpec({
                 steps = steps + step
             }
             samples["${kind.id}-complete"] = view(kind, steps).copy(completed = true)
+            samples["${kind.id}-expired"] = view(kind).copy(accepted = false, expired = true)
         }
         val serializer = LegacyComponentSerializer.builder().character('&').hexColors().build()
         val export = samples.mapValues { (_, snapshot) ->
