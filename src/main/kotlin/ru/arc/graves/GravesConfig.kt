@@ -23,6 +23,7 @@ internal data class GravesSettings(
     val claimDistance: Double = 6.0,
     val appearance: GraveAppearanceSettings = GraveAppearanceSettings(),
     val creationMessageEnabled: Boolean = true,
+    val creationEnabled: Boolean = true,
 ) {
     private val miniMessage = MiniMessage.miniMessage()
 
@@ -55,6 +56,7 @@ internal class GravesConfig(private val source: Config) {
             claimDistance = source.double("interaction.claim-distance", 6.0).also { require(it.isFinite() && it in 1.0..6.0) },
             appearance = appearance(),
             creationMessageEnabled = source.bool("notifications.creation-message", true),
+            creationEnabled = source.bool("creation.enabled", true),
         )
     }
 

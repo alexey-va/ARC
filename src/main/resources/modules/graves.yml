@@ -1,4 +1,6 @@
-# ARC owns new player graves. GravesX is optional legacy-data compatibility only.
+# Existing graves remain accessible when creation is disabled.
+creation:
+  enabled: true
 storage:
   retention-seconds: 86400
   maximum-per-player: 18

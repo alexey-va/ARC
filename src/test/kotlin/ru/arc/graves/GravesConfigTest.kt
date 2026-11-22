@@ -23,6 +23,7 @@ class GravesConfigTest {
         assertEquals(true, settings.trackingEnabledByDefault)
         assertEquals(86_400L, settings.retentionSeconds)
         assertEquals(true, settings.creationMessageEnabled)
+        assertEquals(true, settings.creationEnabled)
         assertEquals("Могила создана у места смерти. Открыть /graves ›",
             PlainTextComponentSerializer.plainText().serialize(settings.text("created")))
         assertEquals("Бесплатно по праву", PlainTextComponentSerializer.plainText().serialize(settings.text("free-price")))
@@ -45,9 +46,12 @@ class GravesConfigTest {
     }
 
     @Test
-    fun `creation notice can be explicitly disabled`() {
+    fun `creation and its notice can be disabled independently`() {
         val source = ConfigManager.of(root, "graves-test.yml")
+        source.setBoolean("creation.enabled", false)
+        assertEquals(false, GravesConfig(source).snapshot().creationEnabled)
         assertEquals(true, GravesConfig(source).snapshot().creationMessageEnabled)
+        source.setBoolean("creation.enabled", true)
         source.setBoolean("notifications.creation-message", false)
         assertEquals(false, GravesConfig(source).snapshot().creationMessageEnabled)
     }

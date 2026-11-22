@@ -48,6 +48,66 @@ class NativeGravesRuntimeTest : FunSpec({
         }
     }
 
+    test("disabled creation preserves both death policies and existing graves remain claimable") {
+        withGraveRuntime(creationEnabled = false) { f ->
+            val oldGrave = f.active(listOf(ItemStack(Material.EMERALD)))
+            f.store.backing.insert(oldGrave).join() shouldBe true
+            f.start()
+
+            val dropped = ItemStack(Material.DIAMOND, 3)
+            val policies = listOf(GameMode.SURVIVAL to false, GameMode.SURVIVAL to true, GameMode.CREATIVE to false)
+            for ((mode, keep) in policies) {
+                f.player.gameMode = mode
+                val drops = if (keep) emptyList() else listOf(dropped)
+                val event = PlayerDeathEvent(f.player, mockk<DamageSource>(), drops.toMutableList(), 7, Component.empty(), true)
+                event.keepInventory = keep
+                event.keepLevel = keep
+                f.paper.callEvent(event)
+                f.scheduler.advanceMs(50)
+                f.flush()
+
+                event.keepInventory shouldBe keep
+                event.keepLevel shouldBe keep
+                event.drops shouldBe drops
+                event.droppedExp shouldBe 7
+            }
+
+            f.store.rows() shouldBe listOf(oldGrave)
+            f.persistence.saves shouldBe emptyList()
+            f.feedback shouldBe emptyList()
+            f.engine.claim(f.player, f.engine.views().single())
+            f.flush()
+            f.player.inventory.getItem(0) shouldBe ItemStack(Material.EMERALD)
+            f.store.rows().single().phase shouldBe NativeGravePhase.CLAIMED
+        }
+    }
+
+    test("creative deaths keep carried items and experience without creating a grave") {
+        withGraveRuntime { f ->
+            val stack = namedStack(Material.DIAMOND_SWORD, 1, "Creative inventory")
+            f.player.gameMode = GameMode.CREATIVE
+            f.player.inventory.setItem(0, stack)
+            f.player.level = 12
+            val before = NativeGraveItems.capture(f.player)
+            f.start()
+            val event = PlayerDeathEvent(f.player, mockk<DamageSource>(), mutableListOf(stack.clone()), 7, Component.empty(), true)
+            event.keepInventory = false
+            event.keepLevel = false
+
+            f.paper.callEvent(event)
+            f.scheduler.advanceMs(50)
+            f.flush()
+
+            event.keepInventory shouldBe true
+            event.keepLevel shouldBe true
+            event.drops shouldBe emptyList()
+            event.droppedExp shouldBe 0
+            NativeGraveItems.capture(f.player) shouldBe before
+            f.store.rows() shouldBe emptyList()
+            f.persistence.saves shouldBe emptyList()
+        }
+    }
+
     test("death keeps actual items until the grave intent is durable and waits for the player save") {
         withGraveRuntime { f ->
             val appearance = GraveAppearanceChoice("slate", true, "Ведро было. Реакции не было.")
@@ -460,7 +520,13 @@ class NativeGravesRuntimeTest : FunSpec({
     }
 })
 
-private fun withGraveRuntime(sharedInventory: Boolean = true, creationMessage: Boolean = false, unstableItemEncoding: Boolean = false, body: (GraveRuntimeFixture) -> Unit) = failOnUnsupportedMockBukkitOperation {
+private fun withGraveRuntime(
+    sharedInventory: Boolean = true,
+    creationMessage: Boolean = false,
+    unstableItemEncoding: Boolean = false,
+    creationEnabled: Boolean = true,
+    body: (GraveRuntimeFixture) -> Unit,
+) = failOnUnsupportedMockBukkitOperation {
     MockBukkitTestRuntime.open().use { paper ->
         // MockBukkit cannot exercise Paper's native NBT serializer. Stable cloned stacks
         // retain amounts and ItemMeta identity while the real grave transition code runs.
@@ -476,14 +542,18 @@ private fun withGraveRuntime(sharedInventory: Boolean = true, creationMessage: B
             encoded[firstArg<ByteArray>().toString(Charsets.UTF_8).toInt()].clone()
         }
         try {
-            GraveRuntimeFixture(paper, sharedInventory, creationMessage).use(body)
+            val settings = GravesConfig(ConfigManager.empty()).snapshot().copy(
+                creationEnabled = creationEnabled,
+                creationMessageEnabled = creationMessage,
+            )
+            GraveRuntimeFixture(paper, sharedInventory, settings).use(body)
         } finally {
             unmockkObject(NativePaperItemStackBinaryCodec)
         }
     }
 }
 
-private class GraveRuntimeFixture(val paper: MockBukkitTestRuntime, sharedInventory: Boolean, creationMessage: Boolean) : AutoCloseable {
+private class GraveRuntimeFixture(val paper: MockBukkitTestRuntime, sharedInventory: Boolean, settings: GravesSettings) : AutoCloseable {
     val world = paper.addSimpleWorld("graves")
     val player = paper.addPlayer("GraveOwner")
     val scheduler = TestTaskScheduler()
@@ -491,7 +561,7 @@ private class GraveRuntimeFixture(val paper: MockBukkitTestRuntime, sharedInvent
     val persistence = ControlledGravePersistence(sharedInventory)
     val feedback = mutableListOf<String>()
     var deathAppearance: GraveAppearanceChoice? = null
-    val engine = NativeGraves("survival", GravesConfig(ConfigManager.empty()).snapshot().copy(creationMessageEnabled = creationMessage),
+    val engine = NativeGraves("survival", settings,
         { _, key -> feedback += key }, {}, paper.createSimplePlugin("NativeGravesTest"),
         CompletableFuture.completedFuture(store), persistence, scheduler, appearanceForDeath = { _, _ -> deathAppearance })
 

@@ -140,7 +140,12 @@ internal class NativeGraves(
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun death(event: PlayerDeathEvent) {
+        if (!settings.creationEnabled) return
         val player = event.entity
+        if (player.gameMode == GameMode.CREATIVE) {
+            preserveDeath(event)
+            return
+        }
         if (event.keepInventory || player.gameMode !in setOf(GameMode.SURVIVAL, GameMode.ADVENTURE)) return
         // GravesX's exact-version death handlers run at MONITOR. Keeping inventory here
         // suppresses its new graves, while the optional adapter can still serve old ones.
