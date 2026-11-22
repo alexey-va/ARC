@@ -8,6 +8,7 @@ import io.mockk.every
 import io.mockk.verify
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import org.bukkit.Material
 import org.bukkit.command.CommandSender
 import org.bukkit.configuration.file.YamlConfiguration
 import org.bukkit.entity.Player
@@ -74,14 +75,15 @@ class AuroraCatalogTest : FreeSpec({
         withCatalog { fixture ->
             val plugin = fixture.plugin
             val admin = fixture.admin
+            val available = AuroraShape.active.filterNot { it.isIllustration }
             fixture.complete(admin, "SHOWCASE", "") shouldBe
-                (AuroraShape.active.map { it.name } + "stop").sorted()
+                (available.map { it.name } + "stop").sorted()
             fixture.complete(admin, "showcase", "tRaCk_F") shouldBe listOf("TRACK_FLOCK", "TRACK_FLYBY")
             fixture.complete(admin, "showcase", "stop", "") shouldBe emptyList()
             fixture.complete(fixture.target, "showcase", "") shouldBe emptyList()
             fixture.complete(fixture.paper.server.consoleSender, "showcase", "") shouldBe emptyList()
 
-            for (shape in AuroraShape.active) {
+            for (shape in available) {
                 fixture.command(admin, "showcase ${shape.name.lowercase(Locale.ROOT)}")
                 val rain = shape == AuroraShape.FROG_RAIN
                 admin.message() shouldBe if (rain) "showcase-frog-rain-on" else "showcase-effect-on:${shape.name}"
@@ -106,6 +108,38 @@ class AuroraCatalogTest : FreeSpec({
             fixture.command(admin, "SHOWCASE StOp")
             admin.message() shouldBe "showcase-off"
             plugin.showcase(admin) shouldBe null
+        }
+    }
+
+    "only configured illustration showcases appear and launch with no runtime presets" {
+        withCatalog { fixture ->
+            val admin = fixture.admin
+            val plugin = fixture.plugin
+            fixture.complete(admin, "showcase", "sakura") shouldBe listOf("SAKURA_IDOL")
+            fixture.command(admin, "showcase SAKURA_IDOL_2D")
+            admin.message() shouldBe "showcase-effect-unavailable"
+            plugin.showcase(admin) shouldBe null
+
+            val file = plugin.dataFolder.resolve("config.yml")
+            YamlConfiguration.loadConfiguration(file).apply {
+                set("profiles", null)
+                set("event-presets", null)
+                set("showcase-illustrations.SAKURA_IDOL_2D.material", "PAPER")
+                set("showcase-illustrations.SAKURA_IDOL_2D.custom-model-data", 173)
+                set("showcase-illustrations.JU_FUFU.material", "PAPER")
+                set("showcase-illustrations.JU_FUFU.custom-model-data", 175)
+                save(file)
+            }
+            fixture.command(fixture.paper.server.consoleSender, "reload")
+            plugin.engine!!.settings.eventPresets shouldBe emptyMap()
+            fixture.complete(admin, "showcase", "sakura") shouldBe listOf("SAKURA_IDOL", "SAKURA_IDOL_2D")
+            fixture.complete(admin, "showcase", "ju_fufu") shouldBe listOf("JU_FUFU")
+            fixture.command(admin, "showcase sakura_idol_2d")
+            val profile = checkNotNull(plugin.showcase(admin)).profiles.single()
+            profile.shape shouldBe AuroraShape.SAKURA_IDOL_2D
+            profile.skyModel shouldBe AuroraSkyModel(Material.PAPER, 173)
+            fixture.command(admin, "showcase ju_fufu")
+            checkNotNull(plugin.showcase(admin)).profiles.single().skyModel shouldBe AuroraSkyModel(Material.PAPER, 175)
         }
     }
 

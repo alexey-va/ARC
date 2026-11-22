@@ -66,7 +66,8 @@ class AuroraResourcesTest : FreeSpec({
         })
         val localWave = local.eventPresets.getValue("custom").single()
         val effects = showcaseEffects(local, settings)
-        effects.keys shouldBe AuroraShape.active.toSet()
+        settings.showcaseIllustrations shouldBe emptyMap()
+        effects.keys shouldBe AuroraShape.active.filterNot { it.isIllustration }.toSet()
         effects.all { (shape, profile) -> profile.shape == shape && profile.skyScene } shouldBe true
         effects.getValue(AuroraShape.WAVE) shouldBe localWave
         effects.getValue(AuroraShape.SKY_LANTERNS) shouldBe lantern
@@ -118,7 +119,7 @@ class AuroraResourcesTest : FreeSpec({
             bundled.eventPresets.getValue("treasure-hunt") +
             bundled.eventPresets[bundled.nightSky.preset].orEmpty()
 
-        (storyShapes + AuroraShape.FROG_RAIN).forEach { shape ->
+        (storyShapes + AuroraShape.FROG_RAIN).filterNot { it.isIllustration }.forEach { shape ->
             withClue(shape) {
                 (shape in AuroraShape.active) shouldBe true
                 shape.isMiniature shouldBe true

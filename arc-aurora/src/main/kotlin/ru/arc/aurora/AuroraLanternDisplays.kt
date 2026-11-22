@@ -71,16 +71,19 @@ class AuroraLanternDisplays internal constructor(private val displays: PaperPack
         }
     }
 
-    /** World-fixed entity origins let a moving part send its position, rotation and scale in one metadata update. */
+    /** A shared fixed origin lets every part send its motion in one metadata update. */
     internal fun updateStory(key: Any, player: Player, profile: AuroraProfile, anchor: Location,
         parts: List<Part>, firstPart: Int, endPart: Int, interpolation: Int): Boolean {
         if (closed) return false
+        val billboard = if (profile.shape.isIllustration) Display.Billboard.CENTER else Display.Billboard.FIXED
         return updateParts(key, player, profile.shape, parts.size, firstPart,
-            Collections.nCopies(endPart - firstPart, anchor), interpolation, fixedAnchor = true, partAt = parts::get)
+            Collections.nCopies(endPart - firstPart, anchor), interpolation, fixedAnchor = true, billboardMode = billboard,
+            partAt = parts::get)
     }
 
     private inline fun updateParts(key: Any, player: Player, model: Any, count: Int, firstPart: Int,
-        centers: List<Location>, updateTicks: Int, fixedAnchor: Boolean = false, partAt: (Int) -> Part): Boolean {
+        centers: List<Location>, updateTicks: Int, fixedAnchor: Boolean = false,
+        billboardMode: Display.Billboard = Display.Billboard.FIXED, partAt: (Int) -> Part): Boolean {
         val viewer = player.uniqueId
         val world = player.world.uid
         if (centers.any { it.world?.uid != world }) {
@@ -126,7 +129,7 @@ class AuroraLanternDisplays internal constructor(private val displays: PaperPack
                     } else {
                         audienceGroup = shared.group
                     }
-                    billboard = Display.Billboard.FIXED
+                    billboard = billboardMode
                     itemDisplayTransform = ItemDisplay.ItemDisplayTransform.NONE
                     brightness = Display.Brightness(15, 15)
                     shadowRadius = 0f

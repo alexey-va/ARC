@@ -48,6 +48,8 @@ internal class AuroraEngine(
     private val onShowcaseBlocked: (Player) -> Unit = {},
     private val showcaseEffects: Map<AuroraShape, AuroraProfile> = showcaseEffects(settings),
 ) : AutoCloseable {
+    val showcaseShapes: Set<AuroraShape> get() = showcaseEffects.keys
+
     private enum class Source { ORDINARY, NIGHTLY, EVENT, SHOWCASE }
     private data class Selection(val source: Source, val profiles: List<AuroraProfile>) {
         fun sameAs(other: Selection): Boolean = source == other.source &&
@@ -176,7 +178,7 @@ internal class AuroraEngine(
     // One immutable unit-size animation per configured shape/count, shared by all viewer scenes.
     // Only the lifecycle-owned single planning worker reads/writes this bounded cache.
     private val animationFrames = mutableMapOf<Pair<AuroraShape, Int>, List<List<AuroraCelestialPoint>>>()
-    private val storyEnvelopes = mutableMapOf<Pair<AuroraShape, Int>, StoryBounds>()
+    private val storyEnvelopes = mutableMapOf<Triple<AuroraShape, Int, Boolean>, StoryBounds>()
     @Volatile var viewerCount = 0; private set
     @Volatile var pingSkipped = 0L; private set
     @Volatile var submittedPackets = 0L; private set
@@ -675,31 +677,45 @@ internal class AuroraEngine(
         val end = minOf(first + remaining, profile.points)
         if (end < profile.points && sky.budget >= profile.points) return 0
         val anchor = Location(player.world, scene.x, scene.y + checkNotNull(scene.surfaceY), scene.z)
-        val parts = scene.storyPose ?: run {
-            val rotation = scene.fixedFacing ?: when {
-                profile.shape == AuroraShape.FROG_RAIN -> player.eyeLocation.let {
-                    Quaternionf().rotationY(atan2(it.x - anchor.x, it.z - anchor.z).toFloat())
-                }
-                sky.showcase != null || profile.shape == AuroraShape.INFERNAL_PENTAGRAM -> player.eyeLocation.let {
-                    AuroraShowcase.storyFacing(it.x - anchor.x, it.y - anchor.y, it.z - anchor.z)
-                }
-                else -> Quaternionf().rotationY(atan2(scene.normalX, scene.normalZ).toFloat())
+        val illustration = profile.shape.isIllustration
+        val packFace = profile.hasPackFace
+        val modelIndex = when {
+            illustration -> 0
+            packFace -> AuroraJuFufu.packFaceIndex
+            else -> -1
+        }
+        val worldFacing = scene.fixedFacing ?: when {
+            profile.shape == AuroraShape.FROG_RAIN -> player.eyeLocation.let {
+                Quaternionf().rotationY(atan2(it.x - anchor.x, it.z - anchor.z).toFloat())
             }
+            sky.showcase != null || profile.shape == AuroraShape.INFERNAL_PENTAGRAM -> player.eyeLocation.let {
+                AuroraShowcase.storyFacing(it.x - anchor.x, it.y - anchor.y, it.z - anchor.z)
+            }
+            else -> Quaternionf().rotationY(atan2(scene.normalX, scene.normalZ).toFloat())
+        }
+        val parts = scene.storyPose ?: run {
+            // CENTER applies the client's camera orientation before translation: +X is screen-right,
+            // +Y is up, and +Z faces the viewer. ItemDisplay's native half-turn applies to the mesh only.
+            val rotation = if (illustration) Quaternionf() else worldFacing
             val size = checkNotNull(scene.animation).size.toFloat()
             val progress = sceneAge.toDouble() / (profile.sceneDurationTicks - 1)
             List(profile.points) { index ->
-                val part = AuroraSkyMiniatures.part(profile.shape, index, progress)
+                val part = AuroraSkyMiniatures.part(profile.shape, index, progress, packFace)
                 val center = part.center
                 val translation = rotation.transform(Vector3f(center.x.toFloat(), center.y.toFloat(), center.z.toFloat())).mul(size)
-                AuroraLanternDisplays.Part(part.material, Transformation(translation, Quaternionf(rotation).mul(part.rotation),
-                    Vector3f(part.scale).mul(size), Quaternionf()))
+                val model = profile.skyModel.takeIf { index == modelIndex }
+                AuroraLanternDisplays.Part(model?.material ?: part.material,
+                    Transformation(translation, Quaternionf(rotation).mul(part.rotation), Vector3f(part.scale).mul(size), Quaternionf()),
+                    model?.customModelData)
             }
         }
         val spot = anchor.clone()
+        val checkedOffset = if (illustration) Vector3f() else null
         for (index in first until end) {
             val transform = parts[index].transform
             if (transform.scale.lengthSquared() == 0f) continue
-            val t = transform.translation
+            // Billboards remain local on the wire. Use the owner's facing for world obstruction checks.
+            val t = checkedOffset?.let { worldFacing.transform(transform.translation, it) } ?: transform.translation
             spot.x = anchor.x + t.x
             spot.y = anchor.y + t.y
             spot.z = anchor.z + t.z
@@ -832,7 +848,9 @@ internal class AuroraEngine(
     /** All integer ages can be submitted. Rain rotates only about Y, so its fall height need not widen the checked footprint. */
     private fun storyBounds(profile: AuroraProfile): StoryBounds? {
         if (!profile.shape.isStory || profile.shape == AuroraShape.DEATH_STAR) return null
-        return storyEnvelopes.getOrPut(profile.shape to profile.sceneDurationTicks) {
+        val packFace = profile.hasPackFace
+        return storyEnvelopes.getOrPut(Triple(profile.shape, profile.sceneDurationTicks, packFace)) {
+            // Camera-facing scenes use the same spherical envelope as other freely rotating stories.
             val upright = profile.shape == AuroraShape.FROG_RAIN
             var radius = 0.0
             var low = Double.POSITIVE_INFINITY
@@ -840,7 +858,7 @@ internal class AuroraEngine(
             for (tick in 0 until profile.sceneDurationTicks) {
                 val progress = tick.toDouble() / (profile.sceneDurationTicks - 1)
                 for (index in 0 until profile.points) {
-                    val part = AuroraSkyMiniatures.part(profile.shape, index, progress)
+                    val part = AuroraSkyMiniatures.part(profile.shape, index, progress, packFace)
                     if (part.scale.lengthSquared() == 0f) continue
                     val p = part.center
                     val mesh = part.meshRadius()
@@ -1079,6 +1097,8 @@ internal class AuroraSkyCursor(private val points: Int, initialPosition: Int = 0
 
 
 private data class SkyColumn(val x: Int, val z: Int, val low: Double, val high: Double)
+
+private val AuroraProfile.hasPackFace: Boolean get() = shape == AuroraShape.JU_FUFU && skyModel != null
 
 private data class StoryBounds(val radius: Double, val vertical: ClosedFloatingPointRange<Double>?)
 

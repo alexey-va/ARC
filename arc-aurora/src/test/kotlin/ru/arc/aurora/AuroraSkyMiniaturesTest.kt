@@ -304,6 +304,8 @@ internal val storyShapes = listOf(
     AuroraShape.SHUB_NIGGURATH,
     AuroraShape.SAKURA_IDOL,
     AuroraShape.JU_FUFU,
+    AuroraShape.SAKURA_IDOL_2D,
+    AuroraShape.JU_FUFU_2D,
     AuroraShape.DEATH_STAR,
     AuroraShape.IMPERIAL_STAR_DESTROYER,
 )

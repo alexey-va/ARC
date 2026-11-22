@@ -17,6 +17,7 @@ class AuroraConfigTest : FreeSpec({
             settings.packetsPerViewer, settings.nativeBudgetMicros) shouldBe listOf(10, 8, 8, 12, 1500)
         settings.skyPacketsPerViewer shouldBe 36
         settings.ping shouldBe AuroraPingSettings()
+        settings.showcaseIllustrations shouldBe emptyMap()
         val profile = settings.profiles.single()
         profile.id shouldBe "ambient"
         profile.particle shouldBe Particle.END_ROD
@@ -34,6 +35,33 @@ class AuroraConfigTest : FreeSpec({
         source.set("profiles.ambient.radius", 24)
         profile.biomes shouldBe listOf("*")
         profile.radius shouldBe 12.0
+    }
+
+    "showcase models require a material and a positive integer" {
+        val root = "showcase-illustrations.SAKURA_IDOL_2D"
+        val source = yaml("""
+            showcase-illustrations:
+              SAKURA_IDOL_2D: {material: PAPER, custom-model-data: 173}
+              ju_fufu_2d: {material: 'minecraft:paper', custom-model-data: 174}
+              JU_FUFU: {material: PAPER, custom-model-data: 175}
+        """)
+        AuroraConfig.parse(source).showcaseIllustrations shouldBe mapOf(
+            AuroraShape.SAKURA_IDOL_2D to AuroraSkyModel(Material.PAPER, 173),
+            AuroraShape.JU_FUFU_2D to AuroraSkyModel(Material.PAPER, 174),
+            AuroraShape.JU_FUFU to AuroraSkyModel(Material.PAPER, 175),
+        )
+        for (invalid in listOf(null, 0, -1, 1.5, "173")) {
+            source.set("$root.custom-model-data", invalid)
+            shouldThrow<AuroraConfigException> { AuroraConfig.parse(source) }.path shouldBe "$root.custom-model-data"
+        }
+        source.set("$root.custom-model-data", 173)
+        for (invalid in listOf(null, "AIR", "unknown")) {
+            source.set("$root.material", invalid)
+            shouldThrow<AuroraConfigException> { AuroraConfig.parse(source) }.path shouldBe "$root.material"
+        }
+        shouldThrow<AuroraConfigException> {
+            AuroraConfig.parse(profileConfig("shape" to "SAKURA_IDOL_2D", "sky-scene" to true))
+        }.path shouldBe "profiles.ambient.shape"
     }
 
     "sky packet cap is bounded independently from the ordinary packet cap" {
@@ -436,7 +464,7 @@ class AuroraConfigTest : FreeSpec({
     }
 
     "miniatures require a sky scene and always keep all authored parts" {
-        for (shape in AuroraShape.active.filter { it.isMiniature }) {
+        for (shape in AuroraShape.active.filter { it.isMiniature && !it.isIllustration }) {
             val config = profileConfig("shape" to shape.name, "sky-scene" to true)
             val parts = AuroraSkyMiniatures.partCount(shape)
             AuroraConfig.parse(config).profiles.single().points shouldBe parts

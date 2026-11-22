@@ -125,6 +125,9 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
                 require(model.material.isItem) { "${profile.id}.sky-model.material must be an item material" }
             }
         }
+        for ((shape, model) in settings.showcaseIllustrations) {
+            require(model.material.isItem) { "showcase-illustrations.${shape.name}.material must be an item material" }
+        }
         checkNotNull(server.servicesManager.load(ArcVisualPacketBudget::class.java)) {
             "ArcCore visual packet budget is not ready"
         }
@@ -326,10 +329,11 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
             if (admin && sender is Player) add("showcase")
         } else {
             if (!admin) return emptyList()
-            val settings = engine?.settings ?: return emptyList()
+            val current = engine ?: return emptyList()
+            val settings = current.settings
             when (args[0].lowercase(Locale.ROOT)) {
                 "showcase" -> if (sender is Player && args.size == 2) {
-                    AuroraShape.active.map { it.name } + "stop"
+                    current.showcaseShapes.map { it.name } + "stop"
                 } else emptyList()
                 "catalog" -> if (args.size == 2) settings.eventPresets.keys.toList() else emptyList()
                 "preview" -> when (args.size) {

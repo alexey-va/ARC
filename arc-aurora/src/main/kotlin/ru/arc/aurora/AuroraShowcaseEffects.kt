@@ -59,10 +59,14 @@ internal fun showcaseEffects(
     // Audition new scenes privately before adding any of them to ambient or event rotation.
     effects[AuroraShape.FEATHER_GLIDER]?.let { template ->
         for (shape in AuroraShape.active.filter { it.isStory }) {
+            if (shape.isIllustration && shape !in settings.showcaseIllustrations) continue
             effects.putIfAbsent(shape, template.copy(id = shape.name.lowercase(java.util.Locale.ROOT),
                 shape = shape, points = AuroraSkyMiniatures.partCount(shape), updateTicks = 3,
                 sceneDurationTicks = shape.storyDurationTicks))
         }
+    }
+    for ((shape, model) in settings.showcaseIllustrations) {
+        effects[shape]?.let { effects[shape] = it.copy(skyModel = model) }
     }
     return effects
 }

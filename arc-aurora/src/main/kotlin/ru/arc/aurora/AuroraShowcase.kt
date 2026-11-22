@@ -111,7 +111,8 @@ internal class AuroraShowcase(
             AuroraShape.ORK_KROOZER, AuroraShape.IMPERIAL_AQUILA, AuroraShape.MECHANICUS_SIGIL,
             AuroraShape.CTHULHU, AuroraShape.DAGON, AuroraShape.HASTUR, AuroraShape.AZATHOTH,
             AuroraShape.YOG_SOTHOTH, AuroraShape.NYARLATHOTEP, AuroraShape.SHUB_NIGGURATH,
-            AuroraShape.SAKURA_IDOL, AuroraShape.JU_FUFU, AuroraShape.DEATH_STAR, AuroraShape.IMPERIAL_STAR_DESTROYER -> 1
+            AuroraShape.SAKURA_IDOL, AuroraShape.JU_FUFU, AuroraShape.SAKURA_IDOL_2D, AuroraShape.JU_FUFU_2D,
+            AuroraShape.DEATH_STAR, AuroraShape.IMPERIAL_STAR_DESTROYER -> 1
             else -> COPY_COUNT
         }
         const val STORY_COPIES_PER_VISIT = 2

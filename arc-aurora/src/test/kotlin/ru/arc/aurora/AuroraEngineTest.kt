@@ -10,6 +10,7 @@ import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.Particle
 import org.bukkit.configuration.file.YamlConfiguration
+import org.bukkit.entity.Display
 import org.bukkit.entity.ItemDisplay
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
@@ -244,6 +245,7 @@ class AuroraEngineTest : FreeSpec({
                 materials[index] shouldBe part.material
                 val rotation = Quaternionf().rotateY(yaw.toFloat()).rotateX(pitch.toFloat()).mul(part.rotation)
                 val pose = Transformation(Vector3f(), rotation, Vector3f(part.scale).mul(size.toFloat()), Quaternionf())
+                verify { handle.billboard = Display.Billboard.FIXED }
                 verify { handle.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.NONE }
                 verify { handle.isVisibleByDefault = false }
                 verify { handle.transformation = pose }
@@ -255,6 +257,87 @@ class AuroraEngineTest : FreeSpec({
             handles.drop(2).forEach { handle -> verify(exactly = 1) { handle.teleport(any()) } }
             displays.retain(fixture.player.uniqueId, emptySet())
             handles.forEach { handle -> verify(exactly = 1) { handle.remove() } }
+        }
+    }
+
+    "an illustration follows the existing shared show and stamps its model only when spawning the figure" {
+        val shape = AuroraShape.SAKURA_IDOL_2D
+        val model = AuroraSkyModel(Material.BOOK, 173)
+        val settings = skySettings(shape = AuroraShape.FEATHER_GLIDER, points = 4)
+            .copy(nativeBudgetMicros = Int.MAX_VALUE, showcaseIllustrations = mapOf(shape to model))
+        withEngine(settings, highSky = true) { fixture ->
+            val player = fixture.player
+            val observer = fixture.joinAdditional("IllustrationObserver")
+            val packets = mockk<PaperPacketDisplays>(relaxed = true)
+            val anchors = mutableSetOf<Location>()
+            val handles = mutableListOf<Pair<ItemStack, PacketItemDisplay>>()
+            every { packets.spawnItem(any(), any()) } answers {
+                anchors += arg<Location>(0).clone()
+                mockk<PacketItemDisplay>(relaxed = true).also { handles += arg<ItemStack>(1) to it }
+            }
+            val displays = AuroraLanternDisplays(packets)
+            every { fixture.lanterns.setShowcaseAudience(any(), any()) } answers {
+                displays.setShowcaseAudience(arg(0), arg(1))
+            }
+            every { fixture.lanterns.removeViewer(any()) } answers { displays.removeViewer(arg(0)) }
+            every { fixture.lanterns.updateStory(any(), any(), any(), any(), any(), any(), any(), any()) } answers {
+                val parts = arg<List<AuroraLanternDisplays.Part>>(4)
+                parts.first().material shouldBe model.material
+                parts.mapNotNull { it.customModelData } shouldBe listOf(model.customModelData)
+                displays.updateStory(arg(0), arg(1), arg(2), arg(3), parts, arg(5), arg(6), arg(7))
+            }
+
+            fixture.admin(true)
+            fixture.engine.startShowcase(player, shape) shouldBe true
+            fixture.advance(shape.storyDurationTicks + 100)
+            anchors.size shouldBe 1
+            handles.size shouldBe AuroraSkyMiniatures.partCount(shape)
+            val portrait = handles.filter { (item, _) -> item.itemMeta.hasCustomModelData() }.single().first
+            portrait.type shouldBe model.material
+            portrait.itemMeta.customModelData shouldBe model.customModelData
+            handles.forEach { (_, handle) ->
+                verify(exactly = 1) { handle.billboard = Display.Billboard.CENTER }
+                verify(exactly = 1) { handle.audienceGroup = any() }
+                verify(exactly = 0) { handle.teleport(any()) }
+                verify(exactly = 0) { handle.showTo(player) }
+                verify(exactly = 0) { handle.showTo(observer) }
+            }
+
+            fixture.engine.stopShowcase(player.uniqueId)
+            handles.forEach { (_, handle) -> verify(exactly = 1) { handle.remove() } }
+        }
+    }
+
+    "Ju Fufu keeps the vanilla face by default and substitutes only the configured 3D face" {
+        val shape = AuroraShape.JU_FUFU
+        val face = AuroraJuFufu.packFaceIndex
+        val fallback = (0 until AuroraSkyMiniatures.partCount(shape)).filter {
+            it != face && AuroraJuFufu.isPackFaceFallback(it)
+        }
+        fallback.isNotEmpty() shouldBe true
+        for (model in listOf(null, AuroraSkyModel(Material.PAPER, 175))) {
+            val settings = skySettings(shape = AuroraShape.FEATHER_GLIDER, points = 4).copy(
+                nativeBudgetMicros = Int.MAX_VALUE,
+                showcaseIllustrations = model?.let { mapOf(shape to it) }.orEmpty(),
+            )
+            withEngine(settings, highSky = true) { fixture ->
+                fixture.admin(true)
+                var visible: List<AuroraLanternDisplays.Part>? = null
+                every { fixture.lanterns.updateStory(any(), any(), any(), any(), any(), any(), any(), any()) } answers {
+                    val parts = arg<List<AuroraLanternDisplays.Part>>(4)
+                    if (parts[face].transform.scale.lengthSquared() > 0f) visible = parts
+                    true
+                }
+                fixture.engine.startShowcase(fixture.player, shape) shouldBe true
+                fixture.advance(100)
+
+                val parts = checkNotNull(visible)
+                parts.mapNotNull { it.customModelData } shouldBe listOfNotNull(model?.customModelData)
+                parts[face].customModelData shouldBe model?.customModelData
+                parts[face].material shouldBe (model?.material ?: AuroraSkyMiniatures.part(shape, face, 0.5).material)
+                fallback.any { parts[it].transform.scale.lengthSquared() > 0f } shouldBe (model == null)
+                parts.indices.any { it !in fallback && it != face && parts[it].transform.scale.lengthSquared() > 0f } shouldBe true
+            }
         }
     }
 

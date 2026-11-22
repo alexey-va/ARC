@@ -69,11 +69,19 @@ object AuroraSkyMiniatures {
         }
     }
 
-    fun part(shape: AuroraShape, index: Int, progress: Double): AuroraMiniaturePart {
+    fun part(shape: AuroraShape, index: Int, progress: Double): AuroraMiniaturePart =
+        part(shape, index, progress, packFace = false)
+
+    internal fun part(shape: AuroraShape, index: Int, progress: Double, packFace: Boolean): AuroraMiniaturePart {
         require(index in 0 until partCount(shape) && progress.isFinite())
         val t = progress.coerceIn(0.0, 1.0)
         val story = shape.storyParts ?: return glider(index, t)
-        val pose = story.part(shape, index, t)
+        val pose = when {
+            packFace && index == AuroraJuFufu.packFaceIndex -> AuroraJuFufu.packFacePart(t)
+            packFace && AuroraJuFufu.isPackFaceFallback(index) ->
+                return story.part(shape, index, t).copy(scale = Vector3f())
+            else -> story.part(shape, index, t)
+        }
         if (shape.loopsAtFullSize) return pose
         val fade = smooth(t / 0.02) * smooth((1.0 - t) / 0.02)
         if (fade == 1.0) return pose

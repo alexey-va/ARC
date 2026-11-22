@@ -22,6 +22,7 @@ data class AuroraSettings(
     val skyPacketsPerViewer: Int = 36,
     val skyField: AuroraSkyFieldSettings = AuroraSkyFieldSettings(),
     val nightSky: AuroraNightSkySettings = AuroraNightSkySettings(),
+    val showcaseIllustrations: Map<AuroraShape, AuroraSkyModel> = emptyMap(),
 ) {
     /** Exact, single-hop aliases; unknown biome keys remain usable without a registry lookup. */
     fun canonicalBiomeKey(raw: String): String = normalizeBiomeKey(raw).let { biomeAliases[it] ?: it }
@@ -107,9 +108,12 @@ enum class AuroraShape(
     SHUB_NIGGURATH(AuroraDreamlandStories, 260, loopsAtFullSize = true),
     SAKURA_IDOL(AuroraSakuraIdol, 220),
     JU_FUFU(AuroraJuFufu, 200),
+    SAKURA_IDOL_2D(AuroraIllustratedIdols, 220, loopsAtFullSize = true),
+    JU_FUFU_2D(AuroraIllustratedIdols, 200, loopsAtFullSize = true),
     DEATH_STAR(AuroraImperialFleet, 240, loopsAtFullSize = true),
     IMPERIAL_STAR_DESTROYER(AuroraImperialFleet, 220, loopsAtFullSize = true);
 
+    internal val isIllustration: Boolean get() = this == SAKURA_IDOL_2D || this == JU_FUFU_2D
     internal val isStory: Boolean get() = storyParts != null
     internal val isMiniature: Boolean get() = this == FEATHER_GLIDER || isStory
 
@@ -291,6 +295,18 @@ object AuroraConfig {
         }.orEmpty().immutable()
         val ping = source.section("ping")
         val field = source.section("sky-field")
+        val illustrations = source.section("showcase-illustrations")?.let { shapes ->
+            buildMap {
+                for (key in shapes.keys) {
+                    val shape = AuroraShape.active.firstOrNull {
+                        (it.isIllustration || it == AuroraShape.JU_FUFU) && it.name.equals(key, ignoreCase = true)
+                    } ?: shapes.fail(key, "expected SAKURA_IDOL_2D, JU_FUFU_2D or JU_FUFU")
+                    shapes.check(key, shape !in this, "duplicate showcase shape ${shape.name}")
+                    val model = shapes.requiredSection(key)
+                    put(shape, AuroraSkyModel(modelMaterial(model), model.int("custom-model-data", null, 1..Int.MAX_VALUE)))
+                }
+            }
+        }.orEmpty().immutable()
         return AuroraSettings(
             permission = permission,
             intervalTicks = source.int("interval-ticks", 10, 1..1200),
@@ -302,6 +318,7 @@ object AuroraConfig {
             profiles = ordinaryProfiles,
             eventPresets = events,
             nightSky = nightSky,
+            showcaseIllustrations = illustrations,
             ping = AuroraPingSettings(
                 maxCurrentMs = ping?.int("max-current-ms", 250, 1..10000) ?: 250,
                 maxAverageMs = ping?.int("max-average-ms", 180, 1..10000) ?: 180,
@@ -329,6 +346,7 @@ object AuroraConfig {
         val shape = AuroraShape.entries.firstOrNull { it.name.equals(shapeName, ignoreCase = true) }
             ?: source.fail("shape", "expected one of ${AuroraShape.active.joinToString { it.name }}")
         if (shape.isRetired) return null
+        source.check("shape", !shape.isIllustration, "$shape is available only through the showcase command")
         val biomes = source.strings("biomes", listOf("*")).map { raw ->
             normalizeBiomeKey(raw).also {
                 source.check("biomes", raw == "*" || biomeGlob.matches(it), "invalid biome glob '$raw'; only '*' is a wildcard")
@@ -443,13 +461,17 @@ object AuroraConfig {
         )
     }
 
-    private fun skyModel(source: Fields?): AuroraSkyModel {
-        if (source == null) return AuroraSkyModel()
-        val materialName = source.string("material", "LANTERN")
+    private fun modelMaterial(source: Fields, default: String? = null): Material {
+        val materialName = source.string("material", default)
         val material = Material.matchMaterial(materialName) ?: source.fail("material", "unknown material '$materialName'")
         source.check("material", material !in setOf(Material.AIR, Material.CAVE_AIR, Material.VOID_AIR), "expected a non-air material")
+        return material
+    }
+
+    private fun skyModel(source: Fields?): AuroraSkyModel {
+        if (source == null) return AuroraSkyModel()
         return AuroraSkyModel(
-            material = material,
+            material = modelMaterial(source, "LANTERN"),
             customModelData = if ("custom-model-data" in source.keys) source.int("custom-model-data", 0, 0..Int.MAX_VALUE) else null,
             scale = source.double("scale", 1.0, 0.1..4.0),
             pivot = AuroraOffset(
@@ -557,8 +579,8 @@ object AuroraConfig {
             val raw = section.get(name) ?: return default
             return raw as? Boolean ?: fail(name, "expected true or false")
         }
-        fun int(name: String, default: Int, range: IntRange): Int {
-            val raw = section.get(name) ?: return default
+        fun int(name: String, default: Int?, range: IntRange): Int {
+            val raw = section.get(name) ?: return default ?: fail(name, "expected an integer in $range")
             val number = (raw as? Number)?.toDouble() ?: fail(name, "expected an integer in $range")
             check(name, number.isFinite() && number % 1.0 == 0.0 && number >= range.first && number <= range.last,
                 "expected an integer in $range")
