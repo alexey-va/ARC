@@ -6,14 +6,22 @@ import org.joml.Vector3f
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 /** ItemDisplay.NONE, in size-one scene space. Each snapshot owns its quaternion and scale. */
-data class AuroraMiniaturePart(
+data class AuroraMiniaturePart @JvmOverloads constructor(
     val material: Material,
     val center: AuroraOffset,
     val rotation: Quaternionf,
     val scale: Vector3f,
-)
+    internal val generatedSprite: Boolean = false,
+) {
+    // Vanilla generated items occupy Z ±1/32 in the NONE display context. Blocks can fill Z ±1/2.
+    internal fun meshRadius(): Double {
+        val depth = if (generatedSprite) scale.z / 16.0 else scale.z.toDouble()
+        return 0.5 * sqrt(scale.x.toDouble() * scale.x + scale.y.toDouble() * scale.y + depth * depth)
+    }
+}
 
 internal interface AuroraStoryParts {
     fun partCount(shape: AuroraShape): Int

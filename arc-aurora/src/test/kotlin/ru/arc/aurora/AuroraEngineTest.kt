@@ -258,6 +258,28 @@ class AuroraEngineTest : FreeSpec({
         }
     }
 
+    "the bundled Yog-Sothoth showcase renders all nine copies within 200 ticks" {
+        val bundled = AuroraConfig.parse(YamlConfiguration().apply {
+            loadFromString(checkNotNull(javaClass.classLoader.getResourceAsStream("config.yml")).bufferedReader().use { it.readText() })
+        })
+        withEngine(bundled.copy(nativeBudgetMicros = 10000), highSky = true) { fixture ->
+            fixture.loadChunks(5)
+            fixture.admin(true)
+            val visibleScenes = mutableSetOf<Any>()
+            every { fixture.lanterns.updateStory(any(), any(), any(), any(), any(), any(), any(), any()) } answers {
+                val parts = arg<List<AuroraLanternDisplays.Part>>(4)
+                val visible = (arg<Int>(5) until arg<Int>(6)).any { parts[it].transform.scale.lengthSquared() > 0f }
+                if (visible) visibleScenes += arg<Any>(0)
+                visible
+            }
+            fixture.engine.startShowcase(fixture.player, AuroraShape.YOG_SOTHOTH) shouldBe true
+            repeat(200) {
+                if (visibleScenes.size < AuroraShowcase.COPY_COUNT) fixture.advance(1)
+            }
+            visibleScenes.size shouldBe AuroraShowcase.COPY_COUNT
+        }
+    }
+
     "the shared herd keeps its scene and current poses as viewers enter, move and leave" {
         val shape = AuroraShape.STORM_HERD
         val count = AuroraSkyMiniatures.partCount(shape)

@@ -836,7 +836,7 @@ internal class AuroraEngine(
                     val part = AuroraSkyMiniatures.part(profile.shape, index, progress)
                     if (part.scale.lengthSquared() == 0f) continue
                     val p = part.center
-                    val mesh = part.scale.length().toDouble() / 2
+                    val mesh = part.meshRadius()
                     val centerRadius = if (upright) hypot(p.x, p.z) else sqrt(p.x * p.x + p.y * p.y + p.z * p.z)
                     radius = maxOf(radius, centerRadius + mesh)
                     if (upright) {

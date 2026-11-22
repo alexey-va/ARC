@@ -35,7 +35,8 @@ internal object AuroraForbiddenStories : AuroraStoryParts {
 
     // Layered vanilla round item silhouettes. The caps of generated items in NONE are exactly 1/16 apart.
     private fun lens(mat: Material, x: Double, y: Double, z: Double, w: Double, h: Double, depth: Double) =
-        storyPart(mat, x, y, z, w, h, depth * 16.0)
+        AuroraMiniaturePart(mat, p(x, y, z), Quaternionf(),
+            Vector3f(w.toFloat(), h.toFloat(), (depth * 16.0).toFloat()), generatedSprite = true)
 
     private data class Tendril(val root: AuroraOffset, val first: AuroraOffset, val second: AuroraOffset,
         val tip: AuroraOffset, val girth: Double, val hide: Material)

@@ -242,8 +242,8 @@ internal object AuroraAbyssalStories : AuroraStoryParts {
         for (s in listOf(-1, 1)) {
             add(beam(Material.LIGHT_BLUE_TERRACOTTA, v(-0.122 + s * 0.135, 0.181, -0.151),
                 v(-0.115 + s * 0.553, -0.066, -0.127), 0.310, 0.428))
-            add(beam(Material.DEAD_BUBBLE_CORAL_BLOCK, v(-0.125 + s * 0.403, -0.135, 0.042),
-                v(-0.174 + s * 0.126, -0.636, 0.055), 0.170, 0.205))
+            add(beam(Material.DEAD_BUBBLE_CORAL_BLOCK, v(-0.125 + s * 0.403, -0.135, if (s > 0) -0.142 else 0.042),
+                v(-0.174 + s * 0.126, -0.636, if (s > 0) -0.125 else 0.055), 0.170, 0.205))
             add(beam(Material.LIGHT_BLUE_TERRACOTTA, v(-0.202 + s * 0.343, -0.435, 0.069),
                 v(-0.259 + s * 0.117, -0.811, 0.059), 0.080, 0.172))
         }
