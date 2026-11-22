@@ -258,7 +258,7 @@ class AuroraEngineTest : FreeSpec({
         }
     }
 
-    "the bundled Yog-Sothoth showcase renders all nine copies within 200 ticks" {
+    "the bundled Yog-Sothoth showcase renders one large model within 100 ticks" {
         val bundled = AuroraConfig.parse(YamlConfiguration().apply {
             loadFromString(checkNotNull(javaClass.classLoader.getResourceAsStream("config.yml")).bufferedReader().use { it.readText() })
         })
@@ -273,10 +273,65 @@ class AuroraEngineTest : FreeSpec({
                 visible
             }
             fixture.engine.startShowcase(fixture.player, AuroraShape.YOG_SOTHOTH) shouldBe true
-            repeat(200) {
-                if (visibleScenes.size < AuroraShowcase.COPY_COUNT) fixture.advance(1)
+            fixture.advance(100)
+            visibleScenes.size shouldBe 1
+        }
+    }
+
+    "the Death Star showcase stays at its launch height and keeps its firing orientation" {
+        val bundled = AuroraConfig.parse(YamlConfiguration().apply {
+            loadFromString(checkNotNull(javaClass.classLoader.getResourceAsStream("config.yml")).bufferedReader().use { it.readText() })
+        })
+        val shape = AuroraShape.DEATH_STAR
+        withEngine(bundled.copy(nativeBudgetMicros = 10000), highSky = true) { fixture ->
+            fixture.loadChunks(6)
+            fixture.admin(true)
+            val player = fixture.player
+            val launch = player.location.apply { y = player.world.getHighestBlockYAt(blockX, blockZ) + 1.0 }
+            player.teleport(launch) shouldBe true
+            val anchor = player.eyeLocation.add(0.0, 14.9, 32.5)
+            val launchFacing = Vector3f(0f, -14.9f, -32.5f).normalize()
+            val scenes = mutableSetOf<Any>()
+            var tick = 0
+            var moved = false
+            var firedAfterMove = false
+            every { fixture.lanterns.updateStory(any(), any(), any(), any(), any(), any(), any(), any()) } answers {
+                val key = arg<Any>(0)
+                val actualAnchor = arg<Location>(3)
+                val parts = arg<List<AuroraLanternDisplays.Part>>(4)
+                arg<Int>(5) shouldBe 0
+                arg<Int>(6) shouldBe parts.size
+                (parts.first().transform.scale.lengthSquared() > 0f) shouldBe true
+                val beam = parts.indexOfFirst { it.material == Material.LIME_STAINED_GLASS }
+                val firing = beam >= 0 && parts[beam].transform.scale.x > 0f
+                val started = key.javaClass.getDeclaredField("startsAt").also { it.isAccessible = true }.getLong(key)
+                val progress = ((tick - started) % shape.storyDurationTicks).toDouble() / (shape.storyDurationTicks - 1)
+                check(actualAnchor.distanceSquared(anchor) < 1e-8) { "Death Star anchor $actualAnchor, expected $anchor" }
+                for (index in if (firing) listOf(0, beam) else listOf(0)) {
+                    // Remove the authored local motion to recover the world orientation of each part.
+                    val local = AuroraSkyMiniatures.part(shape, index, progress)
+                    val facing = Quaternionf(parts[index].transform.leftRotation).mul(Quaternionf(local.rotation).conjugate())
+                    val forward = facing.transform(Vector3f(0f, 0f, 1f))
+                    check(forward.distance(launchFacing) < 1e-4f) { "Death Star part $index changed its facing at tick $tick" }
+                }
+                scenes += key
+                firedAfterMove = firedAfterMove || moved && firing
+                true
             }
-            visibleScenes.size shouldBe AuroraShowcase.COPY_COUNT
+            fixture.engine.startShowcase(player, shape) shouldBe true
+
+            fun advance(ticks: Int) = repeat(ticks) {
+                tick++
+                fixture.advance(1)
+            }
+
+            advance(200)
+            scenes.size shouldBe 1
+            player.teleport(launch.clone().add(20.0, 3.0, 0.0).apply { yaw = 90f }) shouldBe true
+            moved = true
+            advance(shape.storyDurationTicks)
+            firedAfterMove shouldBe true
+            scenes.size shouldBe 1
         }
     }
 

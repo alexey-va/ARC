@@ -86,6 +86,8 @@ internal class AuroraEngine(
         val animation: SkyAnimation? = null,
         val phaseOffsetTicks: Int = 0,
         val storyBounds: StoryBounds? = null,
+        val fixedFacing: Quaternionf? = if (profile.shape == AuroraShape.DEATH_STAR)
+            Quaternionf().rotationY(atan2(normalX, normalZ).toFloat()) else null,
     ) {
         // A showcase's first stroke can join an action in progress. Later cycles start at its first point.
         var cursor = AuroraSkyCursor(profile.points,
@@ -97,10 +99,14 @@ internal class AuroraEngine(
         var terrainAnchor: AuroraSurface? = null
         val terrainColumns = if (cell.terrain) mutableMapOf<Pair<Int, Int>, TerrainColumn>() else null
         val riverWaterline get() = if (profile.shape == AuroraShape.PAPER_FLOTILLA) terrainAnchor?.blockY else null
-        val columns = storyBounds?.let { storyColumns(x, y, z, it, checkNotNull(animation).size) } ?: skyColumns(x, y, z, normalX, normalZ, path, motion,
-            profile.skyPalette.map { it.particle }.ifEmpty { profile.skyHeadParticles.ifEmpty { listOf(profile.particle) } }, animation,
-            if (profile.shape.isMiniature) AuroraSkyMiniatures.partRadius(profile.shape) * checkNotNull(animation).size
-            else profile.skyModel?.let { 2.0 * it.scale }, terrain = cell.terrain)
+        val columns = when {
+            fixedFacing != null -> fixedStoryColumns(profile, x, y, z, checkNotNull(animation).size, fixedFacing)
+            storyBounds != null -> storyColumns(x, y, z, storyBounds, checkNotNull(animation).size)
+            else -> skyColumns(x, y, z, normalX, normalZ, path, motion,
+                profile.skyPalette.map { it.particle }.ifEmpty { profile.skyHeadParticles.ifEmpty { listOf(profile.particle) } }, animation,
+                if (profile.shape.isMiniature) AuroraSkyMiniatures.partRadius(profile.shape) * checkNotNull(animation).size
+                else profile.skyModel?.let { 2.0 * it.scale }, terrain = cell.terrain)
+        }
         @Volatile var startsAt = Long.MAX_VALUE // Main publishes birth after the full envelope passes.
         var checkedColumns = 0
         var nextAt = born
@@ -670,7 +676,7 @@ internal class AuroraEngine(
         if (end < profile.points && sky.budget >= profile.points) return 0
         val anchor = Location(player.world, scene.x, scene.y + checkNotNull(scene.surfaceY), scene.z)
         val parts = scene.storyPose ?: run {
-            val rotation = when {
+            val rotation = scene.fixedFacing ?: when {
                 profile.shape == AuroraShape.FROG_RAIN -> player.eyeLocation.let {
                     Quaternionf().rotationY(atan2(it.x - anchor.x, it.z - anchor.z).toFloat())
                 }
@@ -815,7 +821,8 @@ internal class AuroraEngine(
                 else listOf(AuroraOffset(0.0, 0.0, 0.0))
             SkyScene(profile, input.world, input.revision, input.age,
                 AuroraSkyCell(index, 0), 0L, pose.anchor.x, pose.anchor.y, pose.anchor.z,
-                showcase.normalX, showcase.normalZ, path, motion, animation, pose.phaseOffsetTicks, storyBounds(profile))
+                showcase.normalX, showcase.normalZ, path, motion, animation, pose.phaseOffsetTicks, storyBounds(profile),
+                fixedFacing = if (profile.shape == AuroraShape.DEATH_STAR) showcase.facingAtStart(pose) else null)
         }
         val first = scenes.first().profile
         val budget = if (first.shape.isStory) first.points * AuroraShowcase.STORY_COPIES_PER_VISIT else settings.skyPacketsPerViewer
@@ -824,7 +831,7 @@ internal class AuroraEngine(
 
     /** All integer ages can be submitted. Rain rotates only about Y, so its fall height need not widen the checked footprint. */
     private fun storyBounds(profile: AuroraProfile): StoryBounds? {
-        if (!profile.shape.isStory) return null
+        if (!profile.shape.isStory || profile.shape == AuroraShape.DEATH_STAR) return null
         return storyEnvelopes.getOrPut(profile.shape to profile.sceneDurationTicks) {
             val upright = profile.shape == AuroraShape.FROG_RAIN
             var radius = 0.0
@@ -1074,6 +1081,78 @@ internal class AuroraSkyCursor(private val points: Int, initialPosition: Int = 0
 private data class SkyColumn(val x: Int, val z: Int, val low: Double, val high: Double)
 
 private data class StoryBounds(val radius: Double, val vertical: ClosedFloatingPointRange<Double>?)
+
+/** Fixed showcase facing lets the full discharge sweep a narrow corridor through the world. */
+private fun fixedStoryColumns(
+    profile: AuroraProfile, x: Double, y: Double, z: Double, size: Double, facing: Quaternionf,
+): List<SkyColumn> {
+    val columns = linkedMapOf<Pair<Int, Int>, SkyColumn>()
+    val scale = size.toFloat()
+    for (index in 0 until profile.points) {
+        var basis: Quaternionf? = null
+        val inverse = Quaternionf()
+        val low = Vector3f(Float.POSITIVE_INFINITY)
+        val high = Vector3f(Float.NEGATIVE_INFINITY)
+        val sphereLow = Vector3f(Float.POSITIVE_INFINITY)
+        val sphereHigh = Vector3f(Float.NEGATIVE_INFINITY)
+        var sameRotation = true
+        for (tick in 0 until profile.sceneDurationTicks) {
+            val part = AuroraSkyMiniatures.part(profile.shape, index, tick.toDouble() / (profile.sceneDurationTicks - 1))
+            if (part.scale.lengthSquared() == 0f) continue
+            val reference = basis ?: Quaternionf(part.rotation).also {
+                basis = it
+                inverse.set(it).conjugate()
+            }
+            val p = part.center
+            val position = Vector3f(p.x.toFloat(), p.y.toFloat(), p.z.toFloat())
+            val half = Vector3f(part.scale).mul(0.5f)
+            if (part.generatedSprite) half.z /= 16f
+            val radius = half.length()
+            val worldCenter = facing.transform(Vector3f(position))
+            sphereLow.min(Vector3f(worldCenter).sub(radius, radius, radius))
+            sphereHigh.max(Vector3f(worldCenter).add(radius, radius, radius))
+            sameRotation = sameRotation && reference == part.rotation
+            if (sameRotation) {
+                val center = inverse.transform(position)
+                low.min(Vector3f(center).sub(half))
+                high.max(Vector3f(center).add(half))
+            }
+        }
+        val reference = basis ?: continue
+        // A rotating item's sphere covers every client interpolation. A fixed item's faces
+        // move linearly with its center and dimensions, so the pooled intervals suffice.
+        val worldRotation = if (sameRotation) Quaternionf(facing).mul(reference) else {
+            low.set(sphereLow)
+            high.set(sphereHigh)
+            Quaternionf()
+        }
+        low.sub(0.01f, 0.01f, 0.01f)
+        high.add(0.01f, 0.01f, 0.01f)
+        // The beam stretches along local X. Subdivide the pooled interval only after sweeping
+        // every age, so extending it diagonally does not fill the unused corners of a large box.
+        val slices = if (sameRotation) maxOf(1, ceil((high.x - low.x) * scale / 2.0).toInt()) else 1
+        val step = (high.x - low.x) / slices
+        val halfX = worldRotation.transform(Vector3f(step * scale * 0.5f, 0f, 0f)).absolute()
+        val halfY = worldRotation.transform(Vector3f(0f, (high.y - low.y) * scale * 0.5f, 0f)).absolute()
+        val halfZ = worldRotation.transform(Vector3f(0f, 0f, (high.z - low.z) * scale * 0.5f)).absolute()
+        val extent = halfX.add(halfY).add(halfZ)
+        for (slice in 0 until slices) {
+            val center = worldRotation.transform(Vector3f(low.x + (slice + 0.5f) * step,
+                (low.y + high.y) * 0.5f, (low.z + high.z) * 0.5f)).mul(scale)
+            val bottom = y + center.y - extent.y
+            val top = y + center.y + extent.y
+            for (cx in floor(x + center.x - extent.x).toInt()..floor(x + center.x + extent.x).toInt()) {
+                for (cz in floor(z + center.z - extent.z).toInt()..floor(z + center.z + extent.z).toInt()) {
+                    val key = cx to cz
+                    val previous = columns[key]
+                    columns[key] = SkyColumn(cx, cz, minOf(bottom, previous?.low ?: bottom),
+                        maxOf(top, previous?.high ?: top))
+                }
+            }
+        }
+    }
+    return columns.values.toList()
+}
 
 private fun storyColumns(x: Double, y: Double, z: Double, bounds: StoryBounds, size: Double): List<SkyColumn> = buildList {
     val radius = bounds.radius * size

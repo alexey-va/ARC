@@ -86,7 +86,7 @@ class AuroraCatalogTest : FreeSpec({
                 val rain = shape == AuroraShape.FROG_RAIN
                 admin.message() shouldBe if (rain) "showcase-frog-rain-on" else "showcase-effect-on:${shape.name}"
                 val showcase = checkNotNull(plugin.showcase(admin))
-                showcase.profiles.map { it.shape } shouldBe List(if (rain) 14 else 9) { shape }
+                showcase.profiles.map { it.shape } shouldBe List(AuroraShowcase.copyCount(shape)) { shape }
                 showcase.expiresAt shouldBe 3_600L
             }
             plugin.showcase(fixture.target) shouldBe null

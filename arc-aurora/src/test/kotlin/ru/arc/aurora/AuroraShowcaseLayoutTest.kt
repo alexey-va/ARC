@@ -44,6 +44,20 @@ class AuroraShowcaseLayoutTest : FreeSpec({
         AuroraShowcase.SELECTED_DURATION_TICKS shouldBe 3_600L
     }
 
+    "large figures have a single anchor at twice the former center scale" {
+        for (shape in listOf(AuroraShape.CTHULHU, AuroraShape.DEATH_STAR, AuroraShape.SAKURA_IDOL,
+            AuroraShape.JU_FUFU, AuroraShape.IMPERIAL_AQUILA, AuroraShape.VOID_CATHEDRAL, AuroraShape.INFERNAL_PENTAGRAM)) {
+            AuroraShowcase.copyCount(shape) shouldBe 1
+            val profile = layoutProfile(shape)
+            val center = layoutShowcase(listOf(profile)).pose(0)
+            center.viewerLocalSlot shouldBe AuroraOffset(0.0, 14.9, 32.5)
+            center.size shouldBe (3.95 * 1.06 * 2.0)
+            center.phaseOffsetTicks shouldBe 0
+        }
+        AuroraShowcase.copyCount(AuroraShape.FEATHER_GLIDER) shouldBe 9
+        AuroraShowcase.copyCount(AuroraShape.STORM_HERD) shouldBe 9
+    }
+
     "frog rain fills the zenith and surrounds the viewer throughout the complete loop" {
         val shape = AuroraShape.FROG_RAIN
         val duration = shape.storyDurationTicks

@@ -29,7 +29,12 @@ internal class AuroraShowcase(
     }
 
     fun pose(index: Int): Pose {
-        if (profiles[index].shape == AuroraShape.FROG_RAIN && profiles.size == RAIN_GROUPS) {
+        val profile = profiles[index]
+        if (profiles.size == 1) {
+            val size = profile.shapeSize.coerceIn(3.65, 3.95) * CENTER_SCALE * 2
+            return pose(AuroraOffset(0.0, 14.9, 32.5), size, 0.0, 0)
+        }
+        if (profile.shape == AuroraShape.FROG_RAIN && profiles.size == RAIN_GROUPS) {
             val inner = index % 2 == 0
             val sector = index / 2
             val variation = sector % 3
@@ -46,7 +51,6 @@ internal class AuroraShowcase(
                 phase * profiles[index].sceneDurationTicks / RAIN_GROUPS)
         }
         if (profiles.size == COPY_COUNT) {
-            val profile = profiles[index]
             val size = when (profile.shape) {
                 AuroraShape.CUBE -> 2.1
                 AuroraShape.SKY_LANTERNS -> 2.45
@@ -63,12 +67,15 @@ internal class AuroraShowcase(
             }
             // Nine evenly spaced ages; immediate neighbours show different parts of the action.
             val phase = (index * 4 + 6) % COPY_COUNT
-            return pose(copies[index], if (index == 4) size * 1.06 else size, tilt,
+            return pose(copies[index], if (index == 4) size * CENTER_SCALE else size, tilt,
                 phase * profile.sceneDurationTicks / COPY_COUNT)
         }
         val slot = slots[index]
         return pose(AuroraOffset(slot.right, slot.height, 32.0), slot.size, slot.tilt, 0)
     }
+
+    fun facingAtStart(pose: Pose): Quaternionf = storyFacing(
+        eye.x - pose.anchor.x, eye.y - pose.anchor.y, eye.z - pose.anchor.z)
 
     private fun pose(position: AuroraOffset, size: Double, tilt: Double, phaseOffsetTicks: Int): Pose {
         return Pose(
@@ -97,7 +104,16 @@ internal class AuroraShowcase(
         const val SELECTED_DURATION_TICKS = 3_600L
         const val COPY_COUNT = 9
         private const val RAIN_GROUPS = 14
-        fun copyCount(shape: AuroraShape) = if (shape == AuroraShape.FROG_RAIN) RAIN_GROUPS else COPY_COUNT
+        private const val CENTER_SCALE = 1.06
+        fun copyCount(shape: AuroraShape): Int = when (shape) {
+            AuroraShape.FROG_RAIN -> RAIN_GROUPS
+            AuroraShape.INFERNAL_PENTAGRAM, AuroraShape.VOID_CATHEDRAL, AuroraShape.SOLAR_CORSAIR,
+            AuroraShape.ORK_KROOZER, AuroraShape.IMPERIAL_AQUILA, AuroraShape.MECHANICUS_SIGIL,
+            AuroraShape.CTHULHU, AuroraShape.DAGON, AuroraShape.HASTUR, AuroraShape.AZATHOTH,
+            AuroraShape.YOG_SOTHOTH, AuroraShape.NYARLATHOTEP, AuroraShape.SHUB_NIGGURATH,
+            AuroraShape.SAKURA_IDOL, AuroraShape.JU_FUFU, AuroraShape.DEATH_STAR, AuroraShape.IMPERIAL_STAR_DESTROYER -> 1
+            else -> COPY_COUNT
+        }
         const val STORY_COPIES_PER_VISIT = 2
 
         /** A flat story's local +Z looks from this slot toward its viewer, including any terrain lift. */

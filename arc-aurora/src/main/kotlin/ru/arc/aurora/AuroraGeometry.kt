@@ -83,7 +83,7 @@ object AuroraGeometry {
                 AuroraShape.NIGHT_GAUNT, AuroraShape.COLOUR_FROM_SPACE, AuroraShape.SHOGGOTH_ESCAPE,
                 AuroraShape.SILVER_KEY, AuroraShape.CTHULHU, AuroraShape.DAGON, AuroraShape.HASTUR,
                 AuroraShape.AZATHOTH, AuroraShape.YOG_SOTHOTH, AuroraShape.NYARLATHOTEP, AuroraShape.SHUB_NIGGURATH,
-                AuroraShape.SAKURA_IDOL, AuroraShape.DEATH_STAR,
+                AuroraShape.SAKURA_IDOL, AuroraShape.JU_FUFU, AuroraShape.DEATH_STAR,
                 AuroraShape.IMPERIAL_STAR_DESTROYER ->
                     error("Celestial animations require a sky scene")
             }

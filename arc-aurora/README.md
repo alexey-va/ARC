@@ -99,7 +99,7 @@ The `INFERNAL_PENTAGRAM` in the treasure-hunt sky and its showcase share one dis
 
 ### Sky showcase
 
-Stand outdoors, face open sky and run `/arcaurora showcase SKY_STITCH` with `arcaurora.admin`. By default, nine copies of the selected effect play at different phases for three minutes. Tab completes all active shape names, including the tracks, lanterns and surface effects. Run the command with another name to switch immediately. Run it in a new direction to move the display, or use `/arcaurora showcase stop` to end it early. Everyone within 64 blocks of the starting point in the same world can watch. Spectators can walk into an ongoing show and see its current phase. Each administrator controls their own show.
+Stand outdoors, face open sky and run `/arcaurora showcase SKY_STITCH` with `arcaurora.admin`. The selected effect plays for three minutes. The deities, characters, ships, Death Star, Imperial and Mechanicus emblems, and infernal pentagram appear once in the center at twice the previous center size. Small effects usually appear in nine copies at different phases. Tab completes all active shape names, including the tracks, lanterns and surface effects. Run the command with another name to switch immediately. Run it in a new direction to move the display, or use `/arcaurora showcase stop` to end it early. Everyone within 64 blocks of the starting point in the same world can watch. Spectators can walk into an ongoing show and see its current phase. Each administrator controls their own show.
 
 These sky scenes can be tried individually. They use vanilla item displays and are available with an existing config.
 
@@ -128,7 +128,8 @@ These sky scenes can be tried individually. They use vanilla item displays and a
 | `NYARLATHOTEP` | A pharaoh reveals a crimson head tendril and a rib cage full of watching eyes. |
 | `SHUB_NIGGURATH` | Spiral horns crown a knotted mass of eyes, hooves and writhing tentacles. |
 | `SAKURA_IDOL` | A pink-haired performer turns, winks and sends a heart from her palm. |
-| `DEATH_STAR` | Streams of green light converge above the dish and fire as one beam. |
+| `JU_FUFU` | Ju Fufu poses with her mechanical popcorn pot, Huwei. |
+| `DEATH_STAR` | Green tributaries converge above the dish, then a long superlaser fires. |
 | `IMPERIAL_STAR_DESTROYER` | An Imperial Star Destroyer banks past, revealing its wedge-shaped hull and engines. |
 
 `/arcaurora showcase FROG_RAIN` surrounds the player with falling frogs for three minutes. Turn around to see the shower in every direction. The frogs use packet displays and have no AI or collision.
@@ -635,7 +636,7 @@ Run from the repository root with JDK 25:
 ```
 
 The expected local runtime artifact is
-`arc-aurora/build/libs/ArcAurora-0.1.24.jar`. The public Maven API artifact
+`arc-aurora/build/libs/ArcAurora-0.1.25.jar`. The public Maven API artifact
 `ru.ruscrafting.arc:arc-aurora-api:0.1.0` was verified on 2026-10-29 in the
 [RusCrafting repository](https://repo.rus-crafting.ru/grocermc/ru/ruscrafting/arc/arc-aurora-api/0.1.0/arc-aurora-api-0.1.0.pom).
 That API publication does not establish a runtime-plugin build, delivery,

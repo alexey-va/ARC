@@ -16,7 +16,7 @@ internal object AuroraImperialFleet : AuroraStoryParts {
     private const val TURN = 2.0 * PI
     private const val DISH_LATITUDE = 0.535
     private const val DISH_RADIUS = 0.413
-    private const val FOCUS_DEPTH = 1.49
+    private const val APERTURE_DEPTH = 0.992
     private val dishMount = Quaternionf().rotationX((-DISH_LATITUDE).toFloat())
 
     private fun mounted(piece: AuroraMiniaturePart, turn: Quaternionf,
@@ -88,17 +88,37 @@ internal object AuroraImperialFleet : AuroraStoryParts {
         add(mounted(storyPart(Material.BLACK_CONCRETE, 0.0, 0.0, 0.772, 0.144, 0.144, 0.059, PI / 4), dishMount))
     }
 
-    private val focus = AuroraOffset(0.0, 0.0, FOCUS_DEPTH)
+    private val focus = AuroraOffset(0.37, -0.035, 1.49)
     private val tributaries = List(6) { i ->
         val angle = i * TURN / 6
         val face = round(angle / (PI / 4)) * PI / 4
         val radius = DISH_RADIUS / cos(angle - face)
-        val emitter = AuroraOffset(-radius * sin(angle), radius * cos(angle), 0.992)
+        val emitter = AuroraOffset(-radius * sin(angle), radius * cos(angle), APERTURE_DEPTH)
         mounted(segment(Material.LIME_CONCRETE_POWDER, emitter, focus, 0.031, 0.031), dishMount)
     }
-    private val discharge = mounted(segment(Material.LIME_STAINED_GLASS, focus, AuroraOffset(0.0, 0.0, 2.96), 0.15, 0.15), dishMount)
-    private val dischargeCore = discharge.copy(material = Material.VERDANT_FROGLIGHT,
-        scale = Vector3f(discharge.scale).mul(1f, 0.40f, 0.40f))
+    // Continue the line from the middle of the emitting ring through the point where its six rays meet.
+    private fun dischargeBeam(material: Material, length: Double, thickness: Double): AuroraMiniaturePart {
+        val dz = focus.z - APERTURE_DEPTH
+        val distance = length / hypot(hypot(focus.x, focus.y), dz)
+        val tip = AuroraOffset(focus.x + distance * focus.x, focus.y + distance * focus.y, focus.z + distance * dz)
+        return mounted(segment(material, focus, tip, thickness, thickness), dishMount)
+    }
+
+    private val discharge = dischargeBeam(Material.LIME_STAINED_GLASS, 7.31, 0.163)
+    private val dischargeCore = dischargeBeam(Material.VERDANT_FROGLIGHT, 7.50, 0.057)
+
+    private fun stationPulse(beam: AuroraMiniaturePart, t: Double, delay: Double): AuroraMiniaturePart {
+        // Once emission stops, its trailing edge travels away from the dish. Reset both ends in darkness.
+        val reset = 1 - storyBeat(t, 0.90, 0.982)
+        val head = storyBeat(t, 0.435 + delay, 0.48 + delay) * reset
+        val tail = storyBeat(t, 0.804 + delay, 0.865 + delay) * reset
+        val span = head - tail
+        val shift = beam.rotation.transform(Vector3f((beam.scale.x * (head + tail - 1) / 2).toFloat(), 0f, 0f))
+        val p = beam.center
+        val width = minOf(1.0, 4 * span).toFloat()
+        return beam.copy(center = AuroraOffset(p.x + shift.x, p.y + shift.y, p.z + shift.z),
+            scale = Vector3f(beam.scale).mul(span.toFloat(), width, width))
+    }
 
     private val destroyer = buildList {
         val stern = -1.16
@@ -175,24 +195,23 @@ internal object AuroraImperialFleet : AuroraStoryParts {
     }
 
     private fun stationPart(index: Int, t: Double): AuroraMiniaturePart {
-        val aim = storyBeat(t, 0.10, 0.43) * (1 - storyBeat(t, 0.80, 0.97))
-        val recoil = storyBeat(t, 0.557, 0.595) * (1 - storyBeat(t, 0.61, 0.73))
-        val angle = 0.32 + 0.39 * aim + 0.035 * sin(TURN * t)
-        val attitude = Quaternionf().rotationZ(-0.057f).rotateX(0.09f).rotateY(angle.toFloat())
+        val aim = storyBeat(t, 0.025, 0.34) * (1 - storyBeat(t, 0.885, 0.995))
+        val recoil = storyBeat(t, 0.435, 0.476) * (1 - storyBeat(t, 0.50, 0.59))
+        val angle = 0.32 + 0.75 * aim + 0.035 * sin(TURN * t) * (1 - aim)
+        val attitude = Quaternionf().rotationZ(-0.035f).rotateX(0.06f).rotateY(angle.toFloat())
         val beam = index - station.size
         val piece = when {
             beam < 0 -> station[index]
             beam < tributaries.size -> {
                 val delay = (beam % 3) * 0.022
-                val length = storyBeat(t, 0.252 + delay, 0.481 + delay) * (1 - storyBeat(t, 0.787, 0.858))
+                val length = storyBeat(t, 0.14 + delay, 0.335 + delay) * (1 - storyBeat(t, 0.801, 0.873))
                 extend(tributaries[beam], length, sqrt(length))
             }
-            else -> {
-                val pulse = storyBeat(t, 0.557, 0.626) * (1 - storyBeat(t, 0.721, 0.784))
-                extend(if (beam == tributaries.size) discharge else dischargeCore, pulse, sqrt(pulse))
-            }
+            beam == tributaries.size -> stationPulse(discharge, t, 0.005)
+            else -> stationPulse(dischargeCore, t, 0.0)
         }
-        return mounted(piece, attitude, -0.24 - 0.061 * recoil, -0.093 - 0.029 * recoil, -0.08)
+        return mounted(piece, attitude, -1.30 - 0.75 * aim - 0.061 * recoil, -0.21 - 0.16 * aim - 0.029 * recoil,
+            -0.85 - 0.21 * aim)
     }
 
     private fun destroyerPart(index: Int, t: Double): AuroraMiniaturePart {

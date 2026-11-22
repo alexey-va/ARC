@@ -106,6 +106,7 @@ enum class AuroraShape(
     NYARLATHOTEP(AuroraDreamlandStories, 240, loopsAtFullSize = true),
     SHUB_NIGGURATH(AuroraDreamlandStories, 260, loopsAtFullSize = true),
     SAKURA_IDOL(AuroraSakuraIdol, 220),
+    JU_FUFU(AuroraJuFufu, 200),
     DEATH_STAR(AuroraImperialFleet, 240, loopsAtFullSize = true),
     IMPERIAL_STAR_DESTROYER(AuroraImperialFleet, 220, loopsAtFullSize = true);
 
