@@ -2,6 +2,7 @@ package ru.arc.aurora
 
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -1886,6 +1887,7 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
     override fun close() {
         engine.close()
         scope.close()
+        clearMocks(emitter, lanterns, scheduler)
     }
 
     private fun requireMain() {

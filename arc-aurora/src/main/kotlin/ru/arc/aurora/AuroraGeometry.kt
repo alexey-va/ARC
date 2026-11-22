@@ -73,6 +73,7 @@ object AuroraGeometry {
                 AuroraShape.AURORA_CURTAIN, AuroraShape.TUMBLEWEED,
                 AuroraShape.SKY_HOURGLASS, AuroraShape.DANDELION_GUST, AuroraShape.KINGFISHER_DIVE,
                 AuroraShape.STELLAR_PRISM, AuroraShape.EMBER_VOLCANO, AuroraShape.HATCHING_STAR,
+                AuroraShape.INFERNAL_PENTAGRAM,
                 AuroraShape.FEATHER_GLIDER, AuroraShape.ASTRAL_PENDULUM, AuroraShape.TWIN_SAMARAS, AuroraShape.SKY_PHONOGRAPH ->
                     error("Celestial animations require a sky scene")
             }

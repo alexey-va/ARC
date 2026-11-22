@@ -29,7 +29,7 @@ class AuroraResourcesTest : FreeSpec({
         settings.permission shouldBe "arcaurora.view"
         settings.profiles.size shouldBe 28
         val sky = settings.eventPresets.getValue("treasure-hunt")
-        sky.size shouldBe 39
+        sky.size shouldBe 40
         val lantern = sky.single { it.shape == AuroraShape.SKY_LANTERNS }
         lantern.points shouldBe 6
         lantern.skyTracers shouldBe 6

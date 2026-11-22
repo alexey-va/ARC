@@ -1278,6 +1278,28 @@ event-presets:
         crack: {particle: minecraft:end_rod}
       sky-options: {roll-radians: 0.04}
 
+    infernal_pentagram:
+      sky-scene: true
+      shape: INFERNAL_PENTAGRAM
+      shape-size: 6.5
+      sky-points: 128
+      scene-duration-ticks: 320
+      spawn-delay-ticks: 40
+      update-ticks: 1
+      radius: 84
+      min-distance: 30
+      vertical-min: 28
+      vertical-max: 50
+      sky-tracers: 8
+      particle: minecraft:dust
+      dust-color: '#FF3848'
+      dust-size: 2.0
+      sky-palette:
+        sigil: {particle: minecraft:dust, dust-color: '#FF3848', dust-size: 2.0}
+        embers: {particle: minecraft:dust, dust-color: '#D85B35', dust-size: 1.9}
+        seals: {particle: minecraft:flame}
+      sky-options: {roll-radians: 0.0}
+
     feather_glider:
       sky-scene: true
       shape: FEATHER_GLIDER

@@ -10,7 +10,7 @@ the PacketEvents compile version comes from the repository's dependency catalog.
 
 ## Visual direction
 
-The bundled configuration contains **25 ordinary particle profiles**, **three surface scenes**, and **39 sky variants**
+The bundled configuration contains **25 ordinary particle profiles**, **three surface scenes**, and **40 sky variants**
 sampled into up to **nine retained world cells** for `treasure-hunt`. The sky
 preserves the accepted soft-lines palette: one familiar white wave, blue and
 orange waves/curls, a green spark wave, three frequent meteor variants and one
@@ -24,7 +24,7 @@ interpretations, not a particle-physics simulation. No cube,
 star or TOTEM ring is selected by the bundled night catalogue; those supported
 shapes remain available to custom profiles.
 
-The living-sky catalogue includes twelve animated particle scenes.
+The living-sky catalogue includes thirteen animated particle scenes.
 
 | Profile | Shape | Signature action |
 | --- | --- | --- |
@@ -40,6 +40,7 @@ The living-sky catalogue includes twelve animated particle scenes.
 | `stellar_prism` | `STELLAR_PRISM` | A white beam enters a triangular prism and splits into coloured rays |
 | `ember_volcano` | `EMBER_VOLCANO` | An ember cone erupts and throws hot fragments overhead |
 | `hatching_star` | `HATCHING_STAR` | A cool shell cracks open and releases a gold star |
+| `infernal_pentagram` | `INFERNAL_PENTAGRAM` | A scarlet stroke draws an inverted pentagram inside a smouldering circle, then five seals ignite in succession |
 
 These scenes deform over their complete lifetime, rather than translating a static
 outline. The worker caches at most 33 unit-size poses per shape/sample count,
@@ -104,7 +105,7 @@ Four multipart miniatures use full-bright vanilla items. Each part keeps its own
 
 ### Private sky showcase
 
-Stand outdoors, face open sky and run `/arcaurora showcase SKY_STITCH` with `arcaurora.admin`. Nine copies of the selected effect play at different phases for three minutes. Tab completes all 44 active shape names, including the tracks, lanterns and surface effects. Run the command with another name to switch immediately. Run it in a new direction to move the display, or use `/arcaurora showcase stop` to end it early. Only the invoking player sees the display.
+Stand outdoors, face open sky and run `/arcaurora showcase SKY_STITCH` with `arcaurora.admin`. Nine copies of the selected effect play at different phases for three minutes. Tab completes all 45 active shape names, including the tracks, lanterns and surface effects. Run the command with another name to switch immediately. Run it in a new direction to move the display, or use `/arcaurora showcase stop` to end it early. Only the invoking player sees the display.
 
 The bare `/arcaurora showcase` opens a 60-second overview. The stitch and curtain appear above the hare tracks, paper flotilla and tumbleweed.
 
@@ -607,7 +608,7 @@ Run from the repository root with JDK 25:
 ```
 
 The expected local runtime artifact is
-`arc-aurora/build/libs/ArcAurora-0.1.16.jar`. The public Maven API artifact
+`arc-aurora/build/libs/ArcAurora-0.1.17.jar`. The public Maven API artifact
 `ru.ruscrafting.arc:arc-aurora-api:0.1.0` was verified on 2026-10-29 in the
 [RusCrafting repository](https://repo.rus-crafting.ru/grocermc/ru/ruscrafting/arc/arc-aurora-api/0.1.0/arc-aurora-api-0.1.0.pom).
 That API publication does not establish a runtime-plugin build, delivery,
@@ -654,4 +655,4 @@ approach starting with 0.1.13.
 The five decorations and the private showcase command require ArcAurora 0.1.14.
 Selection by shape and the three-minute display require ArcAurora 0.1.15.
 
-Version 0.1.16 retires `JELLYFISH` and `MANTA_RAY` and adds the ten scenes above.
+Version 0.1.16 retires `JELLYFISH` and `MANTA_RAY` and adds ten scenes. Version 0.1.17 adds `INFERNAL_PENTAGRAM`.

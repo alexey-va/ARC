@@ -424,7 +424,8 @@ class AuroraConfigTest : FreeSpec({
         val celestial = setOf(AuroraShape.LIGHT_KNOT, AuroraShape.REVERSE_LIGHTNING, AuroraShape.SKY_CORAL, AuroraShape.MOON_FAN,
             AuroraShape.SKY_STITCH, AuroraShape.INVISIBLE_HARE, AuroraShape.PAPER_FLOTILLA,
             AuroraShape.AURORA_CURTAIN, AuroraShape.TUMBLEWEED, AuroraShape.SKY_HOURGLASS, AuroraShape.DANDELION_GUST,
-            AuroraShape.KINGFISHER_DIVE, AuroraShape.STELLAR_PRISM, AuroraShape.EMBER_VOLCANO, AuroraShape.HATCHING_STAR)
+            AuroraShape.KINGFISHER_DIVE, AuroraShape.STELLAR_PRISM, AuroraShape.EMBER_VOLCANO, AuroraShape.HATCHING_STAR,
+            AuroraShape.INFERNAL_PENTAGRAM)
         AuroraShape.active.filter { it.isCelestial }.toSet() shouldBe celestial
         celestial.forEach { shape ->
             shape.isTrack shouldBe false
