@@ -1,6 +1,6 @@
 # ARC owns new player graves. GravesX is optional legacy-data compatibility only.
 storage:
-  retention-seconds: 10800
+  retention-seconds: 86400
   maximum-per-player: 18
   experience-fraction: 0.8
 interaction:
@@ -13,7 +13,7 @@ glow:
 tracking:
   enabled-by-default: true
 notifications:
-  creation-message: false
+  creation-message: true
 hud:
   refresh-ticks: 2
 # Random-selection weights only. Explicit player choices remain selectable; all zero weights fall back to slate.
@@ -161,7 +161,7 @@ text:
   hud-remote: '<italic:false><#c4a7e7>Могила: <#ffffff><server> · <world> · /graves'
   hud-world: '<italic:false><#c4a7e7>Могила в мире <#ffffff><world> · /graves'
   marker-label: '<italic:false><#f4bd6a>Ваша могила<newline><#e8dfd2>Присядьте — забрать'
-  created: '<italic:false><#f4bd6a>Вещи остались в могиле. Нажмите ПКМ по памятнику, чтобы открыть могилу. <#ffffff><click:run_command:/graves>Открыть могилы ›</click>'
+  created: '<italic:false><#f4bd6a>Могила создана у места смерти. <#ffffff><click:run_command:/graves>Открыть /graves ›</click>'
   not-owner: '<italic:false><#f4bd6a>Это чужая могила. Забрать вещи может только её владелец.'
   interaction-unavailable: '<italic:false><#f4bd6a>Могила сейчас недоступна. <#ffffff><click:run_command:/graves>Открыть мои могилы ›</click>'
   inventory-full: '<italic:false><#f4bd6a>В инвентаре не хватает места. Освободите место и попробуйте снова.'

@@ -8,6 +8,8 @@ import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import java.nio.file.Path
 
+private const val DEFAULT_RETENTION_SECONDS = 86_400L
+
 internal data class GravesSettings(
     val defaultFee: Double,
     val freePermission: String,
@@ -15,12 +17,12 @@ internal data class GravesSettings(
     val hudRefreshTicks: Int,
     val trackingEnabledByDefault: Boolean,
     private val texts: Map<String, String>,
-    val retentionSeconds: Long = 10_800,
+    val retentionSeconds: Long = DEFAULT_RETENTION_SECONDS,
     val maxGraves: Int = 18,
     val experienceFraction: Double = .8,
     val claimDistance: Double = 6.0,
     val appearance: GraveAppearanceSettings = GraveAppearanceSettings(),
-    val creationMessageEnabled: Boolean = false,
+    val creationMessageEnabled: Boolean = true,
 ) {
     private val miniMessage = MiniMessage.miniMessage()
 
@@ -47,12 +49,12 @@ internal class GravesConfig(private val source: Config) {
             hudRefreshTicks = hudRefreshTicks,
             trackingEnabledByDefault = source.bool("tracking.enabled-by-default", true),
             texts = DEFAULT_TEXT.mapValues { (key, fallback) -> required("text.$key", fallback) },
-            retentionSeconds = source.long("storage.retention-seconds", 10_800).also { require(it in 60..2_592_000) },
+            retentionSeconds = source.long("storage.retention-seconds", DEFAULT_RETENTION_SECONDS).also { require(it in 60..2_592_000) },
             maxGraves = source.int("storage.maximum-per-player", 18).also { require(it in 1..256) },
             experienceFraction = source.double("storage.experience-fraction", .8).also { require(it.isFinite() && it in 0.0..1.0) },
             claimDistance = source.double("interaction.claim-distance", 6.0).also { require(it.isFinite() && it in 1.0..6.0) },
             appearance = appearance(),
-            creationMessageEnabled = source.bool("notifications.creation-message", false),
+            creationMessageEnabled = source.bool("notifications.creation-message", true),
         )
     }
 
@@ -214,7 +216,7 @@ internal class GravesConfig(private val source: Config) {
             "hud-remote" to "<italic:false><#c4a7e7>Могила: <#ffffff><server> · <world> · /graves",
             "hud-world" to "<italic:false><#c4a7e7>Могила в мире <#ffffff><world> · /graves",
             "marker-label" to "<italic:false><#f4bd6a>Ваша могила<newline><#e8dfd2>Присядьте — забрать",
-            "created" to "<italic:false><#f4bd6a>Вещи остались в могиле. Нажмите ПКМ по памятнику, чтобы открыть могилу. <#ffffff><click:run_command:/graves>Открыть могилы ›</click>",
+            "created" to "<italic:false><#f4bd6a>Могила создана у места смерти. <#ffffff><click:run_command:/graves>Открыть /graves ›</click>",
             "not-owner" to "<italic:false><#f4bd6a>Это чужая могила. Забрать вещи может только её владелец.",
             "interaction-unavailable" to "<italic:false><#f4bd6a>Могила сейчас недоступна. <#ffffff><click:run_command:/graves>Открыть мои могилы ›</click>",
             "inventory-full" to "<italic:false><#f4bd6a>В инвентаре не хватает места. Освободите место и попробуйте снова.",

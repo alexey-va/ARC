@@ -5,6 +5,7 @@ import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import io.mockk.verifyOrder
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Chunk
@@ -40,6 +41,7 @@ class GravesHudTest : FunSpec({
             fixture.solidDecorations += decor.id
             fixture.hud.refreshGlow(fixture.player, listOf(decor)) shouldBe emptyList()
             fixture.spawned.size shouldBe GraveModels.slate.parts.size + 1
+            fixture.spawned.forEach { verify(exactly = 0) { it.display.isGlowing = true } }
             PlainTextComponentSerializer.plainText().serialize(checkNotNull(fixture.spawned.last().text)) shouldBe "«Мои слова»"
             fixture.spawned.last().location.yaw shouldBe 90f
             // Even a much newer decoration owned by this viewer cannot hide another player's recoverable grave.
@@ -82,7 +84,16 @@ class GravesHudTest : FunSpec({
                 verify(exactly = 1) { it.display.showTo(fixture.player) }
                 verify(exactly = 0) { it.display.isGlowing = true }
             }
-            fixture.hud.refreshGlow(fixture.player, listOf(grave.copy(ownerId = fixture.owner)))
+            val owned = grave.copy(ownerId = fixture.owner)
+            repeat(2) { fixture.hud.refreshGlow(fixture.player, listOf(owned)) }
+            fixture.hud.refreshGlow(fixture.player, listOf(grave))
+            fixture.spawned.forEach { (display) ->
+                if (display is PacketBlockDisplay) {
+                    verify(exactly = 1) { display.isGlowing = true }
+                    verify(exactly = 1) { display.isGlowing = false }
+                } else verify(exactly = 0) { display.isGlowing = any() }
+            }
+            fixture.spawned.size shouldBe displayCount
             fixture.removed.size shouldBe 0
             verify(exactly = 0) { fixture.player.showBossBar(any()) }
             verify(exactly = 0) { fixture.player.hideBossBar(any()) }
@@ -112,14 +123,29 @@ class GravesHudTest : FunSpec({
         }
     }
 
-    test("empty default epitaphs leave tomb models without text displays or bossbars") {
+    test("a fresh recovery marker glows up close only for its owner even with no epitaph") {
         MockBukkitTestRuntime.open().use { paper ->
             val fixture = GravesHudFixture(paper.createSimplePlugin("GravesHudNoText"),
                 GraveAppearanceSettings(mapOf("slate" to 1.0)))
             val grave = fixture.grave(1, 0, fixture.owner)
+            every { fixture.player.location } returns Location(fixture.world, .5, 64.5, 1.1)
             fixture.hud.refreshGlow(fixture.player, listOf(grave)) shouldBe listOf(GraveMarker(grave, 1))
             fixture.spawned.size shouldBe GraveModels.slate.parts.size
-            fixture.spawned.any { it.display is PacketTextDisplay } shouldBe false
+            val visitor = fixture.viewer(UUID.randomUUID())
+            fixture.hud.refreshGlow(visitor, listOf(grave)) shouldBe listOf(GraveMarker(grave, 1))
+            fixture.spawned.size shouldBe GraveModels.slate.parts.size * 2
+            fixture.spawned.take(GraveModels.slate.parts.size).forEach { (display) ->
+                verifyOrder {
+                    display.glowColorOverride = Color.fromRGB(0xFFD166)
+                    display.isGlowing = true
+                    display.showTo(fixture.player)
+                }
+                verify(exactly = 0) { display.showTo(visitor) }
+            }
+            fixture.spawned.drop(GraveModels.slate.parts.size).forEach { (display) ->
+                verify(exactly = 1) { display.showTo(visitor) }
+                verify(exactly = 0) { display.isGlowing = true }
+            }
             verify(exactly = 0) { fixture.displays.spawnText(any(), any()) }
             verify(exactly = 0) { fixture.player.showBossBar(any()) }
             fixture.hud.closeAsync()
@@ -373,7 +399,7 @@ private class GravesHudFixture(
     data class Spawn(val display: PacketDisplay, val location: Location, val text: Component? = null)
     val owner: UUID = UUID.randomUUID()
     val world = mockk<World>(relaxed = true)
-    val player = mockk<Player>(relaxed = true)
+    val player = viewer(owner)
     val displays = mockk<PaperPacketDisplays>()
     val spawned = mutableListOf<Spawn>()
     val removed = mutableSetOf<PacketDisplay>()
@@ -394,11 +420,6 @@ private class GravesHudFixture(
         val air = mockk<Block>()
         every { air.isPassable } answers { passable }
         every { world.getBlockAt(any<Int>(), any<Int>(), any<Int>()) } returns air
-        every { player.uniqueId } returns owner
-        every { player.world } returns world
-        every { player.location } returns Location(world, .5, 64.0, 2.0)
-        every { player.isOnline } returns true
-        every { player.isChunkSent(any<Long>()) } returns true
         every { displays.spawnBlock(any(), any()) } answers {
             val display = mockk<PacketBlockDisplay>(relaxed = true)
             track(display, firstArg())
@@ -413,6 +434,14 @@ private class GravesHudFixture(
         every { displays.closeAsync() } returns cleanup
         hud = GravesHud(plugin, "survival", GravesConfig(ConfigManager.empty()).snapshot().copy(appearance = appearance), displays,
             decorativeBarrier = { id, _ -> id in solidDecorations }, onClear = { cleared += it })
+    }
+
+    fun viewer(id: UUID): Player = mockk<Player>(relaxed = true).also { viewer ->
+        every { viewer.uniqueId } returns id
+        every { viewer.world } returns world
+        every { viewer.location } returns Location(world, .5, 64.0, 2.0)
+        every { viewer.isOnline } returns true
+        every { viewer.isChunkSent(any<Long>()) } returns true
     }
 
     private fun track(display: PacketDisplay, location: Location, text: Component? = null) {

@@ -17,6 +17,7 @@ import org.bukkit.plugin.Plugin
 import org.bukkit.util.Transformation
 import org.joml.Quaternionf
 import org.joml.Vector3f
+import ru.arc.paper.display.PacketBlockDisplay
 import ru.arc.paper.display.PacketDisplay
 import ru.arc.paper.display.PaperPacketDisplays
 import java.util.UUID
@@ -40,8 +41,18 @@ internal class GravesHud(
         val parts: List<PacketDisplay>,
         val appearance: GraveAppearance,
         val ownerName: String?,
-        var engraving: YamipaGraveEngravings.Handle?,
     ) {
+        var engraving: YamipaGraveEngravings.Handle? = null
+        var ownerGlow = false
+            set(value) {
+                if (field == value) return
+                parts.filterIsInstance<PacketBlockDisplay>().forEach {
+                    it.glowColorOverride = if (value) OWNER_GLOW_COLOR else null
+                    it.isGlowing = value
+                }
+                field = value
+            }
+
         fun matches(grave: GraveView, selected: GraveAppearance): Boolean =
             x == grave.x && y == grave.y && z == grave.z && appearance == selected && ownerName == grave.ownerName && parts.all { it.isValid }
         fun remove() {
@@ -105,8 +116,10 @@ internal class GravesHud(
         val rendered = mutableListOf<GraveMarker>()
         desired.forEach { (grave, appearance) ->
             val renderedMarker = GraveMarker(grave, if (appearance.model.engraved) 2 else 1)
+            val ownerGlow = !grave.decorative && grave.ownerId == player.uniqueId
             val existing = current[grave.id]
             if (existing?.matches(grave, appearance) == true) {
+                existing.ownerGlow = ownerGlow
                 // Pending image cleanup can temporarily exhaust Yamipa's retained-image budget.
                 if (existing.engraving?.isValid == false) existing.engraving = null
                 if (existing.appearance.model.engraved && existing.engraving == null)
@@ -167,10 +180,12 @@ internal class GravesHud(
                         }
                     }
                 }
+                val marker = Marker(grave.x, grave.y, grave.z, parts, appearance, grave.ownerName)
+                marker.ownerGlow = ownerGlow
                 parts.forEach { it.showTo(player) }
                 // Artwork failure must not remove the already visible tomb or its independent epitaph.
-                val engraving = if (appearance.model.engraved) createEngraving(player, grave, appearance.yaw) else null
-                current[grave.id] = Marker(grave.x, grave.y, grave.z, parts.toList(), appearance, grave.ownerName, engraving)
+                if (appearance.model.engraved) marker.engraving = createEngraving(player, grave, appearance.yaw)
+                current[grave.id] = marker
                 rendered += renderedMarker
             } catch (failure: RuntimeException) {
                 parts.forEach(PacketDisplay::remove)
@@ -270,5 +285,8 @@ internal class GravesHud(
 
     override fun close() { closeAsync() }
 
-    private companion object { const val MAX_VISIBLE = 8 }
+    private companion object {
+        const val MAX_VISIBLE = 8
+        val OWNER_GLOW_COLOR = Color.fromRGB(0xFFD166)
+    }
 }

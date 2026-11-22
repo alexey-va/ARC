@@ -21,7 +21,10 @@ class GravesConfigTest {
         assertEquals(32, settings.nearbyGlowRadius)
         assertEquals(2, settings.hudRefreshTicks)
         assertEquals(true, settings.trackingEnabledByDefault)
-        assertEquals(false, settings.creationMessageEnabled)
+        assertEquals(86_400L, settings.retentionSeconds)
+        assertEquals(true, settings.creationMessageEnabled)
+        assertEquals("Могила создана у места смерти. Открыть /graves ›",
+            PlainTextComponentSerializer.plainText().serialize(settings.text("created")))
         assertEquals("Бесплатно по праву", PlainTextComponentSerializer.plainText().serialize(settings.text("free-price")))
         assertEquals(GraveAppearanceSettings.DEFAULT_WEIGHTS, settings.appearance.weights)
         assertEquals(GraveAppearanceSettings.DEFAULT_EPITAPHS, settings.appearance.epitaphs)
@@ -42,10 +45,8 @@ class GravesConfigTest {
     }
 
     @Test
-    fun `creation notice requires explicit opt in`() {
+    fun `creation notice can be explicitly disabled`() {
         val source = ConfigManager.of(root, "graves-test.yml")
-        assertEquals(false, GravesConfig(source).snapshot().creationMessageEnabled)
-        source.setBoolean("notifications.creation-message", true)
         assertEquals(true, GravesConfig(source).snapshot().creationMessageEnabled)
         source.setBoolean("notifications.creation-message", false)
         assertEquals(false, GravesConfig(source).snapshot().creationMessageEnabled)

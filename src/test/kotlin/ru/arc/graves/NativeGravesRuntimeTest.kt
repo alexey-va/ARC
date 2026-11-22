@@ -98,6 +98,7 @@ class NativeGravesRuntimeTest : FunSpec({
             grave.appearance shouldBe appearance
             f.engine.views().single().appearance shouldBe appearance
             grave.phase shouldBe NativeGravePhase.ACTIVE
+            (grave.expiresAt - grave.createdAt) shouldBe 86_400_000L
             grave.items.map(NativeGraveItems::decode) shouldBe listOf(dropped)
             grave.checkpoint shouldBe NativeGraveItems.capture(f.player)
             f.persistence.saves.size shouldBe 1

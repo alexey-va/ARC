@@ -27,16 +27,16 @@ or travel actions. Permission, player identity and request lifetime are checked
 again before an asynchronous result is displayed. Ordinary players remain
 restricted to their own graves.
 
-ARC's separate grave-creation chat notice is off by default. Set
-`notifications.creation-message: true` to emit it once after a new grave's
-durable CREATE acknowledgement. Listing, reconnecting and cross-server refreshes
-never announce existing graves as new. Other death, return-teleport and claim
-messages retain their existing behavior.
+ARC sends the owner a private chat message with a `/graves` link once the
+new grave's CREATE operation is durably acknowledged. Set
+`notifications.creation-message: false` to turn it off. The menu shows the
+actual coordinates, including graves placed at a safe block near the death site.
 
 ## Existing economic conditions
 
-Defaults retain 3-hour storage, 18 graves per player per backend, 80% XP and
-100 Vault coins for a successful visit. `arc.graves.teleport.free` still waives
+New graves last 24 hours. Existing graves keep their recorded expiry.
+The limit is 18 graves per player per backend. Grave storage retains 80% of
+XP, and a successful paid visit costs 100 Vault coins. `arc.graves.teleport.free` still waives
 the fee; this change grants no permissions. Walking and claiming are free.
 Keep-inventory worlds and canceled deaths retain their native policy.
 Unavailable placement/storage/capacity keeps death items and XP with the player.
@@ -99,8 +99,9 @@ gate. Parkour's local profile is independent of the coordinated introduction.
 
 ## Visual lifecycle
 
-Nearby players see varied packet-only tombstones. Every inscription has a solid
-plaque generated from the same measured text bounds, including its signature,
+Nearby players see varied packet-only tombstones. A player grave has a gold
+outline for its owner within the configured visual range (32 blocks by default).
+Every inscription has a solid plaque generated from the same measured text bounds, including its signature,
 with a visible inset and a small front offset. The cairn mounts its plaque on
 the lid. Engraved monuments have an independent dark plaque below the portrait.
 Text wrapping and fitting retain both quote and full Java/Bedrock nickname.
