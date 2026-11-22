@@ -130,14 +130,20 @@ internal enum class SeatDirectionPalette(
     val spine: Material,
     val face: Material,
     val shade: Material,
+    val glove: Material,
     private val leadColor: Int,
     private val accentColor: Int,
 ) {
-    ROSE(Material.NETHER_BRICKS, Material.QUARTZ_BLOCK, Material.PINK_WOOL, Material.PINK_CONCRETE, 0xFF679A, 0xFFD1E0),
-    SCARLET(Material.RED_NETHER_BRICKS, Material.WHITE_CONCRETE, Material.REDSTONE_BLOCK, Material.RED_WOOL, 0xFF7A70, 0xFFBCB1),
-    ORCHID(Material.CRIMSON_PLANKS, Material.CALCITE, Material.PURPUR_BLOCK, Material.MAGENTA_WOOL, 0xEB93F0, 0xFFD0F3),
-    EMERALD(Material.POLISHED_BLACKSTONE, Material.IRON_BLOCK, Material.EMERALD_BLOCK, Material.DEEPSLATE_EMERALD_ORE, 0x6FF992, 0xCEFFD8),
-    PEARL(Material.POLISHED_BLACKSTONE, Material.PINK_WOOL, Material.CALCITE, Material.IRON_BLOCK, 0xFFF5F8, 0xFF92C3);
+    ROSE(Material.NETHER_BRICKS, Material.QUARTZ_BLOCK, Material.PINK_WOOL, Material.PINK_CONCRETE,
+        Material.PINK_CONCRETE, 0xFF679A, 0xFFD1E0),
+    SCARLET(Material.RED_NETHER_BRICKS, Material.WHITE_CONCRETE, Material.REDSTONE_BLOCK, Material.RED_WOOL,
+        Material.RED_CONCRETE, 0xFF7A70, 0xFFBCB1),
+    ORCHID(Material.CRIMSON_PLANKS, Material.CALCITE, Material.PURPUR_BLOCK, Material.MAGENTA_WOOL,
+        Material.MAGENTA_CONCRETE, 0xEB93F0, 0xFFD0F3),
+    EMERALD(Material.POLISHED_BLACKSTONE, Material.IRON_BLOCK, Material.EMERALD_BLOCK, Material.DEEPSLATE_EMERALD_ORE,
+        Material.LIME_CONCRETE, 0x6FF992, 0xCEFFD8),
+    PEARL(Material.POLISHED_BLACKSTONE, Material.PINK_WOOL, Material.CALCITE, Material.IRON_BLOCK,
+        Material.WHITE_CONCRETE, 0xFFF5F8, 0xFF92C3);
 
     fun caption(phrase: String): Component {
         val first = phrase.substringBefore(' ')
@@ -156,7 +162,7 @@ internal enum class SeatDirectionPalette(
 internal class SeatArrowPart(val material: Material, val transform: Transformation)
 
 internal enum class SeatArrowStyle {
-    COMPASS, CHEVRONS, FLETCHED;
+    COMPASS, CHEVRONS, FLETCHED, POINTING_HAND;
 
     fun next(): SeatArrowStyle = entries[(ordinal + 1) % entries.size]
 }
@@ -184,6 +190,7 @@ internal class SeatDirectionPose(val carrierHeight: Float, val style: SeatArrowS
         SeatArrowStyle.COMPASS -> compass()
         SeatArrowStyle.CHEVRONS -> chevrons()
         SeatArrowStyle.FLETCHED -> fletched()
+        SeatArrowStyle.POINTING_HAND -> pointingHand()
     }
 
     private fun compass() = listOf(
@@ -215,6 +222,32 @@ internal class SeatDirectionPose(val carrierHeight: Float, val style: SeatArrowS
         wing(palette.shade, 1, 6.50f, .76f, .13f, .025f),
         diamond(palette.spine, 6.31f, .105f, .18f, .045f, .48f),
     )
+
+    private fun pointingHand(): List<SeatArrowPart> {
+        val degree = (PI / 180).toFloat()
+        // Turn the wrist out so the side thumb and three curled knuckles show even when viewed along +Z.
+        val palm = Quaternionf(plane).rotateY(38f * degree).rotateZ(-5f * degree)
+        val origin = point(5.20f, -.219f * carrierHeight).add(-.51f, 0f, 0f)
+
+        fun piece(material: Material, offset: Vector3f, size: Vector3f, bend: Float = 0f, turn: Float = 0f): SeatArrowPart =
+            centered(material, palm.transform(offset).add(origin),
+                Quaternionf(palm).rotateY(turn * degree).rotateX(bend * degree), size, Quaternionf())
+
+        // The index keeps the exact heading. Its raised fingertip clears the fist in the lower camera.
+        val indexLength = 1.53f
+        val indexAxis = Quaternionf().rotationX(-22f * degree).rotateZ(22f * degree)
+        val indexBase = palm.transform(Vector3f(.35f, .12f, .20f)).add(origin)
+        val indexCenter = indexAxis.transform(Vector3f(0f, 0f, indexLength / 2)).add(indexBase)
+        return listOf(
+            piece(palette.spine, Vector3f(-.10f, -.01f, -.59f), Vector3f(.64f, .34f, .32f), turn = 12f),
+            piece(palette.glove, Vector3f(0f, -.015f, -.12f), Vector3f(1.02f, .32f, .83f)),
+            centered(palette.glove, indexCenter, indexAxis, Vector3f(.285f, .238f, indexLength), Quaternionf()),
+            piece(palette.glove, Vector3f(.67f, .065f, -.085f), Vector3f(.265f, .253f, .78f), bend = -22f, turn = 53f),
+            piece(palette.glove, Vector3f(.08f, .15f, .145f), Vector3f(.242f, .31f, .50f), bend = -42f, turn = 8f),
+            piece(palette.glove, Vector3f(-.19f, .14f, .075f), Vector3f(.242f, .31f, .476f), bend = -47f, turn = 4f),
+            piece(palette.glove, Vector3f(-.44f, .095f, -.03f), Vector3f(.219f, .31f, .442f), bend = -52f),
+        )
+    }
 
     // Both players share the carrier's horizontal position. Fixed text faces them from above the arrow.
     val caption = Transformation(

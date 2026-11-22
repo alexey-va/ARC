@@ -73,16 +73,42 @@ class SeatDirectionPoseTest : StringSpec({
         }
     }
 
-    "the three gestures cycle through distinct meshes using the same seven block handles" {
-        val rotation = generateSequence(SeatArrowStyle.COMPASS) { it.next() }.take(4).toList()
-        rotation shouldBe listOf(SeatArrowStyle.COMPASS, SeatArrowStyle.CHEVRONS, SeatArrowStyle.FLETCHED, SeatArrowStyle.COMPASS)
+    "the fourth gesture shows a pointing hand before the cycle returns to the compass" {
+        val rotation = generateSequence(SeatArrowStyle.COMPASS) { it.next() }.take(5).toList()
+        rotation shouldBe listOf(
+            SeatArrowStyle.COMPASS, SeatArrowStyle.CHEVRONS, SeatArrowStyle.FLETCHED, SeatArrowStyle.POINTING_HAND, SeatArrowStyle.COMPASS,
+        )
         val poses = rotation.map { SeatDirectionPose(1.8f, it, SeatDirectionPalette.ROSE) }
         poses.map { it.arrow.size }.distinct() shouldBe listOf(7)
-        poses.map { it.arrow.map(SeatArrowPart::transform) }.distinct().size shouldBe 3
+        poses.map { it.arrow.map(SeatArrowPart::transform) }.distinct().size shouldBe 4
         poses.map(SeatDirectionPose::caption).distinct().size shouldBe 1
     }
 
-    "all three silhouettes stay inside the vertical field of view and below their caption for both players" {
+    "the index follows the heading and clears the side thumb and three knuckles in both cameras" {
+        val hand = SeatDirectionPose(1.8f, SeatArrowStyle.POINTING_HAND, SeatDirectionPalette.ROSE).arrow.map { it.transform }
+        val index = hand[2]
+        val thumb = hand[3]
+        val knuckles = hand.drop(4).map { it.point(.5f, .5f, .5f) }
+        knuckles.size shouldBe 3
+        knuckles.zipWithNext().all { (a, b) -> a.x - b.x > .19f } shouldBe true
+        (thumb.point(.5f, .5f, 1f).x - index.point(.5f, .5f, 1f).x > .35f) shouldBe true
+
+        for ((yaw, forward) in headings) {
+            val rotated = index.turned(seatHeadingRotation(yaw))
+            val direction = rotated.point(.5f, .5f, 1f).sub(rotated.point(.5f, .5f, 0f))
+            direction.y = 0f
+            direction.normalize().shouldMatch(forward)
+        }
+        val fistCorners = hand.filterNot { it === index }.flatMap { it.corners() }
+        val tip = index.point(.5f, .5f, 1f)
+        (tip.z - fistCorners.maxOf { it.z } > .70f) shouldBe true
+        for (eye in listOf(1.62f, 3.38f)) {
+            fun screenY(p: Vector3f) = (1.8f + p.y - eye) / p.z
+            (screenY(tip) - fistCorners.maxOf(::screenY) > .035f) shouldBe true
+        }
+    }
+
+    "all four silhouettes stay inside the vertical field of view and below their caption for both players" {
         val height = 1.8f
         val limit = tan(Math.toRadians(35.0)).toFloat()
         for (style in SeatArrowStyle.entries) {
@@ -91,8 +117,7 @@ class SeatDirectionPoseTest : StringSpec({
                 val caption = pose.caption.translation
                 val captionBottom = (height + caption.y - eye) / caption.z
                 for (part in pose.arrow) {
-                    for (x in 0..1) for (y in 0..1) for (z in 0..1) {
-                        val corner = part.transform.point(x.toFloat(), y.toFloat(), z.toFloat())
+                    for (corner in part.transform.corners()) {
                         val screenY = (height + corner.y - eye) / corner.z
                         (screenY in -limit..(captionBottom - .005f)) shouldBe true
                     }
@@ -138,11 +163,30 @@ class SeatDirectionPoseTest : StringSpec({
         for (style in SeatArrowStyle.entries) {
             val poses = SeatDirectionPalette.entries.map { palette ->
                 SeatDirectionPose(1.8f, style, palette).also { pose ->
-                    pose.arrow.map { it.material }.toSet() shouldBe setOf(palette.rim, palette.spine, palette.face, palette.shade)
+                    if (style != SeatArrowStyle.POINTING_HAND) {
+                        pose.arrow.map { it.material }.toSet() shouldBe setOf(palette.rim, palette.spine, palette.face, palette.shade)
+                    }
                 }
             }
             poses.map { pose -> pose.arrow.map { it.transform } }.distinct().size shouldBe 1
             poses.map { pose -> pose.arrow.map { it.material } }.distinct().size shouldBe poses.size
+        }
+    }
+
+    "the palm and all five fingers share one matte color with a contrasting cuff in every palette" {
+        val colors = mapOf(
+            SeatDirectionPalette.ROSE to Material.PINK_CONCRETE,
+            SeatDirectionPalette.SCARLET to Material.RED_CONCRETE,
+            SeatDirectionPalette.ORCHID to Material.MAGENTA_CONCRETE,
+            SeatDirectionPalette.EMERALD to Material.LIME_CONCRETE,
+            SeatDirectionPalette.PEARL to Material.WHITE_CONCRETE,
+        )
+        for (palette in SeatDirectionPalette.entries) {
+            val glove = colors.getValue(palette)
+            val parts = SeatDirectionPose(1.8f, SeatArrowStyle.POINTING_HAND, palette).arrow
+            parts.first().material shouldBe palette.spine
+            (parts.first().material != glove) shouldBe true
+            parts.drop(1).map { it.material } shouldBe List(6) { glove }
         }
     }
 
@@ -185,6 +229,8 @@ class SeatDirectionPoseTest : StringSpec({
                 (writes.size > 7) shouldBe true
                 captions.size shouldBe 2
                 (captions[0].color() != captions[1].color()) shouldBe true
+                repeat(2) { display.show(carrier, rider, 180f, "Газуй туда!") }
+                captions.size shouldBe 4
                 val afterGesture = writes.size
                 display.turn(carrier, rider, -179f)
                 writes.size shouldBe afterGesture
@@ -195,6 +241,12 @@ class SeatDirectionPoseTest : StringSpec({
         }
     }
 })
+
+private fun Transformation.corners(): List<Vector3f> = buildList {
+    for (x in 0..1) for (y in 0..1) for (z in 0..1) {
+        add(point(x.toFloat(), y.toFloat(), z.toFloat()))
+    }
+}
 
 private fun Transformation.point(x: Float, y: Float, z: Float): Vector3f {
     val local = rightRotation.transform(Vector3f(x, y, z)).mul(scale)
