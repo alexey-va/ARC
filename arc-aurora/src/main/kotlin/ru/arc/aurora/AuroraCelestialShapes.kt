@@ -43,6 +43,12 @@ object AuroraCelestialShapes {
                 AuroraShape.INVISIBLE_HARE -> invisibleHare(points, progress)
                 AuroraShape.PAPER_FLOTILLA -> paperFlotilla(points, progress)
                 AuroraShape.TUMBLEWEED -> tumbleweed(points, progress)
+                AuroraShape.SKY_HOURGLASS -> skyHourglass(points, progress)
+                AuroraShape.DANDELION_GUST -> dandelionGust(points, progress)
+                AuroraShape.KINGFISHER_DIVE -> kingfisherDive(points, progress)
+                AuroraShape.STELLAR_PRISM -> stellarPrism(points, progress)
+                AuroraShape.EMBER_VOLCANO -> emberVolcano(points, progress)
+                AuroraShape.HATCHING_STAR -> hatchingStar(points, progress)
                 else -> error("Not a celestial shape: $shape")
             }
             val envelope = smooth(progress / 0.12) * smooth((1.0 - progress) / 0.16)

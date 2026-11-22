@@ -95,7 +95,8 @@ internal class AuroraEngine(
         val riverWaterline get() = if (profile.shape == AuroraShape.PAPER_FLOTILLA) terrainAnchor?.blockY else null
         val columns = skyColumns(x, y, z, normalX, normalZ, path, motion,
             profile.skyPalette.map { it.particle }.ifEmpty { profile.skyHeadParticles.ifEmpty { listOf(profile.particle) } }, animation,
-            profile.skyModel?.let { 2.0 * it.scale }, terrain = cell.terrain)
+            if (profile.shape.isMiniature) AuroraSkyMiniatures.partRadius(profile.shape) * checkNotNull(animation).size
+            else profile.skyModel?.let { 2.0 * it.scale }, terrain = cell.terrain)
         @Volatile var startsAt = Long.MAX_VALUE // Main publishes birth after the full envelope passes.
         var checkedColumns = 0
         var nextAt = born
@@ -105,7 +106,7 @@ internal class AuroraEngine(
         var repairAt = Long.MIN_VALUE
         var animationCursor = 0
         var modelCycle = -1L
-        var renderedLanterns = false // The latest Main submission has a nonzero-size member and has not been retired.
+        var renderedModels = false // The latest Main submission has a nonzero-size member and has not been retired.
     }
     private enum class Delivery { SUBMITTED, SKIPPED, OBSTRUCTED }
     private data class Input(
@@ -166,7 +167,7 @@ internal class AuroraEngine(
 
     fun invalidate(id: UUID) {
         viewers[id]?.let {
-            it.sky?.scenes?.forEach { scene -> scene.renderedLanterns = false }
+            it.sky?.scenes?.forEach { scene -> scene.renderedModels = false }
             it.revision++; it.sky = null; it.particles.invalidatePending()
             it.previewDrain = it.previewDrain?.copy(scenes = emptySet())
         }
@@ -213,7 +214,7 @@ internal class AuroraEngine(
         val viewer = viewers[id] ?: return 0L
         val scenes = viewer.sky?.takeIf { it.input.revision == viewer.revision && it.input.selection.profiles === profiles }
             ?.scenes.orEmpty().filter { scene ->
-                scene.renderedLanterns && !scene.culled.get() && !scene.rejected.get() &&
+                scene.renderedModels && !scene.culled.get() && !scene.rejected.get() &&
                     scene.startsAt != Long.MAX_VALUE && age - scene.startsAt < scene.profile.sceneDurationTicks
             }.toSet()
         viewer.previewDrain = PreviewDrain(profiles, scenes)
@@ -323,7 +324,7 @@ internal class AuroraEngine(
     }
 
     private fun eligible(player: Player, viewer: Viewer, source: Source): Boolean {
-        if (!player.isOnline || player.isDead) { retireLanterns(viewer); return false }
+        if (!player.isOnline || player.isDead) { retireModels(viewer); return false }
         viewer.world = player.world.uid
         val current = player.ping
         if (age >= viewer.sampleAt) {
@@ -332,22 +333,22 @@ internal class AuroraEngine(
         }
         if (!viewer.ping.admits(current, settings.ping)) {
             viewer.particles.invalidatePending()
-            retireLanterns(viewer)
+            retireModels(viewer)
             pingSkipped++
             return false
         }
         if (source != Source.EVENT && source != Source.SHOWCASE && (!personallyEnabled(player) ||
             source == Source.ORDINARY && !player.hasPermission(settings.permission))) {
             viewer.particles.invalidatePending()
-            retireLanterns(viewer)
+            retireModels(viewer)
             return false
         }
         return true
     }
 
-    private fun retireLanterns(viewer: Viewer) {
+    private fun retireModels(viewer: Viewer) {
         lanterns?.removeViewer(viewer.id)
-        viewer.sky?.scenes?.forEach { it.renderedLanterns = false }
+        viewer.sky?.scenes?.forEach { it.renderedModels = false }
         viewer.previewDrain = viewer.previewDrain?.copy(scenes = emptySet())
     }
 
@@ -402,12 +403,12 @@ internal class AuroraEngine(
             if (viewers[viewer.id] !== viewer) continue
             if (System.nanoTime() >= deadline) return
             val player = Bukkit.getPlayer(viewer.id)
-            if (player == null) { retireLanterns(viewer); continue }
+            if (player == null) { retireModels(viewer); continue }
             val selection = select(player, viewer)
             val sky = viewer.sky
             if (sky == null || player.world.uid != sky.input.world || viewer.revision != sky.input.revision ||
                 !selection.sameAs(sky.input.selection) || !eligible(player, viewer, selection.source)) {
-                retireLanterns(viewer)
+                retireModels(viewer)
                 continue
             }
             val showcase = sky.showcase
@@ -440,10 +441,17 @@ internal class AuroraEngine(
                 val animation = scene.animation
                 if (animation != null) {
                     if (age < scene.nextAt) continue
-                    if (scene.profile.shape == AuroraShape.SKY_LANTERNS) {
-                        if (remaining < scene.profile.points) continue
+                    if (scene.profile.shape.isModel) {
+                        // No miniature part exists at birth. Leave the first budget slice for its visible pose.
+                        if (scene.profile.shape.isMiniature && sceneAge == 0L) continue
+                        val points = scene.profile.points
+                        val firstPart = scene.animationCursor
+                        val endPart = minOf(points, firstPart + remaining)
+                        // Send a whole pose whenever the visit cap allows. Under smaller caps, keep all
+                        // authored slots and advance through them across visits, sampling only the current age.
+                        if (endPart < points && (!scene.profile.shape.isMiniature || sky.budget >= points)) continue
                         val progress = sceneAge.toDouble() / (scene.profile.sceneDurationTicks - 1)
-                        val centers = List(scene.profile.points) { index ->
+                        val centers = List(points) { index ->
                             val point = animation.pose(AuroraCelestialShapes.pointAt(animation.frames, progress, index).offset)
                             Location(player.world, scene.x + point.x * scene.normalZ + point.z * scene.normalX,
                                 scene.y + checkNotNull(scene.surfaceY) + point.y,
@@ -460,12 +468,18 @@ internal class AuroraEngine(
                             continue
                         }
                         val displays = lanterns ?: lanternFactory().also { lanterns = it }
-                        displays.update(scene, player, checkNotNull(scene.profile.skyModel), centers, progress,
-                            atan2(scene.normalX, scene.normalZ), scene.profile.updateTicks)
-                        scene.renderedLanterns = progress > 0.0 && progress < 1.0
+                        val yaw = atan2(scene.normalX, scene.normalZ)
+                        if (scene.profile.shape.isMiniature) {
+                            displays.updateMiniature(scene, player, scene.profile, firstPart, centers.subList(firstPart, endPart),
+                                progress, yaw, animation.pitch, animation.size)
+                            scene.animationCursor = endPart % points
+                        } else {
+                            displays.update(scene, player, checkNotNull(scene.profile.skyModel), centers, progress, yaw, scene.profile.updateTicks)
+                        }
+                        scene.renderedModels = progress > 0.0 && progress < 1.0
                         scene.modelCycle = elapsed / scene.profile.sceneDurationTicks
-                        scene.nextAt = age + scene.profile.updateTicks
-                        remaining -= centers.size
+                        scene.nextAt = age + if (endPart == points) scene.profile.updateTicks else 1
+                        remaining -= endPart - firstPart
                         continue
                     }
                     scene.nextAt = age + scene.profile.updateTicks
@@ -643,9 +657,10 @@ internal class AuroraEngine(
     private fun planShowcase(input: Input, showcase: AuroraShowcase): SkyInput {
         val scenes = showcase.profiles.mapIndexed { index, profile ->
             val pose = showcase.pose(index)
-            val animation = if (profile.shape.isCelestial || profile.shape == AuroraShape.SKY_LANTERNS)
+            val animation = if (profile.shape.isCelestial || profile.shape.isModel)
                 SkyAnimation(celestialFrames(profile), pose.size, 0.0, false, pose.pitch) else null
             val path = animation?.frames?.first()?.map { animation.pose(it.offset) }
+                ?: showcaseContour(profile.shape, pose.size, profile.points, pose.viewerLocalSlot)
                 ?: AuroraSkyShapes.stroke(profile.shape, pose.size, profile.points, profile.updateTicks,
                     profile.motionPeriodTicks, pose.phaseOffsetTicks % profile.motionPeriodTicks,
                     0.0, false, profile.skyTracers, profile.skyOptions)
@@ -747,13 +762,11 @@ internal class AuroraEngine(
         for (candidate in candidates) {
             if (input.age < input.viewer.fieldAdmissionAfter || active.size >= field.maxScenes) break
             if (scenes.containsKey(candidate.cell) || retired.containsKey(candidate.cell) || rejected[candidate.cell] == candidate.epoch) continue
-            if (candidate.profile.shape == AuroraShape.SKY_LANTERNS) {
-                if (active.count { it.profile.shape == AuroraShape.SKY_LANTERNS } >= field.maxLanternScenes) continue
-            } else {
-                if (active.count { it.profile === candidate.profile } >= field.maxPerProfile) continue
-                if (candidate.profile.shape.isCelestial &&
-                    active.count { it.profile.shape.isCelestial } >= field.maxCelestialScenes) continue
-            }
+            if (candidate.profile.shape.isModel && active.count { it.profile.shape.isModel } >= field.maxLanternScenes) continue
+            if (candidate.profile.shape != AuroraShape.SKY_LANTERNS &&
+                active.count { it.profile === candidate.profile } >= field.maxPerProfile) continue
+            if (candidate.profile.shape.isCelestial &&
+                active.count { it.profile.shape.isCelestial } >= field.maxCelestialScenes) continue
             val distanceSquared = (candidate.x - input.x).let { it * it } + (candidate.z - input.z).let { it * it }
             val outer = minOf(field.viewDistance, candidate.profile.radius)
             if (distanceSquared > outer * outer || distanceSquared < candidate.profile.minDistance * candidate.profile.minDistance) continue
@@ -771,9 +784,9 @@ internal class AuroraEngine(
         val delay = if (profile.spawnDelayTicks == 0) 0 else random.nextInt(profile.spawnDelayTicks + 1)
         val scale = options.scaleMin + random.nextDouble() * (options.scaleMax - options.scaleMin)
         val size = (profile.shapeSize * scale).coerceAtLeast(0.1)
-        if (profile.shape.isCelestial || profile.shape == AuroraShape.SKY_LANTERNS) {
+        if (profile.shape.isCelestial || profile.shape.isModel) {
             val frames = celestialFrames(profile)
-            val animation = if (profile.shape == AuroraShape.SKY_LANTERNS) SkyAnimation(frames, size, 0.0, false)
+            val animation = if (profile.shape.isModel) SkyAnimation(frames, size, 0.0, false)
                 else SkyAnimation(frames, size, if (candidate.cell.terrain) 0.0 else (random.nextDouble() * 2.0 - 1.0) * options.rollRadians,
                     random.nextBoolean())
             return SkyScene(profile, input.world, input.revision, input.age + delay,
@@ -791,8 +804,11 @@ internal class AuroraEngine(
 
     private fun celestialFrames(profile: AuroraProfile): List<List<AuroraCelestialPoint>> =
         animationFrames.getOrPut(profile.shape to profile.points) {
-            if (profile.shape == AuroraShape.SKY_LANTERNS) AuroraLanternMotion.frames(profile.points)
-            else AuroraCelestialShapes.frames(profile.shape, 1.0, profile.points)
+            when {
+                profile.shape == AuroraShape.SKY_LANTERNS -> AuroraLanternMotion.frames(profile.points)
+                profile.shape.isMiniature -> AuroraSkyMiniatures.frames(profile.shape)
+                else -> AuroraCelestialShapes.frames(profile.shape, 1.0, profile.points)
+            }
         }
 
     private fun deliver(emission: Emission): Delivery {
@@ -865,7 +881,7 @@ internal class AuroraSkyCursor(private val points: Int, initialPosition: Int = 0
 private data class SkyColumn(val x: Int, val z: Int, val low: Double, val high: Double)
 
 private class SkyAnimation(
-    val frames: List<List<AuroraCelestialPoint>>, val size: Double, roll: Double, val reverse: Boolean, pitch: Double = 0.0,
+    val frames: List<List<AuroraCelestialPoint>>, val size: Double, roll: Double, val reverse: Boolean, val pitch: Double = 0.0,
 ) {
     private val rollCos = cos(roll)
     private val rollSin = sin(roll)

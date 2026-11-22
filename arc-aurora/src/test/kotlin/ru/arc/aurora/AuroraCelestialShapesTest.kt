@@ -16,13 +16,18 @@ class AuroraCelestialShapesTest : FreeSpec({
         val output = System.getenv("AURORA_CELESTIAL_PREVIEW_DIR")?.let(::File)
         val configuredPoints = if (output == null) emptyMap() else bundledShowcasePointCounts()
         for (shape in AuroraShape.entries.filter { it.isCelestial }) {
+            val maxPaletteSlot = when (shape) {
+                AuroraShape.KINGFISHER_DIVE, AuroraShape.STELLAR_PRISM,
+                AuroraShape.EMBER_VOLCANO, AuroraShape.HATCHING_STAR -> 2
+                else -> 1
+            }
             val previewPoints = configuredPoints[shape] ?: 160
             for (points in setOf(1, 80, 96, 160, 192, previewPoints)) {
                 val frames = AuroraCelestialShapes.frames(shape, 1.0, points)
                 frames.size shouldBe 33
                 frames.all { it.size == points } shouldBe true
                 frames.flatten().all { sample ->
-                    sample.opacity in 0.0..1.0 && sample.paletteSlot in 0..1 &&
+                    sample.opacity in 0.0..1.0 && sample.paletteSlot in 0..maxPaletteSlot &&
                         listOf(sample.offset.x, sample.offset.y, sample.offset.z).all(Double::isFinite) &&
                         celestialDistance(sample.offset, AuroraOffset(0.0, 0.0, 0.0)) < 1.75
                 } shouldBe true

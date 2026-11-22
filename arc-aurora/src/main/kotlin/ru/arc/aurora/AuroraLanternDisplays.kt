@@ -1,6 +1,7 @@
 package ru.arc.aurora
 
 import org.bukkit.Location
+import org.bukkit.Material
 import org.bukkit.entity.Display
 import org.bukkit.entity.ItemDisplay
 import org.bukkit.entity.Player
@@ -15,10 +16,12 @@ import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
 /** Main-thread-owned handles. Core owns private audience tracking, ordered async packets and retirement. */
-class AuroraLanternDisplays(plugin: Plugin) {
-    private data class Scene(val model: AuroraSkyModel, val world: UUID, val handles: MutableList<PacketItemDisplay?>)
+class AuroraLanternDisplays internal constructor(private val displays: PaperPacketDisplays) {
+    constructor(plugin: Plugin) : this(PaperPacketDisplays(plugin, "aurora-lanterns"))
 
-    private val displays = PaperPacketDisplays(plugin, "aurora-lanterns")
+    private data class Scene(val model: Any, val world: UUID, val handles: MutableList<PacketItemDisplay?>)
+    private data class Part(val material: Material, val transform: Transformation, val customModelData: Int? = null)
+
     private val viewers = mutableMapOf<UUID, MutableMap<Any, Scene>>()
     private var closed = false
     private var retirement: CompletableFuture<Void>? = null
@@ -27,6 +30,29 @@ class AuroraLanternDisplays(plugin: Plugin) {
         yawRadians: Double, updateTicks: Int) {
         if (closed) return
         require(centers.size in 1..AuroraLanternMotion.MAX_LANTERNS)
+        updateParts(key, player, model, centers.size, 0, centers, updateTicks) { index ->
+            val pose = AuroraLanternMotion.displayPose(index, progress, yawRadians, model.scale, model.pivot)
+            Part(model.material, Transformation(Vector3f(pose.translation.x.toFloat(), pose.translation.y.toFloat(), pose.translation.z.toFloat()),
+                Quaternionf(pose.rotationX, pose.rotationY, pose.rotationZ, pose.rotationW), Vector3f(pose.scale), Quaternionf()),
+                model.customModelData)
+        }
+    }
+
+    internal fun updateMiniature(key: Any, player: Player, profile: AuroraProfile, firstPart: Int, centers: List<Location>,
+        progress: Double, yawRadians: Double, pitchRadians: Double, size: Double) {
+        if (closed) return
+        val count = AuroraSkyMiniatures.partCount(profile.shape)
+        require(firstPart in 0 until count && centers.size in 1..(count - firstPart))
+        val orientation = Quaternionf().rotateY(yawRadians.toFloat()).rotateX(pitchRadians.toFloat())
+        updateParts(key, player, profile.shape, count, firstPart, centers, profile.updateTicks) { index ->
+            val part = AuroraSkyMiniatures.part(profile.shape, index, progress)
+            Part(part.material, Transformation(Vector3f(), Quaternionf(orientation).mul(part.rotation),
+                Vector3f(part.scale).mul(size.toFloat()), Quaternionf()))
+        }
+    }
+
+    private inline fun updateParts(key: Any, player: Player, model: Any, count: Int, firstPart: Int,
+        centers: List<Location>, updateTicks: Int, partAt: (Int) -> Part) {
         val viewer = player.uniqueId
         val world = player.world.uid
         if (centers.any { it.world?.uid != world }) {
@@ -35,25 +61,24 @@ class AuroraLanternDisplays(plugin: Plugin) {
         }
         val scenes = viewers.getOrPut(viewer) { mutableMapOf() }
         val previous = scenes[key]
-        if (previous != null && (previous.model != model || previous.world != world || previous.handles.size != centers.size)) {
+        if (previous != null && (previous.model != model || previous.world != world || previous.handles.size != count)) {
             previous.remove()
             scenes.remove(key)
         }
-        val scene = scenes.getOrPut(key) { Scene(model, world, MutableList(centers.size) { null }) }
+        val scene = scenes.getOrPut(key) { Scene(model, world, MutableList(count) { null }) }
         val interpolation = updateTicks.coerceIn(1, 59)
-        for (index in centers.indices) {
-            val pose = AuroraLanternMotion.displayPose(index, progress, yawRadians, model.scale, model.pivot)
+        for ((offset, location) in centers.withIndex()) {
+            val index = firstPart + offset
+            val part = partAt(index)
             val handle = scene.handles[index]
-            if (pose.scale <= 0f) {
+            if (part.transform.scale.lengthSquared() == 0f) {
                 handle?.remove()
                 scene.handles[index] = null
                 continue
             }
-            val center = centers[index].clone().apply { yaw = 0f; pitch = 0f }
-            val transform = Transformation(Vector3f(pose.translation.x.toFloat(), pose.translation.y.toFloat(), pose.translation.z.toFloat()),
-                Quaternionf(pose.rotationX, pose.rotationY, pose.rotationZ, pose.rotationW), Vector3f(pose.scale), Quaternionf())
+            val center = location.clone().apply { yaw = 0f; pitch = 0f }
             if (handle == null) {
-                val created = displays.spawnItem(center, item(model))
+                val created = displays.spawnItem(center, item(part))
                 scene.handles[index] = created // Retain ownership even if later metadata preparation fails.
                 created.apply {
                     isVisibleByDefault = false
@@ -69,7 +94,7 @@ class AuroraLanternDisplays(plugin: Plugin) {
                     interpolationDelay = 0
                     interpolationDuration = interpolation
                     teleportDuration = interpolation
-                    transformation = transform
+                    transformation = part.transform
                     showTo(player)
                 }
             } else {
@@ -77,7 +102,7 @@ class AuroraLanternDisplays(plugin: Plugin) {
                 handle.interpolationDuration = interpolation
                 handle.teleportDuration = interpolation
                 handle.teleport(center)
-                handle.transformation = transform
+                handle.transformation = part.transform
             }
         }
     }
@@ -108,8 +133,8 @@ class AuroraLanternDisplays(plugin: Plugin) {
 
     private fun Scene.remove() { handles.forEach { it?.remove() } }
 
-    private fun item(model: AuroraSkyModel): ItemStack = ItemStack(model.material).also { item ->
-        model.customModelData?.let { value ->
+    private fun item(part: Part): ItemStack = ItemStack(part.material).also { item ->
+        part.customModelData?.let { value ->
             val meta = item.itemMeta
             meta.setCustomModelData(value)
             item.itemMeta = meta

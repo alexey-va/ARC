@@ -1,7 +1,7 @@
 # ArcAurora
 
 First-party biome ambience for RusCrafting. The standalone Paper plugin sends
-native particles and client-only lantern item displays to individual viewers through
+native particles and client-only item displays to individual viewers through
 ArcCore. Bundled defaults use vanilla materials and need no resource pack or terrain
 changes. Runtime profiles can reuse an existing custom item model.
 The build targets **Java 25**, **Paper `1.21.11-R0.1-SNAPSHOT`** and **ArcCore
@@ -10,7 +10,7 @@ the PacketEvents compile version comes from the repository's dependency catalog.
 
 ## Visual direction
 
-The bundled configuration contains **25 ordinary particle profiles**, **three surface scenes**, and **31 sky variants**
+The bundled configuration contains **25 ordinary particle profiles**, **three surface scenes**, and **39 sky variants**
 sampled into up to **nine retained world cells** for `treasure-hunt`. The sky
 preserves the accepted soft-lines palette: one familiar white wave, blue and
 orange waves/curls, a green spark wave, three frequent meteor variants and one
@@ -24,18 +24,22 @@ interpretations, not a particle-physics simulation. No cube,
 star or TOTEM ring is selected by the bundled night catalogue; those supported
 shapes remain available to custom profiles.
 
-Eight animated scenes form the living-sky catalogue.
+The living-sky catalogue includes twelve animated particle scenes.
 
 | Profile | Shape | Signature action |
 | --- | --- | --- |
-| `lunar_jellyfish` | `JELLYFISH` | A breathing canopy, moving tentacles and an upward departure |
-| `sky_manta` | `MANTA_RAY` | A broad wing stroke, a bank and dissolving wing tips |
 | `light_knot` | `LIGHT_KNOT` | Two coloured ribbons weave, tighten and unravel |
 | `reverse_lightning` | `REVERSE_LIGHTNING` | Branches converge, then one escaping drop carries the exit |
 | `sky_coral` | `SKY_CORAL` | A branching crown grows, pulses and retracts |
 | `moon_fan` | `MOON_FAN` | Curved ribs open, turn edge-on and reopen on the other side |
 | `sky_stitch` | `SKY_STITCH` | An amber needle draws three stitches between silver edges and leaves a loose thread |
 | `aurora_curtain` | `AURORA_CURTAIN` | A single fold travels across hanging mint threads and reveals a lilac lining |
+| `sky_hourglass` | `SKY_HOURGLASS` | Sand drains through a bright glass waist and piles into the lower bulb |
+| `dandelion_gust` | `DANDELION_GUST` | A bent stem releases parachute seeds into a gust |
+| `kingfisher_dive` | `KINGFISHER_DIVE` | A blue bird folds its wings, dives and carries a mint-green fish |
+| `stellar_prism` | `STELLAR_PRISM` | A white beam enters a triangular prism and splits into coloured rays |
+| `ember_volcano` | `EMBER_VOLCANO` | An ember cone erupts and throws hot fragments overhead |
+| `hatching_star` | `HATCHING_STAR` | A cool shell cracks open and releases a gold star |
 
 These scenes deform over their complete lifetime, rather than translating a static
 outline. The worker caches at most 33 unit-size poses per shape/sample count,
@@ -57,15 +61,15 @@ The separate `lanterns` preset previews that same procession with
 follow three blocks of common wind over 600 ticks, starting at staggered times.
 Their anchors remain world-fixed; their gentle sway does not follow the camera.
 Initial height is 8–14 blocks above loaded terrain, admission distance is 12–72,
-and item poses update every four ticks. The bundled limit is four lantern groups
-(at most 24 lanterns), while celestial scenes retain their separate limit of two.
+and item poses update every four ticks. The bundled limit is four display groups
+(up to 24 parts across lanterns and miniatures), while celestial scenes retain their separate limit of two.
 All figures still share nine scene slots and 36 requests per visit.
 Admission distance only controls new groups. Approaching or flying through an
 existing lantern group preserves its item identities and remaining flight;
 terrain, unloaded chunks, viewer eligibility and normal expiry still retire it.
 
-Lanterns have eight world-cell selection shares among 30 other sky variants,
-instead of one share each: about 21% of cell assignments before distance,
+Lanterns have eight world-cell selection shares among 38 other sky variants,
+about 17% of cell assignments before distance,
 terrain and scene-budget checks. This makes them more common without attaching
 them to the camera or guaranteeing a group at every location. A cell retains
 its selected profile across lifecycles; its anchor jitter and motion seed vary.
@@ -89,9 +93,18 @@ scale envelope, not unsupported item-texture alpha. The model's brightness does
 not illuminate terrain or imply shader bloom. A source-driven model/motion
 preview is separate evidence from native Minecraft rendering and pack loading.
 
+Four multipart miniatures use full-bright vanilla items. Each part keeps its own display identity as the assembly moves.
+
+| Showcase name | Motion |
+| --- | --- |
+| `FEATHER_GLIDER` | Two feather wings unfold, bank and sweep back for a dive. |
+| `ASTRAL_PENDULUM` | An amber bob swings beneath a clock dial. |
+| `TWIN_SAMARAS` | Two winged seeds separate and spin down along different paths. |
+| `SKY_PHONOGRAPH` | The needle lowers onto a spinning record beneath a gold horn. |
+
 ### Private sky showcase
 
-Stand outdoors, face open sky and run `/showcase SKY_STITCH` with `arcaurora.admin`. The full form is `/arcaurora showcase SKY_STITCH`. Nine copies of the selected effect play at different phases for three minutes. Tab completes every `AuroraShape` name, including the tracks, lanterns and surface effects. Run the command with another name to switch immediately. Run it in a new direction to move the display, or use `/showcase stop` to end it early. Only the invoking player sees the display.
+Stand outdoors, face open sky and run `/arcaurora showcase SKY_STITCH` with `arcaurora.admin`. Nine copies of the selected effect play at different phases for three minutes. Tab completes all 44 active shape names, including the tracks, lanterns and surface effects. Run the command with another name to switch immediately. Run it in a new direction to move the display, or use `/arcaurora showcase stop` to end it early. Only the invoking player sees the display.
 
 The bare `/arcaurora showcase` opens a 60-second overview. The stitch and curtain appear above the hare tracks, paper flotilla and tumbleweed.
 
@@ -219,8 +232,8 @@ lifetime (30 seconds by default). Queued or unborn groups cannot start during
 this drain. Manual stop/replacement, quit, world changes, ping rejection and
 reload still remove the displays immediately. Both ping gates remain enforced.
 Look above the horizon to inspect the silhouettes.
-For example, `/arcaurora preview self treasure-hunt lunar_jellyfish` selects the
-jellyfish; `/arcaurora catalog particle-gallery` lists material studies, and
+For example, `/arcaurora preview self treasure-hunt sky_hourglass` selects the
+hourglass; `/arcaurora catalog particle-gallery` lists material studies, and
 `/arcaurora preview self particle-gallery <profile>` isolates one of them nearby.
 An unknown preset/profile is rejected before replacing an existing preview.
 
@@ -274,7 +287,7 @@ biome-aliases:
 | `radius`, `min-distance` | Horizontal admission range; ordinary `2..32`, sky `2..96`. New sky cells must lie in this band and inside `sky-field.view-distance`; active cells use the field's outer cull radius |
 | `vertical-min`, `vertical-max` | Ordinary heights relative to feet (`-32..32`); sky heights above the cell anchor's loaded terrain surface (`-32..64`), independent of player Y |
 | `shape-size` | Unposed radius/half-extent, ordinary `0.1..8`, sky `0.1..32` blocks |
-| `points`, `sky-points` | Ordinary positions `1..24`; sky positions `1..192` across one finite stroke, or stable sample identities in a celestial animation |
+| `points`, `sky-points` | Ordinary positions `1..24`; sky positions `1..192` across one finite stroke, or stable sample identities in a celestial animation. Lantern groups accept 1–6 and each miniature requires its authored part count (4 or 6). |
 | `sky-scene` | `false` by default; retain a sky anchor and use posed, progressively revealed geometry |
 | `scene-duration-ticks` | Sky anchor lifetime after its delayed birth, `40..1200`; default `240`; unfinished strokes expire too |
 | `sky-weight` | World-cell selection shares for sky profiles, `1..64`; default `1` preserves the original selection. Ordinary profiles must keep `1` |
@@ -344,7 +357,7 @@ previous engine and settings active. Admin previews stop on reload; run
 | `cull-hysteresis` | `16`; `0..64` blocks | Extra outer radius for retaining active cells |
 | `max-scenes` | `9`; `1..16` | Maximum retained scenes per viewer |
 | `max-celestial-scenes` | `2`; `1..16` | Aggregate celestial scene limit within `max-scenes`; the shared packet cap still applies |
-| `max-lantern-scenes` | `2` parser, `4` bundled; `1..16` | Lantern-only group limit within `max-scenes`; replaces `max-per-profile` for lanterns without raising celestial limits |
+| `max-lantern-scenes` | `2` parser, `4` bundled; `1..16` | Combined lantern and miniature group limit within `max-scenes`. Miniatures also respect `max-per-profile`. |
 | `max-per-profile` | `2`; `1..16` | Limit on copies of one non-lantern variant; promotes variety and bounds expensive contours |
 | `cull-cooldown-ticks` | `80`; `72..1200` | Minimum whole-cell retirement period after culling, also respecting the old lifecycle expiry |
 
@@ -456,7 +469,7 @@ ping and does not change networking settings.
 
 At 20 TPS, the default ordinary cadence allows at most 24 emission requests per
 second per viewer before other caps. The bundled world field has at most nine
-scenes, up to four lantern groups and two of each other profile. The shared ceiling stays **36 requests per visit**.
+scenes, up to four display groups and two of each profile except lanterns. The shared ceiling stays **36 requests per visit**.
 Two held crystals and seven four-sample tracks would use all 36 requests per
 visit. Simultaneous crystal growth/refresh can also reach the cap;
 per-viewer scene rotation retains fairness and unattempted heads stay pending.
@@ -594,7 +607,7 @@ Run from the repository root with JDK 25:
 ```
 
 The expected local runtime artifact is
-`arc-aurora/build/libs/ArcAurora-0.1.15.jar`. The public Maven API artifact
+`arc-aurora/build/libs/ArcAurora-0.1.16.jar`. The public Maven API artifact
 `ru.ruscrafting.arc:arc-aurora-api:0.1.0` was verified on 2026-10-29 in the
 [RusCrafting repository](https://repo.rus-crafting.ru/grocermc/ru/ruscrafting/arc/arc-aurora-api/0.1.0/arc-aurora-api-0.1.0.pom).
 That API publication does not establish a runtime-plugin build, delivery,
@@ -640,3 +653,5 @@ and `sky-weight` requires 0.1.12. Lantern groups remain visible during close
 approach starting with 0.1.13.
 The five decorations and the private showcase command require ArcAurora 0.1.14.
 Selection by shape and the three-minute display require ArcAurora 0.1.15.
+
+Version 0.1.16 retires `JELLYFISH` and `MANTA_RAY` and adds the ten scenes above.

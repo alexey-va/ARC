@@ -24,7 +24,8 @@ internal class AuroraShowcase(
                 AuroraShape.CUBE -> 2.1
                 AuroraShape.SKY_LANTERNS -> 2.45
                 AuroraShape.RING, AuroraShape.CIRCLE, AuroraShape.SPHERE, AuroraShape.ARC,
-                AuroraShape.CRYSTAL, AuroraShape.STAR, AuroraShape.JELLYFISH, AuroraShape.MOON_FAN -> 3.45
+                AuroraShape.CRYSTAL, AuroraShape.STAR, AuroraShape.JELLYFISH, AuroraShape.MOON_FAN,
+                AuroraShape.ASTRAL_PENDULUM -> 3.45
                 AuroraShape.PAPER_FLOTILLA, AuroraShape.SKY_STITCH -> 4.2
                 AuroraShape.INVISIBLE_HARE, AuroraShape.TUMBLEWEED -> 3.8
                 else -> profile.shapeSize.coerceIn(3.65, 3.95)
@@ -50,11 +51,12 @@ internal class AuroraShowcase(
                 eye.y + position.y,
                 eye.z - normalZ * position.z - normalX * position.x,
             ),
-            size, Math.toRadians(tilt), phaseOffsetTicks,
+            size, Math.toRadians(tilt), phaseOffsetTicks, position,
         )
     }
 
-    data class Pose(val anchor: AuroraOffset, val size: Double, val pitch: Double, val phaseOffsetTicks: Int)
+    data class Pose(val anchor: AuroraOffset, val size: Double, val pitch: Double, val phaseOffsetTicks: Int,
+        val viewerLocalSlot: AuroraOffset)
 
     private data class Slot(
         val shape: AuroraShape, val right: Double, val height: Double, val size: Double, val tilt: Double = 0.0,

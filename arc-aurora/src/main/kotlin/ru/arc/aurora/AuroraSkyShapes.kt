@@ -127,7 +127,10 @@ object AuroraSkyShapes {
             AuroraShape.JELLYFISH, AuroraShape.MANTA_RAY, AuroraShape.LIGHT_KNOT,
             AuroraShape.REVERSE_LIGHTNING, AuroraShape.SKY_CORAL, AuroraShape.MOON_FAN, AuroraShape.SKY_LANTERNS,
             AuroraShape.SKY_STITCH, AuroraShape.INVISIBLE_HARE, AuroraShape.PAPER_FLOTILLA,
-            AuroraShape.AURORA_CURTAIN, AuroraShape.TUMBLEWEED ->
+            AuroraShape.AURORA_CURTAIN, AuroraShape.TUMBLEWEED,
+            AuroraShape.SKY_HOURGLASS, AuroraShape.DANDELION_GUST, AuroraShape.KINGFISHER_DIVE,
+            AuroraShape.STELLAR_PRISM, AuroraShape.EMBER_VOLCANO, AuroraShape.HATCHING_STAR,
+            AuroraShape.FEATHER_GLIDER, AuroraShape.ASTRAL_PENDULUM, AuroraShape.TWIN_SAMARAS, AuroraShape.SKY_PHONOGRAPH ->
                 error("Celestial animations are sampled as keyframes")
             AuroraShape.RING, AuroraShape.CIRCLE -> {
                 val angle = progress * 2.0 * PI * if (shape == AuroraShape.RING) 1.0 else 2.0

@@ -26,11 +26,16 @@ import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
 class AuroraCatalogTest : FreeSpec({
-    "showcase is a self-only admin command and fills missing profiles from the bundle" {
+    "showcase is a self-only arcaurora subcommand and fills missing profiles from the bundle" {
         withCatalog { fixture ->
             val plugin = fixture.plugin
             val admin = fixture.admin
             val target = fixture.target
+            val commands = fixture.paper.server.commandMap
+            plugin.getCommand("showcase") shouldBe null
+            commands.getCommand("showcase") shouldBe null
+            commands.getCommand("arcaurora:showcase") shouldBe null
+            commands.getCommand("aaurora") shouldBe plugin.getCommand("arcaurora")
             fixture.command(target, "showcase")
             target.message() shouldBe "no-permission"
             fixture.complete(target, "show") shouldBe emptyList()
@@ -38,9 +43,9 @@ class AuroraCatalogTest : FreeSpec({
             fixture.complete(fixture.paper.server.consoleSender, "show") shouldBe emptyList()
             plugin.showcase(admin) shouldBe null
             fixture.complete(admin, "show") shouldBe listOf("showcase")
-            fixture.complete(admin, "showcase", "st") shouldBe listOf("STAR", "stop")
+            fixture.complete(admin, "showcase", "st") shouldBe listOf("STAR", "STELLAR_PRISM", "stop")
 
-            fixture.command(admin, "preview self test-gallery jelly")
+            fixture.command(admin, "preview self test-gallery fan")
             admin.message() shouldBe "preview-on"
             val preview = checkNotNull(plugin.preview(admin))
             fixture.command(admin, "showcase")
@@ -65,18 +70,18 @@ class AuroraCatalogTest : FreeSpec({
         }
     }
 
-    "showcase selects any effect for three minutes and completes canonical effect names" {
+    "showcase selects active effects for three minutes and completes canonical effect names" {
         withCatalog { fixture ->
             val plugin = fixture.plugin
             val admin = fixture.admin
             fixture.complete(admin, "SHOWCASE", "") shouldBe
-                (AuroraShape.entries.map { it.name } + "stop").sorted()
+                (AuroraShape.active.map { it.name } + "stop").sorted()
             fixture.complete(admin, "showcase", "tRaCk_F") shouldBe listOf("TRACK_FLOCK", "TRACK_FLYBY")
             fixture.complete(admin, "showcase", "stop", "") shouldBe emptyList()
             fixture.complete(fixture.target, "showcase", "") shouldBe emptyList()
             fixture.complete(fixture.paper.server.consoleSender, "showcase", "") shouldBe emptyList()
 
-            for (shape in AuroraShape.entries) {
+            for (shape in AuroraShape.active) {
                 fixture.command(admin, "showcase ${shape.name.lowercase(Locale.ROOT)}")
                 admin.message() shouldBe "showcase-effect-on:${shape.name}"
                 val showcase = checkNotNull(plugin.showcase(admin))
@@ -85,6 +90,12 @@ class AuroraCatalogTest : FreeSpec({
             }
             plugin.showcase(fixture.target) shouldBe null
             val selected = plugin.showcase(admin)
+            for (retired in listOf("jellyfish", "manta_ray")) {
+                fixture.complete(admin, "showcase", retired) shouldBe emptyList()
+                fixture.command(admin, "showcase $retired")
+                admin.message() shouldBe "showcase-effect-unknown"
+                plugin.showcase(admin) shouldBe selected
+            }
             fixture.command(admin, "showcase stop extra")
             admin.message() shouldBe "showcase-usage"
             plugin.showcase(admin) shouldBe selected
@@ -118,29 +129,6 @@ class AuroraCatalogTest : FreeSpec({
         }
     }
 
-    "standalone showcase command shares the private session and completes its effect names" {
-        withCatalog { fixture ->
-            val plugin = fixture.plugin
-            val admin = fixture.admin
-            val target = fixture.target
-            val command = checkNotNull(plugin.getCommand("showcase"))
-            command.testPermissionSilent(admin) shouldBe true
-            command.testPermissionSilent(target) shouldBe false
-            command.tabComplete(admin, "showcase", arrayOf("st")) shouldBe listOf("STAR", "stop")
-            command.tabComplete(target, "showcase", arrayOf("")) shouldBe emptyList()
-
-            fixture.paper.server.dispatchCommand(target, "showcase STAR")
-            plugin.showcase(target) shouldBe null
-
-            fixture.paper.server.dispatchCommand(admin, "showcase sTaR") shouldBe true
-            admin.message() shouldBe "showcase-effect-on:STAR"
-            plugin.showcase(admin)?.profiles?.map { it.shape } shouldBe List(9) { AuroraShape.STAR }
-            fixture.command(admin, "showcase stop")
-            admin.message() shouldBe "showcase-off"
-            plugin.showcase(admin) shouldBe null
-        }
-    }
-
     "reload waits for predecessor display cleanup and never activates after a failed drain" {
         for (success in listOf(true, false)) withCatalog { fixture ->
             val drain = CompletableFuture<Void>()
@@ -163,7 +151,7 @@ class AuroraCatalogTest : FreeSpec({
             val guest = fixture.paper.addPlayer("CatalogGuest")
             fixture.command(guest, "catalog")
             guest.message() shouldBe "no-permission"
-            fixture.command(guest, "preview ${fixture.target.name} test-gallery jelly")
+            fixture.command(guest, "preview ${fixture.target.name} test-gallery fan")
             guest.message() shouldBe "no-permission"
             fixture.plugin.preview(fixture.target) shouldBe null
             fixture.complete(guest, "cat") shouldBe emptyList()
@@ -172,7 +160,9 @@ class AuroraCatalogTest : FreeSpec({
             fixture.command(fixture.admin, "catalog")
             fixture.admin.message() shouldBe "catalog-presets:test-gallery, treasure-hunt"
             fixture.command(fixture.admin, "catalog test-gallery")
-            fixture.admin.message() shouldBe "catalog-profiles:test-gallery:coral, jelly"
+            fixture.admin.message() shouldBe "catalog-profiles:test-gallery:coral, fan"
+            fixture.command(fixture.admin, "catalog retired-gallery")
+            fixture.admin.message() shouldBe "preset-not-found:retired-gallery"
             fixture.command(fixture.admin, "catalog missing")
             fixture.admin.message() shouldBe "preset-not-found:missing"
             fixture.command(fixture.admin, "catalog test-gallery extra")
@@ -180,24 +170,26 @@ class AuroraCatalogTest : FreeSpec({
 
             fixture.complete(fixture.admin, "cat") shouldBe listOf("catalog")
             fixture.complete(fixture.admin, "catalog", "test") shouldBe listOf("test-gallery")
+            fixture.complete(fixture.admin, "catalog", "retired") shouldBe emptyList()
             fixture.complete(fixture.admin, "preview", "") shouldBe
                 listOf("CatalogAdmin", "CatalogGuest", "CatalogTarget", "self")
             fixture.complete(fixture.paper.server.consoleSender, "preview", "self") shouldBe emptyList()
             fixture.complete(fixture.admin, "preview", "self", "test") shouldBe listOf("test-gallery")
-            fixture.complete(fixture.admin, "preview", "self", "test-gallery", "j") shouldBe listOf("jelly")
+            fixture.complete(fixture.admin, "preview", "self", "retired") shouldBe emptyList()
+            fixture.complete(fixture.admin, "preview", "self", "test-gallery", "") shouldBe listOf("coral", "fan")
             fixture.complete(fixture.admin, "preview", "self", "missing", "") shouldBe emptyList()
-            fixture.complete(fixture.admin, "preview", "self", "test-gallery", "jelly", "") shouldBe emptyList()
+            fixture.complete(fixture.admin, "preview", "self", "test-gallery", "fan", "") shouldBe emptyList()
         }
     }
 
     "explicit previews retain exactly the immutable selection and reject invalid replacements without disturbing it" {
         withCatalog { fixture ->
-            fixture.command(fixture.admin, "preview ${fixture.target.name} test-gallery jelly")
+            fixture.command(fixture.admin, "preview ${fixture.target.name} test-gallery fan")
             fixture.admin.message() shouldBe "preview-on"
             fixture.target.message() shouldBe "preview-on"
             val first = checkNotNull(fixture.plugin.preview(fixture.target))
             val selected = first.selectedProfiles()
-            selected.map { it.id } shouldBe listOf("jelly")
+            selected.map { it.id } shouldBe listOf("fan")
             (selected.single() === fixture.plugin.engine!!.settings.eventPresets.getValue("test-gallery")[0]) shouldBe true
             (fixture.plugin.previewSelection(fixture.target) === selected) shouldBe true
             shouldThrow<UnsupportedOperationException> { (selected as MutableList<AuroraProfile>).clear() }
@@ -207,11 +199,13 @@ class AuroraCatalogTest : FreeSpec({
             fixture.admin.message() shouldBe "preset-not-found:missing"
             (fixture.plugin.preview(fixture.target) === first) shouldBe true
             firstTimer.isCancelled shouldBe false
-            fixture.command(fixture.admin, "preview ${fixture.target.name} test-gallery missing")
-            fixture.admin.message() shouldBe "profile-not-found:test-gallery:missing"
+            fixture.command(fixture.admin, "preview ${fixture.target.name} retired-gallery")
+            fixture.admin.message() shouldBe "preset-not-found:retired-gallery"
+            fixture.command(fixture.admin, "preview ${fixture.target.name} test-gallery old-glider")
+            fixture.admin.message() shouldBe "profile-not-found:test-gallery:old-glider"
             (fixture.plugin.preview(fixture.target) === first) shouldBe true
             firstTimer.isCancelled shouldBe false
-            fixture.command(fixture.admin, "preview Missing test-gallery jelly")
+            fixture.command(fixture.admin, "preview Missing test-gallery fan")
             fixture.admin.message() shouldBe "player-not-found:Missing"
             (fixture.plugin.preview(fixture.target) === first) shouldBe true
 
@@ -222,7 +216,7 @@ class AuroraCatalogTest : FreeSpec({
             replacement.selectedProfiles().map { it.id } shouldBe listOf("coral")
             (fixture.plugin.previewSelection(fixture.target) === replacement.selectedProfiles()) shouldBe true
             fixture.command(fixture.admin, "preview self test-gallery")
-            fixture.plugin.preview(fixture.admin)!!.selectedProfiles().map { it.id } shouldBe listOf("jelly", "coral")
+            fixture.plugin.preview(fixture.admin)!!.selectedProfiles().map { it.id } shouldBe listOf("fan", "coral")
         }
     }
 
@@ -242,7 +236,7 @@ class AuroraCatalogTest : FreeSpec({
             fixture.plugin.engine!!.quit(fixture.admin.uniqueId)
             fixture.plugin.engine!!.quit(fixture.target.uniqueId)
             fixture.paper.performTicks(600)
-            fixture.command(fixture.admin, "preview ${fixture.target.name} test-gallery jelly")
+            fixture.command(fixture.admin, "preview ${fixture.target.name} test-gallery fan")
             val replacement = checkNotNull(fixture.plugin.preview(fixture.target))
             legacy.previewTimer().isCancelled shouldBe true
             fixture.paper.performTicks(600)
@@ -257,7 +251,7 @@ class AuroraCatalogTest : FreeSpec({
 
     "reload quit and disable each clear the selected preview and cancel its owned timer" {
         withCatalog { fixture ->
-            fixture.command(fixture.admin, "preview ${fixture.target.name} test-gallery jelly")
+            fixture.command(fixture.admin, "preview ${fixture.target.name} test-gallery fan")
             val beforeReload = checkNotNull(fixture.plugin.preview(fixture.target))
             val engine = fixture.plugin.engine
             fixture.command(fixture.admin, "reload")
@@ -271,7 +265,7 @@ class AuroraCatalogTest : FreeSpec({
             fixture.plugin.preview(fixture.target) shouldBe null
             beforeQuit.previewTimer().isCancelled shouldBe true
 
-            fixture.command(fixture.admin, "preview ${fixture.target.name} test-gallery jelly")
+            fixture.command(fixture.admin, "preview ${fixture.target.name} test-gallery fan")
             val beforeDisable = checkNotNull(fixture.plugin.preview(fixture.target))
             fixture.paper.server.pluginManager.disablePlugin(fixture.plugin)
             fixture.plugin.preview(fixture.target) shouldBe null
@@ -289,7 +283,7 @@ class AuroraCatalogTest : FreeSpec({
             every { engine.closeAsync() } returns CompletableFuture.completedFuture(null)
             every { engine.beginPreviewDrain(fixture.target.uniqueId, any()) } returns 80L
             ArcAuroraPlugin::class.java.getDeclaredField("engine").apply { isAccessible = true }.set(fixture.plugin, engine)
-            fixture.command(fixture.admin, "preview ${fixture.target.name} test-gallery jelly")
+            fixture.command(fixture.admin, "preview ${fixture.target.name} test-gallery fan")
             val preview = checkNotNull(fixture.plugin.preview(fixture.target))
             val admissionTimer = preview.previewTimer()
             fixture.paper.server.scheduler.performTicks(1199)
@@ -344,10 +338,12 @@ private class CatalogFixture(val paper: MockBukkitTestRuntime) {
             set("night-sky.enabled", false)
             set("event-presets.treasure-hunt.legacy.sky-scene", true)
             set("event-presets.treasure-hunt.legacy.shape", "WAVE")
-            set("event-presets.test-gallery.jelly.sky-scene", true)
-            set("event-presets.test-gallery.jelly.shape", "JELLYFISH")
+            set("event-presets.test-gallery.fan.sky-scene", true)
+            set("event-presets.test-gallery.fan.shape", "MOON_FAN")
             set("event-presets.test-gallery.coral.sky-scene", true)
             set("event-presets.test-gallery.coral.shape", "SKY_CORAL")
+            set("event-presets.test-gallery.old-glider.shape", "MANTA_RAY")
+            set("event-presets.retired-gallery.old-swimmer.shape", "JELLYFISH")
             save(file)
         }
         command(paper.server.consoleSender, "reload")

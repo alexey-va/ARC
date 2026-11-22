@@ -29,7 +29,7 @@ class AuroraResourcesTest : FreeSpec({
         settings.permission shouldBe "arcaurora.view"
         settings.profiles.size shouldBe 28
         val sky = settings.eventPresets.getValue("treasure-hunt")
-        sky.size shouldBe 31
+        sky.size shouldBe 39
         val lantern = sky.single { it.shape == AuroraShape.SKY_LANTERNS }
         lantern.points shouldBe 6
         lantern.skyTracers shouldBe 6
@@ -39,7 +39,11 @@ class AuroraResourcesTest : FreeSpec({
         settings.eventPresets.getValue("lanterns").single() shouldBe lantern
         sky.filter { it !== lantern }.all { it.skyWeight == 1 } shouldBe true
         val celestial = sky.filter { it.shape.isCelestial }
-        (celestial + settings.profiles.filter { it.shape.isCelestial }).map { it.shape }.toSet() shouldBe AuroraShape.entries.filter { it.isCelestial }.toSet()
+        (celestial + settings.profiles.filter { it.shape.isCelestial }).map { it.shape }.toSet() shouldBe AuroraShape.active.filter { it.isCelestial }.toSet()
+        val miniatures = sky.filter { it.shape.isMiniature }
+        miniatures.associate { it.shape to it.points } shouldBe mapOf(AuroraShape.FEATHER_GLIDER to 4,
+            AuroraShape.ASTRAL_PENDULUM to 4, AuroraShape.TWIN_SAMARAS to 4, AuroraShape.SKY_PHONOGRAPH to 6)
+        miniatures.all { it.skyScene && it.updateTicks == 3 && it.skyModel == null } shouldBe true
         celestial.all { it.skyTracers in 8..12 && it.skyPalette.isNotEmpty() && it.skyRefreshTicks == 0 } shouldBe true
         val gallery = settings.eventPresets.getValue("particle-gallery")
         (gallery.size >= 12) shouldBe true
@@ -48,7 +52,7 @@ class AuroraResourcesTest : FreeSpec({
         val localWave = wave.copy(id = "custom_wave", shapeSize = 4.0)
         val sparse = settings.copy(profiles = emptyList(), eventPresets = mapOf("custom" to listOf(localWave)))
         val effects = showcaseEffects(sparse, settings)
-        effects.keys shouldBe AuroraShape.entries.toSet()
+        effects.keys shouldBe AuroraShape.active.toSet()
         effects.all { (shape, profile) -> profile.shape == shape && profile.skyScene } shouldBe true
         effects.getValue(AuroraShape.WAVE) shouldBe localWave
         effects.getValue(AuroraShape.SKY_LANTERNS) shouldBe lantern
@@ -75,7 +79,7 @@ class AuroraResourcesTest : FreeSpec({
         settings.skyField.maxScenes shouldBe 9
         settings.skyField.maxCelestialScenes shouldBe 2
         settings.skyField.maxLanternScenes shouldBe 4
-        sky.filter { it.skyModel == null }.all { it.updateTicks == 1 && it.minDistance >= 28 && it.radius <= 96 } shouldBe true
+        sky.filterNot { it.shape.isModel }.all { it.updateTicks == 1 && it.minDistance >= 28 && it.radius <= 96 } shouldBe true
         settings.eventPresets["treasure-hunt"].orEmpty().any { it.skyScene && it.points > 24 } shouldBe true
         settings.ping shouldBe AuroraPingSettings(250, 180, 10, 20)
         (settings.profiles + settings.eventPresets.values.flatten()).forEach { profile ->

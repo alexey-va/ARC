@@ -73,7 +73,23 @@ enum class AuroraShape {
     TRACK_SPIRAL, TRACK_PAIR, TRACK_SCATTER, TRACK_LENS, TRACK_KNOT,
     TRACK_FLYBY, TRACK_FLOCK, TRACK_KINK, TRACK_RIPPLE, TRACK_EYE, TRACK_SLINGSHOT, TRACK_SKIP,
     JELLYFISH, MANTA_RAY, LIGHT_KNOT, REVERSE_LIGHTNING, SKY_CORAL, MOON_FAN, SKY_LANTERNS,
-    SKY_STITCH, INVISIBLE_HARE, PAPER_FLOTILLA, AURORA_CURTAIN, TUMBLEWEED;
+    SKY_STITCH, INVISIBLE_HARE, PAPER_FLOTILLA, AURORA_CURTAIN, TUMBLEWEED,
+    SKY_HOURGLASS, DANDELION_GUST, KINGFISHER_DIVE, STELLAR_PRISM, EMBER_VOLCANO, HATCHING_STAR,
+    FEATHER_GLIDER, ASTRAL_PENDULUM, TWIN_SAMARAS, SKY_PHONOGRAPH;
+
+    internal val isMiniature: Boolean get() = when (this) {
+        FEATHER_GLIDER, ASTRAL_PENDULUM, TWIN_SAMARAS, SKY_PHONOGRAPH -> true
+        else -> false
+    }
+
+    internal val isModel: Boolean get() = this == SKY_LANTERNS || isMiniature
+
+    /** Recognized in older configuration files, with no active profile or command. */
+    internal val isRetired: Boolean get() = this == JELLYFISH || this == MANTA_RAY
+
+    companion object {
+        internal val active: List<AuroraShape> = entries.filterNot { it.isRetired }
+    }
 
     internal val isTrack: Boolean get() = when (this) {
         TRACK_SPIRAL, TRACK_PAIR, TRACK_SCATTER, TRACK_LENS, TRACK_KNOT,
@@ -83,7 +99,8 @@ enum class AuroraShape {
 
     internal val isCelestial: Boolean get() = when (this) {
         JELLYFISH, MANTA_RAY, LIGHT_KNOT, REVERSE_LIGHTNING, SKY_CORAL, MOON_FAN,
-        SKY_STITCH, INVISIBLE_HARE, PAPER_FLOTILLA, AURORA_CURTAIN, TUMBLEWEED -> true
+        SKY_STITCH, INVISIBLE_HARE, PAPER_FLOTILLA, AURORA_CURTAIN, TUMBLEWEED,
+        SKY_HOURGLASS, DANDELION_GUST, KINGFISHER_DIVE, STELLAR_PRISM, EMBER_VOLCANO, HATCHING_STAR -> true
         else -> false
     }
 }
@@ -195,17 +212,25 @@ object AuroraConfig {
             if (fields == null) return emptyList()
             totalProfiles += fields.keys.size
             fields.check("", totalProfiles <= 128, "at most 128 profiles are allowed across profiles and event-presets")
-            return fields.keys.map { id -> profile(id, fields.requiredSection(id), skyDefaults) }.immutable()
+            return fields.keys.mapNotNull { id -> profile(id, fields.requiredSection(id), skyDefaults) }.immutable()
         }
         val ordinaryProfiles = profiles(source.section("profiles"))
+        val retiredPresets = mutableSetOf<String>()
         val events = source.section("event-presets")?.let { presets ->
-            presets.keys.associateWith { profiles(presets.requiredSection(it)) }
+            buildMap {
+                for (preset in presets.keys) {
+                    val fields = presets.requiredSection(preset)
+                    val active = profiles(fields)
+                    if (active.isEmpty() && fields.keys.isNotEmpty()) retiredPresets.add(preset)
+                    else put(preset, active)
+                }
+            }
         }.orEmpty().immutable()
         val nightSky = source.section("night-sky")?.let { night ->
             val preset = night.string("preset", "treasure-hunt")
             night.check("preset", preset.isNotBlank(), "expected a nonblank preset name")
             AuroraNightSkySettings(
-                enabled = night.boolean("enabled", false),
+                enabled = night.boolean("enabled", false) && preset !in retiredPresets,
                 preset = preset,
                 timeStart = night.int("time-start", 13000, 0..23999),
                 timeEnd = night.int("time-end", 23000, 0..23999),
@@ -263,8 +288,12 @@ object AuroraConfig {
         )
     }
 
-    private fun profile(id: String, source: Fields, skyDefaults: AuroraSkyOptions): AuroraProfile {
+    private fun profile(id: String, source: Fields, skyDefaults: AuroraSkyOptions): AuroraProfile? {
         source.check("", id.isNotBlank(), "profile ID must not be blank")
+        val shapeName = source.string("shape", AuroraShape.POINT.name)
+        val shape = AuroraShape.entries.firstOrNull { it.name.equals(shapeName, ignoreCase = true) }
+            ?: source.fail("shape", "expected one of ${AuroraShape.active.joinToString { it.name }}")
+        if (shape.isRetired) return null
         val biomes = source.strings("biomes", listOf("*")).map { raw ->
             normalizeBiomeKey(raw).also {
                 source.check("biomes", raw == "*" || biomeGlob.matches(it), "invalid biome glob '$raw'; only '*' is a wildcard")
@@ -274,13 +303,12 @@ object AuroraConfig {
         val skyScene = source.boolean("sky-scene", false)
         val skyWeight = source.int("sky-weight", 1, 1..64)
         source.check("sky-weight", skyScene || skyWeight == 1, "a weighted profile requires sky-scene: true")
-        val shape = source.enum("shape", AuroraShape.POINT)
         source.check("shape", skyScene || !shape.isCelestial, "celestial shapes require sky-scene: true")
-        val modelShape = shape == AuroraShape.SKY_LANTERNS
-        source.check("shape", skyScene || !modelShape, "SKY_LANTERNS requires sky-scene: true")
+        val modelShape = shape.isModel
+        source.check("shape", skyScene || !modelShape, "$shape requires sky-scene: true")
         val modelSource = source.section("sky-model")
-        source.check("sky-model", modelShape || modelSource == null, "only SKY_LANTERNS accepts a sky model")
-        val model = if (modelShape) skyModel(modelSource) else null
+        source.check("sky-model", shape == AuroraShape.SKY_LANTERNS || modelSource == null, "only SKY_LANTERNS accepts a sky model")
+        val model = if (shape == AuroraShape.SKY_LANTERNS) skyModel(modelSource) else null
         val palette = source.section("sky-palette")?.let { slots ->
             source.check("sky-palette", skyScene && shape.isCelestial, "only a celestial sky shape accepts a sky palette")
             source.check("sky-palette", "sky-head-particles" !in source.keys,
@@ -292,7 +320,7 @@ object AuroraConfig {
             }.immutable()
         }.orEmpty()
         source.check("sky-head-particles", !modelShape || "sky-head-particles" !in source.keys,
-            "SKY_LANTERNS does not accept head particles")
+            "$shape does not accept head particles")
         val headParticles = source.strings("sky-head-particles", emptyList(), allowEmpty = true, unique = false).map { raw ->
             val particle = particlesByKey[normalizeBiomeKey(raw)]
                 ?: source.fail("sky-head-particles", "unknown particle '$raw'")
@@ -320,7 +348,9 @@ object AuroraConfig {
         val verticalMax = source.double("vertical-max", 6.0, if (skyScene) -32.0..64.0 else -32.0..32.0)
         source.check("vertical-max", verticalMax >= verticalMin, "must be at least vertical-min")
         val style = particleStyle(source)
+        val requiredParts = if (shape.isMiniature) AuroraSkyMiniatures.partCount(shape) else null
         val pointsRange = when {
+            requiredParts != null -> requiredParts..requiredParts
             modelShape -> 1..6
             skyScene -> 1..192
             else -> 1..24
@@ -344,7 +374,7 @@ object AuroraConfig {
             verticalMax = verticalMax,
             shape = shape,
             shapeSize = shapeSize,
-            points = if (skyScene) source.int("sky-points", source.int("points", 1, pointsRange), pointsRange)
+            points = if (skyScene) source.int("sky-points", source.int("points", requiredParts ?: 1, pointsRange), pointsRange)
                 else source.int("points", 1, pointsRange),
             particle = style.particle,
             count = source.int("count", 1, 0..16),

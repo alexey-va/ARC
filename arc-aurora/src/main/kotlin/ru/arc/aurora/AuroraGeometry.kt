@@ -70,7 +70,10 @@ object AuroraGeometry {
                 AuroraShape.JELLYFISH, AuroraShape.MANTA_RAY, AuroraShape.LIGHT_KNOT,
                 AuroraShape.REVERSE_LIGHTNING, AuroraShape.SKY_CORAL, AuroraShape.MOON_FAN, AuroraShape.SKY_LANTERNS,
                 AuroraShape.SKY_STITCH, AuroraShape.INVISIBLE_HARE, AuroraShape.PAPER_FLOTILLA,
-                AuroraShape.AURORA_CURTAIN, AuroraShape.TUMBLEWEED ->
+                AuroraShape.AURORA_CURTAIN, AuroraShape.TUMBLEWEED,
+                AuroraShape.SKY_HOURGLASS, AuroraShape.DANDELION_GUST, AuroraShape.KINGFISHER_DIVE,
+                AuroraShape.STELLAR_PRISM, AuroraShape.EMBER_VOLCANO, AuroraShape.HATCHING_STAR,
+                AuroraShape.FEATHER_GLIDER, AuroraShape.ASTRAL_PENDULUM, AuroraShape.TWIN_SAMARAS, AuroraShape.SKY_PHONOGRAPH ->
                     error("Celestial animations require a sky scene")
             }
         }

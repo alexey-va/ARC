@@ -40,7 +40,7 @@ sky-field:
   cull-hysteresis: 16 # Retain active cells to 112 blocks; no nearest-slot churn.
   max-scenes: 9
   max-per-profile: 2 # Varied motion; at most two copies of one variant.
-  max-lantern-scenes: 4 # Six lanterns per group; other sky variants keep their existing caps.
+  max-lantern-scenes: 4 # Shared by lantern groups and multipart display miniatures.
   cull-cooldown-ticks: 80 # Let the previous native tail expire before a cell can restart.
 sky-defaults:
   # Fixed-world orientation, not a sector around the viewer.
@@ -1039,46 +1039,6 @@ event-presets:
     # Each celestial figure has its own finite opening, main action and departure.
     # Flame-family materials keep their native colour and known short drift/lifetime.
     # Palette order maps to stable contour parts; opacity controls emission density only.
-    lunar_jellyfish:
-      biomes: ['*']
-      sky-scene: true
-      scene-duration-ticks: 320
-      spawn-delay-ticks: 40
-      sky-tracers: 12
-      update-ticks: 1
-      radius: 96
-      min-distance: 32
-      vertical-min: 34
-      vertical-max: 58
-      shape: JELLYFISH
-      shape-size: 6
-      sky-points: 160
-      particle: minecraft:soul_fire_flame
-      sky-palette:
-        bell: {particle: minecraft:soul_fire_flame}
-        tentacles: {particle: minecraft:copper_fire_flame}
-      sky-options:
-        roll-radians: 0.12
-    sky_manta:
-      biomes: ['*']
-      sky-scene: true
-      scene-duration-ticks: 320
-      spawn-delay-ticks: 48
-      sky-tracers: 12
-      update-ticks: 1
-      radius: 96
-      min-distance: 34
-      vertical-min: 36
-      vertical-max: 60
-      shape: MANTA_RAY
-      shape-size: 7
-      sky-points: 160
-      particle: minecraft:copper_fire_flame
-      sky-palette:
-        wings: {particle: minecraft:copper_fire_flame}
-        spine: {particle: minecraft:soul_fire_flame}
-      sky-options:
-        roll-radians: 0.1
     light_knot:
       biomes: ['*']
       sky-scene: true
@@ -1200,10 +1160,184 @@ event-presets:
         fold: {particle: minecraft:dust, dust-color: '#E9A7FF', dust-size: 1.1}
       sky-options: {roll-radians: 0.05}
 
+    sky_hourglass:
+      sky-scene: true
+      shape: SKY_HOURGLASS
+      shape-size: 6.5
+      sky-points: 80
+      scene-duration-ticks: 256
+      spawn-delay-ticks: 40
+      update-ticks: 1
+      radius: 84
+      min-distance: 30
+      vertical-min: 28
+      vertical-max: 50
+      sky-tracers: 8
+      particle: minecraft:soul_fire_flame
+      sky-palette:
+        glass: {particle: minecraft:soul_fire_flame}
+        sand: {particle: minecraft:flame}
+      sky-options: {roll-radians: 0.04}
+
+    dandelion_gust:
+      sky-scene: true
+      shape: DANDELION_GUST
+      shape-size: 6.5
+      sky-points: 80
+      scene-duration-ticks: 240
+      spawn-delay-ticks: 40
+      update-ticks: 1
+      radius: 84
+      min-distance: 30
+      vertical-min: 28
+      vertical-max: 50
+      sky-tracers: 8
+      particle: minecraft:copper_fire_flame
+      sky-palette:
+        stem: {particle: minecraft:copper_fire_flame}
+        seeds: {particle: minecraft:end_rod}
+      sky-options: {roll-radians: 0.04}
+
+    kingfisher_dive:
+      sky-scene: true
+      shape: KINGFISHER_DIVE
+      shape-size: 6.5
+      sky-points: 72
+      scene-duration-ticks: 208
+      spawn-delay-ticks: 40
+      update-ticks: 1
+      radius: 84
+      min-distance: 30
+      vertical-min: 28
+      vertical-max: 50
+      sky-tracers: 8
+      particle: minecraft:soul_fire_flame
+      sky-palette:
+        wings: {particle: minecraft:soul_fire_flame}
+        breast: {particle: minecraft:flame}
+        catch: {particle: minecraft:copper_fire_flame}
+      sky-options: {roll-radians: 0.04}
+
+    stellar_prism:
+      sky-scene: true
+      shape: STELLAR_PRISM
+      shape-size: 6.5
+      sky-points: 72
+      scene-duration-ticks: 224
+      spawn-delay-ticks: 40
+      update-ticks: 1
+      radius: 84
+      min-distance: 30
+      vertical-min: 28
+      vertical-max: 50
+      sky-tracers: 8
+      particle: minecraft:end_rod
+      sky-palette:
+        glass: {particle: minecraft:end_rod}
+        blue: {particle: minecraft:soul_fire_flame}
+        amber: {particle: minecraft:flame}
+      sky-options: {roll-radians: 0.04}
+
+    ember_volcano:
+      sky-scene: true
+      shape: EMBER_VOLCANO
+      shape-size: 6.5
+      sky-points: 80
+      scene-duration-ticks: 224
+      spawn-delay-ticks: 40
+      update-ticks: 1
+      radius: 84
+      min-distance: 30
+      vertical-min: 28
+      vertical-max: 50
+      sky-tracers: 8
+      particle: minecraft:copper_fire_flame
+      sky-palette:
+        cone: {particle: minecraft:copper_fire_flame}
+        lava: {particle: minecraft:flame}
+        ejecta: {particle: minecraft:end_rod}
+      sky-options: {roll-radians: 0.04}
+
+    hatching_star:
+      sky-scene: true
+      shape: HATCHING_STAR
+      shape-size: 6.5
+      sky-points: 72
+      scene-duration-ticks: 240
+      spawn-delay-ticks: 40
+      update-ticks: 1
+      radius: 84
+      min-distance: 30
+      vertical-min: 28
+      vertical-max: 50
+      sky-tracers: 8
+      particle: minecraft:soul_fire_flame
+      sky-palette:
+        shell: {particle: minecraft:soul_fire_flame}
+        star: {particle: minecraft:flame}
+        crack: {particle: minecraft:end_rod}
+      sky-options: {roll-radians: 0.04}
+
+    feather_glider:
+      sky-scene: true
+      shape: FEATHER_GLIDER
+      shape-size: 4
+      sky-points: 4
+      scene-duration-ticks: 200
+      spawn-delay-ticks: 40
+      update-ticks: 3
+      radius: 62
+      min-distance: 18
+      vertical-min: 16
+      vertical-max: 34
+      sky-options: {scale-min: 1.0, scale-max: 1.0, roll-radians: 0.0}
+
+    astral_pendulum:
+      sky-scene: true
+      shape: ASTRAL_PENDULUM
+      shape-size: 4
+      sky-points: 4
+      scene-duration-ticks: 240
+      spawn-delay-ticks: 40
+      update-ticks: 3
+      radius: 62
+      min-distance: 18
+      vertical-min: 16
+      vertical-max: 34
+      sky-options: {scale-min: 1.0, scale-max: 1.0, roll-radians: 0.0}
+
+    twin_samaras:
+      sky-scene: true
+      shape: TWIN_SAMARAS
+      shape-size: 4
+      sky-points: 4
+      scene-duration-ticks: 210
+      spawn-delay-ticks: 40
+      update-ticks: 3
+      radius: 62
+      min-distance: 18
+      vertical-min: 16
+      vertical-max: 34
+      sky-options: {scale-min: 1.0, scale-max: 1.0, roll-radians: 0.0}
+
+    sky_phonograph:
+      sky-scene: true
+      shape: SKY_PHONOGRAPH
+      shape-size: 4
+      sky-points: 6
+      scene-duration-ticks: 240
+      spawn-delay-ticks: 40
+      update-ticks: 3
+      radius: 62
+      min-distance: 18
+      vertical-min: 16
+      vertical-max: 34
+      sky-options: {scale-min: 1.0, scale-max: 1.0, roll-radians: 0.0}
+
     sky_lanterns:
       biomes: ['*']
       sky-scene: true
-      sky-weight: 8 # Eight shares among 30 other sky variants; shared scene limits still apply.
+      sky-weight: 8 # Eight shares among 38 other sky variants; shared scene limits still apply.
       scene-duration-ticks: 600
       spawn-delay-ticks: 80
       sky-tracers: 6

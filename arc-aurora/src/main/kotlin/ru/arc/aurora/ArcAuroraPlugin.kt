@@ -67,11 +67,9 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
         try {
             hotload.beginGeneration()
             hotload.register()
-            for (name in listOf("arcaurora", "showcase")) {
-                val command = checkNotNull(getCommand(name))
-                command.setExecutor(this)
-                command.tabCompleter = this
-            }
+            val command = checkNotNull(getCommand("arcaurora"))
+            command.setExecutor(this)
+            command.tabCompleter = this
             val settings = loadSettings()
             messages = loadMessages()
             ArcLogging.install(PaperLoggingPlatform("ArcAurora"), LoggingConfigSource { ru.arc.config.EmptyConfig })
@@ -103,7 +101,11 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
         if (!dataFolder.resolve("config.yml").isFile) saveResource("config.yml", false)
         Config(dataFolder.toPath(), "config.yml").mergeMissingFromBundled("config.yml", setOf("profiles", "biome-aliases", "event-presets"))
         val yaml = YamlConfiguration().apply { loadFromString(Files.readString(dataFolder.resolve("config.yml").toPath())) }
-        return AuroraConfig.parse(yaml)
+        return AuroraConfig.parse(yaml).also { settings ->
+            if (yaml.getBoolean("night-sky.enabled") && !settings.nightSky.enabled) {
+                logger.warning("Nightly sky preset '${settings.nightSky.preset}' contains only retired shapes. Select a preset with active profiles.")
+            }
+        }
     }
 
     private fun loadMessages(): LocalizedMiniMessage {
@@ -200,11 +202,7 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
         if (event.from.world?.uid != event.to.world?.uid) engine?.invalidate(event.player.uniqueId)
     }
 
-    private fun commandArguments(command: Command, args: Array<out String>): Array<out String> =
-        if (command.name == "showcase") arrayOf("showcase", *args) else args
-
-    override fun onCommand(sender: CommandSender, command: Command, label: String, arguments: Array<out String>): Boolean {
-        val args = commandArguments(command, arguments)
+    override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
         val action = args.firstOrNull()?.lowercase(Locale.ROOT) ?: "toggle"
         if (action in setOf("reload", "status", "preview", "catalog", "showcase")) {
             if (!sender.hasPermission(AURORA_ADMIN_PERMISSION)) return reply(sender, "no-permission")
@@ -218,7 +216,7 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
                     return reply(player, "showcase-off")
                 }
                 val shape = effect?.let { name ->
-                    AuroraShape.entries.firstOrNull { it.name.equals(name, ignoreCase = true) }
+                    AuroraShape.active.firstOrNull { it.name.equals(name, ignoreCase = true) }
                         ?: return reply(player, "showcase-effect-unknown")
                 }
                 if (!current.startShowcase(player, shape)) {
@@ -317,8 +315,7 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
         return reply(sender, if (enabled) "enabled" else "disabled")
     }
 
-    override fun onTabComplete(sender: CommandSender, command: Command, alias: String, arguments: Array<out String>): List<String> {
-        val args = commandArguments(command, if (arguments.isEmpty()) arrayOf("") else arguments)
+    override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): List<String> {
         val admin = sender.hasPermission(AURORA_ADMIN_PERMISSION)
         val candidates = if (args.size <= 1) buildList {
             if (sender is Player) addAll(listOf("on", "off", "toggle", "biome"))
@@ -329,7 +326,7 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
             val settings = engine?.settings ?: return emptyList()
             when (args[0].lowercase(Locale.ROOT)) {
                 "showcase" -> if (sender is Player && args.size == 2) {
-                    AuroraShape.entries.map { it.name } + "stop"
+                    AuroraShape.active.map { it.name } + "stop"
                 } else emptyList()
                 "catalog" -> if (args.size == 2) settings.eventPresets.keys.toList() else emptyList()
                 "preview" -> when (args.size) {

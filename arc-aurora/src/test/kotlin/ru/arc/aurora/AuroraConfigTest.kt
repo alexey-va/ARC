@@ -152,7 +152,7 @@ class AuroraConfigTest : FreeSpec({
     }
 
     "celestial shapes accept twelve tracers while legacy shapes retain their four tracer limit" {
-        AuroraShape.entries.filter { it.isCelestial }.forEach { shape ->
+        AuroraShape.active.filter { it.isCelestial }.forEach { shape ->
             AuroraConfig.parse(profileConfig("sky-scene" to true, "shape" to shape.name, "sky-tracers" to 12))
                 .profiles.single().skyTracers shouldBe 12
             shouldThrow<AuroraConfigException> {
@@ -421,11 +421,11 @@ class AuroraConfigTest : FreeSpec({
     }
 
     "the celestial shapes require sky scene mode and keep separate identities from tracks" {
-        val celestial = listOf(AuroraShape.JELLYFISH, AuroraShape.MANTA_RAY, AuroraShape.LIGHT_KNOT,
-            AuroraShape.REVERSE_LIGHTNING, AuroraShape.SKY_CORAL, AuroraShape.MOON_FAN,
+        val celestial = setOf(AuroraShape.LIGHT_KNOT, AuroraShape.REVERSE_LIGHTNING, AuroraShape.SKY_CORAL, AuroraShape.MOON_FAN,
             AuroraShape.SKY_STITCH, AuroraShape.INVISIBLE_HARE, AuroraShape.PAPER_FLOTILLA,
-            AuroraShape.AURORA_CURTAIN, AuroraShape.TUMBLEWEED)
-        AuroraShape.entries.filter { it.isCelestial } shouldBe celestial
+            AuroraShape.AURORA_CURTAIN, AuroraShape.TUMBLEWEED, AuroraShape.SKY_HOURGLASS, AuroraShape.DANDELION_GUST,
+            AuroraShape.KINGFISHER_DIVE, AuroraShape.STELLAR_PRISM, AuroraShape.EMBER_VOLCANO, AuroraShape.HATCHING_STAR)
+        AuroraShape.active.filter { it.isCelestial }.toSet() shouldBe celestial
         celestial.forEach { shape ->
             shape.isTrack shouldBe false
             AuroraConfig.parse(profileConfig("sky-scene" to true, "shape" to shape.name))
@@ -435,8 +435,63 @@ class AuroraConfigTest : FreeSpec({
         }
     }
 
+    "miniatures require a sky scene and always keep all authored parts" {
+        for (shape in AuroraShape.active.filter { it.isMiniature }) {
+            val config = profileConfig("shape" to shape.name, "sky-scene" to true)
+            val parts = AuroraSkyMiniatures.partCount(shape)
+            AuroraConfig.parse(config).profiles.single().points shouldBe parts
+            config.set("profiles.ambient.sky-points", parts - 1)
+            shouldThrow<AuroraConfigException> { AuroraConfig.parse(config) }.path shouldBe "profiles.ambient.sky-points"
+            config.set("profiles.ambient.sky-points", parts)
+            config.set("profiles.ambient.sky-scene", false)
+            shouldThrow<AuroraConfigException> { AuroraConfig.parse(config) }.path shouldBe "profiles.ambient.shape"
+        }
+    }
+
+    "retired shapes are ignored by shape and may empty a custom nightly preset" {
+        val source = yaml("""
+            night-sky:
+              enabled: true
+              preset: retired-night
+            profiles:
+              obsolete:
+                shape: MaNtA_RaY
+                particle: invalid_obsolete_particle
+              ambient:
+                shape: POINT
+            event-presets:
+              retired-night:
+                old-swimmer:
+                  shape: jellyfish
+                  sky-scene: true
+              mixed-night:
+                old-glider:
+                  shape: MANTA_RAY
+                  sky-scene: true
+                kept:
+                  shape: SKY_CORAL
+                  sky-scene: true
+              empty-night: {}
+        """)
+        val settings = AuroraConfig.parse(source)
+        settings.profiles.map { it.id } shouldBe listOf("ambient")
+        settings.eventPresets.keys shouldBe setOf("mixed-night", "empty-night")
+        settings.eventPresets.getValue("mixed-night").map { it.id } shouldBe listOf("kept")
+        settings.nightSky.enabled shouldBe false
+        settings.nightSky.preset shouldBe "retired-night"
+        source.getString("profiles.obsolete.shape") shouldBe "MaNtA_RaY"
+        AuroraConfig.parse(source) shouldBe settings
+
+        source.set("night-sky.preset", "mixed-night")
+        AuroraConfig.parse(source).nightSky.enabled shouldBe true
+        for (preset in listOf("unknown-night", "empty-night")) {
+            source.set("night-sky.preset", preset)
+            shouldThrow<AuroraConfigException> { AuroraConfig.parse(source) }.path shouldBe "night-sky.preset"
+        }
+    }
+
     "celestial palettes retain ordered typed particle payloads in an immutable detached snapshot" {
-        val source = profileConfig("sky-scene" to true, "shape" to "JELLYFISH",
+        val source = profileConfig("sky-scene" to true, "shape" to "LIGHT_KNOT",
             "sky-palette.halo.particle" to "entity_effect", "sky-palette.halo.particle-color" to "#12aBcD",
             "sky-palette.flash.particle" to "flash", "sky-palette.flash.particle-color" to "#445566",
             "sky-palette.rim.particle" to "dust_color_transition", "sky-palette.rim.dust-color" to "#778899",
@@ -504,12 +559,12 @@ class AuroraConfigTest : FreeSpec({
         }
         listOf(emptyList(), listOf("flame", "soul_fire_flame")).forEach { heads ->
             shouldThrow<AuroraConfigException> {
-                AuroraConfig.parse(profileConfig("sky-scene" to true, "shape" to "MANTA_RAY",
+                AuroraConfig.parse(profileConfig("sky-scene" to true, "shape" to "MOON_FAN",
                     "sky-palette.rim.particle" to "end_rod", "sky-head-particles" to heads))
             }.path shouldBe "profiles.ambient.sky-palette"
         }
         shouldThrow<AuroraConfigException> {
-            AuroraConfig.parse(profileConfig("sky-scene" to true, "shape" to "MANTA_RAY",
+            AuroraConfig.parse(profileConfig("sky-scene" to true, "shape" to "MOON_FAN",
                 "sky-palette" to emptyList<String>()))
         }.path shouldBe "profiles.ambient.sky-palette"
     }

@@ -74,7 +74,7 @@ internal fun invisibleHare(points: Int, progress: Double): List<AuroraCelestialP
     }
 }
 
-private fun polyline(vertices: List<AuroraOffset>, along: Double): AuroraOffset {
+internal fun polyline(vertices: List<AuroraOffset>, along: Double): AuroraOffset {
     val position = along * vertices.lastIndex
     val edge = position.toInt().coerceAtMost(vertices.lastIndex - 1)
     return mix(vertices[edge], vertices[edge + 1], position - edge)

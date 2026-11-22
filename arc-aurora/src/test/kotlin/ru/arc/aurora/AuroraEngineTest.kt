@@ -9,12 +9,19 @@ import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.Particle
 import org.bukkit.configuration.file.YamlConfiguration
+import org.bukkit.entity.ItemDisplay
 import org.bukkit.entity.Player
+import org.bukkit.inventory.ItemStack
+import org.bukkit.util.Transformation
+import org.joml.Quaternionf
+import org.joml.Vector3f
 import org.mockbukkit.mockbukkit.ServerMock
 import org.mockbukkit.mockbukkit.entity.PlayerMock
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.ScheduledTask
 import ru.arc.core.TaskScheduler
+import ru.arc.paper.display.PacketItemDisplay
+import ru.arc.paper.display.PaperPacketDisplays
 import ru.arc.paper.particle.PaperViewerParticles
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import ru.arc.paper.testing.failOnUnsupportedMockBukkitOperation
@@ -105,6 +112,93 @@ class AuroraEngineTest : FreeSpec({
             fixture.activeModels shouldBe emptyMap()
             fixture.advance(100)
             fixture.modelUpdates.size shouldBe beforeStop
+        }
+    }
+
+    "each bundled miniature sends its complete moving assembly in the ordinary field and retires on leaving range" {
+        val bundled = AuroraConfig.parse(YamlConfiguration().apply {
+            loadFromString(checkNotNull(javaClass.classLoader.getResourceAsStream("config.yml")).bufferedReader().use { it.readText() })
+        })
+        val models = bundled.eventPresets.getValue("treasure-hunt").filter { it.shape.isMiniature }
+        models.map { it.shape }.toSet() shouldBe AuroraShape.active.filter { it.isMiniature }.toSet()
+        for (profile in models) {
+            val settings = skySettings(packets = 36).copy(profiles = listOf(profile), nativeBudgetMicros = Int.MAX_VALUE)
+            withEngine(settings, highSky = true) { fixture ->
+                fixture.permission(true)
+                fixture.loadChunks(8)
+                fixture.advance(120)
+                val key = fixture.activeModels.keys.single()
+                val poses = fixture.modelUpdates.filter { it.key === key && it.scales.all { scale -> scale > 0f } }
+                (poses.size >= 2) shouldBe true
+                poses.all { it.indices == 0 until profile.points && it.viewer == fixture.player.uniqueId } shouldBe true
+                (poses.map { it.centers }.distinct().size > 1) shouldBe true
+                fixture.emissions shouldBe emptyList()
+
+                fixture.player.teleport(poses.last().centers.first().clone().add(0.0, 0.0, 86.0)) shouldBe true
+                fixture.engine.tick()
+                fixture.activeModels shouldBe emptyMap()
+            }
+        }
+    }
+
+    "a one-request showcase visits every stable part of all nine six-part miniatures within a single cycle" {
+        val settings = skySettings(points = 6, shape = AuroraShape.SKY_PHONOGRAPH).copy(nativeBudgetMicros = Int.MAX_VALUE)
+        withEngine(settings, highSky = true) { fixture ->
+            fixture.admin(true)
+            fixture.engine.startShowcase(fixture.player, AuroraShape.SKY_PHONOGRAPH) shouldBe true
+            repeat(225) {
+                val before = fixture.modelUpdates.size
+                fixture.advance(1)
+                (fixture.modelUpdates.drop(before).sumOf { it.centers.size } <= 1) shouldBe true
+            }
+            val copies = fixture.modelUpdates.groupBy { it.key }
+            copies.size shouldBe AuroraShowcase.COPY_COUNT
+            for (updates in copies.values) {
+                updates.windowed(6).any { cycle ->
+                    cycle.all { it.scales.single() > 0f } && cycle.zipWithNext().all { (a, b) -> a.progress < b.progress } &&
+                        cycle.flatMap { it.indices }.toSet() == (0 until 6).toSet()
+                } shouldBe true
+            }
+            fixture.engine.stopShowcase(fixture.player.uniqueId)
+            fixture.activeModels shouldBe emptyMap()
+        }
+    }
+
+    "partial miniature poses retain their private packet handles materials and rotated item axes" {
+        val profile = skySettings(points = 6, shape = AuroraShape.SKY_PHONOGRAPH).profiles.single()
+        withEngine { fixture ->
+            val packets = mockk<PaperPacketDisplays>()
+            val handles = mutableListOf<PacketItemDisplay>()
+            val materials = mutableListOf<Material>()
+            every { packets.spawnItem(any(), any()) } answers {
+                materials += arg<ItemStack>(1).type
+                mockk<PacketItemDisplay>(relaxed = true).also(handles::add)
+            }
+            val displays = AuroraLanternDisplays(packets)
+            val centers = List(profile.points) { fixture.player.location.clone().add(it.toDouble(), 2.0, 0.0) }
+            val yaw = 0.75
+            val pitch = 0.3
+            val size = 2.5
+            for ((index, center) in centers.withIndex()) {
+                displays.updateMiniature("scene", fixture.player, profile, index, listOf(center), 0.4, yaw, pitch, size)
+            }
+            handles.size shouldBe profile.points
+            for ((index, handle) in handles.withIndex()) {
+                val part = AuroraSkyMiniatures.part(profile.shape, index, 0.4)
+                materials[index] shouldBe part.material
+                val rotation = Quaternionf().rotateY(yaw.toFloat()).rotateX(pitch.toFloat()).mul(part.rotation)
+                val pose = Transformation(Vector3f(), rotation, Vector3f(part.scale).mul(size.toFloat()), Quaternionf())
+                verify { handle.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.NONE }
+                verify { handle.isVisibleByDefault = false }
+                verify { handle.transformation = pose }
+                verify(exactly = 1) { handle.showTo(fixture.player) }
+            }
+            displays.updateMiniature("scene", fixture.player, profile, 4, centers.subList(4, 6), 0.6, yaw, pitch, size)
+            handles.size shouldBe profile.points
+            handles.take(4).forEach { handle -> verify(exactly = 0) { handle.teleport(any()) } }
+            handles.drop(4).forEach { handle -> verify(exactly = 1) { handle.teleport(any()) } }
+            displays.retain(fixture.player.uniqueId, emptySet())
+            handles.forEach { handle -> verify(exactly = 1) { handle.remove() } }
         }
     }
 
@@ -1075,7 +1169,7 @@ class AuroraEngineTest : FreeSpec({
             loadFromString(checkNotNull(javaClass.classLoader.getResourceAsStream("config.yml")).bufferedReader().use { it.readText() })
         })
         val profiles = bundled.eventPresets.getValue("treasure-hunt").filter { it.shape.isCelestial }
-        profiles.map { it.shape }.toSet() shouldBe AuroraShape.entries.filter { it.isCelestial && !it.followsTerrain }.toSet()
+        profiles.map { it.shape }.toSet() shouldBe AuroraShape.active.filter { it.isCelestial && !it.followsTerrain }.toSet()
         for (profile in profiles) {
             val settings = bundled.copy(nativeBudgetMicros = Int.MAX_VALUE,
                 skyField = bundled.skyField.copy(maxScenes = 1, maxPerProfile = 1))
@@ -1116,7 +1210,7 @@ class AuroraEngineTest : FreeSpec({
                 }
                 (fixture.emissions.size > profile.points) shouldBe true
                 fixture.emissions.map { it.particle }.toSet() shouldBe profile.skyPalette.map { it.particle }.toSet()
-                if (profile.shape == AuroraShape.JELLYFISH) {
+                if (profile.shape == AuroraShape.LIGHT_KNOT) {
                     (middle.isNotEmpty() && fading.isNotEmpty()) shouldBe true
                     (fading.average() < middle.average() * 0.5) shouldBe true
                 }
@@ -1526,7 +1620,7 @@ class AuroraEngineTest : FreeSpec({
     }
 
     "retained sky paths recheck ping lease generation and quit before each native attempt" {
-        val settings = skySettings(points = 24)
+        val settings = skySettings(points = 24).copy(nativeBudgetMicros = Int.MAX_VALUE)
         withEngine(settings) { fixture ->
             fixture.event = settings.profiles
             fixture.pass()
@@ -1592,11 +1686,19 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
             val model = arg<AuroraSkyModel>(2)
             val progress = arg<Double>(4)
             val centers = arg<List<Location>>(3)
-            val observed = ObservedLantern(arg(0), centers.map { it.clone() }, arg<Player>(1).uniqueId,
-                centers.indices.map { AuroraLanternMotion.displayPose(it, progress, arg(5), model.scale, model.pivot).scale })
-            modelUpdates += observed
-            if (observed.scales.any { it > 0f }) activeModels[observed.key] = observed
-            else activeModels.remove(observed.key)?.let(retiredModels::add)
+            observeModel(ObservedLantern(arg(0), centers.map { it.clone() }, arg<Player>(1).uniqueId,
+                centers.indices.map { AuroraLanternMotion.displayPose(it, progress, arg(5), model.scale, model.pivot).scale },
+                centers.indices, progress))
+        }
+        every { lanterns.updateMiniature(any(), any(), any(), any(), any(), any(), any(), any(), any()) } answers {
+            requireMain()
+            val shape = arg<AuroraProfile>(2).shape
+            val first = arg<Int>(3)
+            val centers = arg<List<Location>>(4)
+            val progress = arg<Double>(5)
+            val indices = first until first + centers.size
+            observeModel(ObservedLantern(arg(0), centers.map { it.clone() }, arg<Player>(1).uniqueId,
+                indices.map { AuroraSkyMiniatures.part(shape, it, progress).scale.length() }, indices, progress))
         }
         every { lanterns.retain(any(), any()) } answers {
             requireMain()
@@ -1649,6 +1751,12 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
         extra.teleport(Location(world, 0.5, 80.0, 0.5)) shouldBe true
         engine.join(extra)
         return extra.uniqueId
+    }
+
+    private fun observeModel(observed: ObservedLantern) {
+        modelUpdates += observed
+        if (observed.scales.any { it > 0f }) activeModels[observed.key] = observed
+        else activeModels.remove(observed.key)?.let(retiredModels::add)
     }
 
     /** Export the actual retained Main scene state; reflection is confined to this diagnostic fixture. */
@@ -1794,7 +1902,8 @@ private class EngineWorld(highSky: Boolean) : org.mockbukkit.mockbukkit.world.Wo
 private data class ObservedEmission(val particle: Particle, val count: Int, val offsets: List<Double>, val force: Boolean,
     val viewer: java.util.UUID, val data: Any?)
 
-private data class ObservedLantern(val key: Any, val centers: List<Location>, val viewer: java.util.UUID, val scales: List<Float>)
+private data class ObservedLantern(val key: Any, val centers: List<Location>, val viewer: java.util.UUID, val scales: List<Float>,
+    val indices: IntRange, val progress: Double)
 
 /** Override the one controlled observation without spying on MockBukkit's inherited entity methods. */
 private class EnginePlayer(server: ServerMock, name: String = "AuroraViewer") : PlayerMock(server, name) {
