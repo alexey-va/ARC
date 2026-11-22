@@ -68,16 +68,30 @@ class AuroraPingWindow(val capacity: Int) {
 
 enum class AuroraWeather { ANY, CLEAR, RAIN, THUNDER }
 
-enum class AuroraShape {
+enum class AuroraShape(
+    internal val storyParts: AuroraStoryParts? = null,
+    internal val storyDurationTicks: Int = 0,
+) {
     POINT, LINE, CUBE, RING, CIRCLE, SPHERE, WAVE, HELIX, ARC, CRYSTAL, STAR, METEOR,
     TRACK_SPIRAL, TRACK_PAIR, TRACK_SCATTER, TRACK_LENS, TRACK_KNOT,
     TRACK_FLYBY, TRACK_FLOCK, TRACK_KINK, TRACK_RIPPLE, TRACK_EYE, TRACK_SLINGSHOT, TRACK_SKIP,
     JELLYFISH, MANTA_RAY, LIGHT_KNOT, REVERSE_LIGHTNING, SKY_CORAL, MOON_FAN, SKY_LANTERNS,
     SKY_STITCH, INVISIBLE_HARE, PAPER_FLOTILLA, AURORA_CURTAIN, TUMBLEWEED,
     SKY_HOURGLASS, DANDELION_GUST, KINGFISHER_DIVE, STELLAR_PRISM, EMBER_VOLCANO, HATCHING_STAR, INFERNAL_PENTAGRAM,
-    FEATHER_GLIDER, ASTRAL_PENDULUM, TWIN_SAMARAS, SKY_PHONOGRAPH;
+    FEATHER_GLIDER, ASTRAL_PENDULUM, TWIN_SAMARAS, SKY_PHONOGRAPH,
+    ENDERMAN_SKY_THEFT(AuroraLivingStories, 260),
+    SKY_FISHING(AuroraPhysicsStories, 168),
+    FROST_WALKER(AuroraPhysicsStories, 156),
+    CLOUD_FOX(AuroraLivingStories, 240),
+    TOTEM_HEART(AuroraMagicStories, 137),
+    GHAST_PORTAL(AuroraLivingStories, 236),
+    STORM_HERD(AuroraStormHerd, 156),
+    SLIME_ANVIL(AuroraPhysicsStories, 126),
+    SHATTERED_SWORD(AuroraMagicStories, 134),
+    REVERSE_FIREWORK(AuroraMagicStories, 121);
 
-    internal val isMiniature: Boolean get() = this == FEATHER_GLIDER
+    internal val isStory: Boolean get() = storyParts != null
+    internal val isMiniature: Boolean get() = this == FEATHER_GLIDER || isStory
 
     internal val isModel: Boolean get() = this == SKY_LANTERNS || isMiniature
 

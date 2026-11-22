@@ -15,18 +15,33 @@ data class AuroraMiniaturePart(
     val scale: Vector3f,
 )
 
+internal interface AuroraStoryParts {
+    fun partCount(shape: AuroraShape): Int
+    fun part(shape: AuroraShape, index: Int, t: Double): AuroraMiniaturePart
+}
+
+internal fun storyBeat(t: Double, start: Double, end: Double): Double =
+    AuroraCelestialShapes.smooth((t - start) / (end - start))
+
+/** The authored coordinates use X across, Y up and positive Z towards the viewer. Angles are radians. */
+internal fun storyPart(material: Material, x: Double, y: Double, z: Double,
+    sx: Double, sy: Double, sz: Double, roll: Double = 0.0, yaw: Double = 0.0, pitch: Double = 0.0) =
+    AuroraMiniaturePart(material, AuroraOffset(x, y, z),
+        Quaternionf().rotateZ(roll.toFloat()).rotateY(yaw.toFloat()).rotateX(pitch.toFloat()),
+        Vector3f(sx.toFloat(), sy.toFloat(), sz.toFloat()))
+
 object AuroraSkyMiniatures {
     private const val TURN = 2.0 * PI
 
     fun partCount(shape: AuroraShape): Int = when (shape) {
         AuroraShape.FEATHER_GLIDER -> 4
-        else -> error("Not a sky miniature: $shape")
+        else -> requireNotNull(shape.storyParts) { "Not a sky miniature: $shape" }.partCount(shape)
     }
 
     /** Bounding radii about each item's center, before scene size. Generated-item caps sit at Z ±1/32. */
     fun partRadius(shape: AuroraShape): Double = when (shape) {
         AuroraShape.FEATHER_GLIDER -> 0.86
-        else -> error("Not a sky miniature: $shape")
+        else -> error("Only the glider uses a fixed item radius: $shape")
     }
 
     fun frames(shape: AuroraShape): List<List<AuroraCelestialPoint>> {
@@ -34,14 +49,24 @@ object AuroraSkyMiniatures {
         return List(AuroraCelestialShapes.MAX_FRAMES) { frame ->
             val progress = frame.toDouble() / (AuroraCelestialShapes.MAX_FRAMES - 1)
             val visible = visibility(progress)
-            List(count) { index -> AuroraCelestialPoint(part(shape, index, progress).center, visible, 0) }
+            List(count) { index ->
+                val pose = part(shape, index, progress)
+                val opacity = if (shape.isStory && pose.scale.lengthSquared() == 0f) 0.0 else visible
+                AuroraCelestialPoint(pose.center, opacity, 0)
+            }
         }
     }
 
     fun part(shape: AuroraShape, index: Int, progress: Double): AuroraMiniaturePart {
         require(index in 0 until partCount(shape) && progress.isFinite())
         val t = progress.coerceIn(0.0, 1.0)
-        return glider(index, t)
+        val story = shape.storyParts ?: return glider(index, t)
+        val pose = story.part(shape, index, t)
+        val fade = smooth(t / 0.02) * smooth((1.0 - t) / 0.02)
+        if (fade == 1.0) return pose
+        val center = pose.center
+        return pose.copy(center = AuroraOffset(center.x * fade, center.y * fade, center.z * fade),
+            scale = Vector3f(pose.scale).mul(fade.toFloat()))
     }
 
     private fun visibility(t: Double) = smooth(t / 0.10) * smooth((1.0 - t) / 0.13)

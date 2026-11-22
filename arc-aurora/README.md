@@ -98,7 +98,22 @@ The `FEATHER_GLIDER` has a diamond body and two feather wings. They open, bank a
 
 ### Private sky showcase
 
-Stand outdoors, face open sky and run `/arcaurora showcase SKY_STITCH` with `arcaurora.admin`. Nine copies of the selected effect play at different phases for three minutes. Tab completes all 42 active shape names, including the tracks, lanterns and surface effects. Run the command with another name to switch immediately. Run it in a new direction to move the display, or use `/arcaurora showcase stop` to end it early. Only the invoking player sees the display.
+Stand outdoors, face open sky and run `/arcaurora showcase SKY_STITCH` with `arcaurora.admin`. Nine copies of the selected effect play at different phases for three minutes. Tab completes all active shape names, including the tracks, lanterns and surface effects. Run the command with another name to switch immediately. Run it in a new direction to move the display, or use `/arcaurora showcase stop` to end it early. Only the invoking player sees the display.
+
+Ten private sky scenes can be tried individually. They use vanilla item displays and are available with an existing config.
+
+| Effect | Action |
+| --- | --- |
+| `ENDERMAN_SKY_THEFT` | An enderman pulls a square of night sky free and runs off with it. |
+| `SKY_FISHING` | A fishing line hauls up a little island with an oak. |
+| `FROST_WALKER` | Diamond boots leave a trail of ice as they step across the sky. |
+| `CLOUD_FOX` | A fox dives into a cloud and comes out carrying berries. |
+| `TOTEM_HEART` | A fading half-heart gives way to a totem, then returns as a beating full heart. |
+| `GHAST_PORTAL` | A ghast squeezes through a narrow portal and pulls its last tentacle free. |
+| `STORM_HERD` | Lightning reveals three skeletal horses leaping between clouds. |
+| `SLIME_ANVIL` | An anvil flattens a slime and gets tossed back up. |
+| `SHATTERED_SWORD` | Diamond fragments assemble into a sword that shoots skyward. |
+| `REVERSE_FIREWORK` | A firework folds its sparks back into a falling rocket. |
 
 The bare `/arcaurora showcase` opens a 60-second overview. The stitch and curtain appear above the hare tracks, paper flotilla and tumbleweed.
 
@@ -601,7 +616,7 @@ Run from the repository root with JDK 25:
 ```
 
 The expected local runtime artifact is
-`arc-aurora/build/libs/ArcAurora-0.1.18.jar`. The public Maven API artifact
+`arc-aurora/build/libs/ArcAurora-0.1.19.jar`. The public Maven API artifact
 `ru.ruscrafting.arc:arc-aurora-api:0.1.0` was verified on 2026-10-29 in the
 [RusCrafting repository](https://repo.rus-crafting.ru/grocermc/ru/ruscrafting/arc/arc-aurora-api/0.1.0/arc-aurora-api-0.1.0.pom).
 That API publication does not establish a runtime-plugin build, delivery,

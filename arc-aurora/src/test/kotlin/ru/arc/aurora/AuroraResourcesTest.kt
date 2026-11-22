@@ -1,5 +1,6 @@
 package ru.arc.aurora
 
+import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import org.bukkit.configuration.file.YamlConfiguration
@@ -13,6 +14,10 @@ import com.github.retrooper.packetevents.manager.server.ServerManager
 import com.github.retrooper.packetevents.manager.server.ServerVersion
 
 class AuroraResourcesTest : FreeSpec({
+    fun resource(path: String) = YamlConfiguration().apply {
+        loadFromString(checkNotNull(javaClass.classLoader.getResourceAsStream(path)).bufferedReader().use { it.readText() })
+    }
+
     val previousApi = PacketEvents.getAPI()
     beforeSpec {
         val api = mockk<PacketEventsAPI<Any>>()
@@ -22,9 +27,6 @@ class AuroraResourcesTest : FreeSpec({
     }
     afterSpec { PacketEvents.setAPI(previousApi) }
     "bundled effects parse as a complete usable config and locales have the same keys" {
-        fun resource(path: String) = YamlConfiguration().apply {
-            loadFromString(checkNotNull(javaClass.classLoader.getResourceAsStream(path)).bufferedReader().use { it.readText() })
-        }
         val settings = AuroraConfig.parse(resource("config.yml"))
         settings.permission shouldBe "arcaurora.view"
         settings.profiles.size shouldBe 28
@@ -48,9 +50,13 @@ class AuroraResourcesTest : FreeSpec({
         (gallery.size >= 12) shouldBe true
         gallery.all { !it.skyScene } shouldBe true
         val wave = sky.single { it.id == "sky_wave" }
-        val localWave = wave.copy(id = "custom_wave", shapeSize = 4.0)
-        val sparse = settings.copy(profiles = emptyList(), eventPresets = mapOf("custom" to listOf(localWave)))
-        val effects = showcaseEffects(sparse, settings)
+        val local = AuroraConfig.parse(YamlConfiguration().apply {
+            set("event-presets.custom.custom_wave.shape", "WAVE")
+            set("event-presets.custom.custom_wave.sky-scene", true)
+            set("event-presets.custom.custom_wave.shape-size", 4.0)
+        })
+        val localWave = local.eventPresets.getValue("custom").single()
+        val effects = showcaseEffects(local, settings)
         effects.keys shouldBe AuroraShape.active.toSet()
         effects.all { (shape, profile) -> profile.shape == shape && profile.skyScene } shouldBe true
         effects.getValue(AuroraShape.WAVE) shouldBe localWave
@@ -91,5 +97,30 @@ class AuroraResourcesTest : FreeSpec({
         val descriptor = resource("plugin.yml")
         descriptor.getBoolean("permissions.arcaurora.view.default") shouldBe false
         descriptor.getStringList("depend").toSet() shouldBe setOf("ArcCore", "packetevents")
+    }
+
+    "story miniatures are visible in the bundled and legacy showcases and stay out of the automatic sky" {
+        val bundled = AuroraConfig.parse(resource("config.yml"))
+        val local = AuroraConfig.parse(YamlConfiguration())
+        val builtIn = showcaseEffects(bundled)
+        val legacy = showcaseEffects(local, bundled)
+        val automatic = bundled.profiles +
+            bundled.eventPresets.getValue("treasure-hunt") +
+            bundled.eventPresets[bundled.nightSky.preset].orEmpty()
+
+        storyShapes.forEach { shape ->
+            withClue(shape) {
+                (shape in AuroraShape.active) shouldBe true
+                shape.isMiniature shouldBe true
+                val profile = builtIn.getValue(shape)
+                legacy.getValue(shape) shouldBe profile
+                profile.shape shouldBe shape
+                profile.skyScene shouldBe true
+                profile.points shouldBe AuroraSkyMiniatures.partCount(shape)
+                profile.sceneDurationTicks shouldBe shape.storyDurationTicks
+                profile.skyModel shouldBe null
+                automatic.any { it.shape == shape } shouldBe false
+            }
+        }
     }
 })

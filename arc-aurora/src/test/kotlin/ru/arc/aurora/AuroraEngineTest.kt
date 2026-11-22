@@ -201,6 +201,134 @@ class AuroraEngineTest : FreeSpec({
         }
     }
 
+    "the private herd gallery submits whole current poses in turn and faces the moved viewer above an obstruction" {
+        val shape = AuroraShape.STORM_HERD
+        val count = AuroraSkyMiniatures.partCount(shape)
+        val base = skySettings(points = count, shape = shape)
+        val profile = base.profiles.single().copy(sceneDurationTicks = shape.storyDurationTicks, updateTicks = 3)
+        withEngine(base.copy(profiles = listOf(profile), nativeBudgetMicros = Int.MAX_VALUE), highSky = true) { fixture ->
+            val player = fixture.player
+            fixture.admin(true)
+            val eye = player.eyeLocation
+            val panel = AuroraShowcase(player.world.uid, AuroraOffset(eye.x, eye.y, eye.z), eye.yaw,
+                List(AuroraShowcase.COPY_COUNT) { profile }, AuroraShowcase.SELECTED_DURATION_TICKS)
+            val slots = (0 until AuroraShowcase.COPY_COUNT).map(panel::pose)
+            val low = slots[1].anchor
+            Location(player.world, low.x, low.y + 3, low.z).block.type = Material.STONE
+            val updates = mutableMapOf<Any, MutableList<Int>>()
+            var tick = 0
+            var sent = 0
+            every { fixture.lanterns.updateStory(any(), any(), any(), any(), any(), any(), any(), any()) } answers {
+                val key = arg<Any>(0)
+                arg<Player>(1).uniqueId shouldBe player.uniqueId
+                val anchor = arg<Location>(3)
+                val parts = arg<List<AuroraLanternDisplays.Part>>(4)
+                parts.size shouldBe count
+                arg<Int>(5) shouldBe 0
+                arg<Int>(6) shouldBe count
+                arg<Int>(7) shouldBe AuroraShowcase.STORY_UPDATE_TICKS
+                sent += count
+                updates.getOrPut(key) { mutableListOf() } += tick
+                val slot = slots.single { abs(it.anchor.x - anchor.x) < 1e-8 && abs(it.anchor.z - anchor.z) < 1e-8 }
+                (anchor.y > slot.anchor.y) shouldBe true
+                val started = key.javaClass.getDeclaredField("startsAt").also { it.isAccessible = true }.getLong(key)
+                val t = ((tick - started) % profile.sceneDurationTicks).toDouble() / (profile.sceneDurationTicks - 1)
+                val eyeNow = player.eyeLocation
+                val normal = Vector3f((eyeNow.x - anchor.x).toFloat(), (eyeNow.y - anchor.y).toFloat(),
+                    (eyeNow.z - anchor.z).toFloat()).normalize()
+                val right = Vector3f(0f, 1f, 0f).cross(normal).normalize()
+                val up = Vector3f(normal).cross(right)
+                for (index in parts.indices step 5) {
+                    val local = AuroraSkyMiniatures.part(shape, index, t)
+                    val center = local.center
+                    val expected = Vector3f(right).mul(center.x.toFloat()).fma(center.y.toFloat(), up)
+                        .fma(center.z.toFloat(), normal).mul(slot.size.toFloat())
+                    val actual = parts[index]
+                    actual.material shouldBe local.material
+                    // The renderer uses float quaternions, the oracle uses an independent orthonormal basis.
+                    val distance = actual.transform.translation.distance(expected)
+                    check(distance < 1e-4f) { "Pose differs by $distance blocks at tick $tick, part $index, progress $t" }
+                    val plane = Quaternionf(actual.transform.leftRotation).mul(Quaternionf(local.rotation).conjugate())
+                    (plane.transform(Vector3f(0f, 0f, 1f)).distance(normal) < 1e-4f) shouldBe true
+                }
+                parts.any { it.transform.scale.lengthSquared() > 0f }
+            }
+            fixture.engine.startShowcase(player, shape) shouldBe true
+            repeat(240) {
+                tick++
+                if (tick == 130) player.teleport(player.location.clone().add(6.0, 3.0, 0.0)) shouldBe true
+                sent = 0
+                fixture.advance(1)
+                (sent <= count * AuroraShowcase.STORY_COPIES_PER_VISIT) shouldBe true
+            }
+            updates.size shouldBe AuroraShowcase.COPY_COUNT
+            updates.values.all { phases -> phases.size > 20 && phases.zipWithNext().all { (a, b) -> b - a == 5 } } shouldBe true
+            fixture.engine.stopShowcase(player.uniqueId)
+            sent = 0
+            fixture.advance(20)
+            sent shouldBe 0
+        }
+    }
+
+    "a story moves by metadata on one fixed private anchor, reusing even temporarily hidden parts" {
+        withEngine { fixture ->
+            val profile = skySettings(shape = AuroraShape.STORM_HERD).profiles.single()
+            val anchor = fixture.player.location
+            val packets = mockk<PaperPacketDisplays>()
+            val handle = mockk<PacketItemDisplay>(relaxed = true)
+            every { packets.spawnItem(anchor, any()) } returns handle
+            val displays = AuroraLanternDisplays(packets)
+            fun pose(x: Float, scale: Float) = AuroraLanternDisplays.Part(Material.BONE_BLOCK, Transformation(
+                Vector3f(x, 2f, 0f), Quaternionf(), Vector3f(scale), Quaternionf()))
+            val first = pose(-1f, 0.6f)
+            val moved = pose(2f, 0.6f)
+            fun send(part: AuroraLanternDisplays.Part) =
+                displays.updateStory("horse", fixture.player, profile, anchor, listOf(part), 0, 1, 5)
+            send(first) shouldBe true
+            send(moved) shouldBe true
+            verify { handle.transformation = moved.transform }
+            send(pose(2f, 0f)) shouldBe false
+            send(first) shouldBe true
+            verify(exactly = 1) { packets.spawnItem(any(), any()) }
+            verify(exactly = 1) { handle.showTo(fixture.player) }
+            verify(exactly = 0) { handle.teleport(any()) }
+            displays.removeViewer(fixture.player.uniqueId)
+            verify(exactly = 1) { handle.remove() }
+        }
+    }
+
+    "a custom story field with one request per visit finishes one sampled pose before starting the next" {
+        val shape = AuroraShape.SKY_FISHING
+        val count = AuroraSkyMiniatures.partCount(shape)
+        val settings = skySettings(points = count, shape = shape, packets = 1).copy(nativeBudgetMicros = Int.MAX_VALUE)
+        withEngine(settings, highSky = true) { fixture ->
+            var pose: List<AuroraLanternDisplays.Part>? = null
+            var next = 0
+            var complete = 0
+            var sent = 0
+            every { fixture.lanterns.updateStory(any(), any(), any(), any(), any(), any(), any(), any()) } answers {
+                val parts = arg<List<AuroraLanternDisplays.Part>>(4)
+                arg<Int>(5) shouldBe next
+                arg<Int>(6) shouldBe next + 1
+                if (next == 0) {
+                    (parts !== pose) shouldBe true
+                    pose = parts
+                } else (parts === pose) shouldBe true
+                sent++
+                next = (next + 1) % count
+                if (next == 0) complete++
+                true
+            }
+            fixture.permission(true)
+            repeat(140) {
+                sent = 0
+                fixture.advance(1)
+                (sent <= 1) shouldBe true
+            }
+            (complete >= 2) shouldBe true
+        }
+    }
+
     "showcase cycles through five fixed private slots under the shared one-packet cap" {
         withEngine(showcaseSettings()) { fixture ->
             fixture.joinAdditional("OtherViewer")

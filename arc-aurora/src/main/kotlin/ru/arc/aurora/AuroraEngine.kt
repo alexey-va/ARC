@@ -9,6 +9,9 @@ import org.bukkit.NamespacedKey
 import org.bukkit.entity.Player
 import org.bukkit.persistence.PersistentDataType
 import org.bukkit.plugin.Plugin
+import org.bukkit.util.Transformation
+import org.joml.Quaternionf
+import org.joml.Vector3f
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.paper.particle.PaperViewerParticles
 import java.util.UUID
@@ -82,6 +85,7 @@ internal class AuroraEngine(
         val path: List<AuroraOffset>, val motion: List<AuroraOffset>,
         val animation: SkyAnimation? = null,
         val phaseOffsetTicks: Int = 0,
+        val storyRadius: Double? = null,
     ) {
         // A showcase's first stroke can join an action in progress. Later cycles start at its first point.
         var cursor = AuroraSkyCursor(profile.points,
@@ -93,7 +97,7 @@ internal class AuroraEngine(
         var terrainAnchor: AuroraSurface? = null
         val terrainColumns = if (cell.terrain) mutableMapOf<Pair<Int, Int>, TerrainColumn>() else null
         val riverWaterline get() = if (profile.shape == AuroraShape.PAPER_FLOTILLA) terrainAnchor?.blockY else null
-        val columns = skyColumns(x, y, z, normalX, normalZ, path, motion,
+        val columns = storyRadius?.let { storyColumns(x, y, z, it) } ?: skyColumns(x, y, z, normalX, normalZ, path, motion,
             profile.skyPalette.map { it.particle }.ifEmpty { profile.skyHeadParticles.ifEmpty { listOf(profile.particle) } }, animation,
             if (profile.shape.isMiniature) AuroraSkyMiniatures.partRadius(profile.shape) * checkNotNull(animation).size
             else profile.skyModel?.let { 2.0 * it.scale }, terrain = cell.terrain)
@@ -105,6 +109,8 @@ internal class AuroraEngine(
         var repairIndex = -1
         var repairAt = Long.MIN_VALUE
         var animationCursor = 0
+        var storyPose: List<AuroraLanternDisplays.Part>? = null // One complete phase while a small field budget sends its slices.
+        var lastStoryPoseAt = Long.MIN_VALUE
         var modelCycle = -1L
         var renderedModels = false // The latest Main submission has a nonzero-size member and has not been retired.
     }
@@ -145,6 +151,7 @@ internal class AuroraEngine(
     // One immutable unit-size animation per configured shape/count, shared by all viewer scenes.
     // Only the lifecycle-owned single planning worker reads/writes this bounded cache.
     private val animationFrames = mutableMapOf<Pair<AuroraShape, Int>, List<List<AuroraCelestialPoint>>>()
+    private val storyRadii = mutableMapOf<Pair<AuroraShape, Int>, Double>()
     @Volatile var viewerCount = 0; private set
     @Volatile var pingSkipped = 0L; private set
     @Volatile var submittedPackets = 0L; private set
@@ -418,7 +425,7 @@ internal class AuroraEngine(
             lanterns?.retain(viewer.id, scenes.filter {
                 !it.culled.get() && !it.rejected.get() && if (showcase == null)
                     it.startsAt == Long.MAX_VALUE || age - it.startsAt < it.profile.sceneDurationTicks
-                else it.modelCycle == (age - it.startsAt) / it.profile.sceneDurationTicks
+                else it.profile.shape.isStory || it.modelCycle == (age - it.startsAt) / it.profile.sceneDurationTicks
             }.toSet())
             var remaining = sky.budget
             if (scenes.isEmpty() || remaining == 0) continue
@@ -441,6 +448,10 @@ internal class AuroraEngine(
                 val animation = scene.animation
                 if (animation != null) {
                     if (age < scene.nextAt) continue
+                    if (scene.profile.shape.isStory) {
+                        remaining -= emitStory(sky, scene, player, sceneAge, remaining)
+                        continue
+                    }
                     if (scene.profile.shape.isModel) {
                         // No miniature part exists at birth. Leave the first budget slice for its visible pose.
                         if (scene.profile.shape.isMiniature && sceneAge == 0L) continue
@@ -580,6 +591,55 @@ internal class AuroraEngine(
         }
     }
 
+    private fun emitStory(sky: SkyInput, scene: SkyScene, player: Player, sceneAge: Long, remaining: Int): Int {
+        val profile = scene.profile
+        val first = scene.animationCursor
+        val end = minOf(first + remaining, profile.points)
+        if (end < profile.points && sky.budget >= profile.points) return 0
+        val anchor = Location(player.world, scene.x, scene.y + checkNotNull(scene.surfaceY), scene.z)
+        val parts = scene.storyPose ?: run {
+            val rotation = if (sky.showcase == null) Quaternionf().rotationY(atan2(scene.normalX, scene.normalZ).toFloat())
+            else player.eyeLocation.let { AuroraShowcase.storyFacing(it.x - anchor.x, it.y - anchor.y, it.z - anchor.z) }
+            val size = checkNotNull(scene.animation).size.toFloat()
+            val progress = sceneAge.toDouble() / (profile.sceneDurationTicks - 1)
+            List(profile.points) { index ->
+                val part = AuroraSkyMiniatures.part(profile.shape, index, progress)
+                val center = part.center
+                val translation = rotation.transform(Vector3f(center.x.toFloat(), center.y.toFloat(), center.z.toFloat())).mul(size)
+                AuroraLanternDisplays.Part(part.material, Transformation(translation, Quaternionf(rotation).mul(part.rotation),
+                    Vector3f(part.scale).mul(size), Quaternionf()))
+            }
+        }
+        val spot = anchor.clone()
+        for (index in first until end) {
+            val transform = parts[index].transform
+            if (transform.scale.lengthSquared() == 0f) continue
+            val t = transform.translation
+            spot.x = anchor.x + t.x
+            spot.y = anchor.y + t.y
+            spot.z = anchor.z + t.z
+            if (spot.y < player.world.minHeight || spot.y >= player.world.maxHeight ||
+                !player.world.isChunkLoaded(spot.blockX shr 4, spot.blockZ shr 4) ||
+                !spot.block.isPassable || spot.block.isLiquid ||
+                sky.input.selection.source == Source.ORDINARY && profile !in matching(player, spot, settings.profiles)) {
+                scene.rejected.set(true)
+                scene.storyPose = null
+                lanterns?.retain(player.uniqueId, sky.scenes.filter { !it.rejected.get() && !it.culled.get() }.toSet())
+                return 0
+            }
+        }
+        val cadence = if (sky.showcase == null) profile.updateTicks else maxOf(profile.updateTicks, AuroraShowcase.STORY_UPDATE_TICKS)
+        val interpolation = if (sky.showcase == null || scene.lastStoryPoseAt == Long.MIN_VALUE) cadence
+            else maxOf(cadence, (age - scene.lastStoryPoseAt).coerceAtMost(59).toInt())
+        val displays = lanterns ?: lanternFactory().also { lanterns = it }
+        scene.renderedModels = displays.updateStory(scene, player, profile, anchor, parts, first, end, interpolation)
+        scene.lastStoryPoseAt = age
+        scene.animationCursor = end % profile.points
+        scene.storyPose = if (end < profile.points) parts else null
+        scene.nextAt = age + if (end < profile.points) 1 else cadence
+        return end - first
+    }
+
     /** Loaded heightmap checks cover the whole swept footprint before any point is sent. */
     private fun admitSky(scene: SkyScene, player: Player, deadline: Long): Boolean {
         if (scene.startsAt != Long.MAX_VALUE) return true
@@ -669,9 +729,30 @@ internal class AuroraEngine(
                 else listOf(AuroraOffset(0.0, 0.0, 0.0))
             SkyScene(profile, input.world, input.revision, input.age,
                 AuroraSkyCell(index, 0), 0L, pose.anchor.x, pose.anchor.y, pose.anchor.z,
-                showcase.normalX, showcase.normalZ, path, motion, animation, pose.phaseOffsetTicks)
+                showcase.normalX, showcase.normalZ, path, motion, animation, pose.phaseOffsetTicks, storyRadius(profile, pose.size))
         }
-        return SkyInput(input, scenes, settings.skyPacketsPerViewer, ShowcaseAdmission(scenes))
+        val first = scenes.first().profile
+        val budget = if (first.shape.isStory) first.points * AuroraShowcase.STORY_COPIES_PER_VISIT else settings.skyPacketsPerViewer
+        return SkyInput(input, scenes, budget, ShowcaseAdmission(scenes))
+    }
+
+    /** All integer ages can be submitted. A cached sphere encloses their meshes for every viewer-facing yaw and pitch. */
+    private fun storyRadius(profile: AuroraProfile, size: Double): Double? {
+        if (!profile.shape.isStory) return null
+        return size * storyRadii.getOrPut(profile.shape to profile.sceneDurationTicks) {
+            var radius = 0.0
+            for (tick in 0 until profile.sceneDurationTicks) {
+                val progress = tick.toDouble() / (profile.sceneDurationTicks - 1)
+                for (index in 0 until profile.points) {
+                    val part = AuroraSkyMiniatures.part(profile.shape, index, progress)
+                    if (part.scale.lengthSquared() == 0f) continue
+                    val p = part.center
+                    val mesh = part.scale.length().toDouble() / 2
+                    radius = maxOf(radius, sqrt(p.x * p.x + p.y * p.y + p.z * p.z) + mesh)
+                }
+            }
+            radius + 0.01 // Covers float transforms and the block-column boundary at an exact tangent.
+        }
     }
 
     private fun showcaseSceneAge(scene: SkyScene, elapsed: Long): Long {
@@ -791,7 +872,8 @@ internal class AuroraEngine(
                     random.nextBoolean())
             return SkyScene(profile, input.world, input.revision, input.age + delay,
                 candidate.cell, candidate.epoch, candidate.x, height, candidate.z, sin(angle), -cos(angle),
-                frames.first().map { animation.pose(it.offset) }, listOf(AuroraOffset(0.0, 0.0, 0.0)), animation)
+                frames.first().map { animation.pose(it.offset) }, listOf(AuroraOffset(0.0, 0.0, 0.0)), animation,
+                storyRadius = storyRadius(profile, size))
         }
         val path = AuroraSkyShapes.stroke(profile.shape, size, profile.points, profile.updateTicks,
             profile.motionPeriodTicks, random.nextInt(profile.motionPeriodTicks),
@@ -879,6 +961,20 @@ internal class AuroraSkyCursor(private val points: Int, initialPosition: Int = 0
 
 
 private data class SkyColumn(val x: Int, val z: Int, val low: Double, val high: Double)
+
+private fun storyColumns(x: Double, y: Double, z: Double, radius: Double): List<SkyColumn> = buildList {
+    for (cx in floor(x - radius).toInt()..floor(x + radius).toInt()) {
+        val dx = maxOf(0.0, cx - x, x - (cx + 1))
+        for (cz in floor(z - radius).toInt()..floor(z + radius).toInt()) {
+            val dz = maxOf(0.0, cz - z, z - (cz + 1))
+            val square = radius * radius - dx * dx - dz * dz
+            if (square >= 0.0) {
+                val dy = sqrt(square)
+                add(SkyColumn(cx, cz, y - dy, y + dy))
+            }
+        }
+    }
+}
 
 private class SkyAnimation(
     val frames: List<List<AuroraCelestialPoint>>, val size: Double, roll: Double, val reverse: Boolean, val pitch: Double = 0.0,

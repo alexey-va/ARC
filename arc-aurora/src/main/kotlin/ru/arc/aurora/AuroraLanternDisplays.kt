@@ -12,6 +12,7 @@ import org.joml.Quaternionf
 import org.joml.Vector3f
 import ru.arc.paper.display.PacketItemDisplay
 import ru.arc.paper.display.PaperPacketDisplays
+import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
@@ -19,8 +20,11 @@ import java.util.concurrent.CompletableFuture
 class AuroraLanternDisplays internal constructor(private val displays: PaperPacketDisplays) {
     constructor(plugin: Plugin) : this(PaperPacketDisplays(plugin, "aurora-lanterns"))
 
-    private data class Scene(val model: Any, val world: UUID, val handles: MutableList<PacketItemDisplay?>)
-    private data class Part(val material: Material, val transform: Transformation, val customModelData: Int? = null)
+    private class Scene(val model: Any, val world: UUID, count: Int) {
+        val handles = MutableList<PacketItemDisplay?>(count) { null }
+        val visible = BooleanArray(count)
+    }
+    internal data class Part(val material: Material, val transform: Transformation, val customModelData: Int? = null)
 
     private val viewers = mutableMapOf<UUID, MutableMap<Any, Scene>>()
     private var closed = false
@@ -51,13 +55,21 @@ class AuroraLanternDisplays internal constructor(private val displays: PaperPack
         }
     }
 
+    /** World-fixed entity origins let a moving part send its position, rotation and scale in one metadata update. */
+    internal fun updateStory(key: Any, player: Player, profile: AuroraProfile, anchor: Location,
+        parts: List<Part>, firstPart: Int, endPart: Int, interpolation: Int): Boolean {
+        if (closed) return false
+        return updateParts(key, player, profile.shape, parts.size, firstPart,
+            Collections.nCopies(endPart - firstPart, anchor), interpolation, fixedAnchor = true, partAt = parts::get)
+    }
+
     private inline fun updateParts(key: Any, player: Player, model: Any, count: Int, firstPart: Int,
-        centers: List<Location>, updateTicks: Int, partAt: (Int) -> Part) {
+        centers: List<Location>, updateTicks: Int, fixedAnchor: Boolean = false, partAt: (Int) -> Part): Boolean {
         val viewer = player.uniqueId
         val world = player.world.uid
         if (centers.any { it.world?.uid != world }) {
             viewers[viewer]?.remove(key)?.remove()
-            return
+            return false
         }
         val scenes = viewers.getOrPut(viewer) { mutableMapOf() }
         val previous = scenes[key]
@@ -65,18 +77,28 @@ class AuroraLanternDisplays internal constructor(private val displays: PaperPack
             previous.remove()
             scenes.remove(key)
         }
-        val scene = scenes.getOrPut(key) { Scene(model, world, MutableList(count) { null }) }
+        val scene = scenes.getOrPut(key) { Scene(model, world, count) }
         val interpolation = updateTicks.coerceIn(1, 59)
         for ((offset, location) in centers.withIndex()) {
             val index = firstPart + offset
             val part = partAt(index)
             val handle = scene.handles[index]
-            if (part.transform.scale.lengthSquared() == 0f) {
-                handle?.remove()
-                scene.handles[index] = null
+            val visible = part.transform.scale.lengthSquared() > 0f
+            val wasVisible = scene.visible[index]
+            scene.visible[index] = visible
+            if (!visible) {
+                if (fixedAnchor) {
+                    if (handle != null && wasVisible) {
+                        handle.interpolationDuration = 0
+                        handle.transformation = part.transform
+                    }
+                } else {
+                    handle?.remove()
+                    scene.handles[index] = null
+                }
                 continue
             }
-            val center = location.clone().apply { yaw = 0f; pitch = 0f }
+            val center = if (fixedAnchor) location else location.clone().apply { yaw = 0f; pitch = 0f }
             if (handle == null) {
                 val created = displays.spawnItem(center, item(part))
                 scene.handles[index] = created // Retain ownership even if later metadata preparation fails.
@@ -99,12 +121,15 @@ class AuroraLanternDisplays internal constructor(private val displays: PaperPack
                 }
             } else {
                 handle.interpolationDelay = 0
-                handle.interpolationDuration = interpolation
-                handle.teleportDuration = interpolation
-                handle.teleport(center)
+                handle.interpolationDuration = if (fixedAnchor && !wasVisible) 0 else interpolation
+                if (!fixedAnchor) {
+                    handle.teleportDuration = interpolation
+                    handle.teleport(center)
+                }
                 handle.transformation = part.transform
             }
         }
+        return scene.visible.any { it }
     }
 
     fun retain(viewer: UUID, keys: Set<Any>) {

@@ -2,7 +2,10 @@ package ru.arc.aurora
 
 import java.util.UUID
 import java.util.Locale
+import org.joml.Quaternionf
+import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.hypot
 import kotlin.math.sin
 
 /** An immutable panel in the world, fixed to the player's view at invocation. */
@@ -68,6 +71,15 @@ internal class AuroraShowcase(
         const val DURATION_TICKS = 1_200L
         const val SELECTED_DURATION_TICKS = 3_600L
         const val COPY_COUNT = 9
+        // Two complete storyboard poses per visit give each of nine slots an interpolated update every five ticks.
+        const val STORY_COPIES_PER_VISIT = 2
+        const val STORY_UPDATE_TICKS = (COPY_COUNT + STORY_COPIES_PER_VISIT - 1) / STORY_COPIES_PER_VISIT
+
+        /** A flat story's local +Z looks from this slot toward its viewer, including any terrain lift. */
+        fun storyFacing(toEyeX: Double, toEyeY: Double, toEyeZ: Double): Quaternionf =
+            Quaternionf().rotationY(atan2(toEyeX, toEyeZ).toFloat())
+                .rotateX((-atan2(toEyeY, hypot(toEyeX, toEyeZ))).toFloat())
+
         // Viewer-local right, height and forward distance. Gaps accommodate the full moving silhouettes.
         private val copies = listOf(
             AuroraOffset(-13.1, 5.6, 31.5), AuroraOffset(0.0, 5.15, 30.6), AuroraOffset(13.6, 5.9, 31.8),

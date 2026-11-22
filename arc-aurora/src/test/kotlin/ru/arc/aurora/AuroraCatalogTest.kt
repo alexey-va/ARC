@@ -43,7 +43,7 @@ class AuroraCatalogTest : FreeSpec({
             fixture.complete(fixture.paper.server.consoleSender, "show") shouldBe emptyList()
             plugin.showcase(admin) shouldBe null
             fixture.complete(admin, "show") shouldBe listOf("showcase")
-            fixture.complete(admin, "showcase", "st") shouldBe listOf("STAR", "STELLAR_PRISM", "stop")
+            fixture.complete(admin, "showcase", "st") shouldBe listOf("STAR", "STELLAR_PRISM", "STORM_HERD", "stop")
 
             fixture.command(admin, "preview self test-gallery fan")
             admin.message() shouldBe "preview-on"
