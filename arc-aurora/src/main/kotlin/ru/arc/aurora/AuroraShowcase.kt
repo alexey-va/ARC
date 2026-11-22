@@ -3,6 +3,7 @@ package ru.arc.aurora
 import java.util.UUID
 import java.util.Locale
 import org.joml.Quaternionf
+import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -21,6 +22,22 @@ internal class AuroraShowcase(
     val normalZ = -cos(angle)
 
     fun pose(index: Int): Pose {
+        if (profiles[index].shape == AuroraShape.FROG_RAIN && profiles.size == RAIN_GROUPS) {
+            val inner = index % 2 == 0
+            val sector = index / 2
+            val variation = sector % 3
+            val direction = 0.18 + index * 2.0 * PI / RAIN_GROUPS
+            val (radius, height) = when (index) {
+                2 -> 2.6 to 13.7
+                8 -> 3.2 to 14.6
+                else -> if (inner) (9.3 + variation * 0.9) to (5.4 + variation * 0.45)
+                    else (16.9 + variation * 1.2) to (10.4 + variation * 0.8)
+            }
+            val size = if (inner) 3.35 else 4.10
+            val phase = (index * 5 + 1) % RAIN_GROUPS
+            return pose(AuroraOffset(radius * sin(direction), height, radius * cos(direction)), size, 0.0,
+                phase * profiles[index].sceneDurationTicks / RAIN_GROUPS)
+        }
         if (profiles.size == COPY_COUNT) {
             val profile = profiles[index]
             val size = when (profile.shape) {
@@ -71,9 +88,9 @@ internal class AuroraShowcase(
         const val DURATION_TICKS = 1_200L
         const val SELECTED_DURATION_TICKS = 3_600L
         const val COPY_COUNT = 9
-        // Two complete storyboard poses per visit give each of nine slots an interpolated update every five ticks.
+        private const val RAIN_GROUPS = 14
+        fun copyCount(shape: AuroraShape) = if (shape == AuroraShape.FROG_RAIN) RAIN_GROUPS else COPY_COUNT
         const val STORY_COPIES_PER_VISIT = 2
-        const val STORY_UPDATE_TICKS = (COPY_COUNT + STORY_COPIES_PER_VISIT - 1) / STORY_COPIES_PER_VISIT
 
         /** A flat story's local +Z looks from this slot toward its viewer, including any terrain lift. */
         fun storyFacing(toEyeX: Double, toEyeY: Double, toEyeZ: Double): Quaternionf =

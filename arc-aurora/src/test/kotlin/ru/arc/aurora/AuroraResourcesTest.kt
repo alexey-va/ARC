@@ -43,8 +43,17 @@ class AuroraResourcesTest : FreeSpec({
         val celestial = sky.filter { it.shape.isCelestial }
         (celestial + settings.profiles.filter { it.shape.isCelestial }).map { it.shape }.toSet() shouldBe AuroraShape.active.filter { it.isCelestial }.toSet()
         val miniatures = sky.filter { it.shape.isMiniature }
-        miniatures.associate { it.shape to it.points } shouldBe mapOf(AuroraShape.FEATHER_GLIDER to 4)
+        val pentagramShape = AuroraShape.INFERNAL_PENTAGRAM
+        val pentagram = miniatures.single { it.shape == pentagramShape }
+        miniatures.associate { it.shape to it.points } shouldBe mapOf(
+            AuroraShape.FEATHER_GLIDER to 4,
+            pentagramShape to AuroraSkyMiniatures.partCount(pentagramShape),
+        )
         miniatures.all { it.skyScene && it.updateTicks == 3 && it.skyModel == null } shouldBe true
+        pentagram.id shouldBe "infernal_pentagram"
+        pentagram.sceneDurationTicks shouldBe 320
+        pentagram.skyTracers shouldBe 1
+        pentagram.skyPalette shouldBe emptyList()
         celestial.all { it.skyTracers in 8..12 && it.skyPalette.isNotEmpty() && it.skyRefreshTicks == 0 } shouldBe true
         val gallery = settings.eventPresets.getValue("particle-gallery")
         (gallery.size >= 12) shouldBe true
@@ -61,6 +70,7 @@ class AuroraResourcesTest : FreeSpec({
         effects.all { (shape, profile) -> profile.shape == shape && profile.skyScene } shouldBe true
         effects.getValue(AuroraShape.WAVE) shouldBe localWave
         effects.getValue(AuroraShape.SKY_LANTERNS) shouldBe lantern
+        effects.getValue(pentagramShape) shouldBe pentagram
         effects.getValue(AuroraShape.STAR).skyRefreshTicks shouldBe 40
         val ring = settings.profiles.first { it.shape == AuroraShape.RING }
         effects.getValue(AuroraShape.RING).particleData shouldBe ring.particleData
@@ -108,7 +118,7 @@ class AuroraResourcesTest : FreeSpec({
             bundled.eventPresets.getValue("treasure-hunt") +
             bundled.eventPresets[bundled.nightSky.preset].orEmpty()
 
-        storyShapes.forEach { shape ->
+        (storyShapes + AuroraShape.FROG_RAIN).forEach { shape ->
             withClue(shape) {
                 (shape in AuroraShape.active) shouldBe true
                 shape.isMiniature shouldBe true

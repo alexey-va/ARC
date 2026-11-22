@@ -223,8 +223,11 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
                     return reply(player, if (shape == null) "showcase-unavailable" else "showcase-effect-unavailable")
                 }
                 stopPreview(player.uniqueId)
-                return if (shape == null) reply(player, "showcase-on")
-                else reply(player, "showcase-effect-on", mapOf("effect" to shape.name))
+                return when (shape) {
+                    null -> reply(player, "showcase-on")
+                    AuroraShape.FROG_RAIN -> reply(player, "showcase-frog-rain-on")
+                    else -> reply(player, "showcase-effect-on", mapOf("effect" to shape.name))
+                }
             }
             if (action == "catalog") {
                 val current = engine ?: return reply(sender, "stopped")

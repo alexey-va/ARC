@@ -77,7 +77,7 @@ object AuroraGeometry {
                 AuroraShape.FEATHER_GLIDER, AuroraShape.ASTRAL_PENDULUM, AuroraShape.TWIN_SAMARAS, AuroraShape.SKY_PHONOGRAPH,
                 AuroraShape.ENDERMAN_SKY_THEFT, AuroraShape.SKY_FISHING, AuroraShape.FROST_WALKER, AuroraShape.CLOUD_FOX,
                 AuroraShape.TOTEM_HEART, AuroraShape.GHAST_PORTAL, AuroraShape.STORM_HERD, AuroraShape.SLIME_ANVIL,
-                AuroraShape.SHATTERED_SWORD, AuroraShape.REVERSE_FIREWORK ->
+                AuroraShape.SHATTERED_SWORD, AuroraShape.REVERSE_FIREWORK, AuroraShape.FROG_RAIN, AuroraShape.VOID_CATHEDRAL ->
                     error("Celestial animations require a sky scene")
             }
         }

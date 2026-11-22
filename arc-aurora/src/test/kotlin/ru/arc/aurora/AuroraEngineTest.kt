@@ -120,8 +120,7 @@ class AuroraEngineTest : FreeSpec({
         val bundled = AuroraConfig.parse(YamlConfiguration().apply {
             loadFromString(checkNotNull(javaClass.classLoader.getResourceAsStream("config.yml")).bufferedReader().use { it.readText() })
         })
-        val profile = bundled.eventPresets.getValue("treasure-hunt").single { it.shape.isMiniature }
-        profile.shape shouldBe AuroraShape.FEATHER_GLIDER
+        val profile = bundled.eventPresets.getValue("treasure-hunt").single { it.shape == AuroraShape.FEATHER_GLIDER }
         val settings = skySettings(packets = 36).copy(profiles = listOf(profile), nativeBudgetMicros = Int.MAX_VALUE)
         withEngine(settings, highSky = true) { fixture ->
             fixture.permission(true)
@@ -226,7 +225,7 @@ class AuroraEngineTest : FreeSpec({
                 parts.size shouldBe count
                 arg<Int>(5) shouldBe 0
                 arg<Int>(6) shouldBe count
-                arg<Int>(7) shouldBe AuroraShowcase.STORY_UPDATE_TICKS
+                arg<Int>(7) shouldBe 5
                 sent += count
                 updates.getOrPut(key) { mutableListOf() } += tick
                 val slot = slots.single { abs(it.anchor.x - anchor.x) < 1e-8 && abs(it.anchor.z - anchor.z) < 1e-8 }
@@ -294,6 +293,113 @@ class AuroraEngineTest : FreeSpec({
             verify(exactly = 0) { handle.teleport(any()) }
             displays.removeViewer(fixture.player.uniqueId)
             verify(exactly = 1) { handle.remove() }
+        }
+    }
+
+    "a rain shower keeps fourteen world-fixed groups, lifts a blocked sector locally and preserves world vertical" {
+        val shape = AuroraShape.FROG_RAIN
+        val count = AuroraSkyMiniatures.partCount(shape)
+        val base = skySettings(points = count, shape = shape)
+        val profile = base.profiles.single().copy(sceneDurationTicks = shape.storyDurationTicks, updateTicks = 3)
+        withEngine(base.copy(profiles = listOf(profile), nativeBudgetMicros = Int.MAX_VALUE), highSky = true) { fixture ->
+            val player = fixture.player
+            fixture.admin(true)
+            val eye = player.eyeLocation
+            val countSlots = AuroraShowcase.copyCount(shape)
+            val ring = AuroraShowcase(player.world.uid, AuroraOffset(eye.x, eye.y, eye.z), eye.yaw,
+                List(countSlots) { profile }, AuroraShowcase.SELECTED_DURATION_TICKS)
+            val slots = (0 until countSlots).map(ring::pose)
+            val block = slots[0].anchor
+            Location(player.world, block.x, block.y + 3.0, block.z).block.type = Material.STONE
+            val frogs = mutableMapOf<Int, Int>()
+            val lifts = mutableMapOf<Int, Double>()
+            val identities = mutableSetOf<Any>()
+            var tick = 0
+            var sent = 0
+            every { fixture.lanterns.updateStory(any(), any(), any(), any(), any(), any(), any(), any()) } answers {
+                val key = arg<Any>(0)
+                val anchor = arg<Location>(3)
+                val parts = arg<List<AuroraLanternDisplays.Part>>(4)
+                arg<Int>(5) shouldBe 0
+                arg<Int>(6) shouldBe 33
+                arg<Int>(7) shouldBe 7
+                val i = slots.indexOfFirst { abs(it.anchor.x - anchor.x) < 1e-8 && abs(it.anchor.z - anchor.z) < 1e-8 }
+                val slot = slots[i]
+                val started = key.javaClass.getDeclaredField("startsAt").also { it.isAccessible = true }.getLong(key)
+                val t = ((tick - started) % profile.sceneDurationTicks).toDouble() / (profile.sceneDurationTicks - 1)
+                for (body in listOf(0, 11, 22)) {
+                    val local = AuroraSkyMiniatures.part(shape, body, t)
+                    val transform = parts[body].transform
+                    (abs(transform.translation.y - local.center.y * slot.size) < 1e-5) shouldBe true
+                    val rotation = Quaternionf(transform.leftRotation).mul(Quaternionf(local.rotation).conjugate())
+                    (rotation.transform(Vector3f(0f, 1f, 0f)).distance(Vector3f(0f, 1f, 0f)) < 1e-4f) shouldBe true
+                }
+                identities += key
+                lifts[i] = anchor.y - slot.anchor.y
+                frogs[i] = listOf(0, 11, 22).count { parts[it].transform.scale.lengthSquared() > 0f }
+                sent += count
+                true
+            }
+            fixture.engine.startShowcase(player, shape) shouldBe true
+            repeat(300) {
+                tick++
+                if (tick == 160) player.teleport(player.location.clone().add(3.0, 1.0, 2.0)) shouldBe true
+                sent = 0
+                fixture.advance(1)
+                (sent <= 66) shouldBe true
+                if (tick > 140) {
+                    frogs.size shouldBe 14
+                    (frogs.values.sum() >= 30) shouldBe true
+                }
+            }
+            identities.size shouldBe 14
+            (lifts.getValue(0) > 3.0 && lifts.values.count { it == 0.0 } >= 7) shouldBe true
+            fixture.engine.stopShowcase(player.uniqueId)
+            sent = 0
+            fixture.advance(20)
+            sent shouldBe 0
+        }
+    }
+
+    "field and private-preview pentagrams face the viewer's current eye while respecting the ordinary budget" {
+        val shape = AuroraShape.INFERNAL_PENTAGRAM
+        val count = AuroraSkyMiniatures.partCount(shape)
+        val base = skySettings(points = count, shape = shape, packets = 36)
+        val profile = base.profiles.single().copy(sceneDurationTicks = shape.storyDurationTicks)
+        for (privatePreview in listOf(false, true)) {
+            withEngine(base.copy(profiles = listOf(profile), nativeBudgetMicros = Int.MAX_VALUE), highSky = true) { fixture ->
+                if (privatePreview) fixture.preview = fixture.settings.profiles else fixture.event = fixture.settings.profiles
+                var tick = 0
+                var sent = 0
+                var afterMove = 0
+                every { fixture.lanterns.updateStory(any(), any(), any(), any(), any(), any(), any(), any()) } answers {
+                    val key = arg<Any>(0)
+                    val first = arg<Int>(5)
+                    sent += arg<Int>(6) - first
+                    if (first == 0) {
+                        val anchor = arg<Location>(3)
+                        val started = key.javaClass.getDeclaredField("startsAt").also { it.isAccessible = true }.getLong(key)
+                        val t = (tick - started).toDouble() / (profile.sceneDurationTicks - 1)
+                        val part = arg<List<AuroraLanternDisplays.Part>>(4).first()
+                        val local = AuroraSkyMiniatures.part(shape, 0, t)
+                        val plane = Quaternionf(part.transform.leftRotation).mul(Quaternionf(local.rotation).conjugate())
+                        val eye = fixture.player.eyeLocation
+                        val direction = Vector3f((eye.x - anchor.x).toFloat(), (eye.y - anchor.y).toFloat(),
+                            (eye.z - anchor.z).toFloat()).normalize()
+                        (plane.transform(Vector3f(0f, 0f, 1f)).distance(direction) < 1e-4f) shouldBe true
+                        if (tick >= 90) afterMove++
+                    }
+                    true
+                }
+                repeat(150) {
+                    tick++
+                    if (tick == 90) fixture.player.teleport(fixture.player.location.clone().add(5.0, 4.0, 2.0)) shouldBe true
+                    sent = 0
+                    fixture.advance(1)
+                    (sent <= 36) shouldBe true
+                }
+                (afterMove >= 2) shouldBe true
+            }
         }
     }
 

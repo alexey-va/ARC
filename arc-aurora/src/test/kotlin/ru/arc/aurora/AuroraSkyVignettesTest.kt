@@ -76,51 +76,7 @@ class AuroraSkyVignettesTest : FreeSpec({
         (star.minOf { it.y } > 0.3 && star.maxOf { it.y } > 1.0) shouldBe true
         (star.maxOf { it.x } - star.minOf { it.x } > 0.56) shouldBe true
     }
-
-    "the inverted pentagram draws its five crossing chords in order and holds the completed stroke" {
-        val frames = AuroraCelestialShapes.frames(AuroraShape.INFERNAL_PENTAGRAM, 1.0, 128)
-        val stroke = frames[20].indices.filter { frames[20][it].paletteSlot == 0 }
-        (16..27).all { f -> stroke.all { frames[f][it].opacity > 0.75 } } shouldBe true
-        val visits = listOf(0, 2, 4, 1, 3, 0)
-        val arrivals = visits.zipWithNext { a, b ->
-            val from = pentagramVertices[a]
-            val to = pentagramVertices[b]
-            for (step in 0..5) {
-                val target = AuroraCelestialShapes.mix(from, to, step / 5.0)
-                stroke.any { frames[20][it].offset.distanceXY(target) < 0.07 } shouldBe true
-            }
-            val middle = AuroraCelestialShapes.mix(from, to, 0.5)
-            val sample = stroke.minBy { frames[20][it].offset.distanceXY(middle) }
-            frames.indexOfFirst { it[sample].opacity > 0.55 }
-        }
-        (arrivals.first() > 0 && arrivals.last() < 16 && arrivals.zipWithNext().all { (a, b) -> a < b }) shouldBe true
-        val embers = frames[20].visiblePart(1)
-        embers.size shouldBe 28
-        embers.all { hypot(it.x, it.y) in 1.14..1.16 } shouldBe true
-    }
-
-    "five separate spearhead seals bridge the star tips to the ember ring" {
-        val frames = AuroraCelestialShapes.frames(AuroraShape.INFERNAL_PENTAGRAM, 1.0, 128)
-        val order = mutableListOf<Int>()
-        for (frame in frames) {
-            val seals = frame.filter { it.paletteSlot == 2 && it.opacity > 0.55 }.map { it.offset }
-            if (seals.isEmpty()) continue
-            val vertices = seals.map { point -> pentagramVertices.indices.minBy { point.distanceXY(pentagramVertices[it]) } }
-            vertices.distinct().size shouldBe 1
-            if (seals.size == 8) {
-                val vertex = vertices.first()
-                if (order.lastOrNull() != vertex) order += vertex
-                (seals.minOf { hypot(it.x, it.y) } < 1.01 && seals.maxOf { hypot(it.x, it.y) } > 1.26) shouldBe true
-            }
-        }
-        order shouldBe pentagramVertices.indices.toList()
-    }
 })
-
-private val pentagramVertices = listOf(AuroraOffset(0.0, -1.0, 0.0), AuroraOffset(0.9511, -0.3090, 0.0),
-    AuroraOffset(0.5878, 0.8090, 0.0), AuroraOffset(-0.5878, 0.8090, 0.0), AuroraOffset(-0.9511, -0.3090, 0.0))
-
-private fun AuroraOffset.distanceXY(other: AuroraOffset) = hypot(x - other.x, y - other.y)
 
 private fun List<AuroraCelestialPoint>.visiblePart(slot: Int) =
     filter { it.paletteSlot == slot && it.opacity > 0.3 }.map { it.offset }

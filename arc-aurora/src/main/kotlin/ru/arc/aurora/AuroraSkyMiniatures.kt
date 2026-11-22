@@ -51,7 +51,11 @@ object AuroraSkyMiniatures {
             val visible = visibility(progress)
             List(count) { index ->
                 val pose = part(shape, index, progress)
-                val opacity = if (shape.isStory && pose.scale.lengthSquared() == 0f) 0.0 else visible
+                val opacity = when {
+                    !shape.isStory -> visible
+                    pose.scale.lengthSquared() > 0f -> 1.0
+                    else -> 0.0
+                }
                 AuroraCelestialPoint(pose.center, opacity, 0)
             }
         }
@@ -62,6 +66,8 @@ object AuroraSkyMiniatures {
         val t = progress.coerceIn(0.0, 1.0)
         val story = shape.storyParts ?: return glider(index, t)
         val pose = story.part(shape, index, t)
+        // Each frog disappears at the bottom of its own fall; the surrounding shower runs continuously.
+        if (shape == AuroraShape.FROG_RAIN) return pose
         val fade = smooth(t / 0.02) * smooth((1.0 - t) / 0.02)
         if (fade == 1.0) return pose
         val center = pose.center

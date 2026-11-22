@@ -24,7 +24,7 @@ interpretations, not a particle-physics simulation. No cube,
 star or TOTEM ring is selected by the bundled night catalogue; those supported
 shapes remain available to custom profiles.
 
-The living-sky catalogue includes thirteen animated particle scenes.
+The living-sky catalogue includes twelve particle scenes and a display pentagram.
 
 | Profile | Shape | Signature action |
 | --- | --- | --- |
@@ -40,10 +40,9 @@ The living-sky catalogue includes thirteen animated particle scenes.
 | `stellar_prism` | `STELLAR_PRISM` | A white beam enters a triangular prism and splits into coloured rays |
 | `ember_volcano` | `EMBER_VOLCANO` | An ember cone erupts and throws hot fragments overhead |
 | `hatching_star` | `HATCHING_STAR` | A cool shell cracks open and releases a gold star |
-| `infernal_pentagram` | `INFERNAL_PENTAGRAM` | A scarlet stroke draws an inverted pentagram inside a smouldering circle, then five seals ignite in succession |
+| `infernal_pentagram` | `INFERNAL_PENTAGRAM` | A forged inverted star with glowing inlays and five seals assembles inside a segmented rim of vanilla item displays |
 
-These scenes deform over their complete lifetime, rather than translating a static
-outline. The worker caches at most 33 unit-size poses per shape/sample count,
+The twelve particle scenes deform over their complete lifetime. The worker caches at most 33 unit-size poses per shape/sample count,
 shared across viewers within one runtime generation. Each scene has its own fixed
 world pose. Main interpolates the current age and scans at most its configured
 sample count, emitting at most twelve currently visible samples per visit under the
@@ -63,7 +62,7 @@ follow three blocks of common wind over 600 ticks, starting at staggered times.
 Their anchors remain world-fixed; their gentle sway does not follow the camera.
 Initial height is 8–14 blocks above loaded terrain, admission distance is 12–72,
 and item poses update every four ticks. The bundled limit is four display groups
-(up to 24 parts across lanterns and miniatures), while celestial scenes retain their separate limit of two.
+(up to six parts per lantern group or 75 per pentagram), while celestial scenes retain their separate limit of two.
 All figures still share nine scene slots and 36 requests per visit.
 Admission distance only controls new groups. Approaching or flying through an
 existing lantern group preserves its item identities and remaining flight;
@@ -96,11 +95,13 @@ preview is separate evidence from native Minecraft rendering and pack loading.
 
 The `FEATHER_GLIDER` has a diamond body and two feather wings. They open, bank and fold for a dive. All four full-bright vanilla items keep their display identities throughout the flight.
 
+The `INFERNAL_PENTAGRAM` in the treasure-hunt sky and its private showcase share one display model. Older particle-profile configurations keep the same effect name and placement settings when upgraded to 0.1.20.
+
 ### Private sky showcase
 
-Stand outdoors, face open sky and run `/arcaurora showcase SKY_STITCH` with `arcaurora.admin`. Nine copies of the selected effect play at different phases for three minutes. Tab completes all active shape names, including the tracks, lanterns and surface effects. Run the command with another name to switch immediately. Run it in a new direction to move the display, or use `/arcaurora showcase stop` to end it early. Only the invoking player sees the display.
+Stand outdoors, face open sky and run `/arcaurora showcase SKY_STITCH` with `arcaurora.admin`. By default, nine copies of the selected effect play at different phases for three minutes. Tab completes all active shape names, including the tracks, lanterns and surface effects. Run the command with another name to switch immediately. Run it in a new direction to move the display, or use `/arcaurora showcase stop` to end it early. Only the invoking player sees the display.
 
-Ten private sky scenes can be tried individually. They use vanilla item displays and are available with an existing config.
+These private sky scenes can be tried individually. They use vanilla item displays and are available with an existing config.
 
 | Effect | Action |
 | --- | --- |
@@ -114,6 +115,9 @@ Ten private sky scenes can be tried individually. They use vanilla item displays
 | `SLIME_ANVIL` | An anvil flattens a slime and gets tossed back up. |
 | `SHATTERED_SWORD` | Diamond fragments assemble into a sword that shoots skyward. |
 | `REVERSE_FIREWORK` | A firework folds its sparks back into a falling rocket. |
+| `VOID_CATHEDRAL` | A gothic voidship banks past the viewer, exposing its cathedral spires and glowing engines. |
+
+`/arcaurora showcase FROG_RAIN` surrounds the player with falling frogs for three minutes. Turn around to see the shower in every direction. The frogs are private displays with no AI or collision.
 
 The bare `/arcaurora showcase` opens a 60-second overview. The stitch and curtain appear above the hare tracks, paper flotilla and tumbleweed.
 
@@ -296,7 +300,7 @@ biome-aliases:
 | `radius`, `min-distance` | Horizontal admission range; ordinary `2..32`, sky `2..96`. New sky cells must lie in this band and inside `sky-field.view-distance`; active cells use the field's outer cull radius |
 | `vertical-min`, `vertical-max` | Ordinary heights relative to feet (`-32..32`); sky heights above the cell anchor's loaded terrain surface (`-32..64`), independent of player Y |
 | `shape-size` | Unposed radius/half-extent, ordinary `0.1..8`, sky `0.1..32` blocks |
-| `points`, `sky-points` | Ordinary positions `1..24`; sky positions `1..192` across one finite stroke, or stable sample identities in a celestial animation. Lantern groups accept 1–6 and each miniature requires its authored part count (4 or 6). |
+| `points`, `sky-points` | Ordinary profiles accept 1–24 positions and sky strokes accept 1–192. Lantern groups accept 1–6. Miniatures use their authored part count. Older pentagram profiles automatically use the new 75-part mesh. |
 | `sky-scene` | `false` by default; retain a sky anchor and use posed, progressively revealed geometry |
 | `scene-duration-ticks` | Sky anchor lifetime after its delayed birth, `40..1200`; default `240`; unfinished strokes expire too |
 | `sky-weight` | World-cell selection shares for sky profiles, `1..64`; default `1` preserves the original selection. Ordinary profiles must keep `1` |
@@ -616,7 +620,7 @@ Run from the repository root with JDK 25:
 ```
 
 The expected local runtime artifact is
-`arc-aurora/build/libs/ArcAurora-0.1.19.jar`. The public Maven API artifact
+`arc-aurora/build/libs/ArcAurora-0.1.20.jar`. The public Maven API artifact
 `ru.ruscrafting.arc:arc-aurora-api:0.1.0` was verified on 2026-10-29 in the
 [RusCrafting repository](https://repo.rus-crafting.ru/grocermc/ru/ruscrafting/arc/arc-aurora-api/0.1.0/arc-aurora-api-0.1.0.pom).
 That API publication does not establish a runtime-plugin build, delivery,

@@ -18,7 +18,7 @@ class AuroraCelestialShapesTest : FreeSpec({
         for (shape in AuroraShape.entries.filter { it.isCelestial }) {
             val maxPaletteSlot = when (shape) {
                 AuroraShape.KINGFISHER_DIVE, AuroraShape.STELLAR_PRISM,
-                AuroraShape.EMBER_VOLCANO, AuroraShape.HATCHING_STAR, AuroraShape.INFERNAL_PENTAGRAM -> 2
+                AuroraShape.EMBER_VOLCANO, AuroraShape.HATCHING_STAR -> 2
                 else -> 1
             }
             val previewPoints = configuredPoints[shape] ?: 160

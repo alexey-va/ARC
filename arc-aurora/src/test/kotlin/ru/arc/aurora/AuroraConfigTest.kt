@@ -424,8 +424,7 @@ class AuroraConfigTest : FreeSpec({
         val celestial = setOf(AuroraShape.LIGHT_KNOT, AuroraShape.REVERSE_LIGHTNING, AuroraShape.SKY_CORAL, AuroraShape.MOON_FAN,
             AuroraShape.SKY_STITCH, AuroraShape.INVISIBLE_HARE, AuroraShape.PAPER_FLOTILLA,
             AuroraShape.AURORA_CURTAIN, AuroraShape.TUMBLEWEED, AuroraShape.SKY_HOURGLASS, AuroraShape.DANDELION_GUST,
-            AuroraShape.KINGFISHER_DIVE, AuroraShape.STELLAR_PRISM, AuroraShape.EMBER_VOLCANO, AuroraShape.HATCHING_STAR,
-            AuroraShape.INFERNAL_PENTAGRAM)
+            AuroraShape.KINGFISHER_DIVE, AuroraShape.STELLAR_PRISM, AuroraShape.EMBER_VOLCANO, AuroraShape.HATCHING_STAR)
         AuroraShape.active.filter { it.isCelestial }.toSet() shouldBe celestial
         celestial.forEach { shape ->
             shape.isTrack shouldBe false
@@ -441,11 +440,78 @@ class AuroraConfigTest : FreeSpec({
             val config = profileConfig("shape" to shape.name, "sky-scene" to true)
             val parts = AuroraSkyMiniatures.partCount(shape)
             AuroraConfig.parse(config).profiles.single().points shouldBe parts
-            config.set("profiles.ambient.sky-points", parts - 1)
+            config.set("profiles.ambient.sky-points", if (shape == AuroraShape.INFERNAL_PENTAGRAM) 193 else parts - 1)
             shouldThrow<AuroraConfigException> { AuroraConfig.parse(config) }.path shouldBe "profiles.ambient.sky-points"
             config.set("profiles.ambient.sky-points", parts)
             config.set("profiles.ambient.sky-scene", false)
             shouldThrow<AuroraConfigException> { AuroraConfig.parse(config) }.path shouldBe "profiles.ambient.shape"
+        }
+    }
+
+    "the old treasure hunt pentagram keeps its placement and timing with the new display parts" {
+        val source = yaml("""
+            night-sky:
+              enabled: true
+              preset: treasure-hunt
+            event-presets:
+              treasure-hunt:
+                infernal_pentagram:
+                  sky-scene: true
+                  shape: INFERNAL_PENTAGRAM
+                  shape-size: 6.5
+                  sky-points: 128
+                  scene-duration-ticks: 320
+                  spawn-delay-ticks: 40
+                  update-ticks: 1
+                  radius: 84
+                  min-distance: 30
+                  vertical-min: 28
+                  vertical-max: 50
+                  sky-tracers: 8
+                  particle: minecraft:dust
+                  dust-color: '#FF3848'
+                  dust-size: 2.0
+                  sky-palette:
+                    sigil: {particle: minecraft:dust, dust-color: '#FF3848', dust-size: 2.0}
+                    embers: {particle: minecraft:dust, dust-color: '#D85B35', dust-size: 1.9}
+                    seals: {particle: minecraft:flame}
+                  sky-options: {roll-radians: 0.0}
+        """)
+        val settings = AuroraConfig.parse(source)
+        settings.nightSky.enabled shouldBe true
+        val profile = settings.eventPresets.getValue(settings.nightSky.preset).single()
+        profile.id shouldBe "infernal_pentagram"
+        profile.shape shouldBe AuroraShape.INFERNAL_PENTAGRAM
+        profile.shape.isStory shouldBe true
+        profile.points shouldBe AuroraSkyMiniatures.partCount(profile.shape)
+        profile.skyTracers shouldBe 1
+        profile.skyPalette shouldBe emptyList()
+        profile.shapeSize shouldBe 6.5
+        profile.sceneDurationTicks shouldBe 320
+        profile.spawnDelayTicks shouldBe 40
+        profile.updateTicks shouldBe 1
+        profile.radius shouldBe 84.0
+        profile.minDistance shouldBe 30.0
+        profile.verticalMin shouldBe 28.0
+        profile.verticalMax shouldBe 50.0
+        profile.skyOptions.rollRadians shouldBe 0.0
+        showcaseEffects(settings).getValue(profile.shape) shouldBe profile
+        source.getInt("event-presets.treasure-hunt.infernal_pentagram.sky-points") shouldBe 128
+    }
+
+    "the display pentagram defaults to 320 ticks and preserves validated operator overrides" {
+        val config = profileConfig("shape" to "INFERNAL_PENTAGRAM", "sky-scene" to true)
+        AuroraConfig.parse(config).profiles.single().sceneDurationTicks shouldBe 320
+        config.set("profiles.ambient.scene-duration-ticks", 420)
+        config.set("profiles.ambient.sky-weight", 3)
+        config.set("profiles.ambient.worlds", listOf("night-sky"))
+        val profile = AuroraConfig.parse(config).profiles.single()
+        profile.sceneDurationTicks shouldBe 420
+        profile.skyWeight shouldBe 3
+        profile.worlds shouldBe listOf("night-sky")
+        for ((field, value) in listOf("sky-tracers" to 13, "sky-palette.sigil.dust-size" to 2.1, "scene-duration-ticks" to 39)) {
+            val invalid = profileConfig("shape" to "INFERNAL_PENTAGRAM", "sky-scene" to true, field to value)
+            shouldThrow<AuroraConfigException> { AuroraConfig.parse(invalid) }.path shouldBe "profiles.ambient.$field"
         }
     }
 
@@ -563,6 +629,11 @@ class AuroraConfigTest : FreeSpec({
                 AuroraConfig.parse(profileConfig("sky-scene" to skyScene, "shape" to "TRACK_FLYBY",
                     "sky-palette.rim.particle" to "end_rod"))
             }.path shouldBe "profiles.ambient.sky-palette"
+        }
+        for ((field, value) in listOf("sky-palette.rim.particle" to "end_rod", "sky-tracers" to 8)) {
+            shouldThrow<AuroraConfigException> {
+                AuroraConfig.parse(profileConfig("sky-scene" to true, "shape" to "ENDERMAN_SKY_THEFT", field to value))
+            }.path shouldBe "profiles.ambient.${field.substringBefore('.')}"
         }
         listOf(emptyList(), listOf("flame", "soul_fire_flame")).forEach { heads ->
             shouldThrow<AuroraConfigException> {

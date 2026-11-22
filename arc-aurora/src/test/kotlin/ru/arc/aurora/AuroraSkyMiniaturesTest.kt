@@ -43,7 +43,7 @@ class AuroraSkyMiniaturesTest : FreeSpec({
         (full > wingspan(0.94) * 1.5) shouldBe true
     }
 
-    for (shape in storyShapes) {
+    for (shape in storyShapes + listOf(AuroraShape.INFERNAL_PENTAGRAM, AuroraShape.FROG_RAIN)) {
         "$shape keeps stable item slots and moves a visible part" {
             val samples = (0..64).map { storyPose(shape, it / 64.0) }
             val materials = samples.first().map { it.material }
@@ -71,6 +71,55 @@ class AuroraSkyMiniaturesTest : FreeSpec({
             storyPose(shape, -0.01) shouldBe samples.first()
             storyPose(shape, 1.01) shouldBe samples.last()
         }
+    }
+
+    "the five forged strokes join into a downward star with an overpass and an underpass per stroke" {
+        val shape = AuroraShape.INFERNAL_PENTAGRAM
+        fun end(part: AuroraMiniaturePart, side: Float) =
+            part.rotation.transform(Vector3f(side * part.scale.x / 2f, 0f, 0f)).add(part.center.vector())
+        val held = storyPose(shape, 0.75)
+        held.all { it.visible } shouldBe true
+        val earlier = storyPose(shape, 0.16)
+        (earlier.count { it.visible } < held.size) shouldBe true
+        for (chord in 0 until 5) {
+            val start = chord * 6
+            val first = held[start]
+            val middle = held[start + 2]
+            val last = held[start + 4]
+            val next = held[(start + 6) % 30]
+            (end(first, 1f).distance(end(middle, -1f)) < 0.0001f) shouldBe true
+            (end(middle, 1f).distance(end(last, -1f)) < 0.0001f) shouldBe true
+            (end(last, 1f).distance(end(next, -1f)) < 0.0001f) shouldBe true
+            (end(first, 1f).z > 0.05f && end(last, -1f).z < -0.05f) shouldBe true
+        }
+        (end(held.first(), -1f).y < -0.95f) shouldBe true
+        held.filterIndexed { index, _ -> index in 55..69 && (index - 55) % 3 == 2 }.map { it.material }.distinct().size shouldBe 5
+        // All five relics burn before the amber slit opens, and stay lit after it closes.
+        for (phase in listOf(0.665, 0.83)) {
+            val seal = storyPose(shape, phase)
+            (0 until 5).all { seal[57 + it * 3].visible } shouldBe true
+            seal.last().visible shouldBe false
+        }
+        held.last().material shouldBe Material.HONEYCOMB
+        storyPose(shape, 0.0).none { it.visible } shouldBe true
+        storyPose(shape, 1.0).none { it.visible } shouldBe true
+    }
+
+    "all three frog colours fall independently and stay present across the full shower loop" {
+        val shape = AuroraShape.FROG_RAIN
+        val bodies = listOf(0, 11, 22)
+        bodies.map { shape.part(it, 0.25).material } shouldBe
+            listOf(Material.ORANGE_TERRACOTTA, Material.BONE_BLOCK, Material.MOSS_BLOCK)
+        val ticks = shape.storyDurationTicks
+        val poses = (0 until ticks).map { age -> bodies.map { shape.part(it, age.toDouble() / (ticks - 1)) } }
+        poses.all { frame -> frame.count { it.visible } >= 2 } shouldBe true
+        for (frog in bodies.indices) {
+            val track = poses.map { it[frog] }
+            val heights = track.filter { it.visible }.map { it.center.y }
+            (heights.max() - heights.min() > 2.0) shouldBe true
+            track.zipWithNext().none { (a, b) -> a.visible && b.visible && b.center.y - a.center.y > 0.5 } shouldBe true
+        }
+        (shape.part(0, 0.25).center.y < shape.part(0, 0.20).center.y) shouldBe true
     }
 
     "the enderman's eyes appear before it takes the sky tile and carries it away" {
@@ -221,6 +270,7 @@ internal val storyShapes = listOf(
     AuroraShape.SLIME_ANVIL,
     AuroraShape.SHATTERED_SWORD,
     AuroraShape.REVERSE_FIREWORK,
+    AuroraShape.VOID_CATHEDRAL,
 )
 
 private fun storyPose(shape: AuroraShape, progress: Double) =

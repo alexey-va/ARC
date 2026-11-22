@@ -77,7 +77,8 @@ enum class AuroraShape(
     TRACK_FLYBY, TRACK_FLOCK, TRACK_KINK, TRACK_RIPPLE, TRACK_EYE, TRACK_SLINGSHOT, TRACK_SKIP,
     JELLYFISH, MANTA_RAY, LIGHT_KNOT, REVERSE_LIGHTNING, SKY_CORAL, MOON_FAN, SKY_LANTERNS,
     SKY_STITCH, INVISIBLE_HARE, PAPER_FLOTILLA, AURORA_CURTAIN, TUMBLEWEED,
-    SKY_HOURGLASS, DANDELION_GUST, KINGFISHER_DIVE, STELLAR_PRISM, EMBER_VOLCANO, HATCHING_STAR, INFERNAL_PENTAGRAM,
+    SKY_HOURGLASS, DANDELION_GUST, KINGFISHER_DIVE, STELLAR_PRISM, EMBER_VOLCANO, HATCHING_STAR,
+    INFERNAL_PENTAGRAM(AuroraInfernalPentagram, 320),
     FEATHER_GLIDER, ASTRAL_PENDULUM, TWIN_SAMARAS, SKY_PHONOGRAPH,
     ENDERMAN_SKY_THEFT(AuroraLivingStories, 260),
     SKY_FISHING(AuroraPhysicsStories, 168),
@@ -88,7 +89,9 @@ enum class AuroraShape(
     STORM_HERD(AuroraStormHerd, 156),
     SLIME_ANVIL(AuroraPhysicsStories, 126),
     SHATTERED_SWORD(AuroraMagicStories, 134),
-    REVERSE_FIREWORK(AuroraMagicStories, 121);
+    REVERSE_FIREWORK(AuroraMagicStories, 121),
+    FROG_RAIN(AuroraFrogRain, 160),
+    VOID_CATHEDRAL(AuroraVoidCathedral, 240);
 
     internal val isStory: Boolean get() = storyParts != null
     internal val isMiniature: Boolean get() = this == FEATHER_GLIDER || isStory
@@ -114,7 +117,7 @@ enum class AuroraShape(
     internal val isCelestial: Boolean get() = when (this) {
         JELLYFISH, MANTA_RAY, LIGHT_KNOT, REVERSE_LIGHTNING, SKY_CORAL, MOON_FAN,
         SKY_STITCH, INVISIBLE_HARE, PAPER_FLOTILLA, AURORA_CURTAIN, TUMBLEWEED,
-        SKY_HOURGLASS, DANDELION_GUST, KINGFISHER_DIVE, STELLAR_PRISM, EMBER_VOLCANO, HATCHING_STAR, INFERNAL_PENTAGRAM -> true
+        SKY_HOURGLASS, DANDELION_GUST, KINGFISHER_DIVE, STELLAR_PRISM, EMBER_VOLCANO, HATCHING_STAR -> true
         else -> false
     }
 }
@@ -319,12 +322,15 @@ object AuroraConfig {
         source.check("sky-weight", skyScene || skyWeight == 1, "a weighted profile requires sky-scene: true")
         source.check("shape", skyScene || !shape.isCelestial, "celestial shapes require sky-scene: true")
         val modelShape = shape.isModel
+        // Existing pentagram profiles still carry the former particle renderer's settings.
+        val legacyPentagram = shape == AuroraShape.INFERNAL_PENTAGRAM
         source.check("shape", skyScene || !modelShape, "$shape requires sky-scene: true")
         val modelSource = source.section("sky-model")
         source.check("sky-model", shape == AuroraShape.SKY_LANTERNS || modelSource == null, "only SKY_LANTERNS accepts a sky model")
         val model = if (shape == AuroraShape.SKY_LANTERNS) skyModel(modelSource) else null
         val palette = source.section("sky-palette")?.let { slots ->
-            source.check("sky-palette", skyScene && shape.isCelestial, "only a celestial sky shape accepts a sky palette")
+            source.check("sky-palette", skyScene && (shape.isCelestial || legacyPentagram),
+                "only a celestial sky shape accepts a sky palette")
             source.check("sky-palette", "sky-head-particles" !in source.keys,
                 "must not be combined with sky-head-particles")
             slots.check("", slots.keys.size in 1..4, "expected 1..4 named particle slots")
@@ -333,7 +339,7 @@ object AuroraConfig {
                 particleStyle(slots.requiredSection(slot))
             }.immutable()
         }.orEmpty()
-        source.check("sky-head-particles", !modelShape || "sky-head-particles" !in source.keys,
+        source.check("sky-head-particles", !modelShape || legacyPentagram || "sky-head-particles" !in source.keys,
             "$shape does not accept head particles")
         val headParticles = source.strings("sky-head-particles", emptyList(), allowEmpty = true, unique = false).map { raw ->
             val particle = particlesByKey[normalizeBiomeKey(raw)]
@@ -364,6 +370,7 @@ object AuroraConfig {
         val style = particleStyle(source)
         val requiredParts = if (shape.isMiniature) AuroraSkyMiniatures.partCount(shape) else null
         val pointsRange = when {
+            legacyPentagram -> 1..192
             requiredParts != null -> requiredParts..requiredParts
             modelShape -> 1..6
             skyScene -> 1..192
@@ -388,8 +395,10 @@ object AuroraConfig {
             verticalMax = verticalMax,
             shape = shape,
             shapeSize = shapeSize,
-            points = if (skyScene) source.int("sky-points", source.int("points", requiredParts ?: 1, pointsRange), pointsRange)
-                else source.int("points", 1, pointsRange),
+            points = if (skyScene) {
+                val configuredPoints = source.int("sky-points", source.int("points", requiredParts ?: 1, pointsRange), pointsRange)
+                requiredParts ?: configuredPoints
+            } else source.int("points", 1, pointsRange),
             particle = style.particle,
             count = source.int("count", 1, 0..16),
             offsetX = source.double("offset-x", 0.0, 0.0..2.0),
@@ -398,19 +407,19 @@ object AuroraConfig {
             speed = source.double("speed", 0.0, 0.0..1.0),
             particleData = style.data,
             skyScene = skyScene,
-            sceneDurationTicks = source.int("scene-duration-ticks", 240, 40..1200),
+            sceneDurationTicks = source.int("scene-duration-ticks", if (legacyPentagram) shape.storyDurationTicks else 240, 40..1200),
             motionPeriodTicks = source.int("motion-period-ticks", 400, 40..2400),
             updateTicks = source.int("update-ticks", 4, 1..200),
             spawnDelayTicks = source.int("spawn-delay-ticks", 60, 0..400),
             skyTracers = source.int("sky-tracers", 1, when {
+                legacyPentagram || shape.isCelestial -> 1..12
                 modelShape -> 1..6
-                shape.isCelestial -> 1..12
                 else -> 1..4
-            }),
+            }).let { if (legacyPentagram) 1 else it },
             skyRefreshTicks = source.int("sky-refresh-ticks", 0, 0..200),
             skyOptions = skyOptions,
             skyHeadParticles = headParticles,
-            skyPalette = palette,
+            skyPalette = if (legacyPentagram) emptyList() else palette,
             skyModel = model,
             skyWeight = skyWeight,
         )

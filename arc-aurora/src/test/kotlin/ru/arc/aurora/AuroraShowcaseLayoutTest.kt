@@ -6,6 +6,7 @@ import io.mockk.every
 import io.mockk.mockk
 import java.util.UUID
 import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
@@ -41,6 +42,65 @@ class AuroraShowcaseLayoutTest : FreeSpec({
         phases.sorted() shouldBe (0 until 9).map { it * period / 9 }
         phases.zipWithNext().all { (a, b) -> abs(a - b) > period / 4 } shouldBe true
         AuroraShowcase.SELECTED_DURATION_TICKS shouldBe 3_600L
+    }
+
+    "frog rain fills the zenith and surrounds the viewer throughout the complete loop" {
+        val shape = AuroraShape.FROG_RAIN
+        val duration = shape.storyDurationTicks
+        val profile = layoutProfile(shape)
+        every { profile.sceneDurationTicks } returns duration
+        val count = AuroraShowcase.copyCount(shape)
+        count shouldBe 14
+        val ring = layoutShowcase(List(count) { profile }, 37f)
+        val poses = (0 until count).map(ring::pose)
+        val angles = poses.map { atan2(it.anchor.z, it.anchor.x) }.sorted()
+        (angles + (angles.first() + 2.0 * Math.PI)).zipWithNext().all { (a, b) ->
+            abs(b - a - 2.0 * Math.PI / count) < 1e-8
+        } shouldBe true
+        val (overhead, surrounding) = poses.partition { hypot(it.anchor.x, it.anchor.z) < 5.0 }
+        overhead.size shouldBe 2
+        surrounding.size shouldBe 12
+        val sideAngles = surrounding.map { atan2(it.anchor.z, it.anchor.x) }.sorted()
+        (sideAngles + (sideAngles.first() + 2.0 * Math.PI)).zipWithNext().all { (a, b) ->
+            b - a < Math.toRadians(52.0)
+        } shouldBe true
+        surrounding.count { it.anchor.y < 7.0 } shouldBe 5
+        surrounding.forEach { slot ->
+            val distance = hypot(slot.anchor.x, slot.anchor.z)
+            if (distance < 12.0) {
+                (distance in 9.0..11.5) shouldBe true
+                (slot.anchor.y - 1.8 * slot.size < 0.5) shouldBe true
+            } else {
+                (distance in 16.0..20.0) shouldBe true
+                (slot.anchor.y + 1.8 * slot.size > 17.0) shouldBe true
+            }
+        }
+        poses.map { it.phaseOffsetTicks }.toSet().size shouldBe count
+        val bodies = List(duration) { age -> listOf(0, 11, 22).map { body ->
+            AuroraSkyMiniatures.part(shape, body, age.toDouble() / (duration - 1))
+        } }
+        val visible = List(duration) { tick -> poses.sumOf { slot ->
+            bodies[(tick + slot.phaseOffsetTicks) % duration].count { it.scale.lengthSquared() > 0f }
+        } }
+        (visible.min() >= 32 && visible.average() in 35.0..37.0) shouldBe true
+
+        // A 15-degree cone fits inside the middle half of a 70-degree vertical FOV in every viewing direction.
+        // Check the seven-tick held poses of the two overhead slots as well as all 160 flight phases.
+        for (tick in 7 until 7 + duration * 7) {
+            val nearCrosshair = overhead.sumOf { slot ->
+                val index = poses.indexOf(slot)
+                val lastUpdate = tick - Math.floorMod(tick - index / 2, 7)
+                val horizontal = hypot(slot.anchor.x, slot.anchor.z)
+                bodies[(lastUpdate + slot.phaseOffsetTicks) % duration].count { frog ->
+                    val position = frog.center
+                    val up = slot.anchor.y + position.y * slot.size
+                    val sideways = hypot(position.x * slot.size, horizontal - position.z * slot.size)
+                    check(up > 6.0) { "Overhead frog entered eye level at tick $tick" }
+                    frog.scale.x > 0.10f && atan2(sideways, up) < Math.toRadians(15.0)
+                }
+            }
+            (nearCrosshair >= 2) shouldBe true
+        }
     }
 
     "the full silhouettes in adjacent rows and columns have visible space between them" {
