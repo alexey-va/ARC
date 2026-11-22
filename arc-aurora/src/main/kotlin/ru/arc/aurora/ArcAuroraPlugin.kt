@@ -37,10 +37,12 @@ import java.util.concurrent.CompletableFuture
 import java.util.logging.Level
 
 internal const val AURORA_ADMIN_PERMISSION = "arcaurora.admin"
+internal const val SAKURA_MAP_SHOWCASE = "SAKURA_IDOL_MAP"
 
 open class ArcAuroraPlugin : JavaPlugin(), Listener {
     private var runtime: PaperPluginRuntime? = null
     internal var engine: AuroraEngine? = null; private set
+    internal var mapScreenFactory: ((Player) -> AuroraMapScreen?)? = null
     private var pendingEngine: AuroraEngine? = null
     private var messages: LocalizedMiniMessage? = null
     private val events = linkedMapOf<UUID, LinkedHashMap<UUID, String>>()
@@ -72,6 +74,12 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
             command.tabCompleter = this
             val settings = loadSettings()
             messages = loadMessages()
+            mapScreenFactory = try {
+                AuroraMapScreenFactory(this)::create
+            } catch (failure: Exception) {
+                logger.log(Level.WARNING, "Could not prepare the Sakura map showcase", failure)
+                null
+            }
             ArcLogging.install(PaperLoggingPlatform("ArcAurora"), LoggingConfigSource { ru.arc.config.EmptyConfig })
             PaperArcRuntime.installScheduling(this)
             val owner = PaperPluginRuntime(this).also { runtime = it; it.start() }
@@ -137,6 +145,7 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
             showcaseProfiles = AuroraShowcase.profiles(settings) ?: AuroraShowcase.profiles(settings, bundledShowcaseSettings),
             showcaseEffects = showcaseEffects(settings, bundledShowcaseSettings),
             onShowcaseBlocked = { reply(it, "showcase-blocked") },
+            mapScreenFactory = { player -> mapScreenFactory?.invoke(player) },
         )
         try {
             server.onlinePlayers.forEach(replacement::join) // startup/manual maintenance, no online-player scan on tick
@@ -217,6 +226,12 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
                 if (effect.equals("stop", ignoreCase = true)) {
                     current.stopShowcase(player.uniqueId)
                     return reply(player, "showcase-off")
+                }
+                if (effect.equals(SAKURA_MAP_SHOWCASE, ignoreCase = true)) {
+                    if (mapScreenFactory == null) return reply(player, "showcase-effect-unavailable")
+                    if (!current.startMapShowcase(player)) return reply(player, "showcase-blocked")
+                    stopPreview(player.uniqueId)
+                    return reply(player, "showcase-effect-on", mapOf("effect" to SAKURA_MAP_SHOWCASE))
                 }
                 val shape = effect?.let { name ->
                     AuroraShape.active.firstOrNull { it.name.equals(name, ignoreCase = true) }
@@ -332,8 +347,10 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
             val current = engine ?: return emptyList()
             val settings = current.settings
             when (args[0].lowercase(Locale.ROOT)) {
-                "showcase" -> if (sender is Player && args.size == 2) {
-                    current.showcaseShapes.map { it.name } + "stop"
+                "showcase" -> if (sender is Player && args.size == 2) buildList {
+                    addAll(current.showcaseShapes.map { it.name })
+                    if (mapScreenFactory != null) add(SAKURA_MAP_SHOWCASE)
+                    add("stop")
                 } else emptyList()
                 "catalog" -> if (args.size == 2) settings.eventPresets.keys.toList() else emptyList()
                 "preview" -> when (args.size) {
@@ -364,6 +381,7 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
         val owner = runtime
         runtime = null
         owner?.tasks?.close()
+        mapScreenFactory = null
         previews.keys.toList().forEach(::stopPreview)
         engine?.let { retirement = CompletableFuture.allOf(retirement, it.closeAsync()) }; engine = null
         pendingEngine?.let { retirement = CompletableFuture.allOf(retirement, it.closeAsync()) }; pendingEngine = null

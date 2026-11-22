@@ -76,8 +76,9 @@ class AuroraCatalogTest : FreeSpec({
             val plugin = fixture.plugin
             val admin = fixture.admin
             val available = AuroraShape.active.filterNot { it.isIllustration }
+            val mapEffects = listOfNotNull(SAKURA_MAP_SHOWCASE.takeIf { plugin.mapScreenFactory != null })
             fixture.complete(admin, "SHOWCASE", "") shouldBe
-                (available.map { it.name } + "stop").sorted()
+                (available.map { it.name } + mapEffects + "stop").sorted()
             fixture.complete(admin, "showcase", "tRaCk_F") shouldBe listOf("TRACK_FLOCK", "TRACK_FLYBY")
             fixture.complete(admin, "showcase", "stop", "") shouldBe emptyList()
             fixture.complete(fixture.target, "showcase", "") shouldBe emptyList()
@@ -115,6 +116,7 @@ class AuroraCatalogTest : FreeSpec({
         withCatalog { fixture ->
             val admin = fixture.admin
             val plugin = fixture.plugin
+            plugin.mapScreenFactory = null
             fixture.complete(admin, "showcase", "sakura") shouldBe listOf("SAKURA_IDOL")
             fixture.command(admin, "showcase SAKURA_IDOL_2D")
             admin.message() shouldBe "showcase-effect-unavailable"
@@ -140,6 +142,78 @@ class AuroraCatalogTest : FreeSpec({
             profile.skyModel shouldBe AuroraSkyModel(Material.PAPER, 173)
             fixture.command(admin, "showcase ju_fufu")
             checkNotNull(plugin.showcase(admin)).profiles.single().skyModel shouldBe AuroraSkyModel(Material.PAPER, 175)
+        }
+    }
+
+    "Sakura map is an admin showcase and a blocked placement preserves the current show" {
+        withCatalog { fixture ->
+            val plugin = fixture.plugin
+            val admin = fixture.admin
+            val guest = fixture.target
+            plugin.mapScreenFactory = null
+            fixture.complete(admin, "showcase", SAKURA_MAP_SHOWCASE) shouldBe emptyList()
+            fixture.command(admin, "showcase $SAKURA_MAP_SHOWCASE")
+            admin.message() shouldBe "showcase-effect-unavailable"
+
+            val screen = mockk<AuroraMapScreen>(relaxed = true)
+            every { screen.closeAsync() } returns CompletableFuture.completedFuture(null)
+            var placement: AuroraMapScreen? = null
+            val attempts = mutableListOf<UUID>()
+            plugin.mapScreenFactory = { owner -> attempts += owner.uniqueId; placement }
+            fixture.complete(admin, "showcase", "sakura_idol_m") shouldBe listOf(SAKURA_MAP_SHOWCASE)
+            fixture.complete(guest, "showcase", SAKURA_MAP_SHOWCASE) shouldBe emptyList()
+            fixture.command(guest, "showcase $SAKURA_MAP_SHOWCASE")
+            guest.message() shouldBe "no-permission"
+            attempts shouldBe emptyList()
+
+            fixture.command(admin, "showcase CIRCLE")
+            admin.message() shouldBe "showcase-effect-on:CIRCLE"
+            val original = checkNotNull(plugin.showcase(admin))
+            fixture.command(admin, "showcase sakura_idol_map")
+            admin.message() shouldBe "showcase-blocked"
+            plugin.showcase(admin) shouldBe original
+
+            placement = screen
+            fixture.command(admin, "showcase sakura_idol_map")
+            admin.message() shouldBe "showcase-effect-on:$SAKURA_MAP_SHOWCASE"
+            val map = checkNotNull(plugin.showcase(admin))
+            map.profiles shouldBe emptyList()
+            map.expiresAt shouldBe 3_600L
+            attempts shouldBe listOf(admin.uniqueId, admin.uniqueId)
+            fixture.command(admin, "showcase CIRCLE")
+            admin.message() shouldBe "showcase-effect-on:CIRCLE"
+            verify(exactly = 1) { screen.closeAsync() }
+        }
+    }
+
+    "reload waits for a stopped map screen and disable closes the new screen" {
+        withCatalog { fixture ->
+            val plugin = fixture.plugin
+            val drain = CompletableFuture<Void>()
+            val stopped = mockk<AuroraMapScreen>(relaxed = true)
+            val active = mockk<AuroraMapScreen>(relaxed = true)
+            every { stopped.closeAsync() } returns drain
+            every { active.closeAsync() } returns CompletableFuture.completedFuture(null)
+            var next = stopped
+            plugin.mapScreenFactory = { next }
+            fixture.command(fixture.admin, "showcase $SAKURA_MAP_SHOWCASE")
+            fixture.command(fixture.admin, "showcase stop")
+            verify(exactly = 1) { stopped.closeAsync() }
+            plugin.showcase(fixture.admin) shouldBe null
+
+            fixture.command(fixture.admin, "reload")
+            fixture.paper.performTicks(2)
+            plugin.engine shouldBe null
+            drain.complete(null)
+            fixture.paper.performTicks(2)
+            checkNotNull(plugin.engine)
+
+            next = active
+            fixture.command(fixture.admin, "showcase $SAKURA_MAP_SHOWCASE")
+            checkNotNull(plugin.showcase(fixture.admin))
+            fixture.paper.server.pluginManager.disablePlugin(plugin)
+            verify(exactly = 1) { active.closeAsync() }
+            verify(exactly = 1) { stopped.closeAsync() }
         }
     }
 

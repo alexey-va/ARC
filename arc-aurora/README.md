@@ -131,10 +131,13 @@ These sky scenes can be tried individually. They use vanilla item displays and a
 | `JU_FUFU` | Ju Fufu poses with her mechanical popcorn pot, Huwei. |
 | `SAKURA_IDOL_2D` | A camera-facing illustration of Sakura sends a heart from her hand. |
 | `JU_FUFU_2D` | A camera-facing illustration of Ju Fufu catches popcorn from Huwei. |
+| `SAKURA_IDOL_MAP` | A 1024×1536 portrait of Sakura in the sky, assembled from vanilla maps. |
 | `DEATH_STAR` | Green tributaries converge above the dish, then a long superlaser fires. |
 | `IMPERIAL_STAR_DESTROYER` | An Imperial Star Destroyer banks past, revealing its wedge-shaped hull and engines. |
 
 The two illustrated showcases use the resource pack configured under `showcase-illustrations`. Each shape entry specifies its item `material` and `custom-model-data`. The 3D `JU_FUFU` entry in the same section optionally supplies a textured face. Her head and face rotate together. Without that entry the 3D show uses its built-in face.
+
+`/arcaurora showcase SAKURA_IDOL_MAP` shows one upright 8×12-block panel for three minutes. Nearby players see the same image on temporary invisible frames. The artwork uses the vanilla map palette and travels with the plugin, so this showcase works without a resource pack.
 
 `/arcaurora showcase FROG_RAIN` surrounds the player with falling frogs for three minutes. Turn around to see the shower in every direction. The frogs use packet displays and have no AI or collision.
 
@@ -640,7 +643,7 @@ Run from the repository root with JDK 25:
 ```
 
 The expected local runtime artifact is
-`arc-aurora/build/libs/ArcAurora-0.1.26.jar`. The public Maven API artifact
+`arc-aurora/build/libs/ArcAurora-0.1.27.jar`. The public Maven API artifact
 `ru.ruscrafting.arc:arc-aurora-api:0.1.0` was verified on 2026-10-29 in the
 [RusCrafting repository](https://repo.rus-crafting.ru/grocermc/ru/ruscrafting/arc/arc-aurora-api/0.1.0/arc-aurora-api-0.1.0.pom).
 That API publication does not establish a runtime-plugin build, delivery,

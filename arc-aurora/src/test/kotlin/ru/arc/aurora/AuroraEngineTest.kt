@@ -106,6 +106,62 @@ class AuroraEngineTest : FreeSpec({
         }
     }
 
+    "a map uses the shared viewer snapshot each tick and retires on expiry or owner quit" {
+        val settings = engineSettings().copy(profiles = emptyList())
+        val first = mockk<AuroraMapScreen>(relaxed = true)
+        val second = mockk<AuroraMapScreen>(relaxed = true)
+        val audiences = mutableListOf<Set<UUID>>()
+        every { first.update(any()) } answers {
+            audiences += firstArg<Collection<Player>>().map { it.uniqueId }.toSet()
+        }
+        every { first.closeAsync() } returns CompletableFuture.completedFuture(null)
+        every { second.closeAsync() } returns CompletableFuture.completedFuture(null)
+        val screens = ArrayDeque(listOf(first, second))
+        var mounts = 0
+        withEngine(settings, mapScreenFactory = { mounts++; screens.removeFirst() }) { fixture ->
+            val owner = fixture.player
+            val origin = owner.location
+            val observer = fixture.joinAdditional("MapObserver", origin.clone().add(64.0, 0.0, 0.0))
+            fixture.joinAdditional("BeyondMapLimit", origin.clone().add(64.01, 0.0, 0.0))
+            val elsewhere = fixture.paper.addSimpleWorld("map-elsewhere")
+            var ticks = 0
+            fun advance(count: Int) {
+                fixture.advance(count)
+                ticks += count
+            }
+
+            fixture.admin(true)
+            fixture.engine.startMapShowcase(owner) shouldBe true
+            advance(2)
+            audiences shouldBe List(2) { setOf(owner.uniqueId, observer.uniqueId) }
+
+            observer.teleport(Location(elsewhere, origin.x, origin.y, origin.z)) shouldBe true
+            fixture.engine.changeWorld(observer.uniqueId)
+            audiences.last() shouldBe setOf(owner.uniqueId)
+            owner.teleport(origin.clone().add(-65.0, 0.0, 0.0)) shouldBe true
+            advance(1)
+            audiences.last() shouldBe emptySet()
+
+            owner.teleport(origin) shouldBe true
+            observer.teleport(origin.clone().add(63.0, 0.0, 0.0)) shouldBe true
+            fixture.engine.changeWorld(observer.uniqueId)
+            advance(1)
+            audiences.last() shouldBe setOf(owner.uniqueId, observer.uniqueId)
+            mounts shouldBe 1
+            fixture.emissions shouldBe emptyList()
+
+            advance((AuroraShowcase.SELECTED_DURATION_TICKS - ticks - 1).toInt())
+            verify(exactly = 0) { first.closeAsync() }
+            advance(1)
+            verify(exactly = 1) { first.closeAsync() }
+
+            fixture.engine.startMapShowcase(owner) shouldBe true
+            fixture.engine.quit(owner.uniqueId)
+            verify(exactly = 1) { second.closeAsync() }
+            mounts shouldBe 2
+        }
+    }
+
     "selected lanterns rotate all nine display groups under a cap smaller than one configured group" {
         val base = skySettings(points = 6, shape = AuroraShape.SKY_LANTERNS)
         val lantern = base.profiles.single().copy(sceneDurationTicks = 80, updateTicks = 4, skyModel = AuroraSkyModel())
@@ -2142,15 +2198,17 @@ class AuroraEngineTest : FreeSpec({
 
 })
 
-private fun withEngine(settings: AuroraSettings = engineSettings(), highSky: Boolean = false, block: (EngineFixture) -> Unit) {
+private fun withEngine(settings: AuroraSettings = engineSettings(), highSky: Boolean = false,
+    mapScreenFactory: (Player) -> AuroraMapScreen? = { null }, block: (EngineFixture) -> Unit) {
     failOnUnsupportedMockBukkitOperation {
         MockBukkitTestRuntime.open().use { paper ->
-            EngineFixture(paper, settings, highSky).use(block)
+            EngineFixture(paper, settings, highSky, mapScreenFactory).use(block)
         }
     }
 }
 
-private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: AuroraSettings, highSky: Boolean) : AutoCloseable {
+private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: AuroraSettings, highSky: Boolean,
+    mapScreenFactory: (Player) -> AuroraMapScreen?) : AutoCloseable {
     private val mainThread = Thread.currentThread()
     private val plugin = paper.createSimplePlugin("ArcAuroraEngineTest")
     private val world = EngineWorld(highSky).also { it.name = "ambient"; paper.server.addWorld(it) }
@@ -2177,7 +2235,8 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
     private val scope = LifecycleTaskScope(scheduler)
     private val attachment = player.addAttachment(plugin, settings.permission, false)
     val engine = AuroraEngine(plugin, scope, settings, { if (it == player.world.uid) event else null }, { emitter },
-        { if (it == player.uniqueId) preview else null }, { lanterns }, onShowcaseBlocked = { blockedShowcases += it.uniqueId })
+        { if (it == player.uniqueId) preview else null }, { lanterns }, onShowcaseBlocked = { blockedShowcases += it.uniqueId },
+        mapScreenFactory = mapScreenFactory)
 
     init {
         every { lanterns.update(any(), any(), any(), any(), any(), any(), any()) } answers {
