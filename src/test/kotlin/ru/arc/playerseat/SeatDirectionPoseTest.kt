@@ -56,7 +56,7 @@ class SeatDirectionPoseTest : StringSpec({
     }
 
     "the five captions keep their exact words in bold, with a distinct lead and accent" {
-        val phrases = listOf("Туда Нахуй!", "Пиздуй туда!", "Живее двигай!", "Газуй туда!", "Давай, шевелись!")
+        val phrases = listOf("Туда Нахуй!", "Пиздуй туда!", "Живее двигай!", "Газуй туда!", "Давай, гони!")
         val leads = phrases.map { phrase ->
             val caption = seatDirectionCaption(phrase)
             PlainTextComponentSerializer.plainText().serialize(caption) shouldBe phrase

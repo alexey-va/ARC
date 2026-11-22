@@ -238,6 +238,6 @@ internal class PlayerSeatRuntime(
     }
 
     private companion object {
-        val CAPTIONS = listOf("Туда Нахуй!", "Пиздуй туда!", "Живее двигай!", "Газуй туда!", "Давай, шевелись!")
+        val CAPTIONS = listOf("Туда Нахуй!", "Пиздуй туда!", "Живее двигай!", "Газуй туда!", "Давай, гони!")
     }
 }
