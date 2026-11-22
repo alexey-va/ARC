@@ -11,6 +11,7 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.command.CommandSender
 import org.bukkit.configuration.file.YamlConfiguration
 import org.bukkit.entity.Player
+import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.plugin.ServicePriority
 import org.mockbukkit.mockbukkit.entity.PlayerMock
@@ -24,6 +25,68 @@ import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
 class AuroraCatalogTest : FreeSpec({
+    "showcase is a self-only admin command and fills missing profiles from the bundle" {
+        withCatalog { fixture ->
+            val plugin = fixture.plugin
+            val admin = fixture.admin
+            val target = fixture.target
+            fixture.command(target, "showcase")
+            target.message() shouldBe "no-permission"
+            fixture.complete(target, "show") shouldBe emptyList()
+            fixture.command(fixture.paper.server.consoleSender, "showcase")
+            fixture.complete(fixture.paper.server.consoleSender, "show") shouldBe emptyList()
+            plugin.showcase(admin) shouldBe null
+            fixture.complete(admin, "show") shouldBe listOf("showcase")
+            fixture.complete(admin, "showcase", "st") shouldBe listOf("stop")
+
+            fixture.command(admin, "preview self test-gallery jelly")
+            admin.message() shouldBe "preview-on"
+            val preview = checkNotNull(plugin.preview(admin))
+            fixture.command(admin, "showcase")
+            admin.message() shouldBe "showcase-on"
+            plugin.preview(admin) shouldBe null
+            preview.previewTimer().isCancelled shouldBe true
+            val first = checkNotNull(plugin.showcase(admin))
+            first.profiles.map { it.id } shouldBe
+                listOf("sky_stitch", "aurora_curtain", "invisible_hare", "paper_flotilla", "tumbleweed")
+            plugin.showcase(target) shouldBe null
+            fixture.command(admin, "showcase ${target.name}")
+            admin.message() shouldBe "usage"
+            plugin.showcase(admin) shouldBe first
+
+            fixture.command(admin, "showcase")
+            admin.message() shouldBe "showcase-on"
+            (plugin.showcase(admin) === first) shouldBe false
+            fixture.command(admin, "showcase stop")
+            admin.message() shouldBe "showcase-off"
+            plugin.showcase(admin) shouldBe null
+        }
+    }
+
+    "world change quit and reload clear a showcase owned by the old viewer or engine" {
+        withCatalog { fixture ->
+            val plugin = fixture.plugin
+            val admin = fixture.admin
+            fixture.command(admin, "showcase")
+            (plugin.showcase(admin) != null) shouldBe true
+            fixture.paper.callEvent(PlayerChangedWorldEvent(admin, admin.world))
+            plugin.showcase(admin) shouldBe null
+
+            fixture.command(admin, "showcase")
+            (plugin.showcase(admin) != null) shouldBe true
+            fixture.paper.callEvent(PlayerQuitEvent(admin, Component.empty()))
+            plugin.showcase(admin) shouldBe null
+            plugin.engine!!.join(admin)
+
+            fixture.command(admin, "showcase")
+            (plugin.showcase(admin) != null) shouldBe true
+            val original = plugin.engine
+            fixture.command(admin, "reload")
+            (plugin.engine === original) shouldBe false
+            plugin.showcase(admin) shouldBe null
+        }
+    }
+
     "reload waits for predecessor display cleanup and never activates after a failed drain" {
         for (success in listOf(true, false)) withCatalog { fixture ->
             val drain = CompletableFuture<Void>()
@@ -265,6 +328,12 @@ private fun PlayerMock.message(): String =
 
 private fun ArcAuroraPlugin.preview(player: Player): Any? =
     (ArcAuroraPlugin::class.java.getDeclaredField("previews").apply { isAccessible = true }.get(this) as Map<*, *>)[player.uniqueId]
+
+private fun ArcAuroraPlugin.showcase(player: Player): AuroraShowcase? {
+    val viewers = AuroraEngine::class.java.getDeclaredField("viewers").apply { isAccessible = true }.get(engine) as Map<*, *>
+    val viewer = viewers[player.uniqueId] ?: return null
+    return viewer.javaClass.getDeclaredField("showcase").apply { isAccessible = true }.get(viewer) as AuroraShowcase?
+}
 
 @Suppress("UNCHECKED_CAST")
 private fun Any.selectedProfiles(): List<AuroraProfile> =

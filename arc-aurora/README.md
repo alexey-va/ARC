@@ -10,7 +10,7 @@ the PacketEvents compile version comes from the repository's dependency catalog.
 
 ## Visual direction
 
-The bundled configuration contains **25 ordinary profiles** and **29 sky variants**
+The bundled configuration contains **25 ordinary particle profiles**, **three surface scenes**, and **31 sky variants**
 sampled into up to **nine retained world cells** for `treasure-hunt`. The sky
 preserves the accepted soft-lines palette: one familiar white wave, blue and
 orange waves/curls, a green spark wave, three frequent meteor variants and one
@@ -24,7 +24,7 @@ interpretations, not a particle-physics simulation. No cube,
 star or TOTEM ring is selected by the bundled night catalogue; those supported
 shapes remain available to custom profiles.
 
-Six additional finite scenes form the living-sky catalogue:
+Eight animated scenes form the living-sky catalogue.
 
 | Profile | Shape | Signature action |
 | --- | --- | --- |
@@ -34,6 +34,8 @@ Six additional finite scenes form the living-sky catalogue:
 | `reverse_lightning` | `REVERSE_LIGHTNING` | Branches converge, then one escaping drop carries the exit |
 | `sky_coral` | `SKY_CORAL` | A branching crown grows, pulses and retracts |
 | `moon_fan` | `MOON_FAN` | Curved ribs open, turn edge-on and reopen on the other side |
+| `sky_stitch` | `SKY_STITCH` | An amber needle draws three stitches between silver edges and leaves a loose thread |
+| `aurora_curtain` | `AURORA_CURTAIN` | A single fold travels across hanging mint threads and reveals a lilac lining |
 
 These scenes deform over their complete lifetime, rather than translating a static
 outline. The worker caches at most 33 unit-size poses per shape/sample count,
@@ -62,8 +64,8 @@ Admission distance only controls new groups. Approaching or flying through an
 existing lantern group preserves its item identities and remaining flight;
 terrain, unloaded chunks, viewer eligibility and normal expiry still retire it.
 
-Lanterns have eight world-cell selection shares among 28 other sky variants,
-instead of one share each: about 22% of cell assignments before distance,
+Lanterns have eight world-cell selection shares among 30 other sky variants,
+instead of one share each: about 21% of cell assignments before distance,
 terrain and scene-budget checks. This makes them more common without attaching
 them to the camera or guaranteeing a group at every location. A cell retains
 its selected profile across lifecycles; its anchor jitter and motion seed vary.
@@ -86,6 +88,12 @@ opaque paper would hide an internal flame. Birth and departure use a smooth
 scale envelope, not unsupported item-texture alpha. The model's brightness does
 not illuminate terrain or imply shader bloom. A source-driven model/motion
 preview is separate evidence from native Minecraft rendering and pack loading.
+
+### Five-scene showcase
+
+Stand outdoors with open sky ahead and run `/arcaurora showcase` with `arcaurora.admin`. The private display places the stitch and curtain above three surface scenes. The lower row shows hare tracks, two paper boats and a tumbleweed. The three surface animations tilt toward the viewer for this display. Run the command again to place the display in a new direction, or use `/arcaurora showcase stop` to return to normal ambience. A show expires after 60 seconds.
+
+In ordinary ambience, hare tracks cross a snowy clearing on clear mornings. The paper flotilla sails on river water in rain and can pass under a bridge with hull clearance. One hull catches a lily and turns stern-first. A tumbleweed rolls over desert sand in clear daylight, catches on a cactus and quivers. The branch, lily, sand ridge and cactus are shapes made of particles. The three scenes use 16-block cells. The hare tolerates up to two snow layers of height difference. The tumbleweed rolls across level sand, and the flotilla checks the waterline up to ten blocks under the deck at its anchor.
 
 The separate `particle-gallery` preset contains ready-to-use material studies.
 It is available through private admin preview and is not mixed into automatic
@@ -110,7 +118,7 @@ glow sprites, shader bloom, terrain lighting or native-client acceptance is clai
 | Nether / End | Embers, red threads, teal wisps, soul lights / violet clusters | Dimension-specific biome keys |
 | Night sky / treasure hunt | Soft coloured traces, meteors, chamber tracks and a rare crystal | Automatic configured night window or explicit temporary event lease |
 
-Ordinary shapes pick fresh nearby anchors each pass. Sky positions instead come
+Ordinary particle patches pick fresh nearby anchors each pass. The three surface scenes retain a footprint over snow, water or sand through their animation. Sky positions instead come
 from a deterministic jittered world lattice. World UUID, cell coordinates,
 profile and lifecycle epoch choose the geometry, orientation and variation.
 The observer's position selects nearby cells; yaw and player altitude never
@@ -225,11 +233,10 @@ Edit `plugins/ArcAurora/config.yml`. Profiles are mappings under `profiles`;
 event profiles live under `event-presets.<preset>.<profile-id>`. The loader
 accepts at most **128 profiles in total**, including event profiles. Missing
 global defaults are merged from the bundled file; profile, event-preset and
-alias sections remain administrator-owned.
+alias sections remain administrator-owned. Existing installations can copy the three new surface entries and both new `treasure-hunt` entries from the bundled config to enable ambient playback. A private showcase can use bundled definitions for missing entries.
 
 Ordinary profiles must match at both the viewer's current block and each
-emission position. The highest matching priority wins; equal-priority profiles
-share the emission budget in configuration order. World time supplies the
+emission position. Particle patches and terrain scenes each select the highest matching priority in their group. Both groups share the per-viewer budget. World time supplies the
 ordinary time filter. Time bounds are inclusive and can wrap midnight, such as
 `time-start: 23000` and `time-end: 1000`.
 
@@ -255,7 +262,7 @@ biome-aliases:
 
 | Profile field | Meaning and accepted range |
 | --- | --- |
-| `priority` | Integer; only the highest matching ordinary priority is used |
+| `priority` | Highest matching integer in the ambient or terrain group |
 | `biomes`, `worlds` | Nonempty lists of selectors; default `['*']`; world names are case-sensitive |
 | `time-start`, `time-end` | Inclusive world-time bounds, each `0..23999`; defaults cover the full day |
 | `weather` | `ANY`, `CLEAR`, `RAIN`, `THUNDER`; rain excludes thunder; weather reads world state |
@@ -585,7 +592,7 @@ Run from the repository root with JDK 25:
 ```
 
 The expected local runtime artifact is
-`arc-aurora/build/libs/ArcAurora-0.1.13.jar`. The public Maven API artifact
+`arc-aurora/build/libs/ArcAurora-0.1.14.jar`. The public Maven API artifact
 `ru.ruscrafting.arc:arc-aurora-api:0.1.0` was verified on 2026-10-29 in the
 [RusCrafting repository](https://repo.rus-crafting.ru/grocermc/ru/ruscrafting/arc/arc-aurora-api/0.1.0/arc-aurora-api-0.1.0.pom).
 That API publication does not establish a runtime-plugin build, delivery,
@@ -629,4 +636,4 @@ delivery and runtime activation require separate operational evidence.
 require ArcAurora 0.1.10 or newer; the preview drain behavior requires 0.1.11,
 and `sky-weight` requires 0.1.12. Lantern groups remain visible during close
 approach starting with 0.1.13.
-The 25 ordinary biome profiles and their sampling behavior are unchanged.
+The five decorations and the private showcase command require ArcAurora 0.1.14.

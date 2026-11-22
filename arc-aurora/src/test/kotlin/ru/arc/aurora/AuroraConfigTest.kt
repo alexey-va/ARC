@@ -420,9 +420,11 @@ class AuroraConfigTest : FreeSpec({
         }
     }
 
-    "the six celestial shapes require sky scene mode and keep separate identities from tracks" {
+    "the celestial shapes require sky scene mode and keep separate identities from tracks" {
         val celestial = listOf(AuroraShape.JELLYFISH, AuroraShape.MANTA_RAY, AuroraShape.LIGHT_KNOT,
-            AuroraShape.REVERSE_LIGHTNING, AuroraShape.SKY_CORAL, AuroraShape.MOON_FAN)
+            AuroraShape.REVERSE_LIGHTNING, AuroraShape.SKY_CORAL, AuroraShape.MOON_FAN,
+            AuroraShape.SKY_STITCH, AuroraShape.INVISIBLE_HARE, AuroraShape.PAPER_FLOTILLA,
+            AuroraShape.AURORA_CURTAIN, AuroraShape.TUMBLEWEED)
         AuroraShape.entries.filter { it.isCelestial } shouldBe celestial
         celestial.forEach { shape ->
             shape.isTrack shouldBe false

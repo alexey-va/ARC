@@ -36,6 +36,8 @@ import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.logging.Level
 
+internal const val AURORA_ADMIN_PERMISSION = "arcaurora.admin"
+
 open class ArcAuroraPlugin : JavaPlugin(), Listener {
     private var runtime: PaperPluginRuntime? = null
     internal var engine: AuroraEngine? = null; private set
@@ -47,6 +49,12 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
         var timer: ScheduledTask? = null
     }
     private val previews = mutableMapOf<UUID, Preview>()
+    private val bundledShowcaseSettings by lazy(LazyThreadSafetyMode.NONE) {
+        val yaml = YamlConfiguration().apply {
+            loadFromString(checkNotNull(getResource("config.yml")).bufferedReader(Charsets.UTF_8).use { it.readText() })
+        }
+        AuroraConfig.parse(yaml)
+    }
     @Volatile private var eventCount = 0
     @Volatile private var previewCount = 0
     private var retirement = CompletableFuture.completedFuture<Void>(null)
@@ -115,11 +123,12 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
         checkNotNull(server.servicesManager.load(ArcVisualPacketBudget::class.java)) {
             "ArcCore visual packet budget is not ready"
         }
-        val replacement = AuroraEngine(this, owner.tasks, settings, eventProfiles = { world ->
-            events[world]?.values?.lastOrNull()?.let { engine?.settings?.eventPresets?.get(it) }
-        }, previewProfiles = { playerId ->
-            previews[playerId]?.profiles
-        })
+        val replacement = AuroraEngine(this, owner.tasks, settings,
+            eventProfiles = { world -> events[world]?.values?.lastOrNull()?.let { engine?.settings?.eventPresets?.get(it) } },
+            previewProfiles = { playerId -> previews[playerId]?.profiles },
+            showcaseProfiles = AuroraShowcase.profiles(settings) ?: AuroraShowcase.profiles(settings, bundledShowcaseSettings),
+            onShowcaseBlocked = { reply(it, "showcase-blocked") },
+        )
         try {
             server.onlinePlayers.forEach(replacement::join) // startup/manual maintenance, no online-player scan on tick
         } catch (failure: Exception) {
@@ -182,15 +191,27 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
 
     @EventHandler fun onJoin(event: PlayerJoinEvent) { (engine ?: pendingEngine)?.join(event.player) }
     @EventHandler fun onQuit(event: PlayerQuitEvent) { stopPreview(event.player.uniqueId); (engine ?: pendingEngine)?.quit(event.player.uniqueId) }
-    @EventHandler fun onWorld(event: PlayerChangedWorldEvent) { (engine ?: pendingEngine)?.invalidate(event.player.uniqueId) }
+    @EventHandler fun onWorld(event: PlayerChangedWorldEvent) { (engine ?: pendingEngine)?.changeWorld(event.player.uniqueId) }
     @EventHandler(ignoreCancelled = true) fun onTeleport(event: PlayerTeleportEvent) {
         if (event.from.world?.uid != event.to.world?.uid) engine?.invalidate(event.player.uniqueId)
     }
 
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
         val action = args.firstOrNull()?.lowercase(Locale.ROOT) ?: "toggle"
-        if (action in setOf("reload", "status", "preview", "catalog")) {
-            if (!sender.hasPermission("arcaurora.admin")) return reply(sender, "no-permission")
+        if (action in setOf("reload", "status", "preview", "catalog", "showcase")) {
+            if (!sender.hasPermission(AURORA_ADMIN_PERMISSION)) return reply(sender, "no-permission")
+            if (action == "showcase") {
+                val player = sender as? Player ?: return reply(sender, "players-only")
+                val current = engine ?: return reply(sender, "stopped")
+                if (args.size == 2 && args[1].equals("stop", ignoreCase = true)) {
+                    current.stopShowcase(player.uniqueId)
+                    return reply(player, "showcase-off")
+                }
+                if (args.size != 1) return reply(sender, "usage")
+                if (!current.startShowcase(player)) return reply(player, "showcase-unavailable")
+                stopPreview(player.uniqueId)
+                return reply(player, "showcase-on")
+            }
             if (action == "catalog") {
                 val current = engine ?: return reply(sender, "stopped")
                 if (args.size > 2) return reply(sender, "usage")
@@ -224,6 +245,7 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
                     ?: return reply(sender, "profile-not-found", mapOf("preset" to preset, "profile" to profileId)))
                 val preview = Preview(selected)
                 val targetId = target.uniqueId
+                current.stopShowcase(targetId)
                 stopPreview(targetId)
                 previews[targetId] = preview
                 previewCount = previews.size
@@ -280,14 +302,16 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
     }
 
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): List<String> {
-        val admin = sender.hasPermission("arcaurora.admin")
+        val admin = sender.hasPermission(AURORA_ADMIN_PERMISSION)
         val candidates = if (args.size <= 1) buildList {
             if (sender is Player) addAll(listOf("on", "off", "toggle", "biome"))
             if (admin) addAll(listOf("reload", "status", "catalog", "preview"))
+            if (admin && sender is Player) add("showcase")
         } else {
             if (!admin) return emptyList()
             val settings = engine?.settings ?: return emptyList()
             when (args[0].lowercase(Locale.ROOT)) {
+                "showcase" -> if (sender is Player && args.size == 2) listOf("stop") else emptyList()
                 "catalog" -> if (args.size == 2) settings.eventPresets.keys.toList() else emptyList()
                 "preview" -> when (args.size) {
                     2 -> server.onlinePlayers.map { it.name } + if (sender is Player) listOf("self") else emptyList()

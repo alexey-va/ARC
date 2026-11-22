@@ -18,7 +18,7 @@ data class AuroraSkyFieldSettings(
     val maxLanternScenes: Int = 2,
 )
 
-internal data class AuroraSkyCell(val x: Int, val z: Int)
+internal data class AuroraSkyCell(val x: Int, val z: Int, val terrain: Boolean = false)
 internal data class AuroraWorldCandidate(
     val cell: AuroraSkyCell, val profile: AuroraProfile, val epoch: Long,
     val seed: Long, val x: Double, val z: Double,
@@ -26,16 +26,29 @@ internal data class AuroraWorldCandidate(
 
 internal object AuroraWorldField {
     fun candidates(world: UUID, profiles: List<AuroraProfile>, x: Double, z: Double, age: Long,
-        settings: AuroraSkyFieldSettings): List<AuroraWorldCandidate> {
+        settings: AuroraSkyFieldSettings, terrainScenes: Boolean = false): List<AuroraWorldCandidate> {
+        val (terrain, sky) = if (terrainScenes) profiles.partition { it.shape.followsTerrain }
+            else emptyList<AuroraProfile>() to profiles
+        val candidates = candidatesIn(world, sky, x, z, age, settings, terrain = false) +
+            candidatesIn(world, terrain, x, z, age, settings, terrain = true)
+        return candidates.sortedWith(compareBy<AuroraWorldCandidate> { (it.x - x) * (it.x - x) + (it.z - z) * (it.z - z) }
+            .thenBy { it.cell.x }.thenBy { it.cell.z })
+    }
+
+    private fun candidatesIn(world: UUID, profiles: List<AuroraProfile>, x: Double, z: Double, age: Long,
+        settings: AuroraSkyFieldSettings, terrain: Boolean): List<AuroraWorldCandidate> {
         if (profiles.isEmpty()) return emptyList()
         val totalWeight = profiles.sumOf { it.skyWeight }
-        val cx = floor(x / settings.cellSize).toInt()
-        val cz = floor(z / settings.cellSize).toInt()
-        val reach = ceil((settings.viewDistance + settings.cullHysteresis) / settings.cellSize).toInt() + 1
-        val distance = settings.viewDistance + settings.cullHysteresis
+        // Narrow rivers and small snowfields need more candidate anchors than airborne figures.
+        val cellSize = if (terrain) minOf(16.0, settings.cellSize) else settings.cellSize
+        val cx = floor(x / cellSize).toInt()
+        val cz = floor(z / cellSize).toInt()
+        val distance = if (terrain) minOf(settings.viewDistance, profiles.maxOf { it.radius })
+            else settings.viewDistance + settings.cullHysteresis
+        val reach = ceil(distance / cellSize).toInt() + 1
         val result = ArrayList<AuroraWorldCandidate>()
         for (dx in -reach..reach) for (dz in -reach..reach) {
-            val cell = AuroraSkyCell(cx + dx, cz + dz)
+            val cell = AuroraSkyCell(cx + dx, cz + dz, terrain)
             val cellSeed = world.mostSignificantBits xor world.leastSignificantBits xor
                 (cell.x.toLong() * 341873128712L) xor (cell.z.toLong() * 132897987541L)
             // Default weights reproduce the original nextInt(profile count) cell assignment exactly.
@@ -44,13 +57,12 @@ internal object AuroraWorldField {
             val epoch = age / (profile.sceneDurationTicks + profile.spawnDelayTicks).coerceAtLeast(1)
             val seed = cellSeed xor (profile.id.hashCode().toLong() shl 32) xor (epoch * -7046029254386353131L)
             val random = Random(seed)
-            val px = (cell.x + 0.5 + (random.nextDouble() * 2.0 - 1.0) * settings.jitter) * settings.cellSize
-            val pz = (cell.z + 0.5 + (random.nextDouble() * 2.0 - 1.0) * settings.jitter) * settings.cellSize
+            val px = (cell.x + 0.5 + (random.nextDouble() * 2.0 - 1.0) * settings.jitter) * cellSize
+            val pz = (cell.z + 0.5 + (random.nextDouble() * 2.0 - 1.0) * settings.jitter) * cellSize
             if ((px - x) * (px - x) + (pz - z) * (pz - z) <= distance * distance) {
                 result += AuroraWorldCandidate(cell, profile, epoch, seed, px, pz)
             }
         }
-        return result.sortedWith(compareBy<AuroraWorldCandidate> { (it.x - x) * (it.x - x) + (it.z - z) * (it.z - z) }
-            .thenBy { it.cell.x }.thenBy { it.cell.z })
+        return result
     }
 }

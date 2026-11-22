@@ -90,7 +90,7 @@ sky-defaults:
 #   'iris:your_verified_woodland': 'minecraft:forest'
 biome-aliases: {}
 
-# Only the highest matching priority is used; equal priorities share the budget.
+# Ambient patches and surface scenes each select their highest matching priority and share the budget.
 # Omitted world selectors mean ['*']; omitted time means the entire day.
 # All shipped profiles reject underwater spawning. Shape size is a radius/half-extent.
 # Most presets use at most 6 points; cubes use 12, one sample on each edge.
@@ -473,11 +473,80 @@ profiles:
     dust-to-color: '#D4C4E6'
     dust-size: 0.40
 
+  invisible_hare:
+    biomes: ['minecraft:*snowy*', minecraft:grove, minecraft:frozen_peaks, minecraft:jagged_peaks]
+    weather: CLEAR
+    time-start: 0
+    time-end: 5000
+    min-sky-light: 7
+    vertical-min: 0
+    vertical-max: 0
+    min-distance: 5
+    radius: 48
+    sky-scene: true
+    shape: INVISIBLE_HARE
+    shape-size: 3
+    scene-duration-ticks: 164
+    spawn-delay-ticks: 28
+    update-ticks: 1
+    sky-points: 96
+    sky-tracers: 8
+    particle: minecraft:snowflake
+    sky-palette:
+      prints: {particle: minecraft:dust, dust-color: '#6986A6', dust-size: 0.66}
+      powder: {particle: minecraft:dust, dust-color: '#F5FCFF', dust-size: 0.68}
+    sky-options: {roll-radians: 0.0}
+
+  paper_flotilla:
+    biomes: [minecraft:river]
+    weather: RAIN
+    vertical-min: 0
+    vertical-max: 0
+    min-distance: 5
+    radius: 48
+    sky-scene: true
+    shape: PAPER_FLOTILLA
+    shape-size: 3
+    scene-duration-ticks: 224
+    spawn-delay-ticks: 28
+    update-ticks: 1
+    sky-points: 112
+    sky-tracers: 8
+    particle: minecraft:cloud
+    sky-palette:
+      paper: {particle: minecraft:dust, dust-color: '#FFF4DA', dust-size: 0.84}
+      lily: {particle: minecraft:dust, dust-color: '#659478', dust-size: 0.74}
+    sky-options: {roll-radians: 0.0}
+
+  tumbleweed:
+    biomes: [minecraft:desert]
+    weather: CLEAR
+    time-start: 0
+    time-end: 12500
+    min-sky-light: 7
+    vertical-min: 0
+    vertical-max: 0
+    min-distance: 5
+    radius: 48
+    sky-scene: true
+    shape: TUMBLEWEED
+    shape-size: 3.5
+    scene-duration-ticks: 176
+    spawn-delay-ticks: 28
+    update-ticks: 1
+    sky-points: 96
+    sky-tracers: 8
+    particle: minecraft:ash
+    sky-palette:
+      twigs: {particle: minecraft:dust, dust-color: '#9A5A29', dust-size: 0.88}
+      cactus: {particle: minecraft:dust, dust-color: '#58824B', dust-size: 0.70}
+    sky-options: {roll-radians: 0.0}
+
 # Temporary event ambience replaces ordinary profiles in the leased world.
 # It intentionally bypasses the ordinary permission/toggle and time/biome filters.
 # Ping, loaded-chunk, passable-block and packet-budget gates still apply.
 # These decorative forms do not reveal treasure positions or change rewards.
-# Twenty-two variants share nine world cells: soft blue/warm traces and bubble-chamber tracks.
+# The nightly catalogue shares nine world cells across traces, lanterns and animated figures.
 # One familiar white wave and one rare crystal remain; no cube/star in this night catalogue.
 # Three short meteor variants repeat more often. FLAME is orange, not a red recolour.
 # The crystal holds its outline; celestial figures animate bounded local poses.
@@ -1091,10 +1160,50 @@ event-presets:
       sky-options:
         roll-radians: 0.1
 
+    sky_stitch:
+      biomes: ['*']
+      vertical-min: 34
+      vertical-max: 50
+      min-distance: 30
+      radius: 96
+      sky-scene: true
+      shape: SKY_STITCH
+      shape-size: 7
+      scene-duration-ticks: 208
+      spawn-delay-ticks: 36
+      update-ticks: 1
+      sky-points: 112
+      sky-tracers: 12
+      particle: minecraft:end_rod
+      sky-palette:
+        silver: {particle: minecraft:end_rod}
+        thread: {particle: minecraft:flame}
+      sky-options: {roll-radians: 0.05}
+
+    aurora_curtain:
+      biomes: ['*']
+      vertical-min: 34
+      vertical-max: 50
+      min-distance: 30
+      radius: 96
+      sky-scene: true
+      shape: AURORA_CURTAIN
+      shape-size: 8
+      scene-duration-ticks: 280
+      spawn-delay-ticks: 36
+      update-ticks: 1
+      sky-points: 112
+      sky-tracers: 12
+      particle: minecraft:copper_fire_flame
+      sky-palette:
+        mint: {particle: minecraft:copper_fire_flame}
+        fold: {particle: minecraft:dust, dust-color: '#E9A7FF', dust-size: 1.1}
+      sky-options: {roll-radians: 0.05}
+
     sky_lanterns:
       biomes: ['*']
       sky-scene: true
-      sky-weight: 8 # Eight shares among 28 other sky variants; shared scene limits still apply.
+      sky-weight: 8 # Eight shares among 30 other sky variants; shared scene limits still apply.
       scene-duration-ticks: 600
       spawn-delay-ticks: 80
       sky-tracers: 6

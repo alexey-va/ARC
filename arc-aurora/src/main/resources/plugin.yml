@@ -7,11 +7,12 @@ depend: [ArcCore, packetevents]
 commands:
   arcaurora:
     description: Ambient particles and diagnostics
+    usage: /<command> [on|off|toggle|biome|status|reload|catalog|preview|showcase [stop]]
     aliases: [aaurora]
 permissions:
   arcaurora.view:
     description: Receive ordinary ambient particle effects
     default: false
   arcaurora.admin:
-    description: Reload and inspect ArcAurora
+    description: Reload ArcAurora and use its diagnostics and previews
     default: op

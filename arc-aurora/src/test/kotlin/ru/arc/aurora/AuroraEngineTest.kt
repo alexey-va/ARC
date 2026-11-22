@@ -23,6 +23,87 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
 class AuroraEngineTest : FreeSpec({
+    "showcase cycles through five fixed private slots under the shared one-packet cap" {
+        withEngine(showcaseSettings()) { fixture ->
+            fixture.joinAdditional("OtherViewer")
+            fixture.admin(false)
+            fixture.engine.startShowcase(fixture.player) shouldBe false
+            fixture.admin(true)
+            fixture.engine.setPersonallyEnabled(fixture.player, false)
+            val previous = emptyList<AuroraProfile>()
+            fixture.preview = previous
+            fixture.engine.beginPreviewDrain(fixture.player.uniqueId, previous) shouldBe 0L
+            fixture.engine.startShowcase(fixture.player) shouldBe true
+            fixture.preview = null
+
+            fun cycle(ticks: Int): Set<Int> {
+                val before = fixture.emissions.size
+                repeat(ticks) {
+                    val sent = fixture.emissions.size
+                    fixture.advance(1)
+                    (fixture.emissions.size - sent in 0..1) shouldBe true
+                }
+                return fixture.emissions.drop(before).map { it.count }.toSet()
+            }
+            cycle(300) shouldBe (1..5).toSet()
+            val slots = fixture.sceneRows(0)
+            slots.size shouldBe 5
+            slots.map { row -> row.split(',').subList(7, 10) }.toSet().size shouldBe 5
+            val eyeY = fixture.player.eyeLocation.y
+            fixture.locations.all { it.y > eyeY } shouldBe true
+            fixture.player.teleport(fixture.player.location.apply { yaw = -90f }) shouldBe true
+            cycle(80) shouldBe (1..5).toSet()
+            fixture.sceneRows(0) shouldBe slots
+            fixture.emissions.all { it.viewer == fixture.player.uniqueId && it.force } shouldBe true
+
+            fixture.advance(AuroraShowcase.DURATION_TICKS.toInt() - 381)
+            fixture.sceneRows(0) shouldBe slots
+            val beforeExpiry = fixture.emissions.size
+            fixture.advance(61)
+            fixture.sceneRows(0) shouldBe emptyList()
+            fixture.emissions.size shouldBe beforeExpiry
+        }
+    }
+
+    "showcase waits for loaded swept columns and ends when the panel cannot fit over a roof" {
+        withEngine(showcaseSettings(), highSky = true) { fixture ->
+            val world = fixture.player.world
+            fixture.admin(true)
+            world.unloadChunk(0, 2) shouldBe true
+            fixture.engine.startShowcase(fixture.player) shouldBe true
+            fixture.advance(80)
+            world.isChunkLoaded(0, 2) shouldBe false
+            fixture.emissions shouldBe emptyList()
+
+            world.loadChunk(0, 2)
+            for (x in -4..4) for (z in 29..35) world.getBlockAt(x, 106, z).type = Material.STONE
+            fixture.advance(160)
+            fixture.emissions.map { it.count }.toSet() shouldBe (1..5).toSet()
+            val aboveRoof = fixture.locations.filter { it.blockX in -4..4 && it.blockZ in 29..35 }
+            aboveRoof.isNotEmpty() shouldBe true
+            aboveRoof.all { it.y > 107.0 } shouldBe true
+            val heights = fixture.sceneRows(0).map { it.split(',')[8].toDouble() }.distinct()
+            heights.size shouldBe 2
+            heights.max() - heights.min() shouldBe 8.0
+
+            val beforeStop = fixture.emissions.size
+            fixture.engine.startShowcase(fixture.player) shouldBe true
+            fixture.capture()
+            fixture.engine.stopShowcase(fixture.player.uniqueId)
+            fixture.completePlanning()
+            fixture.advance(80)
+            fixture.emissions.size shouldBe beforeStop
+            fixture.sceneRows(0) shouldBe emptyList()
+
+            for (x in -4..4) for (z in 29..35) world.getBlockAt(x, world.maxHeight - 1, z).type = Material.STONE
+            fixture.engine.startShowcase(fixture.player) shouldBe true
+            fixture.advance(160)
+            fixture.blockedShowcases shouldBe listOf(fixture.player.uniqueId)
+            fixture.emissions.size shouldBe beforeStop
+            fixture.sceneRows(0) shouldBe emptyList()
+        }
+    }
+
     "a full sixty-second preview drains the visible lantern group through its tiny final pose without admitting another" {
         val base = skySettings(points = 3, shape = AuroraShape.SKY_LANTERNS, packets = 3)
         val settings = base.copy(profiles = base.profiles.map {
@@ -909,7 +990,7 @@ class AuroraEngineTest : FreeSpec({
             loadFromString(checkNotNull(javaClass.classLoader.getResourceAsStream("config.yml")).bufferedReader().use { it.readText() })
         })
         val profiles = bundled.eventPresets.getValue("treasure-hunt").filter { it.shape.isCelestial }
-        profiles.map { it.shape }.toSet() shouldBe AuroraShape.entries.filter { it.isCelestial }.toSet()
+        profiles.map { it.shape }.toSet() shouldBe AuroraShape.entries.filter { it.isCelestial && !it.followsTerrain }.toSet()
         for (profile in profiles) {
             val settings = bundled.copy(nativeBudgetMicros = Int.MAX_VALUE,
                 skyField = bundled.skyField.copy(maxScenes = 1, maxPerProfile = 1))
@@ -1308,6 +1389,42 @@ class AuroraEngineTest : FreeSpec({
         }
     }
 
+    "the paper flotilla follows rain and water below a bridge while regular biome ambience continues" {
+        val base = skySettings(points = 64, shape = AuroraShape.PAPER_FLOTILLA, packets = 16)
+        val flotilla = base.profiles.single().copy(priority = 100, weather = AuroraWeather.RAIN, radius = 13.0,
+            verticalMin = 0.0, verticalMax = 0.0, shapeSize = 0.5, skyTracers = 12)
+        val ambient = engineSettings().profiles.single()
+        val settings = base.copy(profiles = listOf(flotilla, ambient), nativeBudgetMicros = Int.MAX_VALUE)
+        withEngine(settings) { fixture ->
+            fixture.permission(true)
+            val world = fixture.player.world
+            world.setStorm(true)
+            fixture.advance(25)
+            fixture.emissions.isNotEmpty() shouldBe true
+            fixture.emissions.none { it.force } shouldBe true
+
+            world.setStorm(false)
+            for (x in -12..12) for (z in -12..12) world.getBlockAt(x, 74, z).type = Material.WATER
+            fixture.roof(78)
+            fixture.advance(20)
+            fixture.emissions.none { it.force } shouldBe true
+
+            world.setStorm(true)
+            val before = fixture.emissions.size
+            fixture.advance(60)
+            val wet = fixture.locations.filterIndexed { index, _ -> index >= before && fixture.emissions[index].force }
+            wet.isNotEmpty() shouldBe true
+            wet.all { it.y >= 74 + 8.0 / 9.0 } shouldBe true
+            wet.any { it.blockY == 74 } shouldBe true // Above the water mesh, inside the water block coordinate.
+            fixture.emissions.drop(before).any { !it.force } shouldBe true
+
+            val obstructed = fixture.emissions.size
+            fixture.roof(75)
+            fixture.advance(30)
+            fixture.emissions.drop(obstructed).none { it.force } shouldBe true
+        }
+    }
+
     "ordinary retained sky stops when the current viewer biome no longer selects its profile" {
         val settings = skySettings(points = 24).let { original -> original.copy(profiles =
             original.profiles.map { it.copy(biomes = listOf("minecraft:plains")) }) }
@@ -1370,6 +1487,7 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
     var droppedEmission: Location? = null
     val locations = mutableListOf<Location>()
     val emissions = mutableListOf<ObservedEmission>()
+    val blockedShowcases = mutableListOf<java.util.UUID>()
     val queued = ArrayDeque<Runnable>()
     val emitter = mockk<PaperViewerParticles>(relaxed = true)
     val lanterns = mockk<AuroraLanternDisplays>(relaxed = true)
@@ -1381,7 +1499,7 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
     private val scope = LifecycleTaskScope(scheduler)
     private val attachment = player.addAttachment(plugin, settings.permission, false)
     val engine = AuroraEngine(plugin, scope, settings, { if (it == player.world.uid) event else null }, { emitter },
-        { if (it == player.uniqueId) preview else null }, { lanterns })
+        { if (it == player.uniqueId) preview else null }, { lanterns }, onShowcaseBlocked = { blockedShowcases += it.uniqueId })
 
     init {
         every { lanterns.update(any(), any(), any(), any(), any(), any(), any()) } answers {
@@ -1529,6 +1647,8 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
 
     fun permission(granted: Boolean) = attachment.setPermission(settings.permission, granted)
 
+    fun admin(granted: Boolean) = attachment.setPermission(AURORA_ADMIN_PERMISSION, granted)
+
     fun capture() {
         queued.size shouldBe 0
         engine.tick()
@@ -1628,3 +1748,18 @@ private fun skySettings(points: Int = 1, shape: AuroraShape = AuroraShape.POINT,
             shape = shape, shapeSize = 2.0, points = points, count = 1, offsetX = 0.0, offsetY = 0.0, offsetZ = 0.0, speed = 0.0,
         ) })
     }
+
+private fun showcaseSettings(): AuroraSettings {
+    val base = skySettings(points = 64)
+    val shapes = listOf(
+        AuroraShape.SKY_STITCH, AuroraShape.AURORA_CURTAIN,
+        AuroraShape.INVISIBLE_HARE, AuroraShape.PAPER_FLOTILLA, AuroraShape.TUMBLEWEED,
+    )
+    val profiles = shapes.mapIndexed { index, shape ->
+        base.profiles.single().copy(id = shape.name.lowercase(), shape = shape, count = index + 1,
+            skyTracers = 12, sceneDurationTicks = 80, weather = AuroraWeather.THUNDER, worlds = listOf("different"))
+    }
+    return base.copy(viewersPerTick = 2, profiles = profiles.drop(2),
+        eventPresets = mapOf("treasure-hunt" to profiles.take(2)),
+        skyField = base.skyField.copy(viewDistance = 16.0, cullHysteresis = 0.0, maxCelestialScenes = 1))
+}

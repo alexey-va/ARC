@@ -3,6 +3,7 @@ package ru.arc.aurora
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
+import org.bukkit.configuration.file.YamlConfiguration
 import java.io.File
 import kotlin.math.PI
 import kotlin.math.abs
@@ -11,9 +12,12 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 class AuroraCelestialShapesTest : FreeSpec({
-    "six finite celestial scenes retain their bounded identities and fade at both ends" {
+    "finite celestial scenes retain their bounded identities and fade at both ends" {
+        val output = System.getenv("AURORA_CELESTIAL_PREVIEW_DIR")?.let(::File)
+        val configuredPoints = if (output == null) emptyMap() else bundledShowcasePointCounts()
         for (shape in AuroraShape.entries.filter { it.isCelestial }) {
-            for (points in listOf(1, 80, 96, 160, 192)) {
+            val previewPoints = configuredPoints[shape] ?: 160
+            for (points in setOf(1, 80, 96, 160, 192, previewPoints)) {
                 val frames = AuroraCelestialShapes.frames(shape, 1.0, points)
                 frames.size shouldBe 33
                 frames.all { it.size == points } shouldBe true
@@ -28,7 +32,7 @@ class AuroraCelestialShapesTest : FreeSpec({
                 frames.zipWithNext().all { (a, b) -> a.zip(b).all { (p, q) ->
                     celestialDistance(p.offset, q.offset) < 0.42
                 } } shouldBe true
-                if (points == 160) exportCelestialPreview(shape, frames)
+                if (output != null && points == previewPoints) exportCelestialPreview(output, shape, frames)
             }
         }
     }
@@ -141,12 +145,23 @@ private fun celestialDistance(a: AuroraOffset, b: AuroraOffset) =
     sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + (a.z - b.z) * (a.z - b.z))
 
 /** Source-derived preview only. Rerun this exact test task when changing this undeclared export input. */
-private fun exportCelestialPreview(shape: AuroraShape, frames: List<List<AuroraCelestialPoint>>) {
-    val output = System.getenv("AURORA_CELESTIAL_PREVIEW_DIR") ?: return
-    val directory = File(output).also { it.mkdirs() }
+private fun exportCelestialPreview(directory: File, shape: AuroraShape, frames: List<List<AuroraCelestialPoint>>) {
+    directory.mkdirs()
     File(directory, "${shape.name.lowercase()}.json").writeText(frames.joinToString(prefix = "[", postfix = "]") { frame ->
         frame.joinToString(prefix = "[", postfix = "]") { point ->
             "[${point.offset.x},${point.offset.y},${point.offset.z},${point.opacity},${point.paletteSlot}]"
         }
     })
+}
+
+private fun bundledShowcasePointCounts(): Map<AuroraShape, Int> {
+    val config = checkNotNull(AuroraShape::class.java.getResourceAsStream("/config.yml")).bufferedReader().use {
+        YamlConfiguration.loadConfiguration(it)
+    }
+    return listOf(AuroraShape.SKY_STITCH, AuroraShape.AURORA_CURTAIN, AuroraShape.INVISIBLE_HARE,
+        AuroraShape.PAPER_FLOTILLA, AuroraShape.TUMBLEWEED).associateWith { shape ->
+        val id = shape.name.lowercase()
+        val path = listOf("profiles.$id", "event-presets.treasure-hunt.$id").single { config.isConfigurationSection(it) }
+        config.getInt("$path.sky-points").also { require(it in 1..192) }
+    }
 }

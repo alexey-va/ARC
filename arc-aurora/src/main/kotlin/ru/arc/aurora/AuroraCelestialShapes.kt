@@ -38,6 +38,11 @@ object AuroraCelestialShapes {
                 AuroraShape.REVERSE_LIGHTNING -> reverseLightning(points, progress)
                 AuroraShape.SKY_CORAL -> coral(points, progress)
                 AuroraShape.MOON_FAN -> moonFan(points, progress)
+                AuroraShape.SKY_STITCH -> skyStitch(points, progress)
+                AuroraShape.AURORA_CURTAIN -> auroraCurtain(points, progress)
+                AuroraShape.INVISIBLE_HARE -> invisibleHare(points, progress)
+                AuroraShape.PAPER_FLOTILLA -> paperFlotilla(points, progress)
+                AuroraShape.TUMBLEWEED -> tumbleweed(points, progress)
                 else -> error("Not a celestial shape: $shape")
             }
             val envelope = smooth(progress / 0.12) * smooth((1.0 - progress) / 0.16)
@@ -243,7 +248,7 @@ object AuroraCelestialShapes {
         }
     }
 
-    private fun mix(a: AuroraOffset, b: AuroraOffset, fraction: Double) = AuroraOffset(
+    internal fun mix(a: AuroraOffset, b: AuroraOffset, fraction: Double) = AuroraOffset(
         a.x + (b.x - a.x) * fraction, a.y + (b.y - a.y) * fraction, a.z + (b.z - a.z) * fraction)
 
     private fun unit(point: AuroraOffset): AuroraOffset {
@@ -252,7 +257,7 @@ object AuroraCelestialShapes {
     }
 
     /** Weighted, interleaved strokes retain every part under a partial refresh budget. */
-    private fun strokes(points: Int, weights: DoubleArray,
+    internal fun strokes(points: Int, weights: DoubleArray,
         sample: (stroke: Int, along: Double) -> AuroraCelestialPoint): List<AuroraCelestialPoint> {
         val total = weights.sum()
         val counts = IntArray(weights.size) { floor(points * weights[it] / total).toInt() }
@@ -269,5 +274,5 @@ object AuroraCelestialShapes {
         }
     }
 
-    private fun smooth(value: Double): Double = value.coerceIn(0.0, 1.0).let { it * it * (3.0 - 2.0 * it) }
+    internal fun smooth(value: Double): Double = value.coerceIn(0.0, 1.0).let { it * it * (3.0 - 2.0 * it) }
 }

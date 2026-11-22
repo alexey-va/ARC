@@ -27,9 +27,9 @@ class AuroraResourcesTest : FreeSpec({
         }
         val settings = AuroraConfig.parse(resource("config.yml"))
         settings.permission shouldBe "arcaurora.view"
-        settings.profiles.size shouldBe 25
+        settings.profiles.size shouldBe 28
         val sky = settings.eventPresets.getValue("treasure-hunt")
-        sky.size shouldBe 29
+        sky.size shouldBe 31
         val lantern = sky.single { it.shape == AuroraShape.SKY_LANTERNS }
         lantern.points shouldBe 6
         lantern.skyTracers shouldBe 6
@@ -39,7 +39,7 @@ class AuroraResourcesTest : FreeSpec({
         settings.eventPresets.getValue("lanterns").single() shouldBe lantern
         sky.filter { it !== lantern }.all { it.skyWeight == 1 } shouldBe true
         val celestial = sky.filter { it.shape.isCelestial }
-        celestial.map { it.shape }.toSet() shouldBe AuroraShape.entries.filter { it.isCelestial }.toSet()
+        (celestial + settings.profiles.filter { it.shape.isCelestial }).map { it.shape }.toSet() shouldBe AuroraShape.entries.filter { it.isCelestial }.toSet()
         celestial.all { it.skyTracers in 8..12 && it.skyPalette.isNotEmpty() && it.skyRefreshTicks == 0 } shouldBe true
         val gallery = settings.eventPresets.getValue("particle-gallery")
         (gallery.size >= 12) shouldBe true
