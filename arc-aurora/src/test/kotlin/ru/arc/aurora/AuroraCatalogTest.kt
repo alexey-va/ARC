@@ -91,7 +91,10 @@ class AuroraCatalogTest : FreeSpec({
             }
             plugin.showcase(fixture.target) shouldBe null
             val selected = plugin.showcase(admin)
-            for (retired in listOf("jellyfish", "manta_ray", "astral_pendulum", "twin_samaras", "sky_phonograph")) {
+            for (retired in listOf(
+                "jellyfish", "manta_ray", "astral_pendulum", "twin_samaras", "sky_phonograph",
+                "kraken_drag", "rlyeh_rising", "dagon_tide", "night_gaunt", "colour_from_space", "shoggoth_escape", "silver_key",
+            )) {
                 fixture.complete(admin, "showcase", retired) shouldBe emptyList()
                 fixture.command(admin, "showcase $retired")
                 admin.message() shouldBe "showcase-effect-unknown"

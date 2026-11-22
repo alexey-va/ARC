@@ -11,13 +11,11 @@ import kotlin.math.sin
 
 internal object AuroraForbiddenStories : AuroraStoryParts {
     private const val TURN = 2.0 * PI
-    private const val ARM_SEGMENTS = 6
-    private const val HINGE_X = 0.516
-    private const val LOCK_X = -0.299
-    private const val LOCK_Y = -0.095
-    private const val GATE_YAW = -0.60
+    private const val TENDRIL_SEGMENTS = 7
+    private const val EYE_LAYERS = 7
+    private const val CLOTH_SEGMENTS = 4
 
-    private fun point(x: Double, y: Double, z: Double = 0.0) = AuroraOffset(x, y, z)
+    private fun p(x: Double, y: Double, z: Double = 0.0) = AuroraOffset(x, y, z)
 
     private fun beam(m: Material, a: AuroraOffset, b: AuroraOffset, width: Double, depth: Double): AuroraMiniaturePart {
         val dx = b.x - a.x
@@ -25,266 +23,337 @@ internal object AuroraForbiddenStories : AuroraStoryParts {
         val dz = b.z - a.z
         val flat = hypot(dx, dy)
         return storyPart(m, (a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2,
-            hypot(flat, dz) + width * 0.12, width, depth, atan2(dy, dx), atan2(-dz, flat))
+            hypot(flat, dz) + width * 0.18, width, depth, atan2(dy, dx), atan2(-dz, flat))
     }
 
-    private fun place(part: AuroraMiniaturePart, facing: Quaternionf, origin: AuroraOffset, size: Double = 1.0): AuroraMiniaturePart {
-        val p = part.center
-        val offset = facing.transform(Vector3f(p.x.toFloat(), p.y.toFloat(), p.z.toFloat())).mul(size.toFloat())
-        return AuroraMiniaturePart(part.material, point(origin.x + offset.x, origin.y + offset.y, origin.z + offset.z),
-            Quaternionf(facing).mul(part.rotation), Vector3f(part.scale).mul(size.toFloat()))
+    private fun place(part: AuroraMiniaturePart, facing: Quaternionf, at: AuroraOffset): AuroraMiniaturePart {
+        val local = part.center
+        val off = facing.transform(Vector3f(local.x.toFloat(), local.y.toFloat(), local.z.toFloat()))
+        return part.copy(center = p(at.x + off.x, at.y + off.y, at.z + off.z),
+            rotation = Quaternionf(facing).mul(part.rotation))
     }
 
-    // Each snow shelf exposes a blue fracture face and hanging ice teeth when the two plates separate.
-    private val ice = buildList {
-        for (side in listOf(-1.0, 1.0)) {
-            val level = if (side < 0) 0.0 else -0.087
-            add(storyPart(Material.BLUE_ICE, side * 0.83, -0.58 + level, -0.06, 0.88, 0.29, 0.51, side * 0.11, side * 0.10))
-            add(storyPart(Material.PACKED_ICE, side * 0.69, -0.46 + level, -0.048, 0.90, 0.17, 0.54, side * 0.092))
-            add(storyPart(Material.SNOW_BLOCK, side * 0.83, -0.363 + level, -0.042, 0.68, 0.058, 0.51, side * 0.092))
-            add(storyPart(Material.PACKED_ICE, side * 0.35, -0.51 + level, 0.021, 0.31, 0.18, 0.43, side * -0.28))
-            add(storyPart(Material.BLUE_ICE, side * 0.52, -0.68 + level, 0.025, 0.175, 0.335, 0.33, side * -0.26))
-            val peak = if (side < 0) 0.43 else 0.295
-            add(storyPart(Material.PACKED_ICE, side * 1.03, -0.38 + level, -0.17, 0.33, peak, 0.25, side * 0.61))
-            add(storyPart(Material.SNOW_BLOCK, side * 0.99, -0.306 + peak * 0.33 + level, -0.16,
-                0.164, 0.12, 0.23, side * 0.61))
-            add(storyPart(Material.PACKED_ICE, side * 0.75, -0.343 + level, -0.23, 0.235, 0.252, 0.22, side * 0.74))
-            add(storyPart(Material.BLUE_ICE, side * 0.43, -0.80 + level, 0.01, 0.089, 0.267, 0.21, side * -0.26))
+    // Layered vanilla round item silhouettes. The caps of generated items in NONE are exactly 1/16 apart.
+    private fun lens(mat: Material, x: Double, y: Double, z: Double, w: Double, h: Double, depth: Double) =
+        storyPart(mat, x, y, z, w, h, depth * 16.0)
+
+    private data class Tendril(val root: AuroraOffset, val first: AuroraOffset, val second: AuroraOffset,
+        val tip: AuroraOffset, val girth: Double, val hide: Material)
+
+    private fun curl(limb: Tendril, n: Int, k: Int, t: Double, extend: Double): AuroraMiniaturePart {
+        fun joint(u: Double): AuroraOffset {
+            val v = 1.0 - u
+            val b = 3 * v * v * u
+            val c = 3 * v * u * u
+            val d = u * u * u
+            fun axis(root: Double, first: Double, second: Double, tip: Double) =
+                root + extend * (b * (first - root) + c * (second - root) + d * (tip - root))
+            val wave = TURN * (t + n * 0.217 - u * 0.91)
+            val swell = u * (0.42 + 0.58 * u) * extend
+            return p(axis(limb.root.x, limb.first.x, limb.second.x, limb.tip.x) + 0.11 * swell * cos(wave),
+                axis(limb.root.y, limb.first.y, limb.second.y, limb.tip.y) + 0.16 * swell * sin(wave),
+                axis(limb.root.z, limb.first.z, limb.second.z, limb.tip.z) + 0.17 * swell * sin(wave + 1.2))
         }
+        val width = limb.girth * (1.0 - 0.88 * (k + 0.35) / TENDRIL_SEGMENTS)
+        return beam(limb.hide, joint(k.toDouble() / TENDRIL_SEGMENTS),
+            joint((k + 1.0) / TENDRIL_SEGMENTS), width, width * 1.07)
     }
 
-    // Generated pearl and ink-sac models have a stepped outline and 1/16 native depth.
-    // Extruding each lobe keeps its oil-dark underside visible from below and on an oblique pass.
-    private val mantle = listOf(
-        storyPart(Material.ENDER_PEARL, -0.04, -0.06, -0.030, 0.92, 0.71, 5.0, 0.09),
-        storyPart(Material.GLOW_INK_SAC, -0.21, 0.13, 0.064, 0.79, 0.65, 4.35, -0.91),
-        storyPart(Material.ENDER_PEARL, 0.13, 0.22, -0.18, 0.61, 0.62, 4.3, 0.34, 0.50),
-        storyPart(Material.GLOW_INK_SAC, 0.265, -0.005, 0.083, 0.73, 0.65, 4.65, 1.04, -0.36),
-        storyPart(Material.ENDER_PEARL, -0.42, -0.14, 0.024, 0.47, 0.42, 3.15, -0.19),
-        storyPart(Material.ENDER_PEARL, 0.035, -0.205, 0.115, 0.57, 0.37, 3.17, -0.54),
+    private data class Orb(val at: AuroraOffset, val size: Double, val yaw: Double, val roll: Double,
+        val membrane: Material, val iris: Material, val wake: Double)
+
+    // The near and far lobes overlap around a heavy left-hand eye. They occupy three depth planes.
+    private val orbs = listOf(
+        Orb(p(-0.32, 0.19, 0.22), 1.16, -0.14, -0.13, Material.ENDER_PEARL, Material.MAGMA_CREAM, 0.24),
+        Orb(p(0.40, -0.34, 0.16), 0.77, 0.26, 0.23, Material.ENDER_PEARL, Material.HEART_OF_THE_SEA, 0.10),
+        Orb(p(0.48, 0.36, -0.01), 0.70, 0.32, -0.28, Material.CHORUS_FRUIT, Material.ENDER_EYE, 0.18),
+        Orb(p(-0.54, -0.52, -0.02), 0.67, -0.30, 0.38, Material.HEART_OF_THE_SEA, Material.MAGMA_CREAM, 0.05),
+        Orb(p(-0.04, 0.78, -0.18), 0.59, -0.08, 0.27, Material.NAUTILUS_SHELL, Material.HEART_OF_THE_SEA, 0.13),
+        Orb(p(-0.99, 0.00, -0.14), 0.51, -0.44, -0.46, Material.ENDER_PEARL, Material.ENDER_EYE, 0.19),
+        Orb(p(0.11, -0.83, 0.01), 0.42, 0.18, -0.38, Material.ENDER_PEARL, Material.MAGMA_CREAM, 0.23),
+        Orb(p(0.97, 0.06, -0.22), 0.46, 0.54, 0.38, Material.CHORUS_FRUIT, Material.MAGMA_CREAM, 0.08),
+        Orb(p(0.09, -0.27, 0.46), 0.34, 0.04, -0.18, Material.HEART_OF_THE_SEA, Material.ENDER_EYE, 0.30),
     )
 
-    private data class Arm(val root: AuroraOffset, val shoulder: AuroraOffset, val bend: AuroraOffset,
-        val tip: AuroraOffset, val girth: Double, val skin: Material)
-
-    private val arms = listOf(
-        Arm(point(-0.31, 0.07, -0.02), point(-0.90, 0.54, 0.10), point(-1.21, -0.29, 0.11),
-            point(-1.38, 0.35, 0.16), 0.235, Material.DARK_PRISMARINE),
-        Arm(point(0.18, 0.18, -0.14), point(0.31, 0.88, -0.20), point(1.00, 0.94, -0.12),
-            point(0.79, 0.53, 0.02), 0.214, Material.WARPED_WART_BLOCK),
-        Arm(point(0.35, -0.06, 0.05), point(0.80, -0.62, 0.15), point(1.20, 0.42, 0.21),
-            point(1.36, -0.026, 0.26), 0.248, Material.DARK_PRISMARINE),
-        Arm(point(-0.18, -0.19, 0.07), point(-0.27, -0.71, 0.28), point(-0.57, -0.86, 0.24),
-            point(-0.96, -0.60, 0.19), 0.205, Material.WARPED_HYPHAE),
+    private val yogTendrils = listOf(
+        Tendril(p(-0.60, 0.12, -0.20), p(-1.39, 0.02, -0.49), p(-1.62, 1.03, 0.10), p(-1.10, 0.99, 0.25), 0.19, Material.WARPED_HYPHAE),
+        Tendril(p(-0.18, 0.48, -0.27), p(-0.93, 0.85, -0.41), p(-0.37, 1.48, -0.02), p(0.20, 1.21, 0.15), 0.18, Material.DARK_PRISMARINE),
+        Tendril(p(0.49, 0.22, -0.28), p(1.19, 0.25, 0.01), p(0.65, 1.24, 0.12), p(1.29, 1.07, -0.03), 0.21, Material.WARPED_HYPHAE),
+        Tendril(p(0.50, -0.28, -0.20), p(1.08, -1.08, -0.17), p(1.54, -0.88, 0.10), p(1.42, -0.15, 0.22), 0.23, Material.DARK_PRISMARINE),
+        Tendril(p(-0.19, -0.50, -0.23), p(-0.10, -1.12, -0.35), p(0.80, -1.38, 0.13), p(0.88, -0.96, 0.30), 0.22, Material.WARPED_HYPHAE),
+        Tendril(p(-0.65, -0.29, -0.09), p(-1.28, -0.27, -0.22), p(-1.45, -0.76, 0.04), p(-1.12, -1.02, 0.17), 0.17, Material.DARK_PRISMARINE),
     )
 
-    private data class Eye(val x: Double, val y: Double, val z: Double, val size: Double, val tilt: Double)
-
-    private val eyes = listOf(
-        Eye(-0.205, 0.145, 0.256, 0.270, -0.23), Eye(0.188, 0.125, 0.265, 0.194, 0.31),
-        Eye(-0.399, -0.01, 0.223, 0.137, 0.35), Eye(0.015, -0.137, 0.269, 0.176, -0.38),
-        Eye(0.037, 0.315, 0.159, 0.142, 0.18), Eye(0.407, -0.037, 0.199, 0.136, -0.13),
+    private val vitreousCore = listOf(
+        lens(Material.CHORUS_FRUIT, -0.12, -0.04, -0.27, 1.68, 1.39, 0.59),
+        lens(Material.GLOW_INK_SAC, -0.49, -0.18, -0.20, 1.28, 0.98, 0.43),
+        lens(Material.HEART_OF_THE_SEA, 0.40, 0.14, -0.19, 1.33, 1.04, 0.40),
+        lens(Material.CHORUS_FRUIT, 0.20, -0.47, -0.10, 1.21, 0.85, 0.30),
+        lens(Material.NAUTILUS_SHELL, -0.22, 0.43, -0.22, 1.04, 0.90, 0.28),
+        lens(Material.CHORUS_FRUIT, 0.68, -0.13, -0.21, 0.90, 0.78, 0.33),
     )
 
-    private fun armPoint(arm: Arm, u: Double, t: Double, reach: Double, n: Int): AuroraOffset {
-        val v = 1.0 - u
-        val a = v * v * v
-        val b = 3.0 * v * v * u
-        val c = 3.0 * v * u * u
-        val d = u * u * u
-        fun axis(r: Double, s: Double, k: Double, e: Double) = r + (a * r + b * s + c * k + d * e - r) * reach
-        val ripple = reach * u * sin(TURN * (2.25 * t - 0.89 * u + n * 0.21))
-        return point(axis(arm.root.x, arm.shoulder.x, arm.bend.x, arm.tip.x) + 0.066 * ripple,
-            axis(arm.root.y, arm.shoulder.y, arm.bend.y, arm.tip.y) + 0.165 * ripple,
-            axis(arm.root.z, arm.shoulder.z, arm.bend.z, arm.tip.z) + 0.09 * reach * u * cos(TURN * (2 * t - u + n * 0.23)))
+    // Translucent-looking pale fibres thread *between* the lobes. Their endpoints remain attached.
+    private data class Fibre(val a: AuroraOffset, val knee: AuroraOffset, val b: AuroraOffset,
+        val width: Double, val material: Material)
+
+    private val fibres = listOf(
+        Fibre(p(-1.01, 0.085, -0.03), p(-0.75, 0.62, 0.06), p(-0.07, 0.77, -0.05), 0.110, Material.PRISMARINE),
+        Fibre(p(-0.89, -0.14, 0.02), p(-0.94, -0.47, 0.13), p(-0.46, -0.53, 0.17), 0.105, Material.PURPUR_BLOCK),
+        Fibre(p(-0.46, -0.53, 0.07), p(-0.12, -0.90, 0.10), p(0.31, -0.60, 0.20), 0.085, Material.PRISMARINE),
+        Fibre(p(0.11, 0.75, -0.14), p(0.60, 0.65, -0.07), p(0.87, 0.10, -0.14), 0.100, Material.PURPUR_BLOCK),
+        Fibre(p(0.30, -0.48, -0.01), p(0.94, -0.47, 0.04), p(0.93, 0.16, -0.10), 0.102, Material.PRISMARINE),
+        Fibre(p(-0.35, -0.13, 0.13), p(0.025, 0.12, 0.30), p(0.48, 0.32, 0.16), 0.125, Material.PURPUR_BLOCK),
+    )
+
+    private fun fibre(n: Int, k: Int, t: Double): AuroraMiniaturePart {
+        val f = fibres[n]
+        fun knot(u: Double): AuroraOffset {
+            val v = 1 - u
+            val bend = 2 * u * v
+            val flex = 0.058 * sin(TURN * t + n) * bend
+            return p(v*v*f.a.x + bend*f.knee.x + u*u*f.b.x, v*v*f.a.y + bend*f.knee.y + u*u*f.b.y + flex,
+                v*v*f.a.z + bend*f.knee.z + u*u*f.b.z + flex)
+        }
+        return beam(f.material, knot(k / 3.0), knot((k + 1) / 3.0), f.width, f.width * 0.80)
     }
 
-    private fun shoggoth(index: Int, t: Double): AuroraMiniaturePart {
-        val fracture = storyBeat(t, 0.065, 0.385) * (1 - storyBeat(t, 0.74, 0.95))
-        if (index < ice.size) {
-            val slab = ice[index]
-            val side = if (slab.center.x < 0) -1.0 else 1.0
-            return place(slab, Quaternionf().rotateZ((side * fracture * 0.064).toFloat()),
-                point(side * 0.17 * fracture, -0.045 * fracture, 0.0))
+    private fun aperture(o: Orb, t: Double): Double {
+        val wake = storyBeat(t, o.wake, o.wake + if (o === orbs.first()) 0.19 else 0.14)
+        val sleep = storyBeat(t, 0.76 + o.wake * 0.4, 0.91 + o.wake * 0.24)
+        return 0.055 + 0.945 * wake * (1.0 - sleep)
+    }
+
+    private fun orbitPose(o: Orb, fixation: Double) = Quaternionf()
+        .rotateY((o.yaw * (1.0 - 0.72 * fixation)).toFloat())
+        .rotateX((0.25 + 0.08 * (1.0 - fixation)).toFloat()).rotateZ(o.roll.toFloat())
+
+    private fun ocular(n: Int, layer: Int, t: Double, fixation: Double): AuroraMiniaturePart {
+        val o = orbs[n]
+        val d = o.size
+        val aperture = aperture(o, t)
+        val g = TURN * (t + 0.29 * n)
+        val wobble = 1.0 - fixation
+        val gazeX = d * (0.13 * cos(g) * wobble + 0.025 * fixation)
+        val gazeY = d * (0.08 * sin(g) * wobble - 0.035 * fixation) * aperture
+        val local = when (layer) {
+            0 -> lens(o.membrane, 0.0, 0.0, -0.085 * d, 1.05 * d, d, 0.49 * d)
+            1 -> lens(Material.CLAY_BALL, 0.0, 0.0, 0.13 * d, 0.92 * d, 0.86 * d, 0.22 * d)
+            2 -> lens(o.membrane, 0.0, 0.0, 0.235 * d, 0.89 * d, 0.79 * d, 0.12 * d)
+            3 -> lens(Material.SNOWBALL, 0.0, 0.0, 0.300 * d, 0.86 * d, 0.77 * d * aperture, 0.065 * d)
+            4 -> lens(o.iris, gazeX, gazeY, 0.351 * d, 0.56 * d, 0.61 * d * aperture, 0.048 * d)
+            5 -> storyPart(Material.BLACK_CONCRETE, gazeX, gazeY, 0.388 * d, 0.128 * d, 0.35 * d * aperture, 0.029 * d)
+            else -> lens(Material.SNOWBALL, gazeX - 0.047 * d, gazeY + 0.11 * d * aperture, 0.408 * d,
+                0.08 * d, 0.095 * d * aperture, 0.016 * d)
         }
-        val rise = storyBeat(t, 0.28, 0.55)
-        val escape = storyBeat(t, 0.70, 0.95)
-        val breath = sin(TURN * (2 * t - 0.11))
-        val bodySize = (0.42 + 0.58 * storyBeat(t, 0.065, 0.46)) * (1 - 0.48 * escape) * (1 - storyBeat(t, 0.87, 0.97))
-        val center = point(-0.085 + 0.16 * rise + 0.62 * escape, -0.59 + 0.77 * rise + 0.64 * escape,
-            -0.05 + 0.16 * rise - 0.36 * escape)
-        val facing = Quaternionf().rotateZ((-0.07 + 0.10 * rise + 0.11 * escape + 0.024 * breath).toFloat())
-            .rotateY((-0.16 + 0.34 * rise - 0.69 * escape).toFloat())
-        val local = index - ice.size
-        val firstEye = mantle.size + arms.size * ARM_SEGMENTS
-        val firstChip = firstEye + 2 * eyes.size
-        if (local >= firstChip) {
-            val k = local - firstChip
-            val elapsed = ((t - 0.345 - k * 0.014) / 0.225).coerceIn(0.0, 1.0)
-            val visible = if (elapsed > 0.0 && elapsed < 1.0) sin(PI * elapsed) else 0.0
-            val side = if (k == 1) 1.0 else -1.0
-            return storyPart(if (k == 1) Material.BLUE_ICE else Material.PACKED_ICE,
-                side * (0.28 + (0.36 + 0.08 * k) * elapsed), -0.42 + (0.37 + 0.08 * k) * visible - 0.27 * elapsed,
-                0.13 + 0.17 * elapsed, 0.082 * visible, 0.164 * visible, 0.108 * visible, side * (0.55 + 1.4 * elapsed))
+        val pose = orbitPose(o, fixation)
+        return place(local, pose, p(o.at.x, o.at.y + 0.025 * sin(g), o.at.z))
+    }
+
+    // The main eye has muscular opposing lids. They meet over its cornea and lift away in two arcs.
+    private fun lid(k: Int, t: Double, fixation: Double): AuroraMiniaturePart {
+        val o = orbs.first()
+        val gap = aperture(o, t)
+        val upper = k < 4
+        val side = if (upper) 1.0 else -1.0
+        fun corner(i: Int): AuroraOffset {
+            val u = i / 4.0
+            return p(o.size * (u - 0.5) * 0.76, o.size * side * (0.027 + 0.31 * sin(PI*u) * gap),
+                o.size * (0.297 + 0.062 * sin(PI*u)))
         }
+        val i = k % 4
+        val lid = beam(if (upper) Material.PURPLE_TERRACOTTA else Material.PRISMARINE, corner(i), corner(i + 1),
+            if (upper) 0.082 else 0.060, 0.072)
+        return place(lid, orbitPose(o, fixation), p(o.at.x, o.at.y + 0.025 * sin(TURN*t), o.at.z))
+    }
+
+    private fun yogSothoth(slot: Int, t: Double): AuroraMiniaturePart {
+        val fixation = storyBeat(t, 0.31, 0.56) * (1.0 - storyBeat(t, 0.73, 0.97))
+        val eyeSlots = orbs.size * EYE_LAYERS
+        val coreStart = eyeSlots + yogTendrils.size * TENDRIL_SEGMENTS
+        val fibreStart = coreStart + vitreousCore.size
+        val lidStart = fibreStart + fibres.size * 3
         val part = when {
-            local < mantle.size -> {
-                val lobe = mantle[local]
-                val rolling = sin(TURN * (2 * t + local * 0.19))
-                val swell = 0.040 * rolling
-                val squeeze = storyBeat(t, 0.21, 0.35) * (1 - storyBeat(t, 0.37, 0.52))
-                lobe.copy(center = point(lobe.center.x * (1 - 0.30 * squeeze), lobe.center.y + swell * 0.5, lobe.center.z),
-                    rotation = Quaternionf(lobe.rotation).rotateY((0.265 * rolling).toFloat()),
-                    scale = Vector3f(lobe.scale).mul((1 + swell - 0.23 * squeeze).toFloat(),
-                        (1 - swell + 0.23 * squeeze).toFloat(), 1f))
+            slot < eyeSlots -> ocular(slot / EYE_LAYERS, slot % EYE_LAYERS, t, fixation)
+            slot < coreStart -> {
+                val arm = (slot - eyeSlots) / TENDRIL_SEGMENTS
+                curl(yogTendrils[arm], arm, (slot - eyeSlots) % TENDRIL_SEGMENTS, t, 0.77 + 0.23 * fixation)
             }
-            local < firstEye -> {
-                val slot = local - mantle.size
-                val n = slot / ARM_SEGMENTS
-                val k = slot % ARM_SEGMENTS
-                val arm = arms[n]
-                val reach = 0.20 + 0.80 * storyBeat(t, 0.09 + n * 0.025, 0.43 + n * 0.024) - 0.35 * escape
-                val width = arm.girth * (1 - 0.84 * (k + 0.35) / ARM_SEGMENTS) * (0.68 + 0.32 * reach)
-                beam(arm.skin, armPoint(arm, k.toDouble() / ARM_SEGMENTS, t, reach, n),
-                    armPoint(arm, (k + 1.0) / ARM_SEGMENTS, t, reach, n), width, width * 1.08)
+            slot < fibreStart -> vitreousCore[slot - coreStart]
+            slot < lidStart -> fibre((slot - fibreStart) / 3, (slot - fibreStart) % 3, t)
+            else -> lid(slot - lidStart, t, fixation)
+        }
+        val facing = Quaternionf().rotateY((-0.33 + 0.40 * fixation + 0.06 * sin(TURN * t)).toFloat())
+            .rotateZ((-0.055 + 0.055 * sin(TURN * t)).toFloat())
+        return place(part, facing, p(0.0, 0.032 * sin(TURN * t), 0.05 * fixation))
+    }
+
+    private val hood = buildList {
+        // A slumped asymmetric arch surrounds one deep empty cavity. Nothing is inset as a face.
+        add(storyPart(Material.BLACK_CONCRETE, -0.085, 0.83, -0.02, 0.44, 0.60, 0.24, -0.07, -0.11))
+        add(beam(Material.BROWN_TERRACOTTA, p(-0.36, 0.50, -0.08), p(-0.24, 1.12, -0.18), 0.32, 0.39))
+        add(beam(Material.YELLOW_TERRACOTTA, p(0.19, 0.51, -0.17), p(0.15, 1.12, -0.18), 0.27, 0.38))
+        add(beam(Material.YELLOW_TERRACOTTA, p(-0.33, 0.56, 0.21), p(-0.33, 0.94, 0.26), 0.15, 0.22))
+        add(beam(Material.YELLOW_WOOL, p(-0.33, 0.94, 0.26), p(-0.20, 1.22, 0.19), 0.14, 0.21))
+        add(beam(Material.YELLOW_TERRACOTTA, p(-0.20, 1.22, 0.19), p(0.13, 1.025, 0.22), 0.20, 0.25))
+        add(beam(Material.YELLOW_WOOL, p(0.13, 1.025, 0.22), p(0.20, 0.76, 0.24), 0.11, 0.20))
+        add(beam(Material.STRIPPED_OAK_WOOD, p(0.20, 0.76, 0.24), p(0.12, 0.56, 0.17), 0.105, 0.16))
+        add(beam(Material.YELLOW_TERRACOTTA, p(-0.30, 0.55, 0.00), p(-0.58, 0.45, -0.15), 0.25, 0.30))
+        add(beam(Material.STRIPPED_OAK_WOOD, p(0.08, 0.56, 0.02), p(0.57, 0.44, -0.14), 0.24, 0.34))
+        // Unequal flattened metal tines follow the incline of the hood rather than forming a hat.
+        val roots = listOf(p(-0.31, 1.02, 0.045), p(-0.19, 1.16, 0.04), p(-0.03, 1.15, -0.10), p(0.13, 1.04, -0.025))
+        val tips = listOf(p(-0.49, 1.28, -0.09), p(-0.27, 1.52, -0.10), p(0.06, 1.39, -0.24), p(0.34, 1.31, -0.16))
+        for (i in roots.indices) {
+            val a = roots[i]
+            val b = tips[i]
+            val joint = p(a.x * 0.44 + b.x * 0.56, a.y * 0.44 + b.y * 0.56, a.z * 0.44 + b.z * 0.56)
+            add(beam(Material.RAW_GOLD_BLOCK, a, joint, 0.095, 0.091))
+            add(beam(Material.STRIPPED_BIRCH_WOOD, joint, b, 0.044, 0.047))
+        }
+    }
+
+    // The lower hem is cut to different lengths. Individual folds start at the same high mantle and
+    // follow it in depth, so their undersides are visible to a viewer standing under the sky scene.
+    private data class Fold(val shoulder: Double, val hem: Double, val y: Double, val z: Double,
+        val width: Double, val sweep: Double, val cloth: Material)
+
+    private val folds = listOf(
+        Fold(-0.38, -0.43, -1.02, -0.32, 0.39, -0.26, Material.BROWN_TERRACOTTA),
+        Fold(0.38, 0.49, -1.14, -0.36, 0.37, 0.24, Material.YELLOW_TERRACOTTA),
+        Fold(-0.50, -0.67, -0.94, -0.17, 0.33, -0.47, Material.YELLOW_TERRACOTTA),
+        Fold(0.48, 0.72, -0.60, -0.19, 0.32, 0.45, Material.STRIPPED_OAK_WOOD),
+        Fold(-0.41, -0.45, -1.39, 0.00, 0.30, -0.48, Material.STRIPPED_OAK_WOOD),
+        Fold(0.37, 0.49, -1.22, -0.03, 0.33, 0.54, Material.YELLOW_TERRACOTTA),
+        Fold(-0.29, -0.24, -0.87, 0.19, 0.28, -0.47, Material.YELLOW_WOOL),
+        Fold(0.22, 0.22, -0.93, 0.18, 0.28, 0.55, Material.YELLOW_WOOL),
+        Fold(-0.15, -0.06, -1.07, 0.28, 0.19, -0.49, Material.YELLOW_TERRACOTTA),
+        Fold(0.085, 0.09, -0.65, 0.28, 0.19, 0.48, Material.STRIPPED_OAK_WOOD),
+    )
+
+    private fun cloth(n: Int, k: Int, t: Double, open: Double): AuroraMiniaturePart {
+        val f = folds[n]
+        val side = if (f.shoulder < 0) -1.0 else 1.0
+        fun seam(u: Double): AuroraOffset {
+            val lower = u * u
+            val gust = sin(TURN * (t - u * 0.22 + n * 0.045))
+            return p(f.shoulder * (1 - u) + (f.hem + f.sweep * open) * u +
+                    side * sin(PI * u) * (0.06 + 0.27 * open) + 0.064 * lower * gust,
+                (0.57 - 0.14 * kotlin.math.abs(f.shoulder)) * (1 - u) + (f.y + open * 0.13) * u
+                    + 0.054 * lower * gust,
+                0.015 * (1 - u) + f.z * u + 0.18 * sin(PI * u) + lower * (0.12 * gust - 0.16 * open))
+        }
+        val u = k.toDouble() / CLOTH_SEGMENTS
+        val width = f.width * (1.06 - if (k == CLOTH_SEGMENTS - 1) 0.39 else 0.10 * u)
+        return beam(f.cloth, seam(u), seam((k + 1.0) / CLOTH_SEGMENTS), width, 0.12 + 0.025 * (n % 3))
+    }
+
+    private val rootsBelow = listOf(
+        Tendril(p(-0.14, 0.31, 0.01), p(-0.23, -0.43, 0.20), p(-1.04, -0.59, 0.27), p(-1.03, -1.19, 0.17), 0.22, Material.PURPLE_TERRACOTTA),
+        Tendril(p(0.16, 0.33, -0.01), p(0.71, -0.16, 0.18), p(0.62, -1.12, -0.11), p(1.03, -0.99, 0.17), 0.21, Material.POLISHED_BLACKSTONE),
+        Tendril(p(-0.04, 0.20, 0.08), p(-0.54, -0.34, 0.19), p(-0.45, -1.58, 0.29), p(-0.03, -1.28, 0.21), 0.23, Material.CRIMSON_PLANKS),
+        Tendril(p(0.10, 0.18, 0.12), p(0.26, -0.54, 0.34), p(0.07, -1.38, 0.25), p(0.62, -1.36, 0.41), 0.19, Material.CRIMSON_HYPHAE),
+        Tendril(p(-0.04, 0.32, -0.14), p(0.43, -0.31, -0.14), p(-0.05, -0.84, 0.02), p(-0.64, -1.19, 0.46), 0.16, Material.POLISHED_BLACKSTONE),
+    )
+
+    private val bloodEyes = listOf(
+        Orb(p(-0.03, 0.33, 0.13), 0.30, -0.08, -0.37, Material.SPIDER_EYE, Material.RED_DYE, 0.09),
+        Orb(p(0.19, 0.04, 0.15), 0.34, 0.26, 0.45, Material.SPIDER_EYE, Material.RED_DYE, 0.19),
+        Orb(p(-0.21, -0.14, 0.20), 0.25, -0.16, -0.39, Material.SPIDER_EYE, Material.RED_DYE, 0.12),
+        Orb(p(0.01, -0.40, 0.22), 0.22, 0.12, -0.06, Material.SPIDER_EYE, Material.RED_DYE, 0.25),
+    )
+
+    private fun bloodEye(n: Int, layer: Int, t: Double, open: Double): AuroraMiniaturePart {
+        val e = bloodEyes[n]
+        val d = e.size
+        val awake = 0.09 + 0.91 * storyBeat(open, e.wake, 0.65 + e.wake)
+        val look = 0.045 * d * sin(TURN * t)
+        val local = when (layer) {
+            0 -> lens(e.membrane, 0.0, 0.0, 0.0, 1.28 * d, 0.99 * d, 0.12)
+            1 -> lens(Material.SNOWBALL, 0.0, 0.0, 0.075, d, d * 0.68 * awake, 0.045)
+            2 -> lens(e.iris, look, -0.025 * d, 0.101, 0.50 * d, 0.58 * d * awake, 0.025)
+            else -> lens(Material.BLACK_DYE, look, -0.025 * d, 0.121, 0.21 * d, 0.48 * d * awake, 0.014)
+        }
+        return place(local, Quaternionf().rotateY(e.yaw.toFloat()).rotateX(0.24f).rotateZ(e.roll.toFloat()), e.at)
+    }
+
+    private fun claw(k: Int, t: Double, reach: Double): AuroraMiniaturePart {
+        val shoulder = p(0.38, 0.45, -0.02)
+        val elbow = p(0.57 + 0.38 * reach, 0.11 + 0.24 * reach, -0.10 + 0.14 * reach)
+        val palm = p(0.46 + 0.79 * reach, -0.05 + 0.65 * reach, 0.13 + 0.65 * reach)
+        if (k == 0) return beam(Material.YELLOW_TERRACOTTA, shoulder, elbow, 0.24, 0.25)
+        if (k == 1) return beam(Material.CRIMSON_HYPHAE, elbow, palm, 0.15, 0.15)
+        if (k == 2) return lens(Material.INK_SAC, palm.x, palm.y, palm.z, 0.26, 0.21, 0.15)
+        val finger = (k - 3) / 2
+        val pos = (k - 3) % 2
+        val fan = finger - 1.5
+        val bend = sin(TURN * t - 0.38 * finger)
+        val root = p(palm.x + 0.024 * finger, palm.y + 0.038 * fan, palm.z)
+        val knuckle = p(palm.x + 0.12 + (0.075 - 0.027 * fan) * reach, palm.y + fan * (0.05 + 0.092 * reach),
+            palm.z + 0.14 + 0.04 * finger)
+        val tip = p(knuckle.x + 0.13 - 0.029 * finger, knuckle.y - 0.135 + 0.035 * bend + 0.022 * fan,
+            knuckle.z + 0.15 + 0.05 * reach)
+        return if (pos == 0) beam(Material.CRIMSON_HYPHAE, root, knuckle, 0.075, 0.075)
+        else beam(Material.DRIPSTONE_BLOCK, knuckle, tip, 0.043, 0.044)
+    }
+
+    private val mantleHeart = listOf(
+        beam(Material.POLISHED_BLACKSTONE, p(-0.04, 0.53, -0.03), p(-0.22, 0.05, 0.05), 0.28, 0.24),
+        beam(Material.PURPLE_TERRACOTTA, p(0.035, 0.49, -0.08), p(0.25, 0.01, 0.05), 0.23, 0.21),
+        beam(Material.POLISHED_BLACKSTONE, p(-0.22, 0.09, 0.035), p(0.01, -0.44, 0.14), 0.19, 0.14),
+        beam(Material.NETHERITE_BLOCK, p(0.22, 0.12, -0.06), p(-0.16, -0.27, 0.10), 0.18, 0.13),
+    )
+
+    // Strips split from the cloth at the hem; each narrows to a single tattered point.
+    private fun tatters(n: Int, k: Int, t: Double, open: Double): AuroraMiniaturePart {
+        val foldIndex = when (n) { 0 -> 2; 1 -> 4; else -> 5 }
+        val fold = folds[foldIndex]
+        val side = if (fold.hem < 0) -1.0 else 1.0
+        val root = cloth(foldIndex, 2, t, open).center
+        fun knot(u: Double): AuroraOffset {
+            val ripple = sin(TURN * (t - u * 0.19 + 0.17 * n))
+            return p(root.x + side * ((0.08 + 0.21 * open) * u + 0.15 * sin(PI * u)) + 0.081 * u * ripple,
+                root.y - (0.60 + 0.065 * n) * u + 0.042 * u * ripple,
+                root.z + (0.13 - n * 0.09) * u + 0.12 * u * ripple)
+        }
+        return beam(if (n == 1) Material.YELLOW_WOOL else Material.YELLOW_TERRACOTTA,
+            knot(k / 3.0), knot((k + 1) / 3.0), 0.127 - 0.038 * k, 0.084 - 0.025 * k)
+    }
+
+    private fun hastur(slot: Int, t: Double): AuroraMiniaturePart {
+        val open = storyBeat(t, 0.11, 0.49) * (1.0 - storyBeat(t, 0.73, 0.97))
+        val reach = storyBeat(t, 0.32, 0.61) * (1.0 - storyBeat(t, 0.70, 0.91))
+        val foldStart = hood.size
+        val tendrilStart = foldStart + folds.size * CLOTH_SEGMENTS
+        val eyeStart = tendrilStart + rootsBelow.size * TENDRIL_SEGMENTS
+        val clawStart = eyeStart + bloodEyes.size * 4
+        val heartStart = clawStart + 11
+        val tatterStart = heartStart + mantleHeart.size
+        val part = when {
+            slot < foldStart -> hood[slot]
+            slot < tendrilStart -> cloth((slot - foldStart) / CLOTH_SEGMENTS, (slot - foldStart) % CLOTH_SEGMENTS, t, open)
+            slot < eyeStart -> {
+                val i = (slot - tendrilStart) / TENDRIL_SEGMENTS
+                curl(rootsBelow[i], i, (slot - tendrilStart) % TENDRIL_SEGMENTS, t, 0.67 + 0.33 * open)
             }
-            else -> {
-                val k = (local - firstEye) / 2
-                val e = eyes[k]
-                val blinkAt = 0.54 + 0.024 * k
-                val blink = storyBeat(t, blinkAt, blinkAt + 0.018) * (1 - storyBeat(t, blinkAt + 0.018, blinkAt + 0.046))
-                val height = 1 - 0.86 * blink
-                val drift = 0.017 * sin(TURN * (2 * t + k * 0.23))
-                if ((local - firstEye) % 2 == 0) {
-                    storyPart(Material.RAW_GOLD, e.x, e.y + drift, e.z, e.size * 1.12, e.size * 0.84 * height,
-                        e.size * 2.7, e.tilt)
-                } else {
-                    storyPart(Material.BLACK_CONCRETE, e.x + 0.008 * breath, e.y + drift, e.z + e.size * 0.097,
-                        e.size * 0.183, e.size * 0.497 * height, e.size * 0.075, e.tilt)
-                }
-            }
+            slot < clawStart -> bloodEye((slot - eyeStart) / 4, (slot - eyeStart) % 4, t, open)
+            slot < heartStart -> claw(slot - clawStart, t, reach)
+            slot < tatterStart -> mantleHeart[slot - heartStart]
+            else -> tatters((slot - tatterStart) / 3, (slot - tatterStart) % 3, t, open)
         }
-        return place(part, facing, center, bodySize)
-    }
-
-    private val gate = buildList {
-        add(storyPart(Material.DEEPSLATE_TILES, 0.0, -0.80, 0.0, 1.49, 0.14, 0.43))
-        add(storyPart(Material.WEATHERED_CUT_COPPER, 0.0, -0.696, 0.0, 1.34, 0.074, 0.36))
-        for (s in listOf(-1.0, 1.0)) {
-            add(storyPart(Material.CHISELED_TUFF, s * 0.595, -0.080, 0.0, 0.185, 1.16, 0.29))
-            add(storyPart(Material.OXIDIZED_CHISELED_COPPER, s * 0.595, -0.535, 0.0, 0.242, 0.22, 0.34))
-            add(storyPart(Material.WEATHERED_CUT_COPPER, s * 0.595, 0.492, 0.0, 0.247, 0.115, 0.33))
-            add(beam(Material.WEATHERED_CUT_COPPER, point(s * 0.59, 0.53), point(s * 0.42, 0.765), 0.145, 0.278))
-            add(beam(Material.WEATHERED_CUT_COPPER, point(s * 0.42, 0.765), point(0.0, 1.005), 0.142, 0.278))
-            add(storyPart(Material.EXPOSED_CUT_COPPER, s * 0.595, 0.010, 0.150, 0.043, 0.886, 0.028))
-            add(storyPart(Material.CHISELED_COPPER, s * 0.645, 0.608, -0.012, 0.120, 0.120, 0.226, PI / 4))
-        }
-        add(storyPart(Material.CHISELED_COPPER, 0.0, 1.005, 0.025, 0.175, 0.175, 0.297, PI / 4))
-    }
-
-    private val leaf = buildList {
-        // Four pieces surround a through-hole. The brass escutcheon and moving bit share its center.
-        add(storyPart(Material.STRIPPED_CRIMSON_STEM, -0.45, -0.045, 0.0, 0.124, 1.21, 0.126))
-        add(storyPart(Material.STRIPPED_CRIMSON_STEM, 0.152, -0.045, 0.0, 0.729, 1.21, 0.126))
-        add(storyPart(Material.STRIPPED_CRIMSON_STEM, LOCK_X, 0.296, 0.0, 0.18, 0.53, 0.126))
-        add(storyPart(Material.STRIPPED_CRIMSON_STEM, LOCK_X, -0.442, 0.0, 0.18, 0.418, 0.126))
-        add(storyPart(Material.STRIPPED_CRIMSON_STEM, 0.0, 0.609, 0.0, 0.83, 0.099, 0.123))
-        add(storyPart(Material.STRIPPED_CRIMSON_STEM, 0.0, 0.700, 0.0, 0.60, 0.086, 0.119))
-        add(storyPart(Material.STRIPPED_CRIMSON_STEM, 0.0, 0.787, 0.0, 0.33, 0.092, 0.116))
-        val escutcheon = listOf(-0.067 to 0.133, 0.067 to 0.133, 0.124 to 0.042, 0.056 to -0.032,
-            0.102 to -0.144, -0.102 to -0.144, -0.056 to -0.032, -0.124 to 0.042)
-        for (i in escutcheon.indices) {
-            val (x1, y1) = escutcheon[i]
-            val (x2, y2) = escutcheon[(i + 1) % escutcheon.size]
-            add(beam(Material.EXPOSED_CUT_COPPER, point(LOCK_X + x1, LOCK_Y + y1, 0.083),
-                point(LOCK_X + x2, LOCK_Y + y2, 0.083), 0.039, 0.046))
-        }
-        for (side in listOf(-1.0, 1.0)) {
-            val shoulder = point(0.032 + side * 0.25, 0.325, 0.080)
-            add(beam(Material.WEATHERED_CUT_COPPER, shoulder, point(0.032, 0.710, 0.080), 0.044, 0.030))
-            add(beam(Material.WEATHERED_CUT_COPPER, shoulder, point(0.032, 0.074, 0.080), 0.040, 0.030))
-            add(beam(Material.EXPOSED_CUT_COPPER, point(side * 0.307, -0.313, 0.080),
-                point(0.032, -0.578, 0.080), 0.049, 0.034))
-        }
-    }
-
-    // The bit is at z = 0. The shaft, toothed wards and open bow turn around its insertion axis.
-    private val key = buildList {
-        add(storyPart(Material.IRON_BLOCK, 0.0, 0.0, 0.292, 0.081, 0.084, 0.584))
-        add(storyPart(Material.SMOOTH_QUARTZ, 0.0, -0.049, 0.066, 0.089, 0.174, 0.067))
-        add(storyPart(Material.IRON_BLOCK, 0.0, -0.050, 0.174, 0.092, 0.128, 0.070))
-        add(storyPart(Material.POLISHED_ANDESITE, 0.0, 0.0, 0.367, 0.119, 0.121, 0.049))
-        add(storyPart(Material.SMOOTH_QUARTZ, 0.0, 0.0, 0.545, 0.129, 0.134, 0.064))
-        val bow = listOf(0.552 to 0.0, 0.625 to 0.172, 0.747 to 0.223, 0.812 to 0.156,
-            0.936 to 0.219, 1.044 to 0.143, 1.106 to 0.0, 1.044 to -0.143, 0.936 to -0.219,
-            0.812 to -0.156, 0.747 to -0.223, 0.625 to -0.172)
-        for (i in bow.indices) {
-            val (z1, y1) = bow[i]
-            val (z2, y2) = bow[(i + 1) % bow.size]
-            add(beam(Material.IRON_BLOCK, point(0.0, y1, z1), point(0.0, y2, z2), 0.059, 0.067))
-        }
-    }
-
-    private val moon = buildList {
-        // Upturned crescent built from only the lit material. Open sky remains between its horns.
-        fun curve(k: Int): AuroraOffset {
-            val a = -PI * 0.69 + PI * 0.69 * k / 4
-            return point(0.36 * sin(a), -0.34 * cos(a), 0.0)
-        }
-        for (i in 0 until 8) {
-            val w = 0.033 + 0.102 * sin(PI * (i + 0.5) / 8)
-            add(beam(Material.PEARLESCENT_FROGLIGHT, curve(i), curve(i + 1), w, 0.12))
-        }
-        add(storyPart(Material.SNOWBALL, -0.045, 0.062, 0.014, 0.281, 0.281, 1.72))
-    }
-
-    private fun silverKey(index: Int, t: Double): AuroraMiniaturePart {
-        val insert = storyBeat(t, 0.12, 0.368)
-        val turn = storyBeat(t, 0.39, 0.525)
-        val withdraw = storyBeat(t, 0.55, 0.70)
-        val opening = storyBeat(t, 0.55, 0.782) * (1 - storyBeat(t, 0.895, 0.995))
-        val gateFacing = Quaternionf().rotateY(GATE_YAW.toFloat())
-        val gateCenter = point(0.36, -0.06, 0.0)
-        if (index < gate.size) return place(gate[index], gateFacing, gateCenter)
-        var slot = index - gate.size
-        if (slot < leaf.size) {
-            val panel = leaf[slot]
-            val p = panel.center
-            val swing = Quaternionf().rotateY((-1.56 * opening).toFloat())
-            val offHinge = panel.copy(center = point(p.x - HINGE_X, p.y, p.z))
-            return place(place(offHinge, swing, point(HINGE_X, 0.0)), gateFacing, gateCenter)
-        }
-        slot -= leaf.size
-        if (slot < key.size) {
-            val keySize = storyBeat(t, 0.015, 0.095) * (1 - storyBeat(t, 0.628, 0.742))
-            val keyFacing = Quaternionf().rotateY((-0.55 * (1 - insert) - 0.45 * withdraw).toFloat())
-                .rotateZ((-1.45 * turn).toFloat())
-            val tip = point(LOCK_X - 0.255 * (1 - insert) - 0.22 * withdraw,
-                LOCK_Y + 0.10 * (1 - insert) + 0.116 * withdraw, 0.65 - 0.925 * insert + 0.97 * withdraw)
-            return place(place(key[slot], keyFacing, tip, keySize), gateFacing, gateCenter)
-        }
-        slot -= key.size
-        val rise = storyBeat(t, 0.63, 0.808)
-        val sink = storyBeat(t, 0.884, 0.976)
-        val visible = rise * (1 - sink)
-        val moonFacing = Quaternionf().rotateZ((0.20 + 0.23 * rise).toFloat())
-        val lunar = if (slot == moon.lastIndex) {
-            val orb = moon[slot]
-            orb.copy(center = point(-0.045 + 0.074 * sin(PI * rise), 0.331 - 0.219 * rise, orb.center.z))
-        } else moon[slot]
-        return place(place(lunar, moonFacing, point(-0.10, -0.62 + 0.86 * rise - 0.31 * sink, -0.22), visible),
-            gateFacing, gateCenter)
+        val facing = Quaternionf().rotateY((-0.31 + 0.15 * reach).toFloat())
+            .rotateX((0.055 + 0.09 * reach).toFloat()).rotateZ((0.05 - 0.055 * reach).toFloat())
+        return place(part, facing, p(-0.07 + 0.02 * reach, 0.034 * sin(TURN * t), 0.09 * reach))
     }
 
     override fun partCount(shape: AuroraShape): Int = when (shape) {
-        AuroraShape.SHOGGOTH_ESCAPE -> ice.size + mantle.size + arms.size * ARM_SEGMENTS + eyes.size * 2 + 3
-        AuroraShape.SILVER_KEY -> gate.size + leaf.size + key.size + moon.size
+        AuroraShape.YOG_SOTHOTH -> orbs.size * EYE_LAYERS + yogTendrils.size * TENDRIL_SEGMENTS + vitreousCore.size + fibres.size * 3 + 8
+        AuroraShape.HASTUR -> hood.size + folds.size * CLOTH_SEGMENTS + rootsBelow.size * TENDRIL_SEGMENTS + bloodEyes.size * 4 + 11 + mantleHeart.size + 9
         else -> error("Not a forbidden story: $shape")
     }
 
     override fun part(shape: AuroraShape, index: Int, t: Double): AuroraMiniaturePart = when (shape) {
-        AuroraShape.SHOGGOTH_ESCAPE -> shoggoth(index, t)
-        AuroraShape.SILVER_KEY -> silverKey(index, t)
+        AuroraShape.YOG_SOTHOTH -> yogSothoth(index, t)
+        AuroraShape.HASTUR -> hastur(index, t)
         else -> error("Not a forbidden story: $shape")
     }
 }

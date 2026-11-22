@@ -73,8 +73,10 @@ class AuroraSkyMiniaturesTest : FreeSpec({
         }
     }
 
-    "the station and destroyer keep their hulls visible across the loop boundary" {
-        for (shape in listOf(AuroraShape.DEATH_STAR, AuroraShape.IMPERIAL_STAR_DESTROYER)) {
+    "the deities and Imperial fleet hold their poses across the loop boundary" {
+        for (shape in listOf(AuroraShape.CTHULHU, AuroraShape.DAGON, AuroraShape.HASTUR, AuroraShape.AZATHOTH,
+            AuroraShape.YOG_SOTHOTH, AuroraShape.NYARLATHOTEP, AuroraShape.SHUB_NIGGURATH,
+            AuroraShape.DEATH_STAR, AuroraShape.IMPERIAL_STAR_DESTROYER)) {
             val start = storyPose(shape, 0.0)
             val end = storyPose(shape, 1.0)
             withClue(shape) {
@@ -293,13 +295,14 @@ internal val storyShapes = listOf(
     AuroraShape.ORK_KROOZER,
     AuroraShape.IMPERIAL_AQUILA,
     AuroraShape.MECHANICUS_SIGIL,
-    AuroraShape.KRAKEN_DRAG,
-    AuroraShape.RLYEH_RISING,
-    AuroraShape.DAGON_TIDE,
-    AuroraShape.NIGHT_GAUNT,
-    AuroraShape.COLOUR_FROM_SPACE,
-    AuroraShape.SHOGGOTH_ESCAPE,
-    AuroraShape.SILVER_KEY,
+    AuroraShape.CTHULHU,
+    AuroraShape.DAGON,
+    AuroraShape.HASTUR,
+    AuroraShape.AZATHOTH,
+    AuroraShape.YOG_SOTHOTH,
+    AuroraShape.NYARLATHOTEP,
+    AuroraShape.SHUB_NIGGURATH,
+    AuroraShape.SAKURA_IDOL,
     AuroraShape.DEATH_STAR,
     AuroraShape.IMPERIAL_STAR_DESTROYER,
 )

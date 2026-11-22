@@ -71,6 +71,7 @@ enum class AuroraWeather { ANY, CLEAR, RAIN, THUNDER }
 enum class AuroraShape(
     internal val storyParts: AuroraStoryParts? = null,
     internal val storyDurationTicks: Int = 0,
+    internal val loopsAtFullSize: Boolean = false,
 ) {
     POINT, LINE, CUBE, RING, CIRCLE, SPHERE, WAVE, HELIX, ARC, CRYSTAL, STAR, METEOR,
     TRACK_SPIRAL, TRACK_PAIR, TRACK_SCATTER, TRACK_LENS, TRACK_KNOT,
@@ -90,21 +91,23 @@ enum class AuroraShape(
     SLIME_ANVIL(AuroraPhysicsStories, 126),
     SHATTERED_SWORD(AuroraMagicStories, 134),
     REVERSE_FIREWORK(AuroraMagicStories, 121),
-    FROG_RAIN(AuroraFrogRain, 160),
+    FROG_RAIN(AuroraFrogRain, 160, loopsAtFullSize = true),
     VOID_CATHEDRAL(AuroraVoidCathedral, 240),
     SOLAR_CORSAIR(AuroraSolarCorsair, 240),
     ORK_KROOZER(AuroraOrkKroozer, 220),
     IMPERIAL_AQUILA(AuroraImperialAquila, 200),
     MECHANICUS_SIGIL(AuroraMechanicusSigil, 220),
-    KRAKEN_DRAG(AuroraAbyssalStories, 240),
-    RLYEH_RISING(AuroraAbyssalStories, 260),
-    DAGON_TIDE(AuroraAbyssalStories, 220),
-    NIGHT_GAUNT(AuroraDreamlandStories, 212),
-    COLOUR_FROM_SPACE(AuroraDreamlandStories, 254),
-    SHOGGOTH_ESCAPE(AuroraForbiddenStories, 260),
-    SILVER_KEY(AuroraForbiddenStories, 280),
-    DEATH_STAR(AuroraImperialFleet, 240),
-    IMPERIAL_STAR_DESTROYER(AuroraImperialFleet, 220);
+    KRAKEN_DRAG, RLYEH_RISING, DAGON_TIDE, NIGHT_GAUNT, COLOUR_FROM_SPACE, SHOGGOTH_ESCAPE, SILVER_KEY,
+    CTHULHU(AuroraAbyssalStories, 260, loopsAtFullSize = true),
+    DAGON(AuroraAbyssalStories, 220, loopsAtFullSize = true),
+    HASTUR(AuroraForbiddenStories, 260, loopsAtFullSize = true),
+    AZATHOTH(AuroraAzathoth, 260, loopsAtFullSize = true),
+    YOG_SOTHOTH(AuroraForbiddenStories, 240, loopsAtFullSize = true),
+    NYARLATHOTEP(AuroraDreamlandStories, 240, loopsAtFullSize = true),
+    SHUB_NIGGURATH(AuroraDreamlandStories, 260, loopsAtFullSize = true),
+    SAKURA_IDOL(AuroraSakuraIdol, 220),
+    DEATH_STAR(AuroraImperialFleet, 240, loopsAtFullSize = true),
+    IMPERIAL_STAR_DESTROYER(AuroraImperialFleet, 220, loopsAtFullSize = true);
 
     internal val isStory: Boolean get() = storyParts != null
     internal val isMiniature: Boolean get() = this == FEATHER_GLIDER || isStory
@@ -113,7 +116,8 @@ enum class AuroraShape(
 
     /** Recognized in older configuration files, with no active profile or command. */
     internal val isRetired: Boolean get() = when (this) {
-        JELLYFISH, MANTA_RAY, ASTRAL_PENDULUM, TWIN_SAMARAS, SKY_PHONOGRAPH -> true
+        JELLYFISH, MANTA_RAY, ASTRAL_PENDULUM, TWIN_SAMARAS, SKY_PHONOGRAPH,
+        KRAKEN_DRAG, RLYEH_RISING, DAGON_TIDE, NIGHT_GAUNT, COLOUR_FROM_SPACE, SHOGGOTH_ESCAPE, SILVER_KEY -> true
         else -> false
     }
 

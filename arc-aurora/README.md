@@ -120,13 +120,14 @@ These sky scenes can be tried individually. They use vanilla item displays and a
 | `ORK_KROOZER` | A patchwork armoured kroozer lurches forward behind its jaw of tusks. |
 | `IMPERIAL_AQUILA` | A gold double-headed eagle unfolds its layered wings and tail. |
 | `MECHANICUS_SIGIL` | A toothed cog turns around a half-mechanical skull as its red lens lights up. |
-| `KRAKEN_DRAG` | Tentacles coil around a sailing ship and drag it under. |
-| `RLYEH_RISING` | R’lyeh rises, its stairways part and a crooked doorway opens. |
-| `DAGON_TIDE` | Dagon breaches a breaking wave and plunges back into the sea. |
-| `NIGHT_GAUNT` | A faceless night-gaunt folds its wings to dive, then flares them wide. |
-| `COLOUR_FROM_SPACE` | A split meteor sends an alien colour through the roots and crown of a dead tree. |
-| `SHOGGOTH_ESCAPE` | An amber-eyed shoggoth squeezes its tendrils through a crack in the ice. |
-| `SILVER_KEY` | A silver key turns in the dream gate and reveals a moon beyond it. |
+| `CTHULHU` | Cthulhu spreads his bat wings while the tentacles of his face uncoil. |
+| `DAGON` | A deep-sea giant opens its toothed jaws and reaches out with webbed claws. |
+| `HASTUR` | The King in Yellow opens his tattered mantle to reveal watching eyes and black tendrils. |
+| `AZATHOTH` | A jagged maw opens in a heaving mass of blind eyes and suckered tentacles. |
+| `YOG_SOTHOTH` | A cluster of opalescent eyes turns within a tangle of living veins. |
+| `NYARLATHOTEP` | A pharaoh reveals a crimson head tendril and a rib cage full of watching eyes. |
+| `SHUB_NIGGURATH` | Spiral horns crown a knotted mass of eyes, hooves and writhing tentacles. |
+| `SAKURA_IDOL` | A pink-haired performer turns, winks and sends a heart from her palm. |
 | `DEATH_STAR` | Streams of green light converge above the dish and fire as one beam. |
 | `IMPERIAL_STAR_DESTROYER` | An Imperial Star Destroyer banks past, revealing its wedge-shaped hull and engines. |
 
@@ -634,7 +635,7 @@ Run from the repository root with JDK 25:
 ```
 
 The expected local runtime artifact is
-`arc-aurora/build/libs/ArcAurora-0.1.22.jar`. The public Maven API artifact
+`arc-aurora/build/libs/ArcAurora-0.1.23.jar`. The public Maven API artifact
 `ru.ruscrafting.arc:arc-aurora-api:0.1.0` was verified on 2026-10-29 in the
 [RusCrafting repository](https://repo.rus-crafting.ru/grocermc/ru/ruscrafting/arc/arc-aurora-api/0.1.0/arc-aurora-api-0.1.0.pom).
 That API publication does not establish a runtime-plugin build, delivery,
