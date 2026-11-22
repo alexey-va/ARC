@@ -1,10 +1,17 @@
 package ru.arc.listeners
 
+import io.papermc.paper.event.player.PrePlayerAttackEntityEvent
 import org.bukkit.attribute.Attribute
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
+import org.bukkit.event.entity.EntityDamageEvent
+import org.bukkit.event.entity.PlayerDeathEvent
+import org.bukkit.event.player.PlayerInputEvent
+import org.bukkit.event.player.PlayerInteractAtEntityEvent
+import org.bukkit.event.player.PlayerInteractEntityEvent
+import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerKickEvent
 import org.bukkit.event.player.PlayerQuitEvent
@@ -30,9 +37,19 @@ class JoinListener : Listener, AutoCloseable {
     }
 
     private val config = ConfigManager.of(ARC.instance.dataFolder.toPath(), "modules/misc.yml")
-    private val invMap: MutableMap<UUID, String> = ConcurrentHashMap()
+    private val arrivalProtection = SurvivalArrivalProtection(
+        enabled = { config.bool("join.invulnerable-enabled", true) },
+        runLater = { ticks, action -> delayed(ticks.ticks) { action() } },
+    )
     private val healthTraceSessions: MutableMap<UUID, UUID> = ConcurrentHashMap()
     private val builderSurvivalGuard = BuilderSurvivalGuard()
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    fun onArrival(event: PlayerJoinEvent) = arrivalProtection.join(
+        event.player,
+        config.integer("join.invulnerable-ticks", 20 * 7).toLong(),
+        untilActivity = ARC.serverName == "survival",
+    )
 
     @EventHandler
     fun onPlayerJoin(event: PlayerJoinEvent) {
@@ -42,21 +59,43 @@ class JoinListener : Listener, AutoCloseable {
         ChatModeService.track(event.player.uniqueId)
         JobsModule.trackPlayer(event.player.uniqueId)
         SyncManager.playerJoin(event.player.uniqueId)
-        invulnerable(event.player)
         fullHeal(event.player)
         AuditManager.join(event.player)
     }
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    fun onMovementInput(event: PlayerInputEvent) = arrivalProtection.input(event)
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    fun onInteraction(event: PlayerInteractEvent) = arrivalProtection.interact(event)
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    fun onEntityInteraction(event: PlayerInteractEntityEvent) = arrivalProtection.activity(event.player)
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    fun onEntityInteractionAt(event: PlayerInteractAtEntityEvent) = arrivalProtection.activity(event.player)
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    fun onAttack(event: PrePlayerAttackEntityEvent) = arrivalProtection.activity(event.player)
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    fun onDamage(event: EntityDamageEvent) = arrivalProtection.damage(event)
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onDeath(event: PlayerDeathEvent) = arrivalProtection.leave(event.entity)
 
     internal fun checkBuilderSurvivalLater(playerId: UUID) {
         ARC.instance.server.getPlayer(playerId)?.let(builderSurvivalGuard::checkLater)
     }
 
     override fun close() {
+        arrivalProtection.close()
         builderSurvivalGuard.close()
     }
 
     @EventHandler(priority = EventPriority.LOW)
     fun onPlayerLeave(event: PlayerQuitEvent) {
+        arrivalProtection.leave(event.player)
         traceHealth("quit-low", event.player)
         healthTraceSessions.remove(event.player.uniqueId)
         RtpRespawnTracker.cancel(event.player.name)
@@ -64,7 +103,6 @@ class JoinListener : Listener, AutoCloseable {
         JobsModule.untrackPlayer(event.player.uniqueId)
         SyncManager.playerQuit(event.player.uniqueId)
         AuditManager.leave(event.player)
-        if (invMap.containsKey(event.player.uniqueId)) stripInvulnerable(event.player)
         TreasureHuntManager.onPlayerQuit(event.player)
     }
 
@@ -77,9 +115,11 @@ class JoinListener : Listener, AutoCloseable {
         JobsModule.untrackPlayer(event.player.uniqueId)
         SyncManager.playerQuit(event.player.uniqueId)
         AuditManager.leave(event.player)
-        if (invMap.containsKey(event.player.uniqueId)) stripInvulnerable(event.player)
         TreasureHuntManager.onPlayerQuit(event.player)
     }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onKickProtectionCleanup(event: PlayerKickEvent) = arrivalProtection.leave(event.player)
 
     @EventHandler(priority = EventPriority.MONITOR)
     fun onPlayerLeaveMonitor(event: PlayerQuitEvent) {
@@ -129,26 +169,6 @@ class JoinListener : Listener, AutoCloseable {
             scale,
             modifiers,
         )
-    }
-
-    private fun invulnerable(player: Player) {
-        if (!config.bool("join.invulnerable-enabled", true)) return
-        if (!player.isOnline) return
-        if (player.hasPermission("arc.join.invulnerability.bypass")) return
-        player.isInvulnerable = true
-        invMap[player.uniqueId] = player.name
-        info("Player {} is invulnerable", player.name)
-        val ticks = config.integer("join.invulnerable-ticks", 20 * 7).toLong()
-        delayed(ticks.ticks) {
-            stripInvulnerable(player)
-        }
-    }
-
-    private fun stripInvulnerable(player: Player) {
-        if (!player.isOnline) return
-        player.isInvulnerable = false
-        invMap.remove(player.uniqueId)
-        info("Player {} is not invulnerable anymore", player.name)
     }
 
     @Suppress("DEPRECATION")
