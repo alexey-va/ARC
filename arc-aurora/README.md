@@ -89,9 +89,11 @@ scale envelope, not unsupported item-texture alpha. The model's brightness does
 not illuminate terrain or imply shader bloom. A source-driven model/motion
 preview is separate evidence from native Minecraft rendering and pack loading.
 
-### Five-scene showcase
+### Private sky showcase
 
-Stand outdoors with open sky ahead and run `/arcaurora showcase` with `arcaurora.admin`. The private display places the stitch and curtain above three surface scenes. The lower row shows hare tracks, two paper boats and a tumbleweed. The three surface animations tilt toward the viewer for this display. Run the command again to place the display in a new direction, or use `/arcaurora showcase stop` to return to normal ambience. A show expires after 60 seconds.
+Stand outdoors, face open sky and run `/showcase SKY_STITCH` with `arcaurora.admin`. The full form is `/arcaurora showcase SKY_STITCH`. Nine copies of the selected effect play at different phases for three minutes. Tab completes every `AuroraShape` name, including the tracks, lanterns and surface effects. Run the command with another name to switch immediately. Run it in a new direction to move the display, or use `/showcase stop` to end it early. Only the invoking player sees the display.
+
+The bare `/arcaurora showcase` opens a 60-second overview. The stitch and curtain appear above the hare tracks, paper flotilla and tumbleweed.
 
 In ordinary ambience, hare tracks cross a snowy clearing on clear mornings. The paper flotilla sails on river water in rain and can pass under a bridge with hull clearance. One hull catches a lily and turns stern-first. A tumbleweed rolls over desert sand in clear daylight, catches on a cactus and quivers. The branch, lily, sand ridge and cactus are shapes made of particles. The three scenes use 16-block cells. The hare tolerates up to two snow layers of height difference. The tumbleweed rolls across level sand, and the flotilla checks the waterline up to ten blocks under the deck at its anchor.
 
@@ -592,7 +594,7 @@ Run from the repository root with JDK 25:
 ```
 
 The expected local runtime artifact is
-`arc-aurora/build/libs/ArcAurora-0.1.14.jar`. The public Maven API artifact
+`arc-aurora/build/libs/ArcAurora-0.1.15.jar`. The public Maven API artifact
 `ru.ruscrafting.arc:arc-aurora-api:0.1.0` was verified on 2026-10-29 in the
 [RusCrafting repository](https://repo.rus-crafting.ru/grocermc/ru/ruscrafting/arc/arc-aurora-api/0.1.0/arc-aurora-api-0.1.0.pom).
 That API publication does not establish a runtime-plugin build, delivery,
@@ -637,3 +639,4 @@ require ArcAurora 0.1.10 or newer; the preview drain behavior requires 0.1.11,
 and `sky-weight` requires 0.1.12. Lantern groups remain visible during close
 approach starting with 0.1.13.
 The five decorations and the private showcase command require ArcAurora 0.1.14.
+Selection by shape and the three-minute display require ArcAurora 0.1.15.

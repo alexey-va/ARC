@@ -7,8 +7,12 @@ depend: [ArcCore, packetevents]
 commands:
   arcaurora:
     description: Ambient particles and diagnostics
-    usage: /<command> [on|off|toggle|biome|status|reload|catalog|preview|showcase [stop]]
+    usage: /<command> [on|off|toggle|biome|status|reload|catalog|preview|showcase [EFFECT|stop]]
     aliases: [aaurora]
+  showcase:
+    description: View a private ambient effect demonstration
+    usage: /<command> [EFFECT|stop]
+    permission: arcaurora.admin
 permissions:
   arcaurora.view:
     description: Receive ordinary ambient particle effects

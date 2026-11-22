@@ -42,6 +42,7 @@ internal class AuroraEngine(
     private val lanternFactory: () -> AuroraLanternDisplays = { AuroraLanternDisplays(plugin) },
     private val showcaseProfiles: List<AuroraProfile>? = AuroraShowcase.profiles(settings),
     private val onShowcaseBlocked: (Player) -> Unit = {},
+    private val showcaseEffects: Map<AuroraShape, AuroraProfile> = showcaseEffects(settings),
 ) : AutoCloseable {
     private enum class Source { ORDINARY, NIGHTLY, EVENT, SHOWCASE }
     private data class Selection(val source: Source, val profiles: List<AuroraProfile>) {
@@ -80,8 +81,12 @@ internal class AuroraEngine(
         val x: Double, val y: Double, val z: Double, val normalX: Double, val normalZ: Double,
         val path: List<AuroraOffset>, val motion: List<AuroraOffset>,
         val animation: SkyAnimation? = null,
+        val phaseOffsetTicks: Int = 0,
     ) {
-        val cursor = AuroraSkyCursor(profile.points)
+        // A showcase's first stroke can join an action in progress. Later cycles start at its first point.
+        var cursor = AuroraSkyCursor(profile.points,
+            if (animation == null) profile.points * phaseOffsetTicks / profile.sceneDurationTicks else 0)
+        val exitTicks = minOf(profile.skyOptions.exitTicks, profile.sceneDurationTicks / 4)
         val rejected = AtomicBoolean()
         val culled = AtomicBoolean()
         var surfaceY: Int? = null // Resolved once on Main; x/y-offset/z never follow a viewer.
@@ -99,6 +104,7 @@ internal class AuroraEngine(
         var repairIndex = -1
         var repairAt = Long.MIN_VALUE
         var animationCursor = 0
+        var modelCycle = -1L
         var renderedLanterns = false // The latest Main submission has a nonzero-size member and has not been retired.
     }
     private enum class Delivery { SUBMITTED, SKIPPED, OBSTRUCTED }
@@ -167,13 +173,20 @@ internal class AuroraEngine(
         lanterns?.removeViewer(id)
     }
 
-    fun startShowcase(player: Player): Boolean {
-        val profiles = showcaseProfiles ?: return false
+    fun startShowcase(player: Player, shape: AuroraShape? = null): Boolean {
         val viewer = viewers[player.uniqueId] ?: return false
         if (!player.hasPermission(AURORA_ADMIN_PERMISSION)) return false
+        val profiles = if (shape == null) showcaseProfiles ?: return false else {
+            val selected = showcaseEffects[shape] ?: return false
+            // Each display group is submitted together. Keep it eligible even under a one-request cap.
+            val profile = if (shape == AuroraShape.SKY_LANTERNS && selected.points > settings.skyPacketsPerViewer)
+                selected.copy(points = settings.skyPacketsPerViewer) else selected
+            List(AuroraShowcase.COPY_COUNT) { profile }
+        }
+        val duration = if (shape == null) AuroraShowcase.DURATION_TICKS else AuroraShowcase.SELECTED_DURATION_TICKS
         val eye = player.eyeLocation
         viewer.showcase = AuroraShowcase(player.world.uid, AuroraOffset(eye.x, eye.y, eye.z), eye.yaw,
-            profiles, age + AuroraShowcase.DURATION_TICKS)
+            profiles, age + duration)
         viewer.previewDrain = null
         viewer.selection = null
         viewer.due = age
@@ -401,8 +414,11 @@ internal class AuroraEngine(
             if (showcase != null && !admitShowcase(sky, showcase, player, deadline)) continue
             // A pre-expiry worker batch may arrive late; it cannot introduce another scene during drain.
             val scenes = viewer.previewDrain?.let { drain -> sky.scenes.filter { it in drain.scenes } } ?: sky.scenes
-            lanterns?.retain(viewer.id, scenes.filter { !it.culled.get() && !it.rejected.get() &&
-                (it.startsAt == Long.MAX_VALUE || age - it.startsAt < it.profile.sceneDurationTicks) }.toSet())
+            lanterns?.retain(viewer.id, scenes.filter {
+                !it.culled.get() && !it.rejected.get() && if (showcase == null)
+                    it.startsAt == Long.MAX_VALUE || age - it.startsAt < it.profile.sceneDurationTicks
+                else it.modelCycle == (age - it.startsAt) / it.profile.sceneDurationTicks
+            }.toSet())
             var remaining = sky.budget
             if (scenes.isEmpty() || remaining == 0) continue
             val start = Math.floorMod(viewer.skyTurn++, scenes.size.toLong()).toInt()
@@ -419,7 +435,7 @@ internal class AuroraEngine(
                 }
                 if (scene.culled.get() || scene.rejected.get() || !admitSky(scene, player, deadline) || age < scene.startsAt) continue
                 val elapsed = age - scene.startsAt
-                val sceneAge = if (showcase == null) elapsed else elapsed % scene.profile.sceneDurationTicks
+                val sceneAge = if (showcase == null) elapsed else showcaseSceneAge(scene, elapsed)
                 if (sceneAge >= scene.profile.sceneDurationTicks) continue
                 val animation = scene.animation
                 if (animation != null) {
@@ -447,6 +463,7 @@ internal class AuroraEngine(
                         displays.update(scene, player, checkNotNull(scene.profile.skyModel), centers, progress,
                             atan2(scene.normalX, scene.normalZ), scene.profile.updateTicks)
                         scene.renderedLanterns = progress > 0.0 && progress < 1.0
+                        scene.modelCycle = elapsed / scene.profile.sceneDurationTicks
                         scene.nextAt = age + scene.profile.updateTicks
                         remaining -= centers.size
                         continue
@@ -492,7 +509,7 @@ internal class AuroraEngine(
                     continue
                 }
                 val refresh = scene.profile.skyRefreshTicks
-                val exitTicks = minOf(scene.profile.skyOptions.exitTicks, scene.profile.sceneDurationTicks / 4)
+                val exitTicks = scene.exitTicks
                 val exitAt = scene.profile.sceneDurationTicks - exitTicks
                 val motion = scene.motion[minOf(sceneAge.toInt(), scene.motion.lastIndex)]
                 fun emit(index: Int) {
@@ -626,14 +643,41 @@ internal class AuroraEngine(
     private fun planShowcase(input: Input, showcase: AuroraShowcase): SkyInput {
         val scenes = showcase.profiles.mapIndexed { index, profile ->
             val pose = showcase.pose(index)
-            val frames = celestialFrames(profile)
-            val animation = SkyAnimation(frames, pose.size, 0.0, false, pose.pitch)
+            val animation = if (profile.shape.isCelestial || profile.shape == AuroraShape.SKY_LANTERNS)
+                SkyAnimation(celestialFrames(profile), pose.size, 0.0, false, pose.pitch) else null
+            val path = animation?.frames?.first()?.map { animation.pose(it.offset) }
+                ?: AuroraSkyShapes.stroke(profile.shape, pose.size, profile.points, profile.updateTicks,
+                    profile.motionPeriodTicks, pose.phaseOffsetTicks % profile.motionPeriodTicks,
+                    0.0, false, profile.skyTracers, profile.skyOptions)
+            val motion = if (animation == null && profile.skyRefreshTicks > 0)
+                AuroraSkyShapes.heldMotion(pose.size, profile.sceneDurationTicks, profile.motionPeriodTicks, profile.skyOptions)
+                else listOf(AuroraOffset(0.0, 0.0, 0.0))
             SkyScene(profile, input.world, input.revision, input.age,
                 AuroraSkyCell(index, 0), 0L, pose.anchor.x, pose.anchor.y, pose.anchor.z,
-                showcase.normalX, showcase.normalZ, frames.first().map { animation.pose(it.offset) },
-                listOf(AuroraOffset(0.0, 0.0, 0.0)), animation)
+                showcase.normalX, showcase.normalZ, path, motion, animation, pose.phaseOffsetTicks)
         }
         return SkyInput(input, scenes, settings.skyPacketsPerViewer, ShowcaseAdmission(scenes))
+    }
+
+    private fun showcaseSceneAge(scene: SkyScene, elapsed: Long): Long {
+        val profile = scene.profile
+        val duration = profile.sceneDurationTicks
+        if (scene.animation != null) return elapsed % duration
+        val exitTicks = if (profile.skyRefreshTicks == 0) 0 else scene.exitTicks
+        val lastRevealTick = (duration - exitTicks - 1).toLong()
+        // A low shared cap can take more than one nominal lifetime to reveal the whole stroke.
+        if (elapsed > lastRevealTick && scene.cursor.position < profile.points) {
+            scene.startsAt = age - lastRevealTick
+            return lastRevealTick
+        }
+        if (elapsed < duration) return elapsed
+        scene.cursor = AuroraSkyCursor(profile.points)
+        scene.refreshCursor = 0
+        scene.refreshCredit = 0
+        scene.repairIndex = -1
+        scene.nextAt = age
+        scene.startsAt = age
+        return 0L
     }
 
     /** One vertical shift keeps the authored slots together above the full swept footprint. */
@@ -662,7 +706,7 @@ internal class AuroraEngine(
         val lift = 0.coerceIn(panel.requiredLift, highestLift)
         for (scene in sky.scenes) {
             scene.surfaceY = lift
-            scene.startsAt = age
+            scene.startsAt = age - Math.floorMod(scene.phaseOffsetTicks, scene.profile.sceneDurationTicks)
             scene.nextAt = age
         }
         return true
@@ -797,8 +841,8 @@ internal class AuroraEngine(
 }
 
 /** Worker plans are detached; only points actually attempted by Main advance the next plan. */
-internal class AuroraSkyCursor(private val points: Int) {
-    private val acknowledged = AtomicInteger()
+internal class AuroraSkyCursor(private val points: Int, initialPosition: Int = 0) {
+    private val acknowledged = AtomicInteger(initialPosition)
 
     val position: Int get() = acknowledged.get()
 

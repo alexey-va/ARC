@@ -23,6 +23,91 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
 class AuroraEngineTest : FreeSpec({
+    "selected track finishes all nine strokes under a one-packet cap and restarts until tick 3600" {
+        val base = skySettings(points = 24, shape = AuroraShape.TRACK_PAIR)
+        val track = base.profiles.single().copy(sceneDurationTicks = 40, skyTracers = 4, skyRefreshTicks = 12)
+        withEngine(base.copy(profiles = listOf(track), nativeBudgetMicros = Int.MAX_VALUE), highSky = true) { fixture ->
+            fixture.admin(true)
+            fixture.engine.startShowcase(fixture.player, track.shape) shouldBe true
+            var firstEmission = 0
+            while (fixture.emissions.isEmpty() && firstEmission < 120) {
+                fixture.advance(1)
+                firstEmission++
+            }
+            fixture.emissions.isNotEmpty() shouldBe true
+            val firstStrokes = fixture.strokeCursors()
+            firstStrokes.size shouldBe AuroraShowcase.COPY_COUNT
+            firstStrokes.map { it.position }.distinct().size shouldBe AuroraShowcase.COPY_COUNT
+            repeat(700 - firstEmission) {
+                val before = fixture.emissions.size
+                fixture.advance(1)
+                (fixture.emissions.size - before <= 1) shouldBe true
+            }
+            firstStrokes.all { it.position == track.points } shouldBe true
+            val restarted = fixture.strokeCursors()
+            restarted.size shouldBe firstStrokes.size
+            restarted.zip(firstStrokes).none { (current, previous) -> current === previous } shouldBe true
+            fixture.emissions.all { it.viewer == fixture.player.uniqueId && it.force } shouldBe true
+
+            fixture.advance(AuroraShowcase.SELECTED_DURATION_TICKS.toInt() - 701)
+            fixture.sceneRows(0).size shouldBe AuroraShowcase.COPY_COUNT
+            val beforeExpiry = fixture.emissions.size
+            fixture.advance(25)
+            fixture.sceneRows(0) shouldBe emptyList()
+            fixture.emissions.size shouldBe beforeExpiry
+        }
+    }
+
+    "selected basic and celestial showcases recapture the heading and only emit the requested shape" {
+        val base = skySettings(packets = 12)
+        val point = base.profiles.single().copy(id = "point", count = 1)
+        val curtain = point.copy(id = "curtain", shape = AuroraShape.AURORA_CURTAIN, points = 48, count = 2, skyTracers = 8)
+        withEngine(base.copy(profiles = listOf(point, curtain), viewersPerTick = 2), highSky = true) { fixture ->
+            fixture.joinAdditional("OtherShowcasePlayer")
+            fixture.admin(true)
+            fixture.engine.startShowcase(fixture.player, AuroraShape.POINT) shouldBe true
+            fixture.advance(100)
+            fixture.sceneRows(0).map { it.split(',')[2] } shouldBe List(AuroraShowcase.COPY_COUNT) { point.id }
+            fixture.emissions.map { it.count }.toSet() shouldBe setOf(1)
+
+            fixture.player.teleport(fixture.player.location.apply { yaw = -90f }) shouldBe true
+            val beforeReplacement = fixture.emissions.size
+            fixture.engine.startShowcase(fixture.player, AuroraShape.AURORA_CURTAIN) shouldBe true
+            fixture.advance(130)
+            val rows = fixture.sceneRows(0).map { it.split(',') }
+            rows.map { it[2] } shouldBe List(AuroraShowcase.COPY_COUNT) { curtain.id }
+            rows.all { it[7].toDouble() - fixture.player.location.x > 20.0 } shouldBe true
+            fixture.emissions.drop(beforeReplacement).map { it.count }.toSet() shouldBe setOf(2)
+            fixture.emissions.all { it.viewer == fixture.player.uniqueId } shouldBe true
+        }
+    }
+
+    "selected lanterns rotate all nine display groups under a cap smaller than one configured group" {
+        val base = skySettings(points = 6, shape = AuroraShape.SKY_LANTERNS)
+        val lantern = base.profiles.single().copy(sceneDurationTicks = 80, updateTicks = 4, skyModel = AuroraSkyModel())
+        withEngine(base.copy(profiles = listOf(lantern)), highSky = true) { fixture ->
+            fixture.admin(true)
+            fixture.engine.startShowcase(fixture.player, AuroraShape.SKY_LANTERNS) shouldBe true
+            repeat(270) {
+                val before = fixture.modelUpdates.size
+                fixture.advance(1)
+                (fixture.modelUpdates.drop(before).sumOf { it.centers.size } <= 1) shouldBe true
+            }
+            val keys = fixture.modelUpdates.map { it.key }.toSet()
+            keys.size shouldBe AuroraShowcase.COPY_COUNT
+            fixture.modelUpdates.all { it.centers.size == 1 && it.viewer == fixture.player.uniqueId } shouldBe true
+            fixture.retiredModels.map { it.key }.toSet() shouldBe keys
+            fixture.activeModels.isNotEmpty() shouldBe true
+            fixture.emissions shouldBe emptyList()
+
+            val beforeStop = fixture.modelUpdates.size
+            fixture.engine.stopShowcase(fixture.player.uniqueId)
+            fixture.activeModels shouldBe emptyMap()
+            fixture.advance(100)
+            fixture.modelUpdates.size shouldBe beforeStop
+        }
+    }
+
     "showcase cycles through five fixed private slots under the shared one-packet cap" {
         withEngine(showcaseSettings()) { fixture ->
             fixture.joinAdditional("OtherViewer")
@@ -1584,6 +1669,13 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
                 cell.x, cell.z, epoch, field(scene, "x"), (field(scene, "y") as Double) + (surface ?: 0), field(scene, "z"),
                 if (start == Long.MAX_VALUE) -1 else start, culled, rejected).joinToString(",")
         }
+    }
+
+    fun strokeCursors(): List<AuroraSkyCursor> {
+        fun field(target: Any, name: String): Any? = target.javaClass.getDeclaredField(name).also { it.isAccessible = true }.get(target)
+        val viewer = (field(engine, "viewers") as Map<*, *>)[player.uniqueId] ?: return emptyList()
+        val sky = field(viewer, "sky") ?: return emptyList()
+        return (field(sky, "scenes") as List<*>).filterNotNull().map { field(it, "cursor") as AuroraSkyCursor }
     }
 
     /** Current world-space path for the single-scene native-submission oracle; test-only reflection. */

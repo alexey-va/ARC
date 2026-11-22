@@ -45,6 +45,18 @@ class AuroraResourcesTest : FreeSpec({
         (gallery.size >= 12) shouldBe true
         gallery.all { !it.skyScene } shouldBe true
         val wave = sky.single { it.id == "sky_wave" }
+        val localWave = wave.copy(id = "custom_wave", shapeSize = 4.0)
+        val sparse = settings.copy(profiles = emptyList(), eventPresets = mapOf("custom" to listOf(localWave)))
+        val effects = showcaseEffects(sparse, settings)
+        effects.keys shouldBe AuroraShape.entries.toSet()
+        effects.all { (shape, profile) -> profile.shape == shape && profile.skyScene } shouldBe true
+        effects.getValue(AuroraShape.WAVE) shouldBe localWave
+        effects.getValue(AuroraShape.SKY_LANTERNS) shouldBe lantern
+        effects.getValue(AuroraShape.STAR).skyRefreshTicks shouldBe 40
+        val ring = settings.profiles.first { it.shape == AuroraShape.RING }
+        effects.getValue(AuroraShape.RING).particleData shouldBe ring.particleData
+        (effects.getValue(AuroraShape.RING).points > ring.points) shouldBe true
+        ring.skyScene shouldBe false
         wave.skyOptions shouldBe AuroraSkyOptions(freshHeadRepair = false)
         wave.skyTracers shouldBe 1
         wave.points shouldBe 192

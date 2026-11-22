@@ -67,8 +67,11 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
         try {
             hotload.beginGeneration()
             hotload.register()
-            checkNotNull(getCommand("arcaurora")).setExecutor(this)
-            getCommand("arcaurora")?.tabCompleter = this
+            for (name in listOf("arcaurora", "showcase")) {
+                val command = checkNotNull(getCommand(name))
+                command.setExecutor(this)
+                command.tabCompleter = this
+            }
             val settings = loadSettings()
             messages = loadMessages()
             ArcLogging.install(PaperLoggingPlatform("ArcAurora"), LoggingConfigSource { ru.arc.config.EmptyConfig })
@@ -127,6 +130,7 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
             eventProfiles = { world -> events[world]?.values?.lastOrNull()?.let { engine?.settings?.eventPresets?.get(it) } },
             previewProfiles = { playerId -> previews[playerId]?.profiles },
             showcaseProfiles = AuroraShowcase.profiles(settings) ?: AuroraShowcase.profiles(settings, bundledShowcaseSettings),
+            showcaseEffects = showcaseEffects(settings, bundledShowcaseSettings),
             onShowcaseBlocked = { reply(it, "showcase-blocked") },
         )
         try {
@@ -196,21 +200,33 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
         if (event.from.world?.uid != event.to.world?.uid) engine?.invalidate(event.player.uniqueId)
     }
 
-    override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
+    private fun commandArguments(command: Command, args: Array<out String>): Array<out String> =
+        if (command.name == "showcase") arrayOf("showcase", *args) else args
+
+    override fun onCommand(sender: CommandSender, command: Command, label: String, arguments: Array<out String>): Boolean {
+        val args = commandArguments(command, arguments)
         val action = args.firstOrNull()?.lowercase(Locale.ROOT) ?: "toggle"
         if (action in setOf("reload", "status", "preview", "catalog", "showcase")) {
             if (!sender.hasPermission(AURORA_ADMIN_PERMISSION)) return reply(sender, "no-permission")
             if (action == "showcase") {
                 val player = sender as? Player ?: return reply(sender, "players-only")
                 val current = engine ?: return reply(sender, "stopped")
-                if (args.size == 2 && args[1].equals("stop", ignoreCase = true)) {
+                if (args.size > 2) return reply(player, "showcase-usage")
+                val effect = args.getOrNull(1)
+                if (effect.equals("stop", ignoreCase = true)) {
                     current.stopShowcase(player.uniqueId)
                     return reply(player, "showcase-off")
                 }
-                if (args.size != 1) return reply(sender, "usage")
-                if (!current.startShowcase(player)) return reply(player, "showcase-unavailable")
+                val shape = effect?.let { name ->
+                    AuroraShape.entries.firstOrNull { it.name.equals(name, ignoreCase = true) }
+                        ?: return reply(player, "showcase-effect-unknown")
+                }
+                if (!current.startShowcase(player, shape)) {
+                    return reply(player, if (shape == null) "showcase-unavailable" else "showcase-effect-unavailable")
+                }
                 stopPreview(player.uniqueId)
-                return reply(player, "showcase-on")
+                return if (shape == null) reply(player, "showcase-on")
+                else reply(player, "showcase-effect-on", mapOf("effect" to shape.name))
             }
             if (action == "catalog") {
                 val current = engine ?: return reply(sender, "stopped")
@@ -301,7 +317,8 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
         return reply(sender, if (enabled) "enabled" else "disabled")
     }
 
-    override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): List<String> {
+    override fun onTabComplete(sender: CommandSender, command: Command, alias: String, arguments: Array<out String>): List<String> {
+        val args = commandArguments(command, if (arguments.isEmpty()) arrayOf("") else arguments)
         val admin = sender.hasPermission(AURORA_ADMIN_PERMISSION)
         val candidates = if (args.size <= 1) buildList {
             if (sender is Player) addAll(listOf("on", "off", "toggle", "biome"))
@@ -311,7 +328,9 @@ open class ArcAuroraPlugin : JavaPlugin(), Listener {
             if (!admin) return emptyList()
             val settings = engine?.settings ?: return emptyList()
             when (args[0].lowercase(Locale.ROOT)) {
-                "showcase" -> if (sender is Player && args.size == 2) listOf("stop") else emptyList()
+                "showcase" -> if (sender is Player && args.size == 2) {
+                    AuroraShape.entries.map { it.name } + "stop"
+                } else emptyList()
                 "catalog" -> if (args.size == 2) settings.eventPresets.keys.toList() else emptyList()
                 "preview" -> when (args.size) {
                     2 -> server.onlinePlayers.map { it.name } + if (sender is Player) listOf("self") else emptyList()

@@ -18,19 +18,43 @@ internal class AuroraShowcase(
     val normalZ = -cos(angle)
 
     fun pose(index: Int): Pose {
+        if (profiles.size == COPY_COUNT) {
+            val profile = profiles[index]
+            val size = when (profile.shape) {
+                AuroraShape.CUBE -> 2.1
+                AuroraShape.SKY_LANTERNS -> 2.45
+                AuroraShape.RING, AuroraShape.CIRCLE, AuroraShape.SPHERE, AuroraShape.ARC,
+                AuroraShape.CRYSTAL, AuroraShape.STAR, AuroraShape.JELLYFISH, AuroraShape.MOON_FAN -> 3.45
+                AuroraShape.PAPER_FLOTILLA, AuroraShape.SKY_STITCH -> 4.2
+                AuroraShape.INVISIBLE_HARE, AuroraShape.TUMBLEWEED -> 3.8
+                else -> profile.shapeSize.coerceIn(3.65, 3.95)
+            }
+            val tilt = when (profile.shape) {
+                AuroraShape.INVISIBLE_HARE, AuroraShape.PAPER_FLOTILLA -> 42.0
+                AuroraShape.TUMBLEWEED -> 12.0
+                else -> 0.0
+            }
+            // Nine evenly spaced ages; immediate neighbours show different parts of the action.
+            val phase = (index * 4 + 6) % COPY_COUNT
+            return pose(copies[index], if (index == 4) size * 1.06 else size, tilt,
+                phase * profile.sceneDurationTicks / COPY_COUNT)
+        }
         val slot = slots[index]
+        return pose(AuroraOffset(slot.right, slot.height, 32.0), slot.size, slot.tilt, 0)
+    }
+
+    private fun pose(position: AuroraOffset, size: Double, tilt: Double, phaseOffsetTicks: Int): Pose {
         return Pose(
             AuroraOffset(
-                eye.x - normalX * DEPTH + normalZ * slot.right,
-                eye.y + slot.height,
-                eye.z - normalZ * DEPTH - normalX * slot.right,
+                eye.x - normalX * position.z + normalZ * position.x,
+                eye.y + position.y,
+                eye.z - normalZ * position.z - normalX * position.x,
             ),
-            slot.size,
-            Math.toRadians(slot.tilt),
+            size, Math.toRadians(tilt), phaseOffsetTicks,
         )
     }
 
-    data class Pose(val anchor: AuroraOffset, val size: Double, val pitch: Double)
+    data class Pose(val anchor: AuroraOffset, val size: Double, val pitch: Double, val phaseOffsetTicks: Int)
 
     private data class Slot(
         val shape: AuroraShape, val right: Double, val height: Double, val size: Double, val tilt: Double = 0.0,
@@ -41,7 +65,14 @@ internal class AuroraShowcase(
 
     companion object {
         const val DURATION_TICKS = 1_200L
-        private const val DEPTH = 32.0
+        const val SELECTED_DURATION_TICKS = 3_600L
+        const val COPY_COUNT = 9
+        // Viewer-local right, height and forward distance. Gaps accommodate the full moving silhouettes.
+        private val copies = listOf(
+            AuroraOffset(-13.1, 5.6, 31.5), AuroraOffset(0.0, 5.15, 30.6), AuroraOffset(13.6, 5.9, 31.8),
+            AuroraOffset(-16.9, 15.6, 34.5), AuroraOffset(-0.75, 14.9, 32.5), AuroraOffset(15.9, 15.9, 34.8),
+            AuroraOffset(-15.8, 28.0, 37.4), AuroraOffset(1.4, 26.6, 36.5), AuroraOffset(17.0, 27.5, 37.5),
+        )
         private val slots = listOf(
             Slot(AuroraShape.SKY_STITCH, -10.0, 15.0, 6.0),
             Slot(AuroraShape.AURORA_CURTAIN, 10.0, 15.0, 7.0),

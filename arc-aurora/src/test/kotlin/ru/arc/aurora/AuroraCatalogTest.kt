@@ -21,6 +21,7 @@ import ru.arc.paper.testing.MockBukkitTestRuntime
 import ru.arc.paper.testing.failOnUnsupportedMockBukkitOperation
 import ru.arc.text.LocaleCatalog
 import ru.arc.text.LocalizedMiniMessage
+import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
@@ -37,7 +38,7 @@ class AuroraCatalogTest : FreeSpec({
             fixture.complete(fixture.paper.server.consoleSender, "show") shouldBe emptyList()
             plugin.showcase(admin) shouldBe null
             fixture.complete(admin, "show") shouldBe listOf("showcase")
-            fixture.complete(admin, "showcase", "st") shouldBe listOf("stop")
+            fixture.complete(admin, "showcase", "st") shouldBe listOf("STAR", "stop")
 
             fixture.command(admin, "preview self test-gallery jelly")
             admin.message() shouldBe "preview-on"
@@ -49,15 +50,45 @@ class AuroraCatalogTest : FreeSpec({
             val first = checkNotNull(plugin.showcase(admin))
             first.profiles.map { it.id } shouldBe
                 listOf("sky_stitch", "aurora_curtain", "invisible_hare", "paper_flotilla", "tumbleweed")
+            first.expiresAt shouldBe 1_200L
             plugin.showcase(target) shouldBe null
             fixture.command(admin, "showcase ${target.name}")
-            admin.message() shouldBe "usage"
+            admin.message() shouldBe "showcase-effect-unknown"
             plugin.showcase(admin) shouldBe first
 
             fixture.command(admin, "showcase")
             admin.message() shouldBe "showcase-on"
             (plugin.showcase(admin) === first) shouldBe false
             fixture.command(admin, "showcase stop")
+            admin.message() shouldBe "showcase-off"
+            plugin.showcase(admin) shouldBe null
+        }
+    }
+
+    "showcase selects any effect for three minutes and completes canonical effect names" {
+        withCatalog { fixture ->
+            val plugin = fixture.plugin
+            val admin = fixture.admin
+            fixture.complete(admin, "SHOWCASE", "") shouldBe
+                (AuroraShape.entries.map { it.name } + "stop").sorted()
+            fixture.complete(admin, "showcase", "tRaCk_F") shouldBe listOf("TRACK_FLOCK", "TRACK_FLYBY")
+            fixture.complete(admin, "showcase", "stop", "") shouldBe emptyList()
+            fixture.complete(fixture.target, "showcase", "") shouldBe emptyList()
+            fixture.complete(fixture.paper.server.consoleSender, "showcase", "") shouldBe emptyList()
+
+            for (shape in AuroraShape.entries) {
+                fixture.command(admin, "showcase ${shape.name.lowercase(Locale.ROOT)}")
+                admin.message() shouldBe "showcase-effect-on:${shape.name}"
+                val showcase = checkNotNull(plugin.showcase(admin))
+                showcase.profiles.map { it.shape } shouldBe List(9) { shape }
+                showcase.expiresAt shouldBe 3_600L
+            }
+            plugin.showcase(fixture.target) shouldBe null
+            val selected = plugin.showcase(admin)
+            fixture.command(admin, "showcase stop extra")
+            admin.message() shouldBe "showcase-usage"
+            plugin.showcase(admin) shouldBe selected
+            fixture.command(admin, "SHOWCASE StOp")
             admin.message() shouldBe "showcase-off"
             plugin.showcase(admin) shouldBe null
         }
@@ -83,6 +114,29 @@ class AuroraCatalogTest : FreeSpec({
             val original = plugin.engine
             fixture.command(admin, "reload")
             (plugin.engine === original) shouldBe false
+            plugin.showcase(admin) shouldBe null
+        }
+    }
+
+    "standalone showcase command shares the private session and completes its effect names" {
+        withCatalog { fixture ->
+            val plugin = fixture.plugin
+            val admin = fixture.admin
+            val target = fixture.target
+            val command = checkNotNull(plugin.getCommand("showcase"))
+            command.testPermissionSilent(admin) shouldBe true
+            command.testPermissionSilent(target) shouldBe false
+            command.tabComplete(admin, "showcase", arrayOf("st")) shouldBe listOf("STAR", "stop")
+            command.tabComplete(target, "showcase", arrayOf("")) shouldBe emptyList()
+
+            fixture.paper.server.dispatchCommand(target, "showcase STAR")
+            plugin.showcase(target) shouldBe null
+
+            fixture.paper.server.dispatchCommand(admin, "showcase sTaR") shouldBe true
+            admin.message() shouldBe "showcase-effect-on:STAR"
+            plugin.showcase(admin)?.profiles?.map { it.shape } shouldBe List(9) { AuroraShape.STAR }
+            fixture.command(admin, "showcase stop")
+            admin.message() shouldBe "showcase-off"
             plugin.showcase(admin) shouldBe null
         }
     }
@@ -304,6 +358,7 @@ private class CatalogFixture(val paper: MockBukkitTestRuntime) {
             "preset-not-found" to "preset-not-found:<preset>",
             "profile-not-found" to "profile-not-found:<preset>:<profile>",
             "player-not-found" to "player-not-found:<player>",
+            "showcase-effect-on" to "showcase-effect-on:<effect>",
         )
         val catalog = object : LocaleCatalog {
             override fun scalar(path: String): String? = if (path == "prefix") "" else templates[path] ?: path
