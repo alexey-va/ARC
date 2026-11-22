@@ -3,6 +3,7 @@ package ru.arc.playerseat
 import org.bukkit.GameMode
 import org.bukkit.entity.Player
 import org.bukkit.event.EventPriority
+import org.bukkit.event.entity.EntityDamageEvent
 import org.bukkit.event.entity.EntityDismountEvent
 import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.player.PlayerChangedWorldEvent
@@ -78,6 +79,12 @@ internal class PlayerSeatRuntime(
         events.on<PlayerToggleSneakEvent>(EventPriority.HIGHEST, ignoreCancelled = true) {
             if (it.isSneaking) rideByRider[it.player.uniqueId]?.let(::dismount)
         }
+        events.on<EntityDamageEvent>(EventPriority.HIGHEST, ignoreCancelled = true) { event ->
+            if (event.cause != EntityDamageEvent.DamageCause.SUFFOCATION) return@on
+            val rider = event.entity as? Player ?: return@on
+            val ride = rideByRider[rider.uniqueId] ?: return@on
+            if (rider.vehicle == ride.carrier) event.isCancelled = true
+        }
         events.on<EntityDismountEvent>(EventPriority.MONITOR, ignoreCancelled = true) { event ->
             val ride = rideByRider[event.entity.uniqueId] ?: return@on
             if (ride.carrier.uniqueId == event.dismounted.uniqueId) {
@@ -99,15 +106,15 @@ internal class PlayerSeatRuntime(
         val target = event.rightClicked as? Player ?: return
         if (!rider.inventory.itemInMainHand.type.isAir || rider.uniqueId == target.uniqueId) return
 
-        val currentRide = rideByRider[rider.uniqueId]
+        val currentRide = activeRide(rideByRider[rider.uniqueId])
         if (currentRide != null) {
             // The generic click can follow a precise click on the same tower.
-            if (currentRide.carrier == rider.vehicle && seatFor(target, rider) == currentRide.carrier) {
+            if (seatFor(target, rider) == currentRide.carrier) {
                 event.isCancelled = true
             }
             return
         }
-        if (!eligible(rider) || rider.isInsideVehicle || !rider.canSee(target) || !target.canSee(rider)) return
+        if (!eligible(rider) || rider.isSneaking || rider.isInsideVehicle || !rider.canSee(target) || !target.canSee(rider)) return
         val carrier = seatFor(target, rider) ?: return
         // Two towers can join. Their tops must be different to avoid mounting a descendant.
         if (rider.passengers.isNotEmpty()) {
@@ -126,7 +133,14 @@ internal class PlayerSeatRuntime(
 
     private fun eligible(player: Player): Boolean =
         player.isOnline && !player.isDead && !player.hasMetadata("NPC") &&
-            player.gameMode != GameMode.SPECTATOR && !player.isSneaking
+            player.gameMode != GameMode.SPECTATOR
+
+    private fun activeRide(ride: Ride?): Ride? {
+        if (ride == null || ride.rider.vehicle == ride.carrier) return ride
+        // A native seat can disappear between clicks. Release only our old link and nametag.
+        forget(ride)
+        return null
+    }
 
     /** Follow only our native passenger links. Foreign vehicles and passengers keep their click. */
     private fun seatFor(target: Player, rider: Player? = null): Player? {
@@ -134,10 +148,10 @@ internal class PlayerSeatRuntime(
         while (eligible(current)) {
             if (current.isInsideVehicle && rideByRider[current.uniqueId]?.carrier != current.vehicle) return null
             val passengers = current.passengers
-            val next = rideByCarrier[current.uniqueId]?.rider
+            val next = activeRide(rideByCarrier[current.uniqueId])?.rider
             if (passengers.isEmpty()) return current.takeIf { next == null }
             if (next == null) return null
-            if (passengers.singleOrNull() != next || next.vehicle != current) return null
+            if (passengers.singleOrNull() != next) return null
             if (next == rider) return current
             current = next
         }

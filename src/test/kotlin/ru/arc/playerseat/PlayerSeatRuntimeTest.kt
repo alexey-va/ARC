@@ -10,6 +10,7 @@ import org.bukkit.GameMode
 import org.bukkit.Material
 import org.bukkit.entity.Entity
 import org.bukkit.entity.Player
+import org.bukkit.event.entity.EntityDamageEvent
 import org.bukkit.event.entity.EntityDismountEvent
 import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.player.PlayerInteractAtEntityEvent
@@ -71,7 +72,6 @@ class PlayerSeatRuntimeTest : StringSpec({
         "dead rider" to { every { rider.isDead } returns true },
         "dead carrier" to { every { carrier.isDead } returns true },
         "sneaking rider" to { every { rider.isSneaking } returns true },
-        "sneaking carrier" to { every { carrier.isSneaking } returns true },
         "hidden carrier" to { every { rider.canSee(carrier) } returns false },
         "hidden rider" to { every { carrier.canSee(rider) } returns false },
         "rider already riding" to { riderVehicle = other },
@@ -89,6 +89,75 @@ class PlayerSeatRuntimeTest : StringSpec({
 
                 verify(exactly = 0) { f.carrier.addPassenger(any()) }
             }
+        }
+    }
+
+    "a crouching carrier can be mounted directly and at the base of a tower" {
+        SeatFixture().use { f ->
+            every { f.carrier.isSneaking } returns true
+            f.click().isCancelled shouldBe true
+            f.click(f.other, f.carrier).isCancelled shouldBe true
+            f.rider.vehicle shouldBe f.carrier
+            f.other.vehicle shouldBe f.rider
+        }
+    }
+
+    "crouching does not override the carrier's ride preference" {
+        SeatFixture().use { f ->
+            every { f.carrier.isSneaking } returns true
+            f.canCarry = false
+            f.click().isCancelled shouldBe false
+            verify(exactly = 0) { f.carrier.addPassenger(any()) }
+        }
+    }
+
+    "the next click recovers either end of a seat lost before ARC saw the native dismount" {
+        SeatFixture().use { f ->
+            f.click()
+            f.riderVehicle = null
+            f.carrierPassengers.clear()
+
+            f.click(f.other, f.carrier).isCancelled shouldBe true
+            f.click(f.rider, f.other).isCancelled shouldBe true
+            f.other.vehicle shouldBe f.carrier
+            f.rider.vehicle shouldBe f.other
+            f.nameTags shouldBe listOf(f.rider to f.carrier.uniqueId, f.rider to null,
+                f.other to f.carrier.uniqueId, f.rider to f.other.uniqueId)
+        }
+        SeatFixture().use { f ->
+            f.click()
+            f.riderVehicle = null
+            f.carrierPassengers.clear()
+            f.click(f.rider, f.other).isCancelled shouldBe true
+            f.rider.vehicle shouldBe f.other
+        }
+    }
+
+    "only a current seat rider is protected against wall suffocation" {
+        SeatFixture().use { f ->
+            fun damage(who: Player, cause: EntityDamageEvent.DamageCause): Boolean {
+                val event = mockk<EntityDamageEvent>(relaxed = true)
+                var cancelled = false
+                every { event.entity } returns who
+                every { event.cause } returns cause
+                every { event.isCancelled } answers { cancelled }
+                every { event.isCancelled = any() } answers { cancelled = firstArg() }
+                f.bus.fire(event)
+                return cancelled
+            }
+            val wall = EntityDamageEvent.DamageCause.SUFFOCATION
+            f.click()
+            f.click(f.other, f.rider)
+            damage(f.rider, wall) shouldBe true
+            damage(f.other, wall) shouldBe true
+            damage(f.carrier, wall) shouldBe false
+            damage(f.rider, EntityDamageEvent.DamageCause.ENTITY_ATTACK) shouldBe false
+            damage(f.rider, EntityDamageEvent.DamageCause.FALL) shouldBe false
+            f.bus.fire(PlayerToggleSneakEvent(f.rider, true))
+            damage(f.rider, wall) shouldBe false
+            damage(f.other, wall) shouldBe true
+            f.riderVehicle = f.other
+            damage(f.rider, wall) shouldBe false
         }
     }
 
