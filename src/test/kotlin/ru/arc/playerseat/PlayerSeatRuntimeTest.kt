@@ -139,21 +139,105 @@ class PlayerSeatRuntimeTest : StringSpec({
         }
     }
 
-    for (side in listOf("rider", "carrier")) {
-        "Shift by the $side removes only the owned passenger" {
-            SeatFixture().use { f ->
-                f.click()
-                val player = if (side == "rider") f.rider else f.carrier
-                f.carrierPassengers += f.other
+    "Shift dismounts the rider and leaves unrelated passengers alone" {
+        SeatFixture().use { f ->
+            f.click()
+            f.carrierPassengers += f.other
 
-                f.bus.fire(PlayerToggleSneakEvent(player, true))
+            f.bus.fire(PlayerToggleSneakEvent(f.carrier, true))
+            f.riderVehicle shouldBe f.carrier
+            f.bus.fire(PlayerToggleSneakEvent(f.rider, true))
 
-                f.riderVehicle shouldBe null
-                f.carrierPassengers shouldBe listOf(f.other)
-                verify(exactly = 1) { f.carrier.removePassenger(f.rider) }
-                verify(exactly = 0) { f.carrier.removePassenger(f.other) }
-                verify(exactly = 0) { f.carrier.eject() }
-            }
+            f.riderVehicle shouldBe null
+            f.carrierPassengers shouldBe listOf(f.other)
+            verify(exactly = 1) { f.carrier.removePassenger(f.rider) }
+            verify(exactly = 0) { f.carrier.removePassenger(f.other) }
+            verify(exactly = 0) { f.carrier.eject() }
+        }
+    }
+
+    "clicks on the base or the top extend a tower, middle Shift takes the upper group along" {
+        SeatFixture().use { f ->
+            val fourth = f.player()
+            f.click().isCancelled shouldBe true
+            f.click(f.other, f.carrier).isCancelled shouldBe true
+            f.click(f.other, f.carrier).isCancelled shouldBe true
+            verify(exactly = 1) { f.rider.addPassenger(f.other) }
+            f.click(fourth, f.other).isCancelled shouldBe true
+
+            f.bus.fire(PlayerToggleSneakEvent(f.carrier, true))
+            f.rider.vehicle shouldBe f.carrier
+            f.other.vehicle shouldBe f.rider
+            fourth.vehicle shouldBe f.other
+
+            f.bus.fire(PlayerToggleSneakEvent(f.rider, true))
+            f.bus.fire(mockk<PlayerTeleportEvent>(relaxed = true) {
+                every { player } returns f.rider
+                every { cause } returns PlayerTeleportEvent.TeleportCause.DISMOUNT
+            })
+
+            f.rider.vehicle shouldBe null
+            f.other.vehicle shouldBe f.rider
+            fourth.vehicle shouldBe f.other
+            f.click(f.rider, fourth).isCancelled shouldBe false
+            verify(exactly = 0) { fourth.addPassenger(any()) }
+            f.click(f.rider, f.carrier).isCancelled shouldBe true
+            f.rider.vehicle shouldBe f.carrier
+            f.other.vehicle shouldBe f.rider
+        }
+    }
+
+    "joining an occupied tower respects the actual top player's ride preference and visibility" {
+        SeatFixture().use { f ->
+            f.click()
+            f.canCarry = false
+            f.click(f.other, f.carrier).isCancelled shouldBe false
+            f.canCarry = true
+            every { f.other.canSee(f.rider) } returns false
+            f.click(f.other, f.carrier).isCancelled shouldBe false
+            f.other.vehicle shouldBe null
+            verify(exactly = 0) { f.rider.addPassenger(any()) }
+        }
+    }
+
+    "only the direct rider receives a nametag update on a successful mount or dismount" {
+        SeatFixture().use { f ->
+            f.mountSucceeds = false
+            f.click()
+            f.nameTags shouldBe emptyList()
+            f.mountSucceeds = true
+            f.click()
+            f.click(f.other, f.carrier)
+            f.click(f.other, f.carrier)
+            f.bus.fire(PlayerToggleSneakEvent(f.carrier, true))
+            f.dismountSucceeds = false
+            f.bus.fire(PlayerToggleSneakEvent(f.rider, true))
+            f.dismountSucceeds = true
+            f.bus.fire(PlayerToggleSneakEvent(f.rider, true))
+            f.bus.fire(EntityDismountEvent(f.rider, f.carrier))
+
+            f.nameTags shouldBe listOf(f.rider to f.carrier.uniqueId, f.other to f.rider.uniqueId, f.rider to null)
+        }
+    }
+
+    "the proxy payload is one big-endian UUID, or empty to restore the tag" {
+        val id = UUID.fromString("00112233-4455-6677-8899-aabbccddeeff")
+        seatNameTagPayload(id).toHexString() shouldBe "00112233445566778899aabbccddeeff"
+        seatNameTagPayload(null).size shouldBe 0
+    }
+
+    "when a middle player quits only the two adjacent seats are cleared" {
+        SeatFixture().use { f ->
+            val fourth = f.player()
+            f.click()
+            f.click(f.other, f.carrier)
+            f.click(fourth, f.other)
+
+            f.bus.fire(mockk<PlayerQuitEvent> { every { player } returns f.rider })
+
+            f.rider.vehicle shouldBe null
+            f.other.vehicle shouldBe null
+            fourth.vehicle shouldBe f.other
         }
     }
 
@@ -164,10 +248,10 @@ class PlayerSeatRuntimeTest : StringSpec({
             val native = EntityDismountEvent(f.rider, f.carrier).also { it.isCancelled = true }
             f.bus.fire(native)
 
-            f.bus.fire(PlayerToggleSneakEvent(f.carrier, true))
+            f.bus.fire(PlayerToggleSneakEvent(f.rider, true))
             f.riderVehicle shouldBe f.carrier
             f.dismountSucceeds = true
-            f.bus.fire(PlayerToggleSneakEvent(f.carrier, true))
+            f.bus.fire(PlayerToggleSneakEvent(f.rider, true))
 
             f.riderVehicle shouldBe null
             verify(exactly = 2) { f.carrier.removePassenger(f.rider) }
@@ -221,7 +305,7 @@ class PlayerSeatRuntimeTest : StringSpec({
                 every { player } returns f.carrier
                 every { isCancelled } returns true
             }
-            val sneak = PlayerToggleSneakEvent(f.carrier, true).also { it.isCancelled = true }
+            val sneak = PlayerToggleSneakEvent(f.rider, true).also { it.isCancelled = true }
 
             f.bus.fire(teleport)
             f.bus.fire(sneak)
@@ -268,39 +352,50 @@ class PlayerSeatRuntimeTest : StringSpec({
 })
 
 private class SeatFixture : AutoCloseable {
-    val rider = seatPlayer()
-    val carrier = seatPlayer()
-    val other = seatPlayer()
+    private val vehicles = mutableMapOf<Player, Entity?>()
+    private val passengers = mutableMapOf<Player, MutableList<Entity>>()
+    val rider = player()
+    val carrier = player()
+    val other = player()
     val bus = TestEventBus()
-    val carrierPassengers = mutableListOf<Entity>()
-    var riderVehicle: Entity? = null
+    val carrierPassengers get() = passengers.getValue(carrier)
+    var riderVehicle: Entity?
+        get() = vehicles[rider]
+        set(value) { vehicles[rider] = value }
     var hand = EquipmentSlot.HAND
     var mountSucceeds = true
     var dismountSucceeds = true
     var canCarry = true
-    private val runtime = PlayerSeatRuntime(bus) { canCarry }
+    val nameTags = mutableListOf<Pair<Player, UUID?>>()
+    private val runtime = PlayerSeatRuntime(bus, { who, carrierId -> nameTags += who to carrierId }) { canCarry }
 
-    init {
-        every { rider.vehicle } answers { riderVehicle }
-        every { carrier.passengers } answers { carrierPassengers.toList() }
-        every { carrier.addPassenger(rider) } answers {
+    init { runtime.start() }
+
+    fun player(): Player = seatPlayer().also { carrier ->
+        val aboard = mutableListOf<Entity>()
+        passengers[carrier] = aboard
+        every { carrier.vehicle } answers { vehicles[carrier] }
+        every { carrier.passengers } answers { aboard.toList() }
+        every { carrier.addPassenger(any()) } answers {
+            val rider = firstArg<Player>()
             if (mountSucceeds) {
-                carrierPassengers += rider
-                riderVehicle = carrier
+                aboard += rider
+                vehicles[rider] = carrier
             }
             mountSucceeds
         }
-        every { carrier.removePassenger(rider) } answers {
+        every { carrier.removePassenger(any()) } answers {
+            val rider = firstArg<Player>()
             if (dismountSucceeds) {
-                carrierPassengers.remove(rider)
-                if (riderVehicle == carrier) riderVehicle = null
+                aboard.remove(rider)
+                if (vehicles[rider] == carrier) vehicles.remove(rider)
             }
             dismountSucceeds
         }
-        runtime.start()
     }
 
-    fun click(): PlayerInteractEntityEvent = PlayerInteractEntityEvent(rider, carrier, hand).also(bus::fire)
+    fun click(actor: Player = rider, target: Player = carrier): PlayerInteractEntityEvent =
+        PlayerInteractEntityEvent(actor, target, hand).also(bus::fire)
 
     override fun close() = runtime.close()
 }
