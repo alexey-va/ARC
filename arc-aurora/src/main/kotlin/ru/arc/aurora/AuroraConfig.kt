@@ -77,15 +77,15 @@ enum class AuroraShape {
     SKY_HOURGLASS, DANDELION_GUST, KINGFISHER_DIVE, STELLAR_PRISM, EMBER_VOLCANO, HATCHING_STAR, INFERNAL_PENTAGRAM,
     FEATHER_GLIDER, ASTRAL_PENDULUM, TWIN_SAMARAS, SKY_PHONOGRAPH;
 
-    internal val isMiniature: Boolean get() = when (this) {
-        FEATHER_GLIDER, ASTRAL_PENDULUM, TWIN_SAMARAS, SKY_PHONOGRAPH -> true
-        else -> false
-    }
+    internal val isMiniature: Boolean get() = this == FEATHER_GLIDER
 
     internal val isModel: Boolean get() = this == SKY_LANTERNS || isMiniature
 
     /** Recognized in older configuration files, with no active profile or command. */
-    internal val isRetired: Boolean get() = this == JELLYFISH || this == MANTA_RAY
+    internal val isRetired: Boolean get() = when (this) {
+        JELLYFISH, MANTA_RAY, ASTRAL_PENDULUM, TWIN_SAMARAS, SKY_PHONOGRAPH -> true
+        else -> false
+    }
 
     companion object {
         internal val active: List<AuroraShape> = entries.filterNot { it.isRetired }

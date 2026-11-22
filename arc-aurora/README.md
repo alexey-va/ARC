@@ -10,7 +10,7 @@ the PacketEvents compile version comes from the repository's dependency catalog.
 
 ## Visual direction
 
-The bundled configuration contains **25 ordinary particle profiles**, **three surface scenes**, and **40 sky variants**
+The bundled configuration contains **25 ordinary particle profiles**, **three surface scenes**, and **37 sky variants**
 sampled into up to **nine retained world cells** for `treasure-hunt`. The sky
 preserves the accepted soft-lines palette: one familiar white wave, blue and
 orange waves/curls, a green spark wave, three frequent meteor variants and one
@@ -69,8 +69,8 @@ Admission distance only controls new groups. Approaching or flying through an
 existing lantern group preserves its item identities and remaining flight;
 terrain, unloaded chunks, viewer eligibility and normal expiry still retire it.
 
-Lanterns have eight world-cell selection shares among 38 other sky variants,
-about 17% of cell assignments before distance,
+Lanterns have eight world-cell selection shares among 36 other sky variants,
+about 18% of cell assignments before distance,
 terrain and scene-budget checks. This makes them more common without attaching
 them to the camera or guaranteeing a group at every location. A cell retains
 its selected profile across lifecycles; its anchor jitter and motion seed vary.
@@ -94,18 +94,11 @@ scale envelope, not unsupported item-texture alpha. The model's brightness does
 not illuminate terrain or imply shader bloom. A source-driven model/motion
 preview is separate evidence from native Minecraft rendering and pack loading.
 
-Four multipart miniatures use full-bright vanilla items. Each part keeps its own display identity as the assembly moves.
-
-| Showcase name | Motion |
-| --- | --- |
-| `FEATHER_GLIDER` | Two feather wings unfold, bank and sweep back for a dive. |
-| `ASTRAL_PENDULUM` | An amber bob swings beneath a clock dial. |
-| `TWIN_SAMARAS` | Two winged seeds separate and spin down along different paths. |
-| `SKY_PHONOGRAPH` | The needle lowers onto a spinning record beneath a gold horn. |
+The `FEATHER_GLIDER` has a diamond body and two feather wings. They open, bank and fold for a dive. All four full-bright vanilla items keep their display identities throughout the flight.
 
 ### Private sky showcase
 
-Stand outdoors, face open sky and run `/arcaurora showcase SKY_STITCH` with `arcaurora.admin`. Nine copies of the selected effect play at different phases for three minutes. Tab completes all 45 active shape names, including the tracks, lanterns and surface effects. Run the command with another name to switch immediately. Run it in a new direction to move the display, or use `/arcaurora showcase stop` to end it early. Only the invoking player sees the display.
+Stand outdoors, face open sky and run `/arcaurora showcase SKY_STITCH` with `arcaurora.admin`. Nine copies of the selected effect play at different phases for three minutes. Tab completes all 42 active shape names, including the tracks, lanterns and surface effects. Run the command with another name to switch immediately. Run it in a new direction to move the display, or use `/arcaurora showcase stop` to end it early. Only the invoking player sees the display.
 
 The bare `/arcaurora showcase` opens a 60-second overview. The stitch and curtain appear above the hare tracks, paper flotilla and tumbleweed.
 
@@ -608,7 +601,7 @@ Run from the repository root with JDK 25:
 ```
 
 The expected local runtime artifact is
-`arc-aurora/build/libs/ArcAurora-0.1.17.jar`. The public Maven API artifact
+`arc-aurora/build/libs/ArcAurora-0.1.18.jar`. The public Maven API artifact
 `ru.ruscrafting.arc:arc-aurora-api:0.1.0` was verified on 2026-10-29 in the
 [RusCrafting repository](https://repo.rus-crafting.ru/grocermc/ru/ruscrafting/arc/arc-aurora-api/0.1.0/arc-aurora-api-0.1.0.pom).
 That API publication does not establish a runtime-plugin build, delivery,
@@ -655,4 +648,4 @@ approach starting with 0.1.13.
 The five decorations and the private showcase command require ArcAurora 0.1.14.
 Selection by shape and the three-minute display require ArcAurora 0.1.15.
 
-Version 0.1.16 retires `JELLYFISH` and `MANTA_RAY` and adds ten scenes. Version 0.1.17 adds `INFERNAL_PENTAGRAM`.
+Version 0.1.16 retires `JELLYFISH` and `MANTA_RAY` and adds ten scenes. Version 0.1.17 adds `INFERNAL_PENTAGRAM`. Version 0.1.18 retires `ASTRAL_PENDULUM`, `TWIN_SAMARAS` and `SKY_PHONOGRAPH`. Existing configurations that reference these shapes continue to load.

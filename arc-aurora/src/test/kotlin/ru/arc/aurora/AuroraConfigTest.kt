@@ -465,7 +465,13 @@ class AuroraConfigTest : FreeSpec({
                 old-swimmer:
                   shape: jellyfish
                   sky-scene: true
+                old-clock:
+                  shape: ASTRAL_PENDULUM
               mixed-night:
+                old-seeds:
+                  shape: twin_samaras
+                old-record:
+                  shape: SKY_PHONOGRAPH
                 old-glider:
                   shape: MANTA_RAY
                   sky-scene: true

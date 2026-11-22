@@ -116,37 +116,35 @@ class AuroraEngineTest : FreeSpec({
         }
     }
 
-    "each bundled miniature sends its complete moving assembly in the ordinary field and retires on leaving range" {
+    "the bundled glider sends all four moving parts in the ordinary field and retires on leaving range" {
         val bundled = AuroraConfig.parse(YamlConfiguration().apply {
             loadFromString(checkNotNull(javaClass.classLoader.getResourceAsStream("config.yml")).bufferedReader().use { it.readText() })
         })
-        val models = bundled.eventPresets.getValue("treasure-hunt").filter { it.shape.isMiniature }
-        models.map { it.shape }.toSet() shouldBe AuroraShape.active.filter { it.isMiniature }.toSet()
-        for (profile in models) {
-            val settings = skySettings(packets = 36).copy(profiles = listOf(profile), nativeBudgetMicros = Int.MAX_VALUE)
-            withEngine(settings, highSky = true) { fixture ->
-                fixture.permission(true)
-                fixture.loadChunks(8)
-                fixture.advance(120)
-                val key = fixture.activeModels.keys.single()
-                val poses = fixture.modelUpdates.filter { it.key === key && it.scales.all { scale -> scale > 0f } }
-                (poses.size >= 2) shouldBe true
-                poses.all { it.indices == 0 until profile.points && it.viewer == fixture.player.uniqueId } shouldBe true
-                (poses.map { it.centers }.distinct().size > 1) shouldBe true
-                fixture.emissions shouldBe emptyList()
+        val profile = bundled.eventPresets.getValue("treasure-hunt").single { it.shape.isMiniature }
+        profile.shape shouldBe AuroraShape.FEATHER_GLIDER
+        val settings = skySettings(packets = 36).copy(profiles = listOf(profile), nativeBudgetMicros = Int.MAX_VALUE)
+        withEngine(settings, highSky = true) { fixture ->
+            fixture.permission(true)
+            fixture.loadChunks(8)
+            fixture.advance(120)
+            val key = fixture.activeModels.keys.single()
+            val poses = fixture.modelUpdates.filter { it.key === key && it.scales.all { scale -> scale > 0f } }
+            (poses.size >= 2) shouldBe true
+            poses.all { it.indices == 0 until 4 && it.viewer == fixture.player.uniqueId } shouldBe true
+            (poses.map { it.centers }.distinct().size > 1) shouldBe true
+            fixture.emissions shouldBe emptyList()
 
-                fixture.player.teleport(poses.last().centers.first().clone().add(0.0, 0.0, 86.0)) shouldBe true
-                fixture.engine.tick()
-                fixture.activeModels shouldBe emptyMap()
-            }
+            fixture.player.teleport(poses.last().centers.first().clone().add(0.0, 0.0, 86.0)) shouldBe true
+            fixture.engine.tick()
+            fixture.activeModels shouldBe emptyMap()
         }
     }
 
-    "a one-request showcase visits every stable part of all nine six-part miniatures within a single cycle" {
-        val settings = skySettings(points = 6, shape = AuroraShape.SKY_PHONOGRAPH).copy(nativeBudgetMicros = Int.MAX_VALUE)
+    "a one-request showcase visits all four stable parts of every glider within a single cycle" {
+        val settings = skySettings(points = 4, shape = AuroraShape.FEATHER_GLIDER).copy(nativeBudgetMicros = Int.MAX_VALUE)
         withEngine(settings, highSky = true) { fixture ->
             fixture.admin(true)
-            fixture.engine.startShowcase(fixture.player, AuroraShape.SKY_PHONOGRAPH) shouldBe true
+            fixture.engine.startShowcase(fixture.player, AuroraShape.FEATHER_GLIDER) shouldBe true
             repeat(225) {
                 val before = fixture.modelUpdates.size
                 fixture.advance(1)
@@ -155,9 +153,9 @@ class AuroraEngineTest : FreeSpec({
             val copies = fixture.modelUpdates.groupBy { it.key }
             copies.size shouldBe AuroraShowcase.COPY_COUNT
             for (updates in copies.values) {
-                updates.windowed(6).any { cycle ->
+                updates.windowed(4).any { cycle ->
                     cycle.all { it.scales.single() > 0f } && cycle.zipWithNext().all { (a, b) -> a.progress < b.progress } &&
-                        cycle.flatMap { it.indices }.toSet() == (0 until 6).toSet()
+                        cycle.flatMap { it.indices }.toSet() == (0 until 4).toSet()
                 } shouldBe true
             }
             fixture.engine.stopShowcase(fixture.player.uniqueId)
@@ -165,8 +163,8 @@ class AuroraEngineTest : FreeSpec({
         }
     }
 
-    "partial miniature poses retain their private packet handles materials and rotated item axes" {
-        val profile = skySettings(points = 6, shape = AuroraShape.SKY_PHONOGRAPH).profiles.single()
+    "partial glider poses retain their private packet handles, materials and rotated item axes" {
+        val profile = skySettings(points = 4, shape = AuroraShape.FEATHER_GLIDER).profiles.single()
         withEngine { fixture ->
             val packets = mockk<PaperPacketDisplays>()
             val handles = mutableListOf<PacketItemDisplay>()
@@ -194,10 +192,10 @@ class AuroraEngineTest : FreeSpec({
                 verify { handle.transformation = pose }
                 verify(exactly = 1) { handle.showTo(fixture.player) }
             }
-            displays.updateMiniature("scene", fixture.player, profile, 4, centers.subList(4, 6), 0.6, yaw, pitch, size)
+            displays.updateMiniature("scene", fixture.player, profile, 2, centers.subList(2, 4), 0.6, yaw, pitch, size)
             handles.size shouldBe profile.points
-            handles.take(4).forEach { handle -> verify(exactly = 0) { handle.teleport(any()) } }
-            handles.drop(4).forEach { handle -> verify(exactly = 1) { handle.teleport(any()) } }
+            handles.take(2).forEach { handle -> verify(exactly = 0) { handle.teleport(any()) } }
+            handles.drop(2).forEach { handle -> verify(exactly = 1) { handle.teleport(any()) } }
             displays.retain(fixture.player.uniqueId, emptySet())
             handles.forEach { handle -> verify(exactly = 1) { handle.remove() } }
         }

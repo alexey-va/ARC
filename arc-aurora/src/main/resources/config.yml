@@ -1314,52 +1314,10 @@ event-presets:
       vertical-max: 34
       sky-options: {scale-min: 1.0, scale-max: 1.0, roll-radians: 0.0}
 
-    astral_pendulum:
-      sky-scene: true
-      shape: ASTRAL_PENDULUM
-      shape-size: 4
-      sky-points: 4
-      scene-duration-ticks: 240
-      spawn-delay-ticks: 40
-      update-ticks: 3
-      radius: 62
-      min-distance: 18
-      vertical-min: 16
-      vertical-max: 34
-      sky-options: {scale-min: 1.0, scale-max: 1.0, roll-radians: 0.0}
-
-    twin_samaras:
-      sky-scene: true
-      shape: TWIN_SAMARAS
-      shape-size: 4
-      sky-points: 4
-      scene-duration-ticks: 210
-      spawn-delay-ticks: 40
-      update-ticks: 3
-      radius: 62
-      min-distance: 18
-      vertical-min: 16
-      vertical-max: 34
-      sky-options: {scale-min: 1.0, scale-max: 1.0, roll-radians: 0.0}
-
-    sky_phonograph:
-      sky-scene: true
-      shape: SKY_PHONOGRAPH
-      shape-size: 4
-      sky-points: 6
-      scene-duration-ticks: 240
-      spawn-delay-ticks: 40
-      update-ticks: 3
-      radius: 62
-      min-distance: 18
-      vertical-min: 16
-      vertical-max: 34
-      sky-options: {scale-min: 1.0, scale-max: 1.0, roll-radians: 0.0}
-
     sky_lanterns:
       biomes: ['*']
       sky-scene: true
-      sky-weight: 8 # Eight shares among 38 other sky variants; shared scene limits still apply.
+      sky-weight: 8 # Eight shares among 36 other sky variants; shared scene limits still apply.
       scene-duration-ticks: 600
       spawn-delay-ticks: 80
       sky-tracers: 6
