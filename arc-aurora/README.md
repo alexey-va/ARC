@@ -95,13 +95,13 @@ preview is separate evidence from native Minecraft rendering and pack loading.
 
 The `FEATHER_GLIDER` has a diamond body and two feather wings. They open, bank and fold for a dive. All four full-bright vanilla items keep their display identities throughout the flight.
 
-The `INFERNAL_PENTAGRAM` in the treasure-hunt sky and its private showcase share one display model. Older particle-profile configurations keep the same effect name and placement settings when upgraded to 0.1.20.
+The `INFERNAL_PENTAGRAM` in the treasure-hunt sky and its showcase share one display model. Older particle-profile configurations keep the same effect name and placement settings when upgraded to 0.1.20.
 
-### Private sky showcase
+### Sky showcase
 
-Stand outdoors, face open sky and run `/arcaurora showcase SKY_STITCH` with `arcaurora.admin`. By default, nine copies of the selected effect play at different phases for three minutes. Tab completes all active shape names, including the tracks, lanterns and surface effects. Run the command with another name to switch immediately. Run it in a new direction to move the display, or use `/arcaurora showcase stop` to end it early. Only the invoking player sees the display.
+Stand outdoors, face open sky and run `/arcaurora showcase SKY_STITCH` with `arcaurora.admin`. By default, nine copies of the selected effect play at different phases for three minutes. Tab completes all active shape names, including the tracks, lanterns and surface effects. Run the command with another name to switch immediately. Run it in a new direction to move the display, or use `/arcaurora showcase stop` to end it early. Everyone within 64 blocks of the starting point in the same world can watch. Spectators can walk into an ongoing show and see its current phase. Each administrator controls their own show.
 
-These private sky scenes can be tried individually. They use vanilla item displays and are available with an existing config.
+These sky scenes can be tried individually. They use vanilla item displays and are available with an existing config.
 
 | Effect | Action |
 | --- | --- |
@@ -116,8 +116,12 @@ These private sky scenes can be tried individually. They use vanilla item displa
 | `SHATTERED_SWORD` | Diamond fragments assemble into a sword that shoots skyward. |
 | `REVERSE_FIREWORK` | A firework folds its sparks back into a falling rocket. |
 | `VOID_CATHEDRAL` | A gothic voidship banks past the viewer, exposing its cathedral spires and glowing engines. |
+| `SOLAR_CORSAIR` | An ivory corsair with a scarlet solar sail heels into a turn. |
+| `ORK_KROOZER` | A patchwork armoured kroozer lurches forward behind its jaw of tusks. |
+| `IMPERIAL_AQUILA` | A gold double-headed eagle unfolds its layered wings and tail. |
+| `MECHANICUS_SIGIL` | A toothed cog turns around a half-mechanical skull as its red lens lights up. |
 
-`/arcaurora showcase FROG_RAIN` surrounds the player with falling frogs for three minutes. Turn around to see the shower in every direction. The frogs are private displays with no AI or collision.
+`/arcaurora showcase FROG_RAIN` surrounds the player with falling frogs for three minutes. Turn around to see the shower in every direction. The frogs use packet displays and have no AI or collision.
 
 The bare `/arcaurora showcase` opens a 60-second overview. The stitch and curtain appear above the hare tracks, paper flotilla and tumbleweed.
 
@@ -223,6 +227,7 @@ bypass. At dawn, new submissions stop and native tails finish fading.
 | `/arcaurora reload` | `arcaurora.admin` | Validate a candidate configuration, then replace the active engine |
 | `/arcaurora preview [player]` | `arcaurora.admin` | Toggle a private sky preview: 60 seconds of new scenes, then visible lanterns finish; console names an online player |
 | `/arcaurora catalog [preset]` | `arcaurora.admin` | List preset IDs, or the profile IDs in one preset |
+| `/arcaurora showcase [EFFECT\|stop]` | `arcaurora.admin` to start or stop | Show a sky scene to nearby players. Viewing requires no permission. |
 | `/arcaurora preview <player\|self> <preset> [profile]` | `arcaurora.admin` | Replace private preview with a selected preset or one selected profile |
 
 `/aaurora` is an alias. A failed configuration parse retains the previous active
@@ -261,7 +266,7 @@ Edit `plugins/ArcAurora/config.yml`. Profiles are mappings under `profiles`;
 event profiles live under `event-presets.<preset>.<profile-id>`. The loader
 accepts at most **128 profiles in total**, including event profiles. Missing
 global defaults are merged from the bundled file; profile, event-preset and
-alias sections remain administrator-owned. Existing installations can copy the three new surface entries and both new `treasure-hunt` entries from the bundled config to enable ambient playback. A private showcase can use bundled definitions for missing entries.
+alias sections remain administrator-owned. Existing installations can copy the three new surface entries and both new `treasure-hunt` entries from the bundled config to enable ambient playback. A showcase can use bundled definitions for missing entries.
 
 Ordinary profiles must match at both the viewer's current block and each
 emission position. Particle patches and terrain scenes each select the highest matching priority in their group. Both groups share the per-viewer budget. World time supplies the
@@ -620,7 +625,7 @@ Run from the repository root with JDK 25:
 ```
 
 The expected local runtime artifact is
-`arc-aurora/build/libs/ArcAurora-0.1.20.jar`. The public Maven API artifact
+`arc-aurora/build/libs/ArcAurora-0.1.21.jar`. The public Maven API artifact
 `ru.ruscrafting.arc:arc-aurora-api:0.1.0` was verified on 2026-10-29 in the
 [RusCrafting repository](https://repo.rus-crafting.ru/grocermc/ru/ruscrafting/arc/arc-aurora-api/0.1.0/arc-aurora-api-0.1.0.pom).
 That API publication does not establish a runtime-plugin build, delivery,
@@ -664,7 +669,8 @@ delivery and runtime activation require separate operational evidence.
 require ArcAurora 0.1.10 or newer; the preview drain behavior requires 0.1.11,
 and `sky-weight` requires 0.1.12. Lantern groups remain visible during close
 approach starting with 0.1.13.
-The five decorations and the private showcase command require ArcAurora 0.1.14.
+The five decorations and the original showcase command require ArcAurora 0.1.14.
 Selection by shape and the three-minute display require ArcAurora 0.1.15.
+Nearby players share the showcase starting with ArcAurora 0.1.21.
 
 Version 0.1.16 retires `JELLYFISH` and `MANTA_RAY` and adds ten scenes. Version 0.1.17 adds `INFERNAL_PENTAGRAM`. Version 0.1.18 retires `ASTRAL_PENDULUM`, `TWIN_SAMARAS` and `SKY_PHONOGRAPH`. Existing configurations that reference these shapes continue to load.

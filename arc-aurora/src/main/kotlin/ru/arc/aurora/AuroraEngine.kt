@@ -64,7 +64,6 @@ internal class AuroraEngine(
         var pass = 0L
         var selection: Selection? = null
         var previewDrain: PreviewDrain? = null // Main-owned; immutable snapshot copied into worker inputs.
-        var showcase: AuroraShowcase? = null
         // Worker owns scene creation; Main retains immutable strokes and acknowledges attempted points.
         var sky: SkyInput? = null
         var skyTurn = 0L
@@ -145,6 +144,19 @@ internal class AuroraEngine(
     }
     private data class Planned(val emissions: List<Emission>, val sky: SkyInput? = null)
     private data class Batch(val age: Long, val emissions: List<Emission>, val skies: List<SkyInput>)
+    private class ShowcaseViewer(val player: Player, val eye: Location)
+    private class SharedShowcase(val panel: AuroraShowcase) {
+        var audience: Map<UUID, ShowcaseViewer> = emptyMap()
+        var recipientOrder: List<UUID> = emptyList()
+        var nextRecipient = 0
+        // Each subscription can cancel its own pending Netty writes without interrupting another show.
+        val particles = mutableMapOf<UUID, PaperViewerParticles>()
+        fun clearParticles() {
+            particles.values.forEach { it.close() }
+            particles.clear()
+        }
+    }
+    private val showcases = mutableMapOf<UUID, SharedShowcase>()
     private val viewers = mutableMapOf<UUID, Viewer>()
     private val rotation = ArrayDeque<Viewer>()
     private val closed = AtomicBoolean()
@@ -173,6 +185,8 @@ internal class AuroraEngine(
     }
 
     fun quit(id: UUID) {
+        showcases.remove(id)?.clearParticles()
+        leaveShowcases(id)
         viewers.remove(id)?.particles?.close()
         lanterns?.removeViewer(id)
         // Stale queue entries retire during the bounded audience scan.
@@ -180,6 +194,7 @@ internal class AuroraEngine(
     }
 
     fun invalidate(id: UUID) {
+        showcases[id]?.clearParticles()
         viewers[id]?.let {
             it.sky?.scenes?.forEach { scene -> scene.renderedModels = false }
             it.revision++; it.sky = null; it.particles.invalidatePending()
@@ -200,8 +215,9 @@ internal class AuroraEngine(
         }
         val duration = if (shape == null) AuroraShowcase.DURATION_TICKS else AuroraShowcase.SELECTED_DURATION_TICKS
         val eye = player.eyeLocation
-        viewer.showcase = AuroraShowcase(player.world.uid, AuroraOffset(eye.x, eye.y, eye.z), eye.yaw,
+        val panel = AuroraShowcase(player.world.uid, AuroraOffset(eye.x, eye.y, eye.z), eye.yaw,
             profiles, age + duration)
+        showcases.put(viewer.id, SharedShowcase(panel))?.clearParticles()
         viewer.previewDrain = null
         viewer.selection = null
         viewer.due = age
@@ -211,15 +227,61 @@ internal class AuroraEngine(
 
     fun stopShowcase(id: UUID) {
         val viewer = viewers[id] ?: return
-        if (viewer.showcase == null) return
-        viewer.showcase = null
+        val showcase = showcases.remove(id) ?: return
+        showcase.clearParticles()
         viewer.selection = null
         viewer.due = age
         invalidate(id)
     }
 
     fun changeWorld(id: UUID) {
-        if (viewers[id]?.showcase != null) stopShowcase(id) else invalidate(id)
+        leaveShowcases(id)
+        if (id in showcases) stopShowcase(id) else invalidate(id)
+    }
+
+    private fun leaveShowcases(id: UUID) {
+        for ((owner, show) in showcases) {
+            if (id in show.audience) setAudience(owner, show, show.audience - id)
+        }
+    }
+
+    private fun setAudience(owner: UUID, show: SharedShowcase, members: Map<UUID, ShowcaseViewer>) {
+        if (members.keys != show.audience.keys) {
+            for (id in show.audience.keys) if (id !in members) show.particles.remove(id)?.close()
+            show.recipientOrder = members.keys.toList()
+            if (show.nextRecipient >= members.size) show.nextRecipient = 0
+            if (members.isEmpty()) viewers[owner]?.let(::retireModels)
+            else lanterns?.setShowcaseAudience(owner, members.keys)
+        }
+        show.audience = members
+    }
+
+    /** The main thread snapshots membership once for all the points in this tick. */
+    private fun refreshShowcaseAudiences() {
+        if (showcases.isEmpty()) return
+        for ((id, show) in showcases.toMap()) {
+            val owner = Bukkit.getPlayer(id)
+            if (owner == null || !owner.isOnline || owner.world.uid != show.panel.world ||
+                age >= show.panel.expiresAt || !owner.hasPermission(AURORA_ADMIN_PERMISSION)) stopShowcase(id)
+        }
+        if (showcases.isEmpty()) return
+        val audiences = showcases.mapValues { mutableMapOf<UUID, ShowcaseViewer>() }
+        for (viewer in viewers.values) {
+            val player = Bukkit.getPlayer(viewer.id) ?: continue
+            if (!player.isOnline || player.isDead) continue
+            val eye = player.eyeLocation
+            val world = player.world.uid
+            var recipient: ShowcaseViewer? = null
+            for ((id, show) in showcases) {
+                if (world != show.panel.world || !show.panel.contains(eye.x, eye.y, eye.z)) continue
+                if (recipient == null) {
+                    if (!pingAdmits(player, viewer)) break
+                    recipient = ShowcaseViewer(player, eye)
+                }
+                audiences.getValue(id)[viewer.id] = recipient
+            }
+        }
+        for ((owner, show) in showcases) setAudience(owner, show, audiences.getValue(owner))
     }
 
     /** Stop preview admission now; only these already-visible groups may finish their original lifetime. */
@@ -237,14 +299,14 @@ internal class AuroraEngine(
         return scenes.maxOfOrNull { it.startsAt + it.profile.sceneDurationTicks - age } ?: 0L
     }
     fun invalidateWorld(worldId: UUID) {
-        viewers.values.filter { it.world == worldId && it.showcase == null }.map { it.id }.forEach(::invalidate)
+        viewers.values.filter { it.world == worldId && it.id !in showcases }.map { it.id }.forEach(::invalidate)
     }
 
     fun personallyEnabled(player: Player) = player.persistentDataContainer.get(disabledKey, PersistentDataType.BYTE) != 1.toByte()
     fun setPersonallyEnabled(player: Player, enabled: Boolean) {
         if (enabled) player.persistentDataContainer.remove(disabledKey)
         else player.persistentDataContainer.set(disabledKey, PersistentDataType.BYTE, 1.toByte())
-        if (viewers[player.uniqueId]?.showcase == null) invalidate(player.uniqueId)
+        if (player.uniqueId !in showcases) invalidate(player.uniqueId)
     }
 
     /** Called exclusively by the owned one-tick Main timer. */
@@ -252,6 +314,7 @@ internal class AuroraEngine(
         if (closed.get()) return
         age++
         val deadline = System.nanoTime() + settings.nativeBudgetMicros * 1000L
+        refreshShowcaseAudiences()
         completed.getAndSet(null)?.let { batch ->
             val fresh = age - batch.age <= 4L
             batch.skies.forEach { sky ->
@@ -262,7 +325,7 @@ internal class AuroraEngine(
             }
             for (emission in batch.emissions) {
                 if (!fresh || System.nanoTime() >= deadline) break
-                deliver(emission)
+                deliver(emission, deadline)
             }
         }
         val audience = ArrayList<Viewer>()
@@ -280,12 +343,13 @@ internal class AuroraEngine(
             val player = Bukkit.getPlayer(viewer.id) ?: return@forEach
             val selection = select(player, viewer)
             if (!eligible(player, viewer, selection.source)) return@forEach
-            if (viewer.showcase != null && viewer.sky != null) return@forEach
+            val showcase = showcases[viewer.id]?.panel
+            if (showcase != null && viewer.sky != null) return@forEach
             val at = player.location
-            if (!player.world.isChunkLoaded(at.blockX shr 4, at.blockZ shr 4)) return@forEach
+            if (showcase == null && !player.world.isChunkLoaded(at.blockX shr 4, at.blockZ shr 4)) return@forEach
             if (selection.profiles.isNotEmpty()) {
                 inputs += Input(viewer, player.world.uid, at.x, at.y, at.z, at.yaw, selection, age, viewer.revision,
-                    viewer.pass++, viewer.previewDrain, viewer.showcase)
+                    viewer.pass++, viewer.previewDrain, showcase)
             }
         }
         if (inputs.isEmpty() || !planning.compareAndSet(false, true)) return
@@ -307,13 +371,7 @@ internal class AuroraEngine(
     /** Reconcile Main-owned source changes before consuming a point or dispatching captured work. */
     private fun select(player: Player, viewer: Viewer): Selection {
         val world = player.world
-        val showcase = viewer.showcase
-        if (showcase != null) {
-            if (showcase.world == world.uid && age < showcase.expiresAt && player.hasPermission(AURORA_ADMIN_PERMISSION)) {
-                return Selection(Source.SHOWCASE, showcase.profiles)
-            }
-            stopShowcase(viewer.id)
-        }
+        showcases[viewer.id]?.let { return Selection(Source.SHOWCASE, it.panel.profiles) }
         val preview = previewProfiles(viewer.id)
         if (viewer.previewDrain?.profiles !== preview) viewer.previewDrain = null
         val event = preview ?: eventProfiles(world.uid)
@@ -338,26 +396,33 @@ internal class AuroraEngine(
     }
 
     private fun eligible(player: Player, viewer: Viewer, source: Source): Boolean {
+        // The owner drives the timeline even while out of range or unable to receive cosmetic packets.
+        if (source == Source.SHOWCASE) return showcases[viewer.id]?.audience?.isNotEmpty() == true
         if (!player.isOnline || player.isDead) { retireModels(viewer); return false }
         viewer.world = player.world.uid
-        val current = player.ping
-        if (age >= viewer.sampleAt) {
-            viewer.ping.sample(current)
-            viewer.sampleAt = age + settings.ping.sampleIntervalTicks
-        }
-        if (!viewer.ping.admits(current, settings.ping)) {
+        if (!pingAdmits(player, viewer)) {
             viewer.particles.invalidatePending()
             retireModels(viewer)
-            pingSkipped++
             return false
         }
-        if (source != Source.EVENT && source != Source.SHOWCASE && (!personallyEnabled(player) ||
+        if (source != Source.EVENT && (!personallyEnabled(player) ||
             source == Source.ORDINARY && !player.hasPermission(settings.permission))) {
             viewer.particles.invalidatePending()
             retireModels(viewer)
             return false
         }
         return true
+    }
+
+    private fun pingAdmits(player: Player, viewer: Viewer): Boolean {
+        val current = player.ping
+        if (age >= viewer.sampleAt) {
+            viewer.ping.sample(current)
+            viewer.sampleAt = age + settings.ping.sampleIntervalTicks
+        }
+        if (viewer.ping.admits(current, settings.ping)) return true
+        pingSkipped++
+        return false
     }
 
     private fun retireModels(viewer: Viewer) {
@@ -419,6 +484,7 @@ internal class AuroraEngine(
             val player = Bukkit.getPlayer(viewer.id)
             if (player == null) { retireModels(viewer); continue }
             val selection = select(player, viewer)
+            if (selection.source == Source.SHOWCASE && showcases.getValue(viewer.id).audience.isEmpty()) continue
             val sky = viewer.sky
             if (sky == null || player.world.uid != sky.input.world || viewer.revision != sky.input.revision ||
                 !selection.sameAs(sky.input.selection) || !eligible(player, viewer, selection.source)) {
@@ -442,9 +508,8 @@ internal class AuroraEngine(
                 if (remaining == 0) break
                 val scene = scenes[(start + index) % scenes.size]
                 val current = player.location
-                val ordinaryLimit = settings.skyField.viewDistance + settings.skyField.cullHysteresis
-                val limit = if (showcase == null) ordinaryLimit else maxOf(48.0, ordinaryLimit)
-                if ((scene.x - current.x).let { it * it } + (scene.z - current.z).let { it * it } > limit * limit) {
+                val limit = settings.skyField.viewDistance + settings.skyField.cullHysteresis
+                if (showcase == null && (scene.x - current.x).let { it * it } + (scene.z - current.z).let { it * it } > limit * limit) {
                     scene.culled.set(true) // Stop the whole figure; its existing native tail expires naturally.
                     lanterns?.retain(viewer.id, scenes.filter { !it.culled.get() && !it.rejected.get() }.toSet())
                 }
@@ -485,7 +550,7 @@ internal class AuroraEngine(
                             lanterns?.retain(viewer.id, scenes.filter { it !== scene && !it.rejected.get() && !it.culled.get() }.toSet())
                             continue
                         }
-                        val displays = lanterns ?: lanternFactory().also { lanterns = it }
+                        val displays = displaysFor(sky.input)
                         val yaw = atan2(scene.normalX, scene.normalZ)
                         if (scene.profile.shape.isMiniature) {
                             displays.updateMiniature(scene, player, scene.profile, firstPart, centers.subList(firstPart, endPart),
@@ -536,7 +601,7 @@ internal class AuroraEngine(
                         remaining--
                         if (deliver(Emission(sky.input, scene.profile, x, y, z,
                             style?.particle ?: scene.profile.particle,
-                            if (style == null) scene.profile.particleData else style.data, support)) == Delivery.OBSTRUCTED) scene.rejected.set(true)
+                            if (style == null) scene.profile.particleData else style.data, support), deadline) == Delivery.OBSTRUCTED) scene.rejected.set(true)
                     }
                     continue
                 }
@@ -554,7 +619,7 @@ internal class AuroraEngine(
                         scene.y + checkNotNull(scene.surfaceY) + offset.y,
                         scene.z - offset.x * scene.normalX + offset.z * scene.normalZ,
                         particle = if (palette.isEmpty()) scene.profile.particle else palette[index % 2],
-                        particleData = if (palette.isEmpty()) scene.profile.particleData else null)) == Delivery.OBSTRUCTED) {
+                        particleData = if (palette.isEmpty()) scene.profile.particleData else null), deadline) == Delivery.OBSTRUCTED) {
                         scene.rejected.set(true) // Relocate a damaged figure instead of carving a permanent hole.
                     }
                 }
@@ -646,13 +711,19 @@ internal class AuroraEngine(
             Math.ceilDiv(sky.scenes.size, AuroraShowcase.STORY_COPIES_PER_VISIT))
         val interpolation = if (sky.showcase == null || scene.lastStoryPoseAt == Long.MIN_VALUE) cadence
             else maxOf(cadence, (age - scene.lastStoryPoseAt).coerceAtMost(59).toInt())
-        val displays = lanterns ?: lanternFactory().also { lanterns = it }
+        val displays = displaysFor(sky.input)
         scene.renderedModels = displays.updateStory(scene, player, profile, anchor, parts, first, end, interpolation)
         scene.lastStoryPoseAt = age
         scene.animationCursor = end % profile.points
         scene.storyPose = if (end < profile.points) parts else null
         scene.nextAt = age + if (end < profile.points) 1 else cadence
         return end - first
+    }
+
+    private fun displaysFor(input: Input): AuroraLanternDisplays {
+        val displays = lanterns ?: lanternFactory().also { lanterns = it }
+        if (input.showcase != null) displays.setShowcaseAudience(input.viewer.id, showcases.getValue(input.viewer.id).audience.keys)
+        return displays
     }
 
     /** Loaded heightmap checks cover the whole swept footprint before any point is sent. */
@@ -915,7 +986,7 @@ internal class AuroraEngine(
             }
         }
 
-    private fun deliver(emission: Emission): Delivery {
+    private fun deliver(emission: Emission, deadline: Long): Delivery {
         val input = emission.input
         val viewer = input.viewer
         if (viewers[viewer.id] !== viewer || viewer.revision != input.revision) return Delivery.SKIPPED
@@ -925,15 +996,14 @@ internal class AuroraEngine(
         if (!selection.sameAs(input.selection) || viewer.revision != input.revision) return Delivery.SKIPPED
         if (viewer.previewDrain != null) return Delivery.SKIPPED
         if (!eligible(player, viewer, selection.source)) return Delivery.SKIPPED
-        val at = player.location
-        if (!emission.profile.skyScene && at.distanceSquared(Location(player.world, input.x, input.y, input.z)) > 16.0)
+        if (!emission.profile.skyScene && player.location.distanceSquared(Location(player.world, input.x, input.y, input.z)) > 16.0)
             return Delivery.SKIPPED
         val world = player.world
         if (emission.y < world.minHeight || emission.y >= world.maxHeight) return Delivery.OBSTRUCTED
         val location = Location(world, emission.x, emission.y, emission.z)
         // Sky min-distance selects its anchor, not a sphere that would cut off the near half of a large figure.
         val eyeClearance = if (emission.profile.skyScene) 2.0 else emission.profile.minDistance
-        if (location.distanceSquared(player.eyeLocation) < eyeClearance * eyeClearance) return Delivery.OBSTRUCTED
+        if (input.showcase == null && location.distanceSquared(player.eyeLocation) < eyeClearance * eyeClearance) return Delivery.OBSTRUCTED
         if (!world.isChunkLoaded(location.blockX shr 4, location.blockZ shr 4)) return Delivery.OBSTRUCTED
         val block = location.block
         if (emission.support != null && location.y < emission.support.height) return Delivery.OBSTRUCTED
@@ -942,16 +1012,35 @@ internal class AuroraEngine(
             return Delivery.OBSTRUCTED
         if (input.selection.source == Source.ORDINARY && emission.profile !in matching(player, location, settings.profiles, aboveSupport))
             return Delivery.OBSTRUCTED
-        // Final permission/ping gate above is shared by ambient and temporary events.
         val p = emission.profile
-        viewer.particles.emit(player, location, emission.particle, p.count, p.offsetX, p.offsetY, p.offsetZ, p.speed, emission.particleData, p.skyScene)
-        submittedPackets++
+        fun submit(emitter: PaperViewerParticles, recipient: Player) {
+            emitter.emit(recipient, location, emission.particle, p.count, p.offsetX, p.offsetY, p.offsetZ, p.speed, emission.particleData, p.skyScene)
+            submittedPackets++
+        }
+        if (input.showcase == null) {
+            submit(viewer.particles, player)
+        } else {
+            val show = showcases.getValue(viewer.id)
+            // A crowded show may only reach part of its audience in this native slice. The
+            // next fresh point starts with the next viewer; obsolete particles are never queued.
+            repeat(show.recipientOrder.size) {
+                if (System.nanoTime() >= deadline) return Delivery.SUBMITTED
+                val id = show.recipientOrder[show.nextRecipient]
+                show.nextRecipient = (show.nextRecipient + 1) % show.recipientOrder.size
+                val recipient = show.audience.getValue(id)
+                if (location.distanceSquared(recipient.eye) >= eyeClearance * eyeClearance) {
+                    submit(show.particles.getOrPut(id, emitterFactory), recipient.player)
+                }
+            }
+        }
         return Delivery.SUBMITTED
     }
 
     fun closeAsync(): CompletableFuture<Void> {
         if (!closed.compareAndSet(false, true)) return retirement
         completed.set(null)
+        showcases.values.forEach { it.clearParticles() }
+        showcases.clear()
         viewers.values.forEach { it.particles.close() }
         viewers.clear(); rotation.clear(); viewerCount = 0
         retirement = lanterns?.closeAsync() ?: CompletableFuture.completedFuture(null)

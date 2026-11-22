@@ -91,7 +91,11 @@ enum class AuroraShape(
     SHATTERED_SWORD(AuroraMagicStories, 134),
     REVERSE_FIREWORK(AuroraMagicStories, 121),
     FROG_RAIN(AuroraFrogRain, 160),
-    VOID_CATHEDRAL(AuroraVoidCathedral, 240);
+    VOID_CATHEDRAL(AuroraVoidCathedral, 240),
+    SOLAR_CORSAIR(AuroraSolarCorsair, 240),
+    ORK_KROOZER(AuroraOrkKroozer, 220),
+    IMPERIAL_AQUILA(AuroraImperialAquila, 200),
+    MECHANICUS_SIGIL(AuroraMechanicusSigil, 220);
 
     internal val isStory: Boolean get() = storyParts != null
     internal val isMiniature: Boolean get() = this == FEATHER_GLIDER || isStory

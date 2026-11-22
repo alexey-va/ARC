@@ -21,6 +21,13 @@ internal class AuroraShowcase(
     val normalX = sin(angle)
     val normalZ = -cos(angle)
 
+    fun contains(x: Double, y: Double, z: Double): Boolean {
+        val dx = x - eye.x
+        val dy = y - eye.y
+        val dz = z - eye.z
+        return dx * dx + dy * dy + dz * dz <= AUDIENCE_RADIUS * AUDIENCE_RADIUS
+    }
+
     fun pose(index: Int): Pose {
         if (profiles[index].shape == AuroraShape.FROG_RAIN && profiles.size == RAIN_GROUPS) {
             val inner = index % 2 == 0
@@ -85,6 +92,7 @@ internal class AuroraShowcase(
     }
 
     companion object {
+        const val AUDIENCE_RADIUS = 64.0
         const val DURATION_TICKS = 1_200L
         const val SELECTED_DURATION_TICKS = 3_600L
         const val COPY_COUNT = 9

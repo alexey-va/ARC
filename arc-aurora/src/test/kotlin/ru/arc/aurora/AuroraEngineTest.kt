@@ -26,6 +26,7 @@ import ru.arc.paper.display.PaperPacketDisplays
 import ru.arc.paper.particle.PaperViewerParticles
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import ru.arc.paper.testing.failOnUnsupportedMockBukkitOperation
+import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
@@ -66,27 +67,41 @@ class AuroraEngineTest : FreeSpec({
         }
     }
 
-    "selected basic and celestial showcases recapture the heading and only emit the requested shape" {
+    "selected particle showcases share the same positions up to 64 blocks in the invocation world" {
         val base = skySettings(packets = 12)
         val point = base.profiles.single().copy(id = "point", count = 1)
         val curtain = point.copy(id = "curtain", shape = AuroraShape.AURORA_CURTAIN, points = 48, count = 2, skyTracers = 8)
-        withEngine(base.copy(profiles = listOf(point, curtain), viewersPerTick = 2), highSky = true) { fixture ->
-            fixture.joinAdditional("OtherShowcasePlayer")
+        val settings = base.copy(profiles = listOf(point, curtain), viewersPerTick = 3, nativeBudgetMicros = Int.MAX_VALUE)
+        withEngine(settings, highSky = true) { fixture ->
+            val owner = fixture.player
+            val origin = owner.location
+            val atLimit = fixture.joinAdditional("AtShowcaseLimit", origin.clone().add(0.0, 0.0, -64.0))
+            val outside = fixture.joinAdditional("OutsideShowcaseLimit", origin.clone().add(0.0, 64.01, 0.0))
+            fixture.engine.startShowcase(atLimit, AuroraShape.POINT) shouldBe false
             fixture.admin(true)
-            fixture.engine.startShowcase(fixture.player, AuroraShape.POINT) shouldBe true
+
+            fun emissionsSince(index: Int) = fixture.emissions.drop(index).zip(fixture.locations.drop(index))
+                .groupBy { it.first.viewer }
+
+            fixture.engine.startShowcase(owner, AuroraShape.POINT) shouldBe true
             fixture.advance(100)
             fixture.sceneRows(0).map { it.split(',')[2] } shouldBe List(AuroraShowcase.COPY_COUNT) { point.id }
-            fixture.emissions.map { it.count }.toSet() shouldBe setOf(1)
+            val first = emissionsSince(0)
+            first.keys shouldBe setOf(owner.uniqueId, atLimit.uniqueId)
+            first.getValue(owner.uniqueId).map { it.second } shouldBe first.getValue(atLimit.uniqueId).map { it.second }
+            fixture.emissions.all { it.count == 1 && it.force } shouldBe true
 
-            fixture.player.teleport(fixture.player.location.apply { yaw = -90f }) shouldBe true
+            val otherWorld = fixture.paper.addSimpleWorld("showcase-elsewhere")
+            outside.teleport(Location(otherWorld, origin.x, origin.y, origin.z)) shouldBe true
+            fixture.engine.changeWorld(outside.uniqueId)
+            owner.teleport(origin.clone().apply { yaw = -90f }) shouldBe true
             val beforeReplacement = fixture.emissions.size
-            fixture.engine.startShowcase(fixture.player, AuroraShape.AURORA_CURTAIN) shouldBe true
+            fixture.engine.startShowcase(owner, AuroraShape.AURORA_CURTAIN) shouldBe true
             fixture.advance(130)
-            val rows = fixture.sceneRows(0).map { it.split(',') }
-            rows.map { it[2] } shouldBe List(AuroraShowcase.COPY_COUNT) { curtain.id }
-            rows.all { it[7].toDouble() - fixture.player.location.x > 20.0 } shouldBe true
-            fixture.emissions.drop(beforeReplacement).map { it.count }.toSet() shouldBe setOf(2)
-            fixture.emissions.all { it.viewer == fixture.player.uniqueId } shouldBe true
+            val replacement = emissionsSince(beforeReplacement)
+            replacement.keys shouldBe first.keys
+            replacement.getValue(owner.uniqueId).map { it.second } shouldBe replacement.getValue(atLimit.uniqueId).map { it.second }
+            replacement.values.flatten().all { (emission, location) -> emission.count == 2 && location.x - origin.x > 20.0 } shouldBe true
         }
     }
 
@@ -94,6 +109,7 @@ class AuroraEngineTest : FreeSpec({
         val base = skySettings(points = 6, shape = AuroraShape.SKY_LANTERNS)
         val lantern = base.profiles.single().copy(sceneDurationTicks = 80, updateTicks = 4, skyModel = AuroraSkyModel())
         withEngine(base.copy(profiles = listOf(lantern)), highSky = true) { fixture ->
+            val observer = fixture.joinAdditional("LanternObserver")
             fixture.admin(true)
             fixture.engine.startShowcase(fixture.player, AuroraShape.SKY_LANTERNS) shouldBe true
             repeat(270) {
@@ -106,11 +122,13 @@ class AuroraEngineTest : FreeSpec({
             fixture.modelUpdates.all { it.centers.size == 1 && it.viewer == fixture.player.uniqueId } shouldBe true
             fixture.retiredModels.map { it.key }.toSet() shouldBe keys
             fixture.activeModels.isNotEmpty() shouldBe true
+            fixture.showcaseAudiences[fixture.player.uniqueId] shouldBe setOf(fixture.player.uniqueId, observer.uniqueId)
             fixture.emissions shouldBe emptyList()
 
             val beforeStop = fixture.modelUpdates.size
             fixture.engine.stopShowcase(fixture.player.uniqueId)
             fixture.activeModels shouldBe emptyMap()
+            fixture.showcaseAudiences[fixture.player.uniqueId] shouldBe null
             fixture.advance(100)
             fixture.modelUpdates.size shouldBe beforeStop
         }
@@ -162,6 +180,46 @@ class AuroraEngineTest : FreeSpec({
         }
     }
 
+    "changing viewers retires their shared displays without replacing the owner's scene" {
+        val shape = AuroraShape.FEATHER_GLIDER
+        val settings = skySettings(points = 4, shape = shape, packets = 36)
+            .copy(viewersPerTick = 3, nativeBudgetMicros = Int.MAX_VALUE)
+        withEngine(settings, highSky = true) { fixture ->
+            val owner = fixture.player
+            val guest = fixture.joinAdditional("ChangingWorld")
+            val quitter = fixture.joinAdditional("QuittingShowcase")
+            val origin = owner.location
+            val otherWorld = fixture.paper.addSimpleWorld("showcase-destination")
+            val destination = Location(otherWorld, origin.x, origin.y, origin.z)
+            fixture.admin(true)
+            fixture.engine.startShowcase(owner, shape) shouldBe true
+            fixture.advance(160)
+            val firstScene = fixture.activeModels.keys.toSet()
+            firstScene.isNotEmpty() shouldBe true
+            fixture.showcaseAudiences[owner.uniqueId] shouldBe setOf(owner.uniqueId, guest.uniqueId, quitter.uniqueId)
+
+            guest.teleport(destination) shouldBe true
+            fixture.engine.changeWorld(guest.uniqueId)
+            fixture.showcaseAudiences[owner.uniqueId] shouldBe setOf(owner.uniqueId, quitter.uniqueId)
+            fixture.engine.quit(quitter.uniqueId)
+            fixture.showcaseAudiences[owner.uniqueId] shouldBe setOf(owner.uniqueId)
+            fixture.activeModels.keys shouldBe firstScene
+
+            fixture.engine.startShowcase(owner, shape) shouldBe true
+            fixture.activeModels shouldBe emptyMap()
+            fixture.advance(160)
+            fixture.activeModels.isNotEmpty() shouldBe true
+            fixture.activeModels.keys.intersect(firstScene) shouldBe emptySet()
+            val beforeWorldChange = fixture.modelUpdates.size
+            owner.teleport(destination) shouldBe true
+            fixture.engine.changeWorld(owner.uniqueId)
+            fixture.activeModels shouldBe emptyMap()
+            fixture.showcaseAudiences[owner.uniqueId] shouldBe null
+            fixture.advance(25)
+            fixture.modelUpdates.size shouldBe beforeWorldChange
+        }
+    }
+
     "partial glider poses retain their private packet handles, materials and rotated item axes" {
         val profile = skySettings(points = 4, shape = AuroraShape.FEATHER_GLIDER).profiles.single()
         withEngine { fixture ->
@@ -200,14 +258,15 @@ class AuroraEngineTest : FreeSpec({
         }
     }
 
-    "the private herd gallery submits whole current poses in turn and faces the moved viewer above an obstruction" {
+    "the shared herd keeps its scene and current poses as viewers enter, move and leave" {
         val shape = AuroraShape.STORM_HERD
         val count = AuroraSkyMiniatures.partCount(shape)
         val base = skySettings(points = count, shape = shape)
         val profile = base.profiles.single().copy(sceneDurationTicks = shape.storyDurationTicks, updateTicks = 3)
-        withEngine(base.copy(profiles = listOf(profile), nativeBudgetMicros = Int.MAX_VALUE), highSky = true) { fixture ->
+        withEngine(base.copy(profiles = listOf(profile), viewersPerTick = 2, nativeBudgetMicros = Int.MAX_VALUE), highSky = true) { fixture ->
             val player = fixture.player
             fixture.admin(true)
+            val origin = player.location
             val eye = player.eyeLocation
             val panel = AuroraShowcase(player.world.uid, AuroraOffset(eye.x, eye.y, eye.z), eye.yaw,
                 List(AuroraShowcase.COPY_COUNT) { profile }, AuroraShowcase.SELECTED_DURATION_TICKS)
@@ -253,14 +312,33 @@ class AuroraEngineTest : FreeSpec({
                 parts.any { it.transform.scale.lengthSquared() > 0f }
             }
             fixture.engine.startShowcase(player, shape) shouldBe true
-            repeat(240) {
-                tick++
-                if (tick == 130) player.teleport(player.location.clone().add(6.0, 3.0, 0.0)) shouldBe true
-                sent = 0
-                fixture.advance(1)
-                (sent <= count * AuroraShowcase.STORY_COPIES_PER_VISIT) shouldBe true
+            fun advance(ticks: Int) {
+                repeat(ticks) {
+                    tick++
+                    sent = 0
+                    fixture.advance(1)
+                    (sent <= count * AuroraShowcase.STORY_COPIES_PER_VISIT) shouldBe true
+                }
             }
-            updates.size shouldBe AuroraShowcase.COPY_COUNT
+            advance(120)
+            val originalScenes = updates.keys.toSet()
+            originalScenes.size shouldBe AuroraShowcase.COPY_COUNT
+            val watcher = fixture.joinAdditional("LateHerdObserver", origin.clone().add(9.0, 0.0, 0.0))
+            advance(10)
+            fixture.showcaseAudiences[player.uniqueId] shouldBe setOf(player.uniqueId, watcher.uniqueId)
+
+            watcher.teleport(origin.clone().add(10.0, 2.0, 4.0).apply { yaw = 150f }) shouldBe true
+            player.teleport(origin.clone().add(6.0, 3.0, 0.0)) shouldBe true
+            advance(40)
+            fixture.showcaseAudiences[player.uniqueId] shouldBe setOf(player.uniqueId, watcher.uniqueId)
+            watcher.teleport(origin.clone().add(65.0, 0.0, 0.0)) shouldBe true
+            advance(10)
+            fixture.showcaseAudiences[player.uniqueId] shouldBe setOf(player.uniqueId)
+            watcher.teleport(origin.clone().add(9.0, 0.0, 0.0)) shouldBe true
+            player.teleport(origin.clone().add(65.0, 0.0, 0.0)) shouldBe true
+            advance(60)
+            fixture.showcaseAudiences[player.uniqueId] shouldBe setOf(watcher.uniqueId)
+            updates.keys shouldBe originalScenes
             updates.values.all { phases -> phases.size > 20 && phases.zipWithNext().all { (a, b) -> b - a == 5 } } shouldBe true
             fixture.engine.stopShowcase(player.uniqueId)
             sent = 0
@@ -435,9 +513,10 @@ class AuroraEngineTest : FreeSpec({
         }
     }
 
-    "showcase cycles through five fixed private slots under the shared one-packet cap" {
+    "the default showcase cycles through five fixed slots for both viewers under a one-point cap" {
         withEngine(showcaseSettings()) { fixture ->
-            fixture.joinAdditional("OtherViewer")
+            val observer = fixture.joinAdditional("OtherViewer")
+            val audience = setOf(fixture.player.uniqueId, observer.uniqueId)
             fixture.admin(false)
             fixture.engine.startShowcase(fixture.player) shouldBe false
             fixture.admin(true)
@@ -448,25 +527,26 @@ class AuroraEngineTest : FreeSpec({
             fixture.engine.startShowcase(fixture.player) shouldBe true
             fixture.preview = null
 
-            fun cycle(ticks: Int): Set<Int> {
+            fun cycle(ticks: Int) {
                 val before = fixture.emissions.size
                 repeat(ticks) {
                     val sent = fixture.emissions.size
                     fixture.advance(1)
-                    (fixture.emissions.size - sent in 0..1) shouldBe true
+                    fixture.emissions.drop(sent).groupingBy { it.viewer }.eachCount().values.all { it == 1 } shouldBe true
                 }
-                return fixture.emissions.drop(before).map { it.count }.toSet()
+                val counts = fixture.emissions.drop(before).groupBy { it.viewer }.mapValues { (_, seen) -> seen.map { it.count }.toSet() }
+                counts shouldBe audience.associateWith { (1..5).toSet() }
             }
-            cycle(300) shouldBe (1..5).toSet()
+            cycle(300)
             val slots = fixture.sceneRows(0)
             slots.size shouldBe 5
             slots.map { row -> row.split(',').subList(7, 10) }.toSet().size shouldBe 5
             val eyeY = fixture.player.eyeLocation.y
             fixture.locations.all { it.y > eyeY } shouldBe true
             fixture.player.teleport(fixture.player.location.apply { yaw = -90f }) shouldBe true
-            cycle(80) shouldBe (1..5).toSet()
+            cycle(80)
             fixture.sceneRows(0) shouldBe slots
-            fixture.emissions.all { it.viewer == fixture.player.uniqueId && it.force } shouldBe true
+            fixture.emissions.all { it.force } shouldBe true
 
             fixture.advance(AuroraShowcase.DURATION_TICKS.toInt() - 381)
             fixture.sceneRows(0) shouldBe slots
@@ -474,6 +554,31 @@ class AuroraEngineTest : FreeSpec({
             fixture.advance(61)
             fixture.sceneRows(0) shouldBe emptyList()
             fixture.emissions.size shouldBe beforeExpiry
+        }
+    }
+
+    "nearby showcases coexist with a private preview and the other owner's quit" {
+        val base = skySettings(points = 12, shape = AuroraShape.LINE, packets = 8)
+        val line = base.profiles.single().copy(id = "line", count = 2, skyRefreshTicks = 4)
+        val point = line.copy(id = "point", shape = AuroraShape.POINT, points = 1, count = 1)
+        val settings = base.copy(profiles = listOf(point, line), viewersPerTick = 3, nativeBudgetMicros = Int.MAX_VALUE)
+        withEngine(settings, highSky = true) { fixture ->
+            val guest = fixture.player
+            val first = fixture.joinAdditional("PointShowcaseOwner", admin = true)
+            val second = fixture.joinAdditional("LineShowcaseOwner", guest.location.add(3.0, 0.0, 0.0), admin = true)
+            fixture.preview = listOf(engineSettings().profiles.single().copy(count = 3))
+            fixture.engine.startShowcase(first, AuroraShape.POINT) shouldBe true
+            fixture.engine.startShowcase(second, AuroraShape.LINE) shouldBe true
+            fixture.advance(160)
+
+            fun countsSince(index: Int) = fixture.emissions.drop(index).groupBy { it.viewer }
+                .mapValues { (_, seen) -> seen.map { it.count }.toSet() }
+
+            countsSince(0) shouldBe mapOf(guest.uniqueId to setOf(1, 2, 3), first.uniqueId to setOf(1, 2), second.uniqueId to setOf(1, 2))
+            val beforeQuit = fixture.emissions.size
+            fixture.engine.quit(first.uniqueId)
+            fixture.advance(50)
+            countsSince(beforeQuit) shouldBe mapOf(guest.uniqueId to setOf(2, 3), second.uniqueId to setOf(2))
         }
     }
 
@@ -781,7 +886,8 @@ class AuroraEngineTest : FreeSpec({
     }
 
     "private preview uses only its explicit viewer callback and remains subject to the ping gate" {
-        withEngine { fixture ->
+        withEngine(engineSettings().copy(viewersPerTick = 2)) { fixture ->
+            fixture.joinAdditional("PreviewNeighbor")
             fixture.preview = fixture.settings.profiles
             fixture.capture()
             fixture.completePlanning()
@@ -798,6 +904,7 @@ class AuroraEngineTest : FreeSpec({
             fixture.engine.invalidate(fixture.player.uniqueId)
             fixture.engine.tick()
             fixture.locations.size shouldBe 1
+            fixture.emissions.map { it.viewer } shouldBe listOf(fixture.player.uniqueId)
         }
     }
 
@@ -1139,9 +1246,7 @@ class AuroraEngineTest : FreeSpec({
         val settings = skySettings(points = 12, shape = AuroraShape.LINE, packets = 2).copy(viewersPerTick = 2)
         withEngine(settings) { fixture ->
             fixture.event = settings.profiles
-            val second = fixture.joinAdditional("ObserverTwo")
-            val player = checkNotNull(fixture.paper.server.getPlayer(second))
-            player.teleport(player.location.add(1.0, 9.0, 0.0).apply { yaw = 180f }) shouldBe true
+            val second = fixture.joinAdditional("ObserverTwo", fixture.player.location.add(1.0, 9.0, 0.0).apply { yaw = 180f }).uniqueId
             fixture.capture(); fixture.completePlanning()
             repeat(30) { fixture.engine.tick() }
             fun positions(id: java.util.UUID) = fixture.locations.filterIndexed { i, _ -> fixture.emissions[i].viewer == id }
@@ -1265,7 +1370,7 @@ class AuroraEngineTest : FreeSpec({
             }) }
         withEngine(settings) { fixture ->
             fixture.event = settings.profiles
-            val ids = listOf(fixture.player.uniqueId, fixture.joinAdditional("Second"), fixture.joinAdditional("Third"))
+            val ids = listOf(fixture.player, fixture.joinAdditional("Second"), fixture.joinAdditional("Third")).map { it.uniqueId }
             repeat(75) {
                 if (fixture.queued.isNotEmpty()) fixture.completePlanning()
                 fixture.engine.tick()
@@ -1900,6 +2005,7 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
     val locations = mutableListOf<Location>()
     val emissions = mutableListOf<ObservedEmission>()
     val blockedShowcases = mutableListOf<java.util.UUID>()
+    val showcaseAudiences = mutableMapOf<UUID, Set<UUID>>()
     val queued = ArrayDeque<Runnable>()
     val emitter = mockk<PaperViewerParticles>(relaxed = true)
     val lanterns = mockk<AuroraLanternDisplays>(relaxed = true)
@@ -1945,6 +2051,13 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
             requireMain()
             val viewer = arg<java.util.UUID>(0)
             activeModels.values.filter { it.viewer == viewer }.forEach { activeModels.remove(it.key); retiredModels += it }
+            showcaseAudiences.remove(viewer)
+        }
+        every { lanterns.setShowcaseAudience(any(), any()) } answers {
+            requireMain()
+            val owner = arg<UUID>(0)
+            val audience = arg<Set<UUID>?>(1)
+            if (audience == null) showcaseAudiences.remove(owner) else showcaseAudiences[owner] = audience.toSet()
         }
         every { lanterns.closeAsync() } answers { modelClose }
         every { scheduler.runAsync(any()) } answers {
@@ -1978,12 +2091,13 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
         engine.join(player)
     }
 
-    fun joinAdditional(name: String): java.util.UUID {
+    fun joinAdditional(name: String, at: Location = player.location, admin: Boolean = false): EnginePlayer {
         val extra = EnginePlayer(paper.server, name)
         paper.server.addPlayer(extra)
-        extra.teleport(Location(world, 0.5, 80.0, 0.5)) shouldBe true
+        extra.addAttachment(plugin, AURORA_ADMIN_PERMISSION, admin)
+        extra.teleport(at) shouldBe true
         engine.join(extra)
-        return extra.uniqueId
+        return extra
     }
 
     private fun observeModel(observed: ObservedLantern) {

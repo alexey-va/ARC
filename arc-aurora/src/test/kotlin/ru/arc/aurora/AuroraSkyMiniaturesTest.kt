@@ -271,6 +271,10 @@ internal val storyShapes = listOf(
     AuroraShape.SHATTERED_SWORD,
     AuroraShape.REVERSE_FIREWORK,
     AuroraShape.VOID_CATHEDRAL,
+    AuroraShape.SOLAR_CORSAIR,
+    AuroraShape.ORK_KROOZER,
+    AuroraShape.IMPERIAL_AQUILA,
+    AuroraShape.MECHANICUS_SIGIL,
 )
 
 private fun storyPose(shape: AuroraShape, progress: Double) =

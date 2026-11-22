@@ -16,7 +16,7 @@ import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
-/** Main-thread-owned handles. Core owns private audience tracking, ordered async packets and retirement. */
+/** Main owns the handles. Core tracks their audience, sends ordered updates and retires them. */
 class AuroraLanternDisplays internal constructor(private val displays: PaperPacketDisplays) {
     constructor(plugin: Plugin) : this(PaperPacketDisplays(plugin, "aurora-lanterns"))
 
@@ -27,8 +27,24 @@ class AuroraLanternDisplays internal constructor(private val displays: PaperPack
     internal data class Part(val material: Material, val transform: Transformation, val customModelData: Int? = null)
 
     private val viewers = mutableMapOf<UUID, MutableMap<Any, Scene>>()
+    private class ShowcaseAudience(displays: PaperPacketDisplays, var members: Set<UUID>) {
+        val group = displays.createAudienceGroup { it.uniqueId in members }
+    }
+    private val showcaseAudiences = mutableMapOf<UUID, ShowcaseAudience>()
     private var closed = false
     private var retirement: CompletableFuture<Void>? = null
+
+    /** All parts of a show use one gate, including parts that appear after a spectator arrives. */
+    internal fun setShowcaseAudience(owner: UUID, audience: Set<UUID>?) {
+        if (closed) return
+        if (audience == null) {
+            showcaseAudiences.remove(owner)?.group?.close()
+        } else {
+            val current = showcaseAudiences[owner]
+            if (current == null) showcaseAudiences[owner] = ShowcaseAudience(displays, audience)
+            else current.members = audience
+        }
+    }
 
     fun update(key: Any, player: Player, model: AuroraSkyModel, centers: List<Location>, progress: Double,
         yawRadians: Double, updateTicks: Int) {
@@ -103,7 +119,13 @@ class AuroraLanternDisplays internal constructor(private val displays: PaperPack
                 val created = displays.spawnItem(center, item(part))
                 scene.handles[index] = created // Retain ownership even if later metadata preparation fails.
                 created.apply {
-                    isVisibleByDefault = false
+                    val shared = showcaseAudiences[viewer]
+                    if (shared == null) {
+                        isVisibleByDefault = false
+                        showTo(player)
+                    } else {
+                        audienceGroup = shared.group
+                    }
                     billboard = Display.Billboard.FIXED
                     itemDisplayTransform = ItemDisplay.ItemDisplayTransform.NONE
                     brightness = Display.Brightness(15, 15)
@@ -117,7 +139,6 @@ class AuroraLanternDisplays internal constructor(private val displays: PaperPack
                     interpolationDuration = interpolation
                     teleportDuration = interpolation
                     transformation = part.transform
-                    showTo(player)
                 }
             } else {
                 handle.interpolationDelay = 0
@@ -147,12 +168,14 @@ class AuroraLanternDisplays internal constructor(private val displays: PaperPack
 
     fun removeViewer(viewer: UUID) {
         viewers.remove(viewer)?.values?.forEach { it.remove() }
+        setShowcaseAudience(viewer, null)
     }
 
     fun closeAsync(): CompletableFuture<Void> {
         retirement?.let { return it }
         closed = true
         viewers.clear()
+        showcaseAudiences.clear()
         return displays.closeAsync().also { retirement = it }
     }
 

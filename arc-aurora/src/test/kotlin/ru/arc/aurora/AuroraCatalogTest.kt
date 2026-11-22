@@ -382,9 +382,9 @@ private fun ArcAuroraPlugin.preview(player: Player): Any? =
     (ArcAuroraPlugin::class.java.getDeclaredField("previews").apply { isAccessible = true }.get(this) as Map<*, *>)[player.uniqueId]
 
 private fun ArcAuroraPlugin.showcase(player: Player): AuroraShowcase? {
-    val viewers = AuroraEngine::class.java.getDeclaredField("viewers").apply { isAccessible = true }.get(engine) as Map<*, *>
-    val viewer = viewers[player.uniqueId] ?: return null
-    return viewer.javaClass.getDeclaredField("showcase").apply { isAccessible = true }.get(viewer) as AuroraShowcase?
+    val shows = AuroraEngine::class.java.getDeclaredField("showcases").apply { isAccessible = true }.get(engine) as Map<*, *>
+    val show = shows[player.uniqueId] ?: return null
+    return show.javaClass.getDeclaredField("panel").apply { isAccessible = true }.get(show) as AuroraShowcase
 }
 
 @Suppress("UNCHECKED_CAST")
