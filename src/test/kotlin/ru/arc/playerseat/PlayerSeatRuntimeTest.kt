@@ -108,6 +108,39 @@ class PlayerSeatRuntimeTest : StringSpec({
         }
     }
 
+    "each carrier hides only their direct rider and restores them on dismount or quit" {
+        val view = mockk<SeatPassengerView>(relaxed = true)
+        Tasks.withScheduler(TestTaskScheduler()) {
+            SeatFixture(passengerView = view).use { f ->
+                f.click()
+                f.click(f.other, f.carrier)
+                verify(exactly = 1) { view.setHidden(f.carrier, f.rider, true) }
+                verify(exactly = 1) { view.setHidden(f.rider, f.other, true) }
+                verify(exactly = 0) { view.setHidden(f.carrier, f.other, any()) }
+                f.bus.fire(PlayerToggleSneakEvent(f.rider, true))
+                verify(exactly = 1) { view.setHidden(f.carrier, f.rider, false) }
+                verify(exactly = 0) { view.setHidden(f.rider, f.other, false) }
+                f.bus.fire(mockk<PlayerQuitEvent> { every { player } returns f.other })
+                verify(exactly = 1) { view.setHidden(f.rider, f.other, false) }
+            }
+        }
+        verify { view.close() }
+    }
+
+    "losing the native mount restores the carrier view before the rider has used the compass" {
+        val scheduler = TestTaskScheduler()
+        val view = mockk<SeatPassengerView>(relaxed = true)
+        Tasks.withScheduler(scheduler) {
+            SeatFixture(passengerView = view).use { f ->
+                f.click()
+                f.riderVehicle = null
+                scheduler.tick()
+                verify(exactly = 1) { view.setHidden(f.carrier, f.rider, false) }
+                scheduler.timerCount() shouldBe 0
+            }
+        }
+    }
+
     "crouching does not override the carrier's ride preference" {
         SeatFixture().use { f ->
             every { f.carrier.isSneaking } returns true
@@ -167,27 +200,33 @@ class PlayerSeatRuntimeTest : StringSpec({
         }
     }
 
-    "empty-hand left clicks point for four seconds from the latest gesture without consuming attacks" {
+    "one swing starts continuous steering and further swings change the signal without consuming attacks" {
         val scheduler = TestTaskScheduler()
         val display = mockk<SeatDirections>(relaxed = true)
         Tasks.withScheduler(scheduler) {
             SeatFixture(display).use { f ->
                 f.click()
                 every { f.rider.ticksLived } returns 2
-                every { f.rider.eyeLocation.yaw } returns 90f
+                every { f.rider.yaw } returns 90f
                 f.gesture(Action.LEFT_CLICK_AIR, cancelled = true)
                 f.gesture(Action.LEFT_CLICK_BLOCK)
                 verify(exactly = 1) { display.show(f.carrier, f.rider, 90f, "Туда Нахуй!") }
-                scheduler.tick(60)
-                every { f.rider.ticksLived } returns 60
-                every { f.rider.eyeLocation.yaw } returns -45f
+                scheduler.tick(100)
+                every { f.rider.yaw } returns -45f
+                scheduler.tick()
+                verify(exactly = 1) { display.turn(f.carrier, f.rider, -45f) }
+                verify(exactly = 1) { display.show(any(), any(), any(), any()) }
+                every { f.rider.ticksLived } returns 101
                 val hit = PrePlayerAttackEntityEvent(f.rider, f.other, true)
                 f.bus.fire(hit)
                 hit.isCancelled shouldBe false
                 verify { display.show(f.carrier, f.rider, -45f, "Пиздуй туда!") }
-                scheduler.tick(79)
+                scheduler.tick(100)
+                scheduler.timerCount() shouldBe 1
                 verify(exactly = 0) { display.hide(any()) }
+                f.riderVehicle = null
                 scheduler.tick()
+                scheduler.timerCount() shouldBe 0
                 val riderId = f.rider.uniqueId
                 verify(exactly = 1) { display.hide(riderId) }
             }
@@ -196,26 +235,28 @@ class PlayerSeatRuntimeTest : StringSpec({
 
     "right clicks, a held item and a foreign vehicle do not point" {
         val display = mockk<SeatDirections>(relaxed = true)
-        SeatFixture(display).use { f ->
-            f.gesture(Action.LEFT_CLICK_AIR)
-            f.click()
-            f.gesture(Action.LEFT_CLICK_AIR)
-            f.click()
-            f.gesture(Action.RIGHT_CLICK_AIR)
-            f.gesture(Action.RIGHT_CLICK_BLOCK)
-            every { f.rider.ticksLived } returns 1
-            f.gesture(Action.LEFT_CLICK_AIR)
-            f.gesture(Action.LEFT_CLICK_BLOCK)
-            every { f.rider.ticksLived } returns 5
-            f.bus.fire(mockk<PlayerDropItemEvent>(relaxed = true) { every { player } returns f.rider })
-            f.gesture(Action.LEFT_CLICK_AIR)
-            f.gesture(Action.LEFT_CLICK_AIR, EquipmentSlot.OFF_HAND)
-            every { f.rider.inventory.itemInMainHand.type } returns Material.STICK
-            f.gesture(Action.LEFT_CLICK_BLOCK)
-            every { f.rider.inventory.itemInMainHand.type } returns Material.AIR
-            f.riderVehicle = f.other
-            f.gesture(Action.LEFT_CLICK_AIR)
-            verify(exactly = 0) { display.show(any(), any(), any(), any()) }
+        Tasks.withScheduler(TestTaskScheduler()) {
+            SeatFixture(display).use { f ->
+                f.gesture(Action.LEFT_CLICK_AIR)
+                f.click()
+                f.gesture(Action.LEFT_CLICK_AIR)
+                f.click()
+                f.gesture(Action.RIGHT_CLICK_AIR)
+                f.gesture(Action.RIGHT_CLICK_BLOCK)
+                every { f.rider.ticksLived } returns 1
+                f.gesture(Action.LEFT_CLICK_AIR)
+                f.gesture(Action.LEFT_CLICK_BLOCK)
+                every { f.rider.ticksLived } returns 5
+                f.bus.fire(mockk<PlayerDropItemEvent>(relaxed = true) { every { player } returns f.rider })
+                f.gesture(Action.LEFT_CLICK_AIR)
+                f.gesture(Action.LEFT_CLICK_AIR, EquipmentSlot.OFF_HAND)
+                every { f.rider.inventory.itemInMainHand.type } returns Material.STICK
+                f.gesture(Action.LEFT_CLICK_BLOCK)
+                every { f.rider.inventory.itemInMainHand.type } returns Material.AIR
+                f.riderVehicle = f.other
+                f.gesture(Action.LEFT_CLICK_AIR)
+                verify(exactly = 0) { display.show(any(), any(), any(), any()) }
+            }
         }
     }
 
@@ -497,7 +538,7 @@ class PlayerSeatRuntimeTest : StringSpec({
     }
 })
 
-private class SeatFixture(directions: SeatDirections? = null) : AutoCloseable {
+private class SeatFixture(directions: SeatDirections? = null, passengerView: SeatPassengerView? = null) : AutoCloseable {
     private val vehicles = mutableMapOf<Player, Entity?>()
     private val passengers = mutableMapOf<Player, MutableList<Entity>>()
     val rider = player()
@@ -513,7 +554,7 @@ private class SeatFixture(directions: SeatDirections? = null) : AutoCloseable {
     var dismountSucceeds = true
     var canCarry = true
     val nameTags = mutableListOf<Pair<Player, UUID?>>()
-    private val runtime = PlayerSeatRuntime(bus, { who, carrierId -> nameTags += who to carrierId }, directions) { canCarry }
+    private val runtime = PlayerSeatRuntime(bus, { who, carrierId -> nameTags += who to carrierId }, directions, passengerView) { canCarry }
 
     init { runtime.start() }
 

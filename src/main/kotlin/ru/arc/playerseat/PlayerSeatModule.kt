@@ -44,7 +44,7 @@ object PlayerSeatModule : PluginModule {
             if (rider.isOnline && plugin.isEnabled) {
                 rider.sendPluginMessage(plugin, CHANNEL, seatNameTagPayload(carrierId))
             }
-        }, SeatDirectionDisplay(plugin), canCarry)
+        }, SeatDirectionDisplay(plugin), SeatPassengerView(), canCarry)
         runtime = seats
         seats.start()
     }
@@ -67,6 +67,7 @@ internal fun seatNameTagPayload(carrierId: UUID?): ByteArray =
 
 internal interface SeatDirections : AutoCloseable {
     fun show(carrier: Player, rider: Player, yaw: Float, caption: String)
+    fun turn(carrier: Player, rider: Player, yaw: Float)
     fun hide(riderId: UUID)
 }
 
@@ -75,13 +76,14 @@ internal class PlayerSeatRuntime(
     bus: EventBus,
     private val updateNameTag: (Player, UUID?) -> Unit = { _, _ -> },
     private val directions: SeatDirections? = null,
+    private val passengerView: SeatPassengerView? = null,
     private val canCarry: (Player) -> Boolean = { true },
 ) : AutoCloseable {
     private class Ride(val carrier: Player, val rider: Player) {
         var nextCaption = 0
         var lastPointTick: Int? = null
         var otherSwingTick: Int? = null
-        var expiry: ScheduledTask? = null
+        var steering: ScheduledTask? = null
     }
 
     private val events = EventScope(bus)
@@ -142,14 +144,9 @@ internal class PlayerSeatRuntime(
         // A use and its client animation can land on adjacent server ticks, including the mount click.
         if (swing && ride.otherSwingTick?.let { tick - it in 0..1 } == true) return
         if (ride.lastPointTick?.let { tick - it in 0 until 4 } == true) return
-        display.show(ride.carrier, rider, rider.eyeLocation.yaw, CAPTIONS[ride.nextCaption])
+        display.show(ride.carrier, rider, rider.yaw, CAPTIONS[ride.nextCaption])
         ride.lastPointTick = tick
         ride.nextCaption = (ride.nextCaption + 1) % CAPTIONS.size
-        ride.expiry?.cancel()
-        ride.expiry = Tasks.scheduler.runLater(80) {
-            display.hide(rider.uniqueId)
-            ride.expiry = null
-        }
     }
 
     private fun interact(event: PlayerInteractEntityEvent) {
@@ -181,7 +178,14 @@ internal class PlayerSeatRuntime(
         rideByCarrier[carrier.uniqueId] = ride
         rideByRider[rider.uniqueId] = ride
         event.isCancelled = true
+        passengerView?.setHidden(carrier, rider, true)
         updateNameTag(rider, carrier.uniqueId)
+        if (directions != null || passengerView != null) {
+            ride.steering = Tasks.scheduler.runTimer(1, 1) {
+                // Reconcile the private view even if Paper lost a mount before the first signal.
+                if (activeRide(ride) != null && ride.lastPointTick != null) directions?.turn(carrier, rider, rider.yaw)
+            }
+        }
     }
 
     private fun eligible(player: Player): Boolean =
@@ -224,17 +228,28 @@ internal class PlayerSeatRuntime(
     private fun forget(ride: Ride) {
         rideByCarrier.remove(ride.carrier.uniqueId, ride)
         if (rideByRider.remove(ride.rider.uniqueId, ride)) {
-            ride.expiry?.cancel()
-            if (ride.expiry != null) directions?.hide(ride.rider.uniqueId)
+            ride.steering?.cancel()
+            if (ride.lastPointTick != null) directions?.hide(ride.rider.uniqueId)
+            passengerView?.setHidden(ride.carrier, ride.rider, false)
             updateNameTag(ride.rider, null)
         }
     }
 
     override fun close() {
         events.unregisterAll()
-        rideByRider.values.toList().forEach(::dismount)
+        try {
+            rideByRider.values.toList().forEach(::dismount)
+        } finally {
+            // Paper can deny a dismount. Retain its link for a retry, but release the client views.
+            rideByRider.values.forEach {
+                it.steering?.cancel()
+                it.steering = null
+                it.lastPointTick = null
+            }
+            directions?.close()
+            passengerView?.close()
+        }
         check(rideByRider.isEmpty()) { "Player seats could not dismount ${rideByRider.size} owned rider(s)" }
-        directions?.close()
     }
 
     private companion object {

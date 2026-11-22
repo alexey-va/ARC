@@ -4,6 +4,7 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.Color
+import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.entity.Display
 import org.bukkit.entity.Player
@@ -21,12 +22,30 @@ import kotlin.math.atan
 import kotlin.math.atan2
 import kotlin.math.hypot
 import kotlin.math.sqrt
+import kotlin.random.Random
 
-internal class SeatDirectionDisplay(plugin: Plugin) : SeatDirections {
-    private val displays = PaperPacketDisplays(plugin, "player-seat-directions")
+internal class SeatDirectionDisplay(private val displays: PaperPacketDisplays) : SeatDirections {
+    constructor(plugin: Plugin) : this(PaperPacketDisplays(plugin, "player-seat-directions"))
+
     private val signals = mutableMapOf<UUID, Signal>()
 
-    private class Signal(val carrierId: UUID, val arrow: List<PacketBlockDisplay>, val caption: PacketTextDisplay) {
+    private class Signal(
+        val carrierId: UUID,
+        val arrow: List<PacketBlockDisplay>,
+        val caption: PacketTextDisplay,
+        var pose: SeatDirectionPose,
+        var yaw: Float,
+    ) {
+        fun render(interpolationTicks: Int) {
+            val rotation = seatHeadingRotation(yaw)
+            arrow.forEachIndexed { index, display ->
+                display.interpolationDuration = interpolationTicks
+                display.transformation = pose.arrow[index].transform.turned(rotation)
+            }
+            caption.interpolationDuration = interpolationTicks
+            caption.transformation = pose.caption.turned(rotation)
+        }
+
         fun remove() {
             arrow.forEach(PacketDisplay::remove)
             caption.remove()
@@ -34,20 +53,42 @@ internal class SeatDirectionDisplay(plugin: Plugin) : SeatDirections {
     }
 
     override fun show(carrier: Player, rider: Player, yaw: Float, caption: String) {
-        val pose = SeatDirectionPose(yaw, carrier.height.toFloat())
-        val text = seatDirectionCaption(caption)
         val riderId = rider.uniqueId
         if (signals[riderId]?.carrierId != carrier.uniqueId) hide(riderId)
-        val signal = signals.getOrPut(riderId) { createSignal(carrier, rider, text, pose) }
-        signal.arrow.forEachIndexed { index, block -> block.transformation = pose.arrow[index].transform }
-        signal.caption.transformation = pose.caption
+        val signal = signals[riderId]
+        val palette = SeatDirectionPalette.pick(signal?.pose?.palette)
+        val text = palette.caption(caption)
+        val height = carrier.height.toFloat()
+        if (signal == null) {
+            signals[riderId] = createSignal(carrier, rider, text, SeatDirectionPose(height, SeatArrowStyle.COMPASS, palette), yaw)
+            return
+        }
+        val old = signal.pose
+        val next = SeatDirectionPose(height, old.style.next(), palette)
+        signal.arrow.forEachIndexed { index, display ->
+            val material = next.arrow[index].material
+            if (old.arrow[index].material != material) display.blockData = material.createBlockData()
+        }
+        signal.pose = next
         signal.caption.text(text)
+        signal.render(0)
     }
 
-    private fun createSignal(carrier: Player, rider: Player, text: Component, pose: SeatDirectionPose): Signal {
+    override fun turn(carrier: Player, rider: Player, yaw: Float) {
+        val signal = signals[rider.uniqueId] ?: return
+        if (carrier.uniqueId != signal.carrierId) return
+        val next = seatTurnYaw(signal.yaw, yaw)
+        val height = carrier.height.toFloat()
+        if (next == signal.yaw && height == signal.pose.carrierHeight) return
+        signal.yaw = next
+        if (height != signal.pose.carrierHeight) signal.pose = SeatDirectionPose(height, signal.pose.style, signal.pose.palette)
+        signal.render(2)
+    }
+
+    private fun createSignal(carrier: Player, rider: Player, text: Component, pose: SeatDirectionPose, yaw: Float): Signal {
         // A fixed display applies its entity yaw/pitch before its transform. Keep those axes world-aligned.
         val at = carrier.location.apply {
-            yaw = 0f
+            this.yaw = 0f
             pitch = 0f
         }
         val parts = mutableListOf<PacketDisplay>()
@@ -67,7 +108,7 @@ internal class SeatDirectionDisplay(plugin: Plugin) : SeatDirections {
                 part.pauseWhenNotObserved = false
                 part.attachTo(carrier)
             }
-            return Signal(carrier.uniqueId, arrow, caption)
+            return Signal(carrier.uniqueId, arrow, caption, pose, yaw % 720f).also { it.render(0) }
         } catch (failure: Exception) {
             parts.forEach(PacketDisplay::remove)
             throw failure
@@ -84,57 +125,125 @@ internal class SeatDirectionDisplay(plugin: Plugin) : SeatDirections {
     }
 }
 
-internal fun seatDirectionCaption(phrase: String): Component {
-    val first = phrase.substringBefore(' ')
-    val (lead, accent) = when (first) {
-        "Туда" -> 0xFF6999 to 0xFFD4E4
-        "Пиздуй" -> 0xFF8274 to 0xFFB4D2
-        "Живее" -> 0x95F983 to 0xE4FFD9
-        "Газуй" -> 0xDB9CFF to 0xFF9AC8
-        else -> 0xFFECEB to 0xFF80CF
+internal enum class SeatDirectionPalette(
+    val rim: Material,
+    val spine: Material,
+    val face: Material,
+    val shade: Material,
+    private val leadColor: Int,
+    private val accentColor: Int,
+) {
+    ROSE(Material.NETHER_BRICKS, Material.QUARTZ_BLOCK, Material.PINK_WOOL, Material.PINK_CONCRETE, 0xFF679A, 0xFFD1E0),
+    SCARLET(Material.RED_NETHER_BRICKS, Material.WHITE_CONCRETE, Material.REDSTONE_BLOCK, Material.RED_WOOL, 0xFF7A70, 0xFFBCB1),
+    ORCHID(Material.CRIMSON_PLANKS, Material.CALCITE, Material.PURPUR_BLOCK, Material.MAGENTA_WOOL, 0xEB93F0, 0xFFD0F3),
+    EMERALD(Material.POLISHED_BLACKSTONE, Material.IRON_BLOCK, Material.EMERALD_BLOCK, Material.DEEPSLATE_EMERALD_ORE, 0x6FF992, 0xCEFFD8),
+    PEARL(Material.POLISHED_BLACKSTONE, Material.PINK_WOOL, Material.CALCITE, Material.IRON_BLOCK, 0xFFF5F8, 0xFF92C3);
+
+    fun caption(phrase: String): Component {
+        val first = phrase.substringBefore(' ')
+        return Component.text(first, TextColor.color(leadColor)).decorate(TextDecoration.BOLD)
+            .append(Component.text(phrase.substring(first.length), TextColor.color(accentColor)))
     }
-    return Component.text(first, TextColor.color(lead)).decorate(TextDecoration.BOLD)
-        .append(Component.text(phrase.substring(first.length), TextColor.color(accent)))
+
+    companion object {
+        fun pick(previous: SeatDirectionPalette?, random: Random = Random.Default): SeatDirectionPalette {
+            if (previous == null || entries.size == 1) return entries.random(random)
+            return entries[(previous.ordinal + random.nextInt(1, entries.size)) % entries.size]
+        }
+    }
 }
 
 internal class SeatArrowPart(val material: Material, val transform: Transformation)
 
-/** Offsets from the native passenger origin above the carrier, with +Z forward at Bukkit yaw zero. */
-internal class SeatDirectionPose(yaw: Float, private val carrierHeight: Float) {
-    private val heading = Quaternionf().rotationY(-Math.toRadians(yaw.toDouble() % 360.0).toFloat())
-    private val slope = carrierHeight / 9f
-    private val plane = Quaternionf(heading).rotateX(-atan(slope))
+internal enum class SeatArrowStyle {
+    COMPASS, CHEVRONS, FLETCHED;
 
-    // Quartz spine and two folded faces on a dark rim.
-    val arrow = listOf(
-        shaft(Material.NETHER_BRICKS, 4.28f, 5.78f, .31f, .16f, 0f),
-        shaft(Material.QUARTZ_BLOCK, 4.36f, 6.16f, .15f, .06f, .102f),
-        wing(Material.NETHER_BRICKS, -1, 6.46f, 1f, .15f, 0f),
-        wing(Material.PINK_WOOL, -1, 6.40f, .87f, .060f, .091f),
-        wing(Material.NETHER_BRICKS, 1, 6.46f, 1f, .15f, 0f),
-        wing(Material.MAGENTA_CONCRETE, 1, 6.40f, .87f, .060f, .091f),
-        centered(Material.QUARTZ_BLOCK, 6f, .141f, Vector3f(.14f / sqrt(2f), .05f, .99f / sqrt(2f)),
-            Quaternionf().rotationY((PI / 4).toFloat())),
+    fun next(): SeatArrowStyle = entries[(ordinal + 1) % entries.size]
+}
+
+/** Small increments keep the display's linearly interpolated offset on the turning arc. */
+internal fun seatTurnYaw(current: Float, target: Float): Float {
+    val delta = Location.normalizeYaw(target - current)
+    // A full quaternion period also preserves its sign across the +/-180 degree seam.
+    return (current + delta.coerceIn(-30f, 30f)) % 720f
+}
+
+internal fun seatHeadingRotation(yaw: Float): Quaternionf = Quaternionf().rotationY(-Math.toRadians(yaw.toDouble()).toFloat())
+
+internal fun Transformation.turned(heading: Quaternionf): Transformation = Transformation(
+    heading.transform(Vector3f(translation)), Quaternionf(heading).mul(leftRotation), scale, rightRotation,
+)
+
+/** Offsets from the native passenger origin above the carrier, with +Z forward at Bukkit yaw zero. */
+internal class SeatDirectionPose(val carrierHeight: Float, val style: SeatArrowStyle, val palette: SeatDirectionPalette) {
+    private val slope = carrierHeight / 9f
+    private val plane = Quaternionf().rotationX(-atan(slope))
+
+    // Seven block handles in every shape let a gesture change the silhouette in place.
+    val arrow = when (style) {
+        SeatArrowStyle.COMPASS -> compass()
+        SeatArrowStyle.CHEVRONS -> chevrons()
+        SeatArrowStyle.FLETCHED -> fletched()
+    }
+
+    private fun compass() = listOf(
+        shaft(palette.rim, 4.28f, 5.78f, .31f, .16f, 0f),
+        shaft(palette.spine, 4.36f, 6.16f, .15f, .06f, .102f),
+        wing(palette.rim, -1, 6.46f, 1f, .15f, 0f),
+        wing(palette.face, -1, 6.40f, .87f, .060f, .091f),
+        wing(palette.rim, 1, 6.46f, 1f, .15f, 0f),
+        wing(palette.shade, 1, 6.40f, .87f, .060f, .091f),
+        diamond(palette.spine, 6f, .141f, .14f, .05f, .99f),
+    )
+
+    private fun chevrons() = listOf(
+        wing(palette.rim, -1, 5.28f, .75f, .16f, -.035f),
+        wing(palette.rim, 1, 5.28f, .75f, .16f, -.035f),
+        wing(palette.spine, -1, 5.22f, .62f, .055f, .066f),
+        wing(palette.spine, 1, 5.22f, .62f, .055f, .066f),
+        wing(palette.face, -1, 6.65f, 1.02f, .15f, .035f),
+        wing(palette.face, 1, 6.65f, 1.02f, .15f, .035f),
+        diamond(palette.shade, 6.17f, .116f, .19f, .06f, .80f),
+    )
+
+    private fun fletched() = listOf(
+        shaft(palette.rim, 4.14f, 6.16f, .15f, .12f, 0f),
+        shaft(palette.spine, 4.23f, 6.34f, .075f, .05f, .077f),
+        feather(palette.face, -1),
+        feather(palette.shade, 1),
+        wing(palette.face, -1, 6.50f, .76f, .13f, .025f),
+        wing(palette.shade, 1, 6.50f, .76f, .13f, .025f),
+        diamond(palette.spine, 6.31f, .105f, .18f, .045f, .48f),
     )
 
     // Both players share the carrier's horizontal position. Fixed text faces them from above the arrow.
     val caption = Transformation(
-        heading.transform(Vector3f(0f, -.04f * carrierHeight, 5.84f)), Quaternionf(heading).rotateY(PI.toFloat()),
+        Vector3f(0f, -.04f * carrierHeight, 5.84f), Quaternionf().rotateY(PI.toFloat()),
         Vector3f(1.85f), Quaternionf(),
     )
 
     private fun point(z: Float, lift: Float) =
-        heading.transform(Vector3f(0f, -.52f * carrierHeight + (z - 4.30f) * slope + lift, z))
+        Vector3f(0f, -.52f * carrierHeight + (z - 4.30f) * slope + lift, z)
 
     private fun shaft(material: Material, from: Float, to: Float, width: Float, height: Float, lift: Float): SeatArrowPart {
         val depth = (to - from) * hypot(1f, slope)
-        return centered(material, (from + to) / 2f, lift, Vector3f(width, height, depth), Quaternionf())
+        return centered(material, point((from + to) / 2f, lift), plane, Vector3f(width, height, depth), Quaternionf())
     }
 
-    private fun centered(material: Material, z: Float, lift: Float, scale: Vector3f, right: Quaternionf): SeatArrowPart {
+    private fun diamond(material: Material, z: Float, lift: Float, width: Float, height: Float, length: Float): SeatArrowPart =
+        centered(material, point(z, lift), plane, Vector3f(width / sqrt(2f), height, length / sqrt(2f)),
+            Quaternionf().rotationY((PI / 4).toFloat()))
+
+    private fun feather(material: Material, side: Int): SeatArrowPart = centered(
+        material, point(4.66f, .06f).add(side * .12f, 0f, 0f),
+        Quaternionf(plane).rotateY(-side * Math.toRadians(14.0).toFloat()),
+        Vector3f(.21f / sqrt(2f), .11f, 1.10f / sqrt(2f)), Quaternionf().rotationY((PI / 4).toFloat()),
+    )
+
+    private fun centered(material: Material, at: Vector3f, left: Quaternionf, scale: Vector3f, right: Quaternionf): SeatArrowPart {
         val center = right.transform(Vector3f(.5f)).mul(scale)
-        val corner = point(z, lift).sub(plane.transform(center))
-        return SeatArrowPart(material, Transformation(corner, plane, scale, right))
+        val corner = at.sub(left.transform(center))
+        return SeatArrowPart(material, Transformation(corner, left, scale, right))
     }
 
     private fun wing(material: Material, side: Int, tipZ: Float, size: Float, height: Float, lift: Float): SeatArrowPart {
