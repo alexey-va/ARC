@@ -1,14 +1,18 @@
 package ru.arc.playerseat
 
+import io.papermc.paper.event.player.PrePlayerAttackEntityEvent
 import org.bukkit.GameMode
 import org.bukkit.entity.Player
 import org.bukkit.event.EventPriority
+import org.bukkit.event.block.Action
 import org.bukkit.event.entity.EntityDamageEvent
 import org.bukkit.event.entity.EntityDismountEvent
 import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.player.PlayerChangedWorldEvent
+import org.bukkit.event.player.PlayerDropItemEvent
 import org.bukkit.event.player.PlayerInteractAtEntityEvent
 import org.bukkit.event.player.PlayerInteractEntityEvent
+import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerTeleportEvent
 import org.bukkit.event.player.PlayerToggleSneakEvent
@@ -18,6 +22,8 @@ import ru.arc.core.BukkitEventBus
 import ru.arc.core.EventBus
 import ru.arc.core.EventScope
 import ru.arc.core.PluginModule
+import ru.arc.core.ScheduledTask
+import ru.arc.core.Tasks
 import java.nio.ByteBuffer
 import java.util.UUID
 
@@ -38,7 +44,7 @@ object PlayerSeatModule : PluginModule {
             if (rider.isOnline && plugin.isEnabled) {
                 rider.sendPluginMessage(plugin, CHANNEL, seatNameTagPayload(carrierId))
             }
-        }, canCarry)
+        }, SeatDirectionDisplay(plugin), canCarry)
         runtime = seats
         seats.start()
     }
@@ -59,13 +65,24 @@ internal fun seatNameTagPayload(carrierId: UUID?): ByteArray =
     if (carrierId == null) byteArrayOf()
     else ByteBuffer.allocate(16).putLong(carrierId.mostSignificantBits).putLong(carrierId.leastSignificantBits).array()
 
+internal interface SeatDirections : AutoCloseable {
+    fun show(carrier: Player, rider: Player, yaw: Float, caption: String)
+    fun hide(riderId: UUID)
+}
+
 /** Paper-thread-only ownership of native player passengers; flight state belongs to the server. */
 internal class PlayerSeatRuntime(
     bus: EventBus,
     private val updateNameTag: (Player, UUID?) -> Unit = { _, _ -> },
+    private val directions: SeatDirections? = null,
     private val canCarry: (Player) -> Boolean = { true },
 ) : AutoCloseable {
-    private data class Ride(val carrier: Player, val rider: Player)
+    private class Ride(val carrier: Player, val rider: Player) {
+        var nextCaption = 0
+        var lastPointTick: Int? = null
+        var otherSwingTick: Int? = null
+        var expiry: ScheduledTask? = null
+    }
 
     private val events = EventScope(bus)
     private val rideByRider = mutableMapOf<UUID, Ride>()
@@ -76,6 +93,19 @@ internal class PlayerSeatRuntime(
         if (PlayerInteractAtEntityEvent.getHandlerList() !== PlayerInteractEntityEvent.getHandlerList()) {
             events.on<PlayerInteractAtEntityEvent>(EventPriority.HIGHEST, ignoreCancelled = true, handler = ::interact)
         }
+        // Paper may pre-cancel a genuine air click. Observe input without changing vanilla actions.
+        events.on<PlayerInteractEvent>(EventPriority.MONITOR) { event ->
+            when (event.action) {
+                Action.LEFT_CLICK_AIR, Action.LEFT_CLICK_BLOCK -> if (event.hand == EquipmentSlot.HAND) {
+                    point(event.player, swing = true)
+                }
+                Action.RIGHT_CLICK_AIR, Action.RIGHT_CLICK_BLOCK -> recordOtherSwing(event.player)
+                else -> Unit
+            }
+        }
+        // Using or dropping the last item can also produce a swing packet with an empty hand.
+        events.on<PlayerDropItemEvent>(EventPriority.MONITOR) { recordOtherSwing(it.player) }
+        events.on<PrePlayerAttackEntityEvent>(EventPriority.MONITOR) { point(it.player) }
         events.on<PlayerToggleSneakEvent>(EventPriority.HIGHEST, ignoreCancelled = true) {
             if (it.isSneaking) rideByRider[it.player.uniqueId]?.let(::dismount)
         }
@@ -100,9 +130,32 @@ internal class PlayerSeatRuntime(
         events.on<PlayerChangedWorldEvent>(EventPriority.HIGHEST) { detachPlayer(it.player) }
     }
 
+    private fun recordOtherSwing(player: Player) {
+        rideByRider[player.uniqueId]?.otherSwingTick = player.ticksLived
+    }
+
+    private fun point(rider: Player, swing: Boolean = false) {
+        val display = directions ?: return
+        val ride = activeRide(rideByRider[rider.uniqueId]) ?: return
+        if (!rider.inventory.itemInMainHand.type.isAir) return
+        val tick = rider.ticksLived
+        // A use and its client animation can land on adjacent server ticks, including the mount click.
+        if (swing && ride.otherSwingTick?.let { tick - it in 0..1 } == true) return
+        if (ride.lastPointTick?.let { tick - it in 0 until 4 } == true) return
+        display.show(ride.carrier, rider, rider.eyeLocation.yaw, CAPTIONS[ride.nextCaption])
+        ride.lastPointTick = tick
+        ride.nextCaption = (ride.nextCaption + 1) % CAPTIONS.size
+        ride.expiry?.cancel()
+        ride.expiry = Tasks.scheduler.runLater(80) {
+            display.hide(rider.uniqueId)
+            ride.expiry = null
+        }
+    }
+
     private fun interact(event: PlayerInteractEntityEvent) {
-        if (event.isCancelled || event.hand != EquipmentSlot.HAND) return
         val rider = event.player
+        recordOtherSwing(rider)
+        if (event.isCancelled || event.hand != EquipmentSlot.HAND) return
         val target = event.rightClicked as? Player ?: return
         if (!rider.inventory.itemInMainHand.type.isAir || rider.uniqueId == target.uniqueId) return
 
@@ -124,7 +177,7 @@ internal class PlayerSeatRuntime(
         if (carrier == rider || !rider.canSee(carrier) || !carrier.canSee(rider) || !canCarry(carrier)) return
         if (!carrier.addPassenger(rider)) return
 
-        val ride = Ride(carrier, rider)
+        val ride = Ride(carrier, rider).apply { otherSwingTick = rider.ticksLived }
         rideByCarrier[carrier.uniqueId] = ride
         rideByRider[rider.uniqueId] = ride
         event.isCancelled = true
@@ -170,12 +223,21 @@ internal class PlayerSeatRuntime(
 
     private fun forget(ride: Ride) {
         rideByCarrier.remove(ride.carrier.uniqueId, ride)
-        if (rideByRider.remove(ride.rider.uniqueId, ride)) updateNameTag(ride.rider, null)
+        if (rideByRider.remove(ride.rider.uniqueId, ride)) {
+            ride.expiry?.cancel()
+            if (ride.expiry != null) directions?.hide(ride.rider.uniqueId)
+            updateNameTag(ride.rider, null)
+        }
     }
 
     override fun close() {
         events.unregisterAll()
         rideByRider.values.toList().forEach(::dismount)
         check(rideByRider.isEmpty()) { "Player seats could not dismount ${rideByRider.size} owned rider(s)" }
+        directions?.close()
+    }
+
+    private companion object {
+        val CAPTIONS = listOf("Туда Нахуй!", "Пиздуй туда!", "Живее двигай!", "Газуй туда!", "Давай, шевелись!")
     }
 }

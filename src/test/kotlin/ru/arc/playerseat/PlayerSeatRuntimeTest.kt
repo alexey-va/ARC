@@ -6,21 +6,27 @@ import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import io.papermc.paper.event.player.PrePlayerAttackEntityEvent
 import org.bukkit.GameMode
 import org.bukkit.Material
 import org.bukkit.entity.Entity
 import org.bukkit.entity.Player
+import org.bukkit.event.block.Action
 import org.bukkit.event.entity.EntityDamageEvent
 import org.bukkit.event.entity.EntityDismountEvent
 import org.bukkit.event.entity.PlayerDeathEvent
+import org.bukkit.event.player.PlayerDropItemEvent
 import org.bukkit.event.player.PlayerInteractAtEntityEvent
 import org.bukkit.event.player.PlayerInteractEntityEvent
+import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerTeleportEvent
 import org.bukkit.event.player.PlayerToggleSneakEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.util.Vector
 import ru.arc.core.TestEventBus
+import ru.arc.core.Tasks
+import ru.arc.core.TestTaskScheduler
 import java.util.UUID
 
 class PlayerSeatRuntimeTest : StringSpec({
@@ -158,6 +164,77 @@ class PlayerSeatRuntimeTest : StringSpec({
             damage(f.other, wall) shouldBe true
             f.riderVehicle = f.other
             damage(f.rider, wall) shouldBe false
+        }
+    }
+
+    "empty-hand left clicks point for four seconds from the latest gesture without consuming attacks" {
+        val scheduler = TestTaskScheduler()
+        val display = mockk<SeatDirections>(relaxed = true)
+        Tasks.withScheduler(scheduler) {
+            SeatFixture(display).use { f ->
+                f.click()
+                every { f.rider.ticksLived } returns 2
+                every { f.rider.eyeLocation.yaw } returns 90f
+                f.gesture(Action.LEFT_CLICK_AIR, cancelled = true)
+                f.gesture(Action.LEFT_CLICK_BLOCK)
+                verify(exactly = 1) { display.show(f.carrier, f.rider, 90f, "Туда Нахуй!") }
+                scheduler.tick(60)
+                every { f.rider.ticksLived } returns 60
+                every { f.rider.eyeLocation.yaw } returns -45f
+                val hit = PrePlayerAttackEntityEvent(f.rider, f.other, true)
+                f.bus.fire(hit)
+                hit.isCancelled shouldBe false
+                verify { display.show(f.carrier, f.rider, -45f, "Пиздуй туда!") }
+                scheduler.tick(79)
+                verify(exactly = 0) { display.hide(any()) }
+                scheduler.tick()
+                val riderId = f.rider.uniqueId
+                verify(exactly = 1) { display.hide(riderId) }
+            }
+        }
+    }
+
+    "right clicks, a held item and a foreign vehicle do not point" {
+        val display = mockk<SeatDirections>(relaxed = true)
+        SeatFixture(display).use { f ->
+            f.gesture(Action.LEFT_CLICK_AIR)
+            f.click()
+            f.gesture(Action.LEFT_CLICK_AIR)
+            f.click()
+            f.gesture(Action.RIGHT_CLICK_AIR)
+            f.gesture(Action.RIGHT_CLICK_BLOCK)
+            every { f.rider.ticksLived } returns 1
+            f.gesture(Action.LEFT_CLICK_AIR)
+            f.gesture(Action.LEFT_CLICK_BLOCK)
+            every { f.rider.ticksLived } returns 5
+            f.bus.fire(mockk<PlayerDropItemEvent>(relaxed = true) { every { player } returns f.rider })
+            f.gesture(Action.LEFT_CLICK_AIR)
+            f.gesture(Action.LEFT_CLICK_AIR, EquipmentSlot.OFF_HAND)
+            every { f.rider.inventory.itemInMainHand.type } returns Material.STICK
+            f.gesture(Action.LEFT_CLICK_BLOCK)
+            every { f.rider.inventory.itemInMainHand.type } returns Material.AIR
+            f.riderVehicle = f.other
+            f.gesture(Action.LEFT_CLICK_AIR)
+            verify(exactly = 0) { display.show(any(), any(), any(), any()) }
+        }
+    }
+
+    "a block hit by the upper rider points for the immediate carrier and dismount clears it" {
+        val scheduler = TestTaskScheduler()
+        val display = mockk<SeatDirections>(relaxed = true)
+        Tasks.withScheduler(scheduler) {
+            SeatFixture(display).use { f ->
+                f.click()
+                f.click(f.other, f.carrier)
+                every { f.other.ticksLived } returns 2
+                f.gesture(Action.LEFT_CLICK_BLOCK, who = f.other)
+                verify { display.show(f.rider, f.other, any(), any()) }
+                f.bus.fire(PlayerToggleSneakEvent(f.other, true))
+                val upperRiderId = f.other.uniqueId
+                verify(exactly = 1) { display.hide(upperRiderId) }
+                scheduler.tick(80)
+                verify(exactly = 1) { display.hide(any()) }
+            }
         }
     }
 
@@ -420,7 +497,7 @@ class PlayerSeatRuntimeTest : StringSpec({
     }
 })
 
-private class SeatFixture : AutoCloseable {
+private class SeatFixture(directions: SeatDirections? = null) : AutoCloseable {
     private val vehicles = mutableMapOf<Player, Entity?>()
     private val passengers = mutableMapOf<Player, MutableList<Entity>>()
     val rider = player()
@@ -436,7 +513,7 @@ private class SeatFixture : AutoCloseable {
     var dismountSucceeds = true
     var canCarry = true
     val nameTags = mutableListOf<Pair<Player, UUID?>>()
-    private val runtime = PlayerSeatRuntime(bus, { who, carrierId -> nameTags += who to carrierId }) { canCarry }
+    private val runtime = PlayerSeatRuntime(bus, { who, carrierId -> nameTags += who to carrierId }, directions) { canCarry }
 
     init { runtime.start() }
 
@@ -465,6 +542,15 @@ private class SeatFixture : AutoCloseable {
 
     fun click(actor: Player = rider, target: Player = carrier): PlayerInteractEntityEvent =
         PlayerInteractEntityEvent(actor, target, hand).also(bus::fire)
+
+    fun gesture(action: Action, hand: EquipmentSlot = EquipmentSlot.HAND, who: Player = rider, cancelled: Boolean = false) {
+        val click = mockk<PlayerInteractEvent>()
+        every { click.action } returns action
+        every { click.hand } returns hand
+        every { click.player } returns who
+        every { click.isCancelled } returns cancelled
+        bus.fire(click)
+    }
 
     override fun close() = runtime.close()
 }
