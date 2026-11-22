@@ -78,7 +78,11 @@ object AuroraGeometry {
                 AuroraShape.ENDERMAN_SKY_THEFT, AuroraShape.SKY_FISHING, AuroraShape.FROST_WALKER, AuroraShape.CLOUD_FOX,
                 AuroraShape.TOTEM_HEART, AuroraShape.GHAST_PORTAL, AuroraShape.STORM_HERD, AuroraShape.SLIME_ANVIL,
                 AuroraShape.SHATTERED_SWORD, AuroraShape.REVERSE_FIREWORK, AuroraShape.FROG_RAIN, AuroraShape.VOID_CATHEDRAL,
-                AuroraShape.SOLAR_CORSAIR, AuroraShape.ORK_KROOZER, AuroraShape.IMPERIAL_AQUILA, AuroraShape.MECHANICUS_SIGIL ->
+                AuroraShape.SOLAR_CORSAIR, AuroraShape.ORK_KROOZER, AuroraShape.IMPERIAL_AQUILA, AuroraShape.MECHANICUS_SIGIL,
+                AuroraShape.KRAKEN_DRAG, AuroraShape.RLYEH_RISING, AuroraShape.DAGON_TIDE,
+                AuroraShape.NIGHT_GAUNT, AuroraShape.COLOUR_FROM_SPACE, AuroraShape.SHOGGOTH_ESCAPE,
+                AuroraShape.SILVER_KEY, AuroraShape.DEATH_STAR,
+                AuroraShape.IMPERIAL_STAR_DESTROYER ->
                     error("Celestial animations require a sky scene")
             }
         }

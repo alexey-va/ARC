@@ -66,8 +66,8 @@ object AuroraSkyMiniatures {
         val t = progress.coerceIn(0.0, 1.0)
         val story = shape.storyParts ?: return glider(index, t)
         val pose = story.part(shape, index, t)
-        // Each frog disappears at the bottom of its own fall; the surrounding shower runs continuously.
-        if (shape == AuroraShape.FROG_RAIN) return pose
+        // The shower and the Imperial fleet animate through the loop boundary at full size.
+        if (shape == AuroraShape.FROG_RAIN || story === AuroraImperialFleet) return pose
         val fade = smooth(t / 0.02) * smooth((1.0 - t) / 0.02)
         if (fade == 1.0) return pose
         val center = pose.center

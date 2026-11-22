@@ -95,7 +95,16 @@ enum class AuroraShape(
     SOLAR_CORSAIR(AuroraSolarCorsair, 240),
     ORK_KROOZER(AuroraOrkKroozer, 220),
     IMPERIAL_AQUILA(AuroraImperialAquila, 200),
-    MECHANICUS_SIGIL(AuroraMechanicusSigil, 220);
+    MECHANICUS_SIGIL(AuroraMechanicusSigil, 220),
+    KRAKEN_DRAG(AuroraAbyssalStories, 240),
+    RLYEH_RISING(AuroraAbyssalStories, 260),
+    DAGON_TIDE(AuroraAbyssalStories, 220),
+    NIGHT_GAUNT(AuroraDreamlandStories, 212),
+    COLOUR_FROM_SPACE(AuroraDreamlandStories, 254),
+    SHOGGOTH_ESCAPE(AuroraForbiddenStories, 260),
+    SILVER_KEY(AuroraForbiddenStories, 280),
+    DEATH_STAR(AuroraImperialFleet, 240),
+    IMPERIAL_STAR_DESTROYER(AuroraImperialFleet, 220);
 
     internal val isStory: Boolean get() = storyParts != null
     internal val isMiniature: Boolean get() = this == FEATHER_GLIDER || isStory

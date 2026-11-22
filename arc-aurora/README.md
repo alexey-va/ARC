@@ -120,6 +120,15 @@ These sky scenes can be tried individually. They use vanilla item displays and a
 | `ORK_KROOZER` | A patchwork armoured kroozer lurches forward behind its jaw of tusks. |
 | `IMPERIAL_AQUILA` | A gold double-headed eagle unfolds its layered wings and tail. |
 | `MECHANICUS_SIGIL` | A toothed cog turns around a half-mechanical skull as its red lens lights up. |
+| `KRAKEN_DRAG` | Tentacles coil around a sailing ship and drag it under. |
+| `RLYEH_RISING` | R’lyeh rises, its stairways part and a crooked doorway opens. |
+| `DAGON_TIDE` | Dagon breaches a breaking wave and plunges back into the sea. |
+| `NIGHT_GAUNT` | A faceless night-gaunt folds its wings to dive, then flares them wide. |
+| `COLOUR_FROM_SPACE` | A split meteor sends an alien colour through the roots and crown of a dead tree. |
+| `SHOGGOTH_ESCAPE` | An amber-eyed shoggoth squeezes its tendrils through a crack in the ice. |
+| `SILVER_KEY` | A silver key turns in the dream gate and reveals a moon beyond it. |
+| `DEATH_STAR` | Streams of green light converge above the dish and fire as one beam. |
+| `IMPERIAL_STAR_DESTROYER` | An Imperial Star Destroyer banks past, revealing its wedge-shaped hull and engines. |
 
 `/arcaurora showcase FROG_RAIN` surrounds the player with falling frogs for three minutes. Turn around to see the shower in every direction. The frogs use packet displays and have no AI or collision.
 
@@ -625,7 +634,7 @@ Run from the repository root with JDK 25:
 ```
 
 The expected local runtime artifact is
-`arc-aurora/build/libs/ArcAurora-0.1.21.jar`. The public Maven API artifact
+`arc-aurora/build/libs/ArcAurora-0.1.22.jar`. The public Maven API artifact
 `ru.ruscrafting.arc:arc-aurora-api:0.1.0` was verified on 2026-10-29 in the
 [RusCrafting repository](https://repo.rus-crafting.ru/grocermc/ru/ruscrafting/arc/arc-aurora-api/0.1.0/arc-aurora-api-0.1.0.pom).
 That API publication does not establish a runtime-plugin build, delivery,

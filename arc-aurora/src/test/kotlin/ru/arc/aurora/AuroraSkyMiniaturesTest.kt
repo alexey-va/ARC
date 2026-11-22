@@ -73,6 +73,24 @@ class AuroraSkyMiniaturesTest : FreeSpec({
         }
     }
 
+    "the station and destroyer keep their hulls visible across the loop boundary" {
+        for (shape in listOf(AuroraShape.DEATH_STAR, AuroraShape.IMPERIAL_STAR_DESTROYER)) {
+            val start = storyPose(shape, 0.0)
+            val end = storyPose(shape, 1.0)
+            withClue(shape) {
+                (start.count { it.visible } > start.size / 2) shouldBe true
+                for ((a, b) in start.zip(end)) {
+                    b.visible shouldBe a.visible
+                    if (a.visible) {
+                        (a.center.vector().distance(b.center.vector()) < 0.001f) shouldBe true
+                        (a.scale.distance(b.scale) < 0.001f) shouldBe true
+                        (abs(a.rotation.dot(b.rotation)) > 0.999f) shouldBe true
+                    }
+                }
+            }
+        }
+    }
+
     "the five forged strokes join into a downward star with an overpass and an underpass per stroke" {
         val shape = AuroraShape.INFERNAL_PENTAGRAM
         fun end(part: AuroraMiniaturePart, side: Float) =
@@ -275,6 +293,15 @@ internal val storyShapes = listOf(
     AuroraShape.ORK_KROOZER,
     AuroraShape.IMPERIAL_AQUILA,
     AuroraShape.MECHANICUS_SIGIL,
+    AuroraShape.KRAKEN_DRAG,
+    AuroraShape.RLYEH_RISING,
+    AuroraShape.DAGON_TIDE,
+    AuroraShape.NIGHT_GAUNT,
+    AuroraShape.COLOUR_FROM_SPACE,
+    AuroraShape.SHOGGOTH_ESCAPE,
+    AuroraShape.SILVER_KEY,
+    AuroraShape.DEATH_STAR,
+    AuroraShape.IMPERIAL_STAR_DESTROYER,
 )
 
 private fun storyPose(shape: AuroraShape, progress: Double) =
