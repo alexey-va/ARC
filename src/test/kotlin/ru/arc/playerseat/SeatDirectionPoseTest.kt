@@ -38,7 +38,7 @@ class SeatDirectionPoseTest : StringSpec({
     for ((yaw, forward) in headings) {
         "the compass wings meet at one tip on Bukkit yaw $yaw and the caption faces the riders" {
             val pose = SeatDirectionPose(1.8f, SeatArrowStyle.COMPASS, SeatDirectionPalette.ROSE)
-            val heading = seatHeadingRotation(yaw)
+            val heading = seatHeadingRotation(yaw, 0f)
             val (shaft, left, right) = pose.arrow.filter { it.material == Material.NETHER_BRICKS }.map { it.transform.turned(heading) }
             val tail = shaft.point(.5f, .5f, 0f)
             val tip = left.point(1f, .5f, 1f)
@@ -97,7 +97,7 @@ class SeatDirectionPoseTest : StringSpec({
         val tip = index.point(.5f, .5f, 1f)
         (tip.z - pads.maxOf { it.z } > 1.5f) shouldBe true
         for ((yaw, forward) in headings) {
-            val rotated = index.turned(seatHeadingRotation(yaw))
+            val rotated = index.turned(seatHeadingRotation(yaw, 0f))
             val direction = rotated.point(.5f, .5f, 1f).sub(rotated.point(.5f, .5f, 0f))
             direction.normalize().shouldMatch(forward)
         }
@@ -126,6 +126,39 @@ class SeatDirectionPoseTest : StringSpec({
         }
     }
 
+    "the compass shaft and pointer finger follow the full gaze and the label faces back toward the pair" {
+        val palette = SeatDirectionPalette.ROSE
+        val compass = SeatDirectionPose(1.8f, SeatArrowStyle.COMPASS, palette)
+        val hand = SeatDirectionPose(1.8f, SeatArrowStyle.POINTING_HAND, palette)
+        val shaft = compass.arrow.first().transform
+        val index = hand.arrow.maxBy { it.transform.scale.z }.transform
+        for (yaw in headings.keys) for (pitch in listOf(-90f, -47f, -4f, 0f, 33f, 89f, 90f)) {
+            val direction = Location(null, 0.0, 0.0, 0.0, yaw, pitch).direction
+            val forward = Vector3f(direction.x.toFloat(), direction.y.toFloat(), direction.z.toFloat())
+            val rotation = seatHeadingRotation(yaw, pitch)
+            for (part in listOf(shaft, index)) {
+                val rotated = part.turned(rotation, size = .5f, side = -1f)
+                rotated.point(.5f, .5f, 1f).sub(rotated.point(.5f, .5f, 0f)).normalize().shouldMatch(forward)
+            }
+            compass.caption.turned(rotation).leftRotation
+                .transform(Vector3f(0f, 0f, 1f)).shouldMatch(Vector3f(forward).negate())
+        }
+    }
+
+    "steep downward directions keep each shape visible above level ground" {
+        for (height in listOf(1.5f, 1.8f)) for (style in SeatArrowStyle.entries) {
+            val pose = SeatDirectionPose(height, style, SeatDirectionPalette.ROSE)
+            for (pitch in listOf(20f, 45f, 70f, 90f)) {
+                val heading = seatHeadingRotation(135f, pitch)
+                val size = pose.scaleForPitch(pitch)
+                val lowest = pose.arrow.minOf { part ->
+                    part.transform.turned(heading, size).corners().minOf { it.y }
+                }
+                (height + lowest > .15f) shouldBe true
+            }
+        }
+    }
+
     "heading follows the short arc through the seam and completes a stationary half turn" {
         seatTurnYaw(179f, -179f) shouldBe 181f
         seatTurnYaw(-179f, 179f) shouldBe -181f
@@ -135,8 +168,8 @@ class SeatDirectionPoseTest : StringSpec({
             repeat(6) {
                 val next = seatTurnYaw(current, target)
                 (abs(Location.normalizeYaw(next - current)) <= 30f) shouldBe true
-                val a = seatHeadingRotation(current)
-                val b = seatHeadingRotation(next)
+                val a = seatHeadingRotation(current, 0f)
+                val b = seatHeadingRotation(next, 0f)
                 (a.dot(b) > .96f) shouldBe true
                 // The native client interpolates local translation linearly between keyframes.
                 val middle = Vector3f(caption.turned(a).translation).lerp(caption.turned(b).translation, .5f)
@@ -215,27 +248,27 @@ class SeatDirectionPoseTest : StringSpec({
         mockkStatic(Bukkit::class) {
             every { Bukkit.createBlockData(capture(writes)) } returns mockk<BlockData>()
             SeatDirectionDisplay(displays).use { display ->
-                display.show(carrier, rider, 0f, "Туда Нахуй!")
+                display.show(carrier, rider, 0f, 0f, "Туда Нахуй!")
                 writes.size shouldBe 7
-                repeat(8) { display.turn(carrier, rider, 180f) }
+                repeat(8) { display.turn(carrier, rider, 180f, 40f) }
                 every { carrier.height } returns 1.5
-                display.turn(carrier, rider, 180f)
+                display.turn(carrier, rider, 180f, 40f)
                 writes.size shouldBe 7
                 captions.size shouldBe 1
-                display.show(carrier, rider, 180f, "Туда Нахуй!")
+                display.show(carrier, rider, 180f, 40f, "Туда Нахуй!")
                 (writes.size > 7) shouldBe true
                 captions.size shouldBe 2
                 (captions[0].color() != captions[1].color()) shouldBe true
-                repeat(2) { display.show(carrier, rider, 180f, "Газуй туда!") }
+                repeat(2) { display.show(carrier, rider, 180f, 40f, "Газуй туда!") }
                 captions.size shouldBe 4
                 blocks.size shouldBe 34
                 val afterGesture = writes.size
-                repeat(7) { display.turn(carrier, rider, -45f) }
+                repeat(7) { display.turn(carrier, rider, -45f, -60f) }
                 writes.size shouldBe afterGesture
                 blocks.size shouldBe 34
                 verify(exactly = 1) { displays.spawnText(any(), any()) }
                 blocks.forEach { verify(exactly = 0) { it.remove() } }
-                display.show(carrier, rider, -45f, "Живее двигай!")
+                display.show(carrier, rider, -45f, -60f, "Живее двигай!")
                 blocks.size shouldBe 34
                 blocks.take(7).forEach { verify(exactly = 0) { it.remove() } }
                 blocks.drop(7).forEach { verify(exactly = 1) { it.remove() } }

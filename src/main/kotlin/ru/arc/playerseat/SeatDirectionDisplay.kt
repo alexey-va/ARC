@@ -18,11 +18,14 @@ import ru.arc.paper.display.PacketTextDisplay
 import ru.arc.paper.display.PaperPacketDisplays
 import java.util.UUID
 import kotlin.math.PI
-import kotlin.math.atan
+import kotlin.math.abs
 import kotlin.math.atan2
-import kotlin.math.hypot
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.random.Random
+
+private const val HAND_SIDE_OFFSET = 1.92f
 
 internal class SeatDirectionDisplay(private val displays: PaperPacketDisplays) : SeatDirections {
     constructor(plugin: Plugin) : this(PaperPacketDisplays(plugin, "player-seat-directions"))
@@ -35,15 +38,25 @@ internal class SeatDirectionDisplay(private val displays: PaperPacketDisplays) :
         val caption: PacketTextDisplay,
         var pose: SeatDirectionPose,
         var yaw: Float,
+        var pitch: Float,
     ) {
         fun render(interpolationTicks: Int) {
-            val rotation = seatHeadingRotation(yaw)
+            val rotation = seatHeadingRotation(yaw, pitch)
+            val size = pose.scaleForPitch(pitch)
+            // At steep angles the two players share the sightline. Slide the cue beside them
+            // while keeping its pointing axis parallel to the rider's gaze.
+            val steepness = ((abs(pitch) - 55f) / 30f).coerceIn(0f, 1f)
+            val blend = steepness * steepness
+            val side = if (pitch < 0f) 3.2f else .95f
+            val handOffset = if (pose.style == SeatArrowStyle.POINTING_HAND) HAND_SIDE_OFFSET * size else 0f
+            val arrowShift = -(side - handOffset) * blend
+            val captionShift = -side * blend
             arrow.forEachIndexed { index, display ->
                 display.interpolationDuration = interpolationTicks
-                display.transformation = pose.arrow[index].transform.turned(rotation)
+                display.transformation = pose.arrow[index].transform.turned(rotation, size, arrowShift)
             }
             caption.interpolationDuration = interpolationTicks
-            caption.transformation = pose.caption.turned(rotation)
+            caption.transformation = pose.caption.turned(rotation, size, captionShift)
         }
 
         fun remove() {
@@ -52,7 +65,7 @@ internal class SeatDirectionDisplay(private val displays: PaperPacketDisplays) :
         }
     }
 
-    override fun show(carrier: Player, rider: Player, yaw: Float, caption: String) {
+    override fun show(carrier: Player, rider: Player, yaw: Float, pitch: Float, caption: String) {
         val riderId = rider.uniqueId
         if (signals[riderId]?.carrierId != carrier.uniqueId) hide(riderId)
         val signal = signals[riderId]
@@ -60,7 +73,8 @@ internal class SeatDirectionDisplay(private val displays: PaperPacketDisplays) :
         val text = palette.caption(caption)
         val height = carrier.height.toFloat()
         if (signal == null) {
-            signals[riderId] = createSignal(carrier, rider, text, SeatDirectionPose(height, SeatArrowStyle.COMPASS, palette), yaw)
+            val pose = SeatDirectionPose(height, SeatArrowStyle.COMPASS, palette)
+            signals[riderId] = createSignal(carrier, rider, text, pose, yaw, pitch)
             return
         }
         val old = signal.pose
@@ -90,13 +104,15 @@ internal class SeatDirectionDisplay(private val displays: PaperPacketDisplays) :
         }
     }
 
-    override fun turn(carrier: Player, rider: Player, yaw: Float) {
+    override fun turn(carrier: Player, rider: Player, yaw: Float, pitch: Float) {
         val signal = signals[rider.uniqueId] ?: return
         if (carrier.uniqueId != signal.carrierId) return
-        val next = seatTurnYaw(signal.yaw, yaw)
+        val nextYaw = seatTurnYaw(signal.yaw, yaw)
+        val nextPitch = signal.pitch + (pitch - signal.pitch).coerceIn(-30f, 30f)
         val height = carrier.height.toFloat()
-        if (next == signal.yaw && height == signal.pose.carrierHeight) return
-        signal.yaw = next
+        if (nextYaw == signal.yaw && nextPitch == signal.pitch && height == signal.pose.carrierHeight) return
+        signal.yaw = nextYaw
+        signal.pitch = nextPitch
         if (height != signal.pose.carrierHeight) signal.pose = SeatDirectionPose(height, signal.pose.style, signal.pose.palette)
         signal.render(2)
     }
@@ -116,7 +132,9 @@ internal class SeatDirectionDisplay(private val displays: PaperPacketDisplays) :
         part.attachTo(carrier)
     }
 
-    private fun createSignal(carrier: Player, rider: Player, text: Component, pose: SeatDirectionPose, yaw: Float): Signal {
+    private fun createSignal(
+        carrier: Player, rider: Player, text: Component, pose: SeatDirectionPose, yaw: Float, pitch: Float,
+    ): Signal {
         val at = anchor(carrier)
         val parts = mutableListOf<PacketDisplay>()
         try {
@@ -128,7 +146,7 @@ internal class SeatDirectionDisplay(private val displays: PaperPacketDisplays) :
                 isShadowed = true
             }
             for (part in parts) attach(part, carrier, rider)
-            return Signal(carrier.uniqueId, arrow, caption, pose, yaw % 720f).also { it.render(0) }
+            return Signal(carrier.uniqueId, arrow, caption, pose, yaw % 720f, pitch).also { it.render(0) }
         } catch (failure: Exception) {
             parts.forEach(PacketDisplay::remove)
             throw failure
@@ -207,22 +225,30 @@ internal fun seatTurnYaw(current: Float, target: Float): Float {
     return (current + delta.coerceIn(-30f, 30f)) % 720f
 }
 
-internal fun seatHeadingRotation(yaw: Float): Quaternionf = Quaternionf().rotationY(-Math.toRadians(yaw.toDouble()).toFloat())
+internal fun seatHeadingRotation(yaw: Float, pitch: Float): Quaternionf =
+    Quaternionf().rotationY(-Math.toRadians(yaw.toDouble()).toFloat()).rotateX(Math.toRadians(pitch.toDouble()).toFloat())
 
-internal fun Transformation.turned(heading: Quaternionf): Transformation = Transformation(
-    heading.transform(Vector3f(translation)), Quaternionf(heading).mul(leftRotation), scale, rightRotation,
+internal fun Transformation.turned(heading: Quaternionf, size: Float = 1f, side: Float = 0f): Transformation = Transformation(
+    heading.transform(Vector3f(translation).mul(size).add(side, 0f, 0f)), Quaternionf(heading).mul(leftRotation),
+    Vector3f(scale).mul(size), rightRotation,
 )
 
 /** Offsets from the native passenger origin above the carrier, with +Z forward at Bukkit yaw zero. */
 internal class SeatDirectionPose(val carrierHeight: Float, val style: SeatArrowStyle, val palette: SeatDirectionPalette) {
-    private val slope = carrierHeight / 9f
-    private val plane = Quaternionf().rotationX(-atan(slope))
-
     val arrow = when (style) {
         SeatArrowStyle.COMPASS -> compass()
         SeatArrowStyle.CHEVRONS -> chevrons()
         SeatArrowStyle.FLETCHED -> fletched()
         SeatArrowStyle.POINTING_HAND -> pointingHand()
+    }
+
+    fun scaleForPitch(pitch: Float): Float {
+        if (pitch <= 0f) return 1f
+        // Keep downward cues above the carrier's feet on level ground by bringing the whole cue closer.
+        val angle = Math.toRadians(pitch.toDouble()).toFloat()
+        val drop = if (style == SeatArrowStyle.POINTING_HAND) carrierHeight * .56f + .49f else carrierHeight * .52f + .2f
+        val depth = drop * cos(angle) + 7.3f * sin(angle)
+        return ((carrierHeight - .2f) / depth).coerceIn(.1f, 1f)
     }
 
     private fun compass() = listOf(
@@ -260,7 +286,7 @@ internal class SeatDirectionPose(val carrierHeight: Float, val style: SeatArrowS
         val degree = (PI / 180).toFloat()
         // Roll around the pointing axis, and put the hand to the right so the extended finger has parallax.
         val frame = Quaternionf().rotationZ(-11f * degree)
-        val origin = Vector3f(-1.92f, -carrierHeight * 5f / 9f, 5.20f)
+        val origin = Vector3f(-HAND_SIDE_OFFSET, -carrierHeight * 5f / 9f, 5.20f)
         val flat = Quaternionf()
         fun box(material: Material, at: Vector3f, size: Vector3f, rotation: Quaternionf = flat) {
             val center = frame.transform(Vector3f(at)).add(origin)
@@ -318,20 +344,19 @@ internal class SeatDirectionPose(val carrierHeight: Float, val style: SeatArrowS
     )
 
     private fun point(z: Float, lift: Float) =
-        Vector3f(0f, -.52f * carrierHeight + (z - 4.30f) * slope + lift, z)
+        Vector3f(0f, -.52f * carrierHeight + lift, z)
 
     private fun shaft(material: Material, from: Float, to: Float, width: Float, height: Float, lift: Float): SeatArrowPart {
-        val depth = (to - from) * hypot(1f, slope)
-        return centered(material, point((from + to) / 2f, lift), plane, Vector3f(width, height, depth), Quaternionf())
+        return centered(material, point((from + to) / 2f, lift), Quaternionf(), Vector3f(width, height, to - from), Quaternionf())
     }
 
     private fun diamond(material: Material, z: Float, lift: Float, width: Float, height: Float, length: Float): SeatArrowPart =
-        centered(material, point(z, lift), plane, Vector3f(width / sqrt(2f), height, length / sqrt(2f)),
+        centered(material, point(z, lift), Quaternionf(), Vector3f(width / sqrt(2f), height, length / sqrt(2f)),
             Quaternionf().rotationY((PI / 4).toFloat()))
 
     private fun feather(material: Material, side: Int): SeatArrowPart = centered(
         material, point(4.66f, .06f).add(side * .12f, 0f, 0f),
-        Quaternionf(plane).rotateY(-side * Math.toRadians(14.0).toFloat()),
+        Quaternionf().rotationY(-side * Math.toRadians(14.0).toFloat()),
         Vector3f(.21f / sqrt(2f), .11f, 1.10f / sqrt(2f)), Quaternionf().rotationY((PI / 4).toFloat()),
     )
 
@@ -346,7 +371,7 @@ internal class SeatDirectionPose(val carrierHeight: Float, val style: SeatArrowS
         val right = Quaternionf().rotationY(side * (PI / 3).toFloat())
         val scale = Vector3f(.50f * size, height, 1.32f * size)
         val seam = right.transform(Vector3f(0f, 0f, 1f)).mul(scale)
-        val left = Quaternionf(plane).rotateZ(-side * Math.toRadians(12.0).toFloat()).rotateY(-atan2(seam.x, seam.z))
+        val left = Quaternionf().rotationZ(-side * Math.toRadians(12.0).toFloat()).rotateY(-atan2(seam.x, seam.z))
         // Align the inner edge with the spine. Its front corner is the shared sharp point.
         val innerCorner = Vector3f(if (side < 0) 1f else 0f, .5f, 1f)
         val corner = point(tipZ, lift).sub(left.transform(right.transform(innerCorner).mul(scale)))

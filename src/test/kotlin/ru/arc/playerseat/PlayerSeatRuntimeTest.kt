@@ -114,14 +114,14 @@ class PlayerSeatRuntimeTest : StringSpec({
             SeatFixture(passengerView = view).use { f ->
                 f.click()
                 f.click(f.other, f.carrier)
-                verify(exactly = 1) { view.setHidden(f.carrier, f.rider, true) }
-                verify(exactly = 1) { view.setHidden(f.rider, f.other, true) }
-                verify(exactly = 0) { view.setHidden(f.carrier, f.other, any()) }
+                verify(exactly = 1) { view.setMounted(f.carrier, f.rider, true) }
+                verify(exactly = 1) { view.setMounted(f.rider, f.other, true) }
+                verify(exactly = 0) { view.setMounted(f.carrier, f.other, any()) }
                 f.bus.fire(PlayerToggleSneakEvent(f.rider, true))
-                verify(exactly = 1) { view.setHidden(f.carrier, f.rider, false) }
-                verify(exactly = 0) { view.setHidden(f.rider, f.other, false) }
+                verify(exactly = 1) { view.setMounted(f.carrier, f.rider, false) }
+                verify(exactly = 0) { view.setMounted(f.rider, f.other, false) }
                 f.bus.fire(mockk<PlayerQuitEvent> { every { player } returns f.other })
-                verify(exactly = 1) { view.setHidden(f.rider, f.other, false) }
+                verify(exactly = 1) { view.setMounted(f.rider, f.other, false) }
             }
         }
         verify { view.close() }
@@ -135,7 +135,7 @@ class PlayerSeatRuntimeTest : StringSpec({
                 f.click()
                 f.riderVehicle = null
                 scheduler.tick()
-                verify(exactly = 1) { view.setHidden(f.carrier, f.rider, false) }
+                verify(exactly = 1) { view.setMounted(f.carrier, f.rider, false) }
                 scheduler.timerCount() shouldBe 0
             }
         }
@@ -208,19 +208,23 @@ class PlayerSeatRuntimeTest : StringSpec({
                 f.click()
                 every { f.rider.ticksLived } returns 2
                 every { f.rider.yaw } returns 90f
+                every { f.rider.pitch } returns -25f
                 f.gesture(Action.LEFT_CLICK_AIR, cancelled = true)
                 f.gesture(Action.LEFT_CLICK_BLOCK)
-                verify(exactly = 1) { display.show(f.carrier, f.rider, 90f, "Туда Нахуй!") }
+                verify(exactly = 1) { display.show(f.carrier, f.rider, 90f, -25f, "Туда Нахуй!") }
                 scheduler.tick(100)
+                every { f.rider.pitch } returns 35f
+                scheduler.tick()
+                verify(exactly = 1) { display.turn(f.carrier, f.rider, 90f, 35f) }
                 every { f.rider.yaw } returns -45f
                 scheduler.tick()
-                verify(exactly = 1) { display.turn(f.carrier, f.rider, -45f) }
-                verify(exactly = 1) { display.show(any(), any(), any(), any()) }
+                verify(exactly = 1) { display.turn(f.carrier, f.rider, -45f, 35f) }
+                verify(exactly = 1) { display.show(any(), any(), any(), any(), any()) }
                 every { f.rider.ticksLived } returns 101
                 val hit = PrePlayerAttackEntityEvent(f.rider, f.other, true)
                 f.bus.fire(hit)
                 hit.isCancelled shouldBe false
-                verify { display.show(f.carrier, f.rider, -45f, "Пиздуй туда!") }
+                verify { display.show(f.carrier, f.rider, -45f, 35f, "Пиздуй туда!") }
                 scheduler.tick(100)
                 scheduler.timerCount() shouldBe 1
                 verify(exactly = 0) { display.hide(any()) }
@@ -255,7 +259,7 @@ class PlayerSeatRuntimeTest : StringSpec({
                 every { f.rider.inventory.itemInMainHand.type } returns Material.AIR
                 f.riderVehicle = f.other
                 f.gesture(Action.LEFT_CLICK_AIR)
-                verify(exactly = 0) { display.show(any(), any(), any(), any()) }
+                verify(exactly = 0) { display.show(any(), any(), any(), any(), any()) }
             }
         }
     }
@@ -269,7 +273,7 @@ class PlayerSeatRuntimeTest : StringSpec({
                 f.click(f.other, f.carrier)
                 every { f.other.ticksLived } returns 2
                 f.gesture(Action.LEFT_CLICK_BLOCK, who = f.other)
-                verify { display.show(f.rider, f.other, any(), any()) }
+                verify { display.show(f.rider, f.other, any(), any(), any()) }
                 f.bus.fire(PlayerToggleSneakEvent(f.other, true))
                 val upperRiderId = f.other.uniqueId
                 verify(exactly = 1) { display.hide(upperRiderId) }

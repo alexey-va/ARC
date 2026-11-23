@@ -66,8 +66,8 @@ internal fun seatNameTagPayload(carrierId: UUID?): ByteArray =
     else ByteBuffer.allocate(16).putLong(carrierId.mostSignificantBits).putLong(carrierId.leastSignificantBits).array()
 
 internal interface SeatDirections : AutoCloseable {
-    fun show(carrier: Player, rider: Player, yaw: Float, caption: String)
-    fun turn(carrier: Player, rider: Player, yaw: Float)
+    fun show(carrier: Player, rider: Player, yaw: Float, pitch: Float, caption: String)
+    fun turn(carrier: Player, rider: Player, yaw: Float, pitch: Float)
     fun hide(riderId: UUID)
 }
 
@@ -144,7 +144,7 @@ internal class PlayerSeatRuntime(
         // A use and its client animation can land on adjacent server ticks, including the mount click.
         if (swing && ride.otherSwingTick?.let { tick - it in 0..1 } == true) return
         if (ride.lastPointTick?.let { tick - it in 0 until 4 } == true) return
-        display.show(ride.carrier, rider, rider.yaw, CAPTIONS[ride.nextCaption])
+        display.show(ride.carrier, rider, rider.yaw, rider.pitch, CAPTIONS[ride.nextCaption])
         ride.lastPointTick = tick
         ride.nextCaption = (ride.nextCaption + 1) % CAPTIONS.size
     }
@@ -178,12 +178,12 @@ internal class PlayerSeatRuntime(
         rideByCarrier[carrier.uniqueId] = ride
         rideByRider[rider.uniqueId] = ride
         event.isCancelled = true
-        passengerView?.setHidden(carrier, rider, true)
+        passengerView?.setMounted(carrier, rider, true)
         updateNameTag(rider, carrier.uniqueId)
         if (directions != null || passengerView != null) {
             ride.steering = Tasks.scheduler.runTimer(1, 1) {
                 // Reconcile the private view even if Paper lost a mount before the first signal.
-                if (activeRide(ride) != null && ride.lastPointTick != null) directions?.turn(carrier, rider, rider.yaw)
+                if (activeRide(ride) != null && ride.lastPointTick != null) directions?.turn(carrier, rider, rider.yaw, rider.pitch)
             }
         }
     }
@@ -230,7 +230,7 @@ internal class PlayerSeatRuntime(
         if (rideByRider.remove(ride.rider.uniqueId, ride)) {
             ride.steering?.cancel()
             if (ride.lastPointTick != null) directions?.hide(ride.rider.uniqueId)
-            passengerView?.setHidden(ride.carrier, ride.rider, false)
+            passengerView?.setMounted(ride.carrier, ride.rider, false)
             updateNameTag(ride.rider, null)
         }
     }
