@@ -23,6 +23,7 @@ import ru.arc.paper.display.PacketTextDisplay
 import ru.arc.paper.display.PaperPacketDisplays
 import java.util.UUID
 import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.tan
 import kotlin.random.Random
 
@@ -79,32 +80,31 @@ class SeatDirectionPoseTest : StringSpec({
             SeatArrowStyle.COMPASS, SeatArrowStyle.CHEVRONS, SeatArrowStyle.FLETCHED, SeatArrowStyle.POINTING_HAND, SeatArrowStyle.COMPASS,
         )
         val poses = rotation.map { SeatDirectionPose(1.8f, it, SeatDirectionPalette.ROSE) }
-        poses.map { it.arrow.size }.distinct() shouldBe listOf(7)
+        poses.map { it.arrow.size } shouldBe listOf(7, 7, 7, 34, 7)
         poses.map { it.arrow.map(SeatArrowPart::transform) }.distinct().size shouldBe 4
         poses.map(SeatDirectionPose::caption).distinct().size shouldBe 1
     }
 
-    "the index follows the heading and clears the side thumb and three knuckles in both cameras" {
-        val hand = SeatDirectionPose(1.8f, SeatArrowStyle.POINTING_HAND, SeatDirectionPalette.ROSE).arrow.map { it.transform }
-        val index = hand[2]
-        val thumb = hand[3]
-        val knuckles = hand.drop(4).map { it.point(.5f, .5f, .5f) }
-        knuckles.size shouldBe 3
-        knuckles.zipWithNext().all { (a, b) -> a.x - b.x > .19f } shouldBe true
-        (thumb.point(.5f, .5f, 1f).x - index.point(.5f, .5f, 1f).x > .35f) shouldBe true
-
+    "the arcade index is horizontal on every heading with distinct folded pads and visible length in both cameras" {
+        val palette = SeatDirectionPalette.ROSE
+        val hand = SeatDirectionPose(1.8f, SeatArrowStyle.POINTING_HAND, palette).arrow
+        val index = hand.maxBy { it.transform.scale.z }.transform
+        val pads = hand.filter { it.material == palette.hand.highlight && it.transform.scale.z < .1f }
+            .map { it.transform.point(.5f, .5f, .5f) }.sortedBy { it.x }
+        pads.size shouldBe 4
+        pads.zipWithNext().all { (a, b) -> b.x - a.x > .25f } shouldBe true
+        val base = index.point(.5f, .5f, 0f)
+        val tip = index.point(.5f, .5f, 1f)
+        (tip.z - pads.maxOf { it.z } > 1.5f) shouldBe true
         for ((yaw, forward) in headings) {
             val rotated = index.turned(seatHeadingRotation(yaw))
             val direction = rotated.point(.5f, .5f, 1f).sub(rotated.point(.5f, .5f, 0f))
-            direction.y = 0f
             direction.normalize().shouldMatch(forward)
         }
-        val fistCorners = hand.filterNot { it === index }.flatMap { it.corners() }
-        val tip = index.point(.5f, .5f, 1f)
-        (tip.z - fistCorners.maxOf { it.z } > .70f) shouldBe true
         for (eye in listOf(1.62f, 3.38f)) {
             fun screenY(p: Vector3f) = (1.8f + p.y - eye) / p.z
-            (screenY(tip) - fistCorners.maxOf(::screenY) > .035f) shouldBe true
+            val projectedLength = hypot(tip.x / tip.z - base.x / base.z, screenY(tip) - screenY(base))
+            (projectedLength > .065f) shouldBe true
         }
     }
 
@@ -173,20 +173,17 @@ class SeatDirectionPoseTest : StringSpec({
         }
     }
 
-    "the palm and all five fingers share one matte color with a contrasting cuff in every palette" {
-        val colors = mapOf(
-            SeatDirectionPalette.ROSE to Material.PINK_CONCRETE,
-            SeatDirectionPalette.SCARLET to Material.RED_CONCRETE,
-            SeatDirectionPalette.ORCHID to Material.MAGENTA_CONCRETE,
-            SeatDirectionPalette.EMERALD to Material.LIME_CONCRETE,
-            SeatDirectionPalette.PEARL to Material.WHITE_CONCRETE,
-        )
+    "the arcade hand shares its body color with the index and distributes highlights across all five digits" {
+        SeatDirectionPalette.entries.map { it.hand.body }.distinct().size shouldBe 5
         for (palette in SeatDirectionPalette.entries) {
-            val glove = colors.getValue(palette)
+            val colors = palette.hand
             val parts = SeatDirectionPose(1.8f, SeatArrowStyle.POINTING_HAND, palette).arrow
-            parts.first().material shouldBe palette.spine
-            (parts.first().material != glove) shouldBe true
-            parts.drop(1).map { it.material } shouldBe List(6) { glove }
+            parts.map { it.material }.toSet() shouldBe setOf(
+                Material.BLACK_TERRACOTTA, colors.shade, colors.body, colors.highlight, colors.cuff, colors.stripe,
+            )
+            parts.maxBy { it.transform.scale.z }.material shouldBe colors.body
+            parts.count { it.material == colors.highlight } shouldBe 5
+            (colors.body != colors.cuff) shouldBe true
         }
     }
 
@@ -231,12 +228,17 @@ class SeatDirectionPoseTest : StringSpec({
                 (captions[0].color() != captions[1].color()) shouldBe true
                 repeat(2) { display.show(carrier, rider, 180f, "Газуй туда!") }
                 captions.size shouldBe 4
+                blocks.size shouldBe 34
                 val afterGesture = writes.size
-                display.turn(carrier, rider, -179f)
+                repeat(7) { display.turn(carrier, rider, -45f) }
                 writes.size shouldBe afterGesture
-                blocks.size shouldBe 7
+                blocks.size shouldBe 34
                 verify(exactly = 1) { displays.spawnText(any(), any()) }
                 blocks.forEach { verify(exactly = 0) { it.remove() } }
+                display.show(carrier, rider, -45f, "Живее двигай!")
+                blocks.size shouldBe 34
+                blocks.take(7).forEach { verify(exactly = 0) { it.remove() } }
+                blocks.drop(7).forEach { verify(exactly = 1) { it.remove() } }
             }
         }
     }

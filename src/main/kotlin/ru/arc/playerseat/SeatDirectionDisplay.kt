@@ -31,7 +31,7 @@ internal class SeatDirectionDisplay(private val displays: PaperPacketDisplays) :
 
     private class Signal(
         val carrierId: UUID,
-        val arrow: List<PacketBlockDisplay>,
+        val arrow: MutableList<PacketBlockDisplay>,
         val caption: PacketTextDisplay,
         var pose: SeatDirectionPose,
         var yaw: Float,
@@ -65,13 +65,29 @@ internal class SeatDirectionDisplay(private val displays: PaperPacketDisplays) :
         }
         val old = signal.pose
         val next = SeatDirectionPose(height, old.style.next(), palette)
-        signal.arrow.forEachIndexed { index, display ->
-            val material = next.arrow[index].material
-            if (old.arrow[index].material != material) display.blockData = material.createBlockData()
+        try {
+            val at = anchor(carrier)
+            next.arrow.forEachIndexed { index, part ->
+                val display = signal.arrow.getOrNull(index)
+                if (display == null) {
+                    val added = displays.spawnBlock(at, part.material.createBlockData())
+                    signal.arrow.add(added)
+                    attach(added, carrier, rider)
+                } else if (old.arrow[index].material != part.material) {
+                    display.blockData = part.material.createBlockData()
+                }
+            }
+            while (signal.arrow.size > next.arrow.size) {
+                signal.arrow.last().remove()
+                signal.arrow.removeAt(signal.arrow.lastIndex)
+            }
+            signal.pose = next
+            signal.caption.text(text)
+            signal.render(0)
+        } catch (failure: Exception) {
+            hide(riderId)
+            throw failure
         }
-        signal.pose = next
-        signal.caption.text(text)
-        signal.render(0)
     }
 
     override fun turn(carrier: Player, rider: Player, yaw: Float) {
@@ -85,29 +101,33 @@ internal class SeatDirectionDisplay(private val displays: PaperPacketDisplays) :
         signal.render(2)
     }
 
+    // A fixed display applies its entity yaw/pitch before its transform. Keep those axes world-aligned.
+    private fun anchor(carrier: Player) = carrier.location.apply {
+        yaw = 0f
+        pitch = 0f
+    }
+
+    private fun attach(part: PacketDisplay, carrier: Player, rider: Player) {
+        part.isVisibleByDefault = false
+        part.showTo(carrier)
+        part.showTo(rider)
+        part.brightness = Display.Brightness(15, 15)
+        part.pauseWhenNotObserved = false
+        part.attachTo(carrier)
+    }
+
     private fun createSignal(carrier: Player, rider: Player, text: Component, pose: SeatDirectionPose, yaw: Float): Signal {
-        // A fixed display applies its entity yaw/pitch before its transform. Keep those axes world-aligned.
-        val at = carrier.location.apply {
-            this.yaw = 0f
-            pitch = 0f
-        }
+        val at = anchor(carrier)
         val parts = mutableListOf<PacketDisplay>()
         try {
-            val arrow = pose.arrow.map { part ->
+            val arrow = pose.arrow.mapTo(mutableListOf()) { part ->
                 displays.spawnBlock(at, part.material.createBlockData()).also(parts::add)
             }
             val caption = displays.spawnText(at, text).also(parts::add).apply {
                 backgroundColor = Color.fromARGB(212, 35, 17, 31)
                 isShadowed = true
             }
-            for (part in parts) {
-                part.isVisibleByDefault = false
-                part.showTo(carrier)
-                part.showTo(rider)
-                part.brightness = Display.Brightness(15, 15)
-                part.pauseWhenNotObserved = false
-                part.attachTo(carrier)
-            }
+            for (part in parts) attach(part, carrier, rider)
             return Signal(carrier.uniqueId, arrow, caption, pose, yaw % 720f).also { it.render(0) }
         } catch (failure: Exception) {
             parts.forEach(PacketDisplay::remove)
@@ -125,25 +145,38 @@ internal class SeatDirectionDisplay(private val displays: PaperPacketDisplays) :
     }
 }
 
+internal class SeatHandColors(
+    val shade: Material,
+    val body: Material,
+    val highlight: Material,
+    val cuff: Material,
+    val stripe: Material,
+)
+
 internal enum class SeatDirectionPalette(
     val rim: Material,
     val spine: Material,
     val face: Material,
     val shade: Material,
-    val glove: Material,
+    val hand: SeatHandColors,
     private val leadColor: Int,
     private val accentColor: Int,
 ) {
     ROSE(Material.NETHER_BRICKS, Material.QUARTZ_BLOCK, Material.PINK_WOOL, Material.PINK_CONCRETE,
-        Material.PINK_CONCRETE, 0xFF679A, 0xFFD1E0),
+        SeatHandColors(Material.MAGENTA_TERRACOTTA, Material.PINK_CONCRETE, Material.PINK_CONCRETE_POWDER,
+            Material.MAGENTA_CONCRETE, Material.SMOOTH_QUARTZ), 0xFF679A, 0xFFD1E0),
     SCARLET(Material.RED_NETHER_BRICKS, Material.WHITE_CONCRETE, Material.REDSTONE_BLOCK, Material.RED_WOOL,
-        Material.RED_CONCRETE, 0xFF7A70, 0xFFBCB1),
+        SeatHandColors(Material.PINK_TERRACOTTA, Material.WHITE_TERRACOTTA, Material.SMOOTH_QUARTZ,
+            Material.PURPLE_TERRACOTTA, Material.PINK_CONCRETE_POWDER), 0xFF7A70, 0xFFBCB1),
     ORCHID(Material.CRIMSON_PLANKS, Material.CALCITE, Material.PURPUR_BLOCK, Material.MAGENTA_WOOL,
-        Material.MAGENTA_CONCRETE, 0xEB93F0, 0xFFD0F3),
+        SeatHandColors(Material.PURPLE_TERRACOTTA, Material.MAGENTA_CONCRETE_POWDER, Material.WHITE_TERRACOTTA,
+            Material.PINK_CONCRETE, Material.SMOOTH_QUARTZ), 0xEB93F0, 0xFFD0F3),
     EMERALD(Material.POLISHED_BLACKSTONE, Material.IRON_BLOCK, Material.EMERALD_BLOCK, Material.DEEPSLATE_EMERALD_ORE,
-        Material.LIME_CONCRETE, 0x6FF992, 0xCEFFD8),
+        SeatHandColors(Material.GRAY_CONCRETE, Material.PURPLE_CONCRETE_POWDER, Material.SMOOTH_QUARTZ,
+            Material.WEATHERED_COPPER, Material.SEA_LANTERN), 0x6FF992, 0xCEFFD8),
     PEARL(Material.POLISHED_BLACKSTONE, Material.PINK_WOOL, Material.CALCITE, Material.IRON_BLOCK,
-        Material.WHITE_CONCRETE, 0xFFF5F8, 0xFF92C3);
+        SeatHandColors(Material.WHITE_TERRACOTTA, Material.SMOOTH_QUARTZ, Material.PINK_CONCRETE_POWDER,
+            Material.PINK_CONCRETE, Material.MAGENTA_TERRACOTTA), 0xFFF5F8, 0xFF92C3);
 
     fun caption(phrase: String): Component {
         val first = phrase.substringBefore(' ')
@@ -185,7 +218,6 @@ internal class SeatDirectionPose(val carrierHeight: Float, val style: SeatArrowS
     private val slope = carrierHeight / 9f
     private val plane = Quaternionf().rotationX(-atan(slope))
 
-    // Seven block handles in every shape let a gesture change the silhouette in place.
     val arrow = when (style) {
         SeatArrowStyle.COMPASS -> compass()
         SeatArrowStyle.CHEVRONS -> chevrons()
@@ -223,30 +255,60 @@ internal class SeatDirectionPose(val carrierHeight: Float, val style: SeatArrowS
         diamond(palette.spine, 6.31f, .105f, .18f, .045f, .48f),
     )
 
-    private fun pointingHand(): List<SeatArrowPart> {
+    private fun pointingHand(): List<SeatArrowPart> = buildList {
+        val colors = palette.hand
         val degree = (PI / 180).toFloat()
-        // Turn the wrist out so the side thumb and three curled knuckles show even when viewed along +Z.
-        val palm = Quaternionf(plane).rotateY(38f * degree).rotateZ(-5f * degree)
-        val origin = point(5.20f, -.219f * carrierHeight).add(-.51f, 0f, 0f)
+        // Roll around the pointing axis, and put the hand to the right so the extended finger has parallax.
+        val frame = Quaternionf().rotationZ(-11f * degree)
+        val origin = Vector3f(-1.92f, -carrierHeight * 5f / 9f, 5.20f)
+        val flat = Quaternionf()
+        fun box(material: Material, at: Vector3f, size: Vector3f, rotation: Quaternionf = flat) {
+            val center = frame.transform(Vector3f(at)).add(origin)
+            add(centered(material, center, Quaternionf(frame).mul(rotation), size, flat))
+        }
+        // Two intersecting blocks cut a step from each corner of a solid pad.
+        fun pad(material: Material, at: Vector3f, size: Vector3f, cut: Float, rotation: Quaternionf = flat) {
+            box(material, at, Vector3f(size.x, size.y - 2f * cut, size.z), rotation)
+            box(material, at, Vector3f(size.x - 2f * cut, size.y, size.z - .015f), rotation)
+        }
 
-        fun piece(material: Material, offset: Vector3f, size: Vector3f, bend: Float = 0f, turn: Float = 0f): SeatArrowPart =
-            centered(material, palm.transform(offset).add(origin),
-                Quaternionf(palm).rotateY(turn * degree).rotateX(bend * degree), size, Quaternionf())
+        pad(colors.cuff, Vector3f(-.24f, -.245f, -.57f), Vector3f(.71f, .335f, .43f), .056f)
+        box(Material.BLACK_TERRACOTTA, Vector3f(-.24f, -.408f, -.57f), Vector3f(.57f, .043f, .38f))
+        val stripeAngle = Quaternionf().rotationZ(-31f * degree)
+        for (x in listOf(-.33f, -.135f)) {
+            box(colors.stripe, Vector3f(x, -.225f, -.792f), Vector3f(.074f, .166f, .028f), stripeAngle)
+        }
+        box(Material.BLACK_TERRACOTTA, Vector3f(-.008f, -.334f, -.013f), Vector3f(1.08f, .073f, .77f))
+        pad(colors.shade, Vector3f(-.003f, -.078f, -.016f), Vector3f(1.215f, .478f, .836f), .064f)
+        pad(colors.body, Vector3f(-.005f, .007f, -.047f), Vector3f(1.21f, .459f, .884f), .084f)
 
-        // The index keeps the exact heading. Its raised fingertip clears the fist in the lower camera.
-        val indexLength = 1.53f
-        val indexAxis = Quaternionf().rotationX(-22f * degree).rotateZ(22f * degree)
-        val indexBase = palm.transform(Vector3f(.35f, .12f, .20f)).add(origin)
-        val indexCenter = indexAxis.transform(Vector3f(0f, 0f, indexLength / 2)).add(indexBase)
-        return listOf(
-            piece(palette.spine, Vector3f(-.10f, -.01f, -.59f), Vector3f(.64f, .34f, .32f), turn = 12f),
-            piece(palette.glove, Vector3f(0f, -.015f, -.12f), Vector3f(1.02f, .32f, .83f)),
-            centered(palette.glove, indexCenter, indexAxis, Vector3f(.285f, .238f, indexLength), Quaternionf()),
-            piece(palette.glove, Vector3f(.67f, .065f, -.085f), Vector3f(.265f, .253f, .78f), bend = -22f, turn = 53f),
-            piece(palette.glove, Vector3f(.08f, .15f, .145f), Vector3f(.242f, .31f, .50f), bend = -42f, turn = 8f),
-            piece(palette.glove, Vector3f(-.19f, .14f, .075f), Vector3f(.242f, .31f, .476f), bend = -47f, turn = 4f),
-            piece(palette.glove, Vector3f(-.44f, .095f, -.03f), Vector3f(.219f, .31f, .442f), bend = -52f),
-        )
+        // The knuckle and fingertip share a straight, horizontal +Z axis.
+        box(colors.body, Vector3f(.395f, .217f, .119f), Vector3f(.308f, .398f, .73f))
+        box(colors.shade, Vector3f(.40f, .270f, .957f), Vector3f(.281f, .075f, 1.67f))
+        pad(colors.body, Vector3f(.40f, .402f, .973f), Vector3f(.344f, .272f, 1.78f), .048f)
+        box(colors.body, Vector3f(.40f, .402f, 1.878f), Vector3f(.249f, .167f, .119f))
+        box(colors.highlight, Vector3f(.496f, .528f, .917f), Vector3f(.116f, .028f, 1.285f),
+            Quaternionf().rotationZ(-24f * degree))
+
+        fun curledFinger(at: Vector3f, size: Vector3f, tilt: Float) {
+            val knuckle = Quaternionf().rotationX(tilt * degree)
+            box(colors.shade, Vector3f(at).add(-.014f, -.030f, .009f),
+                Vector3f(size).add(.025f, -.014f, -.016f), knuckle)
+            pad(colors.body, at, size, .053f, knuckle)
+            // The visible pad faces back and up toward the carrier and rider.
+            val facet = knuckle.transform(Vector3f(-.012f, .030f, -size.z / 2f - .012f)).add(at)
+            box(colors.highlight, facet, Vector3f(size.x * .69f, size.y * .40f, .032f), knuckle)
+        }
+        curledFinger(Vector3f(.112f, .106f, -.335f), Vector3f(.342f, .344f, .515f), 18f)
+        curledFinger(Vector3f(-.223f, .054f, -.306f), Vector3f(.326f, .318f, .485f), 20f)
+        curledFinger(Vector3f(-.537f, -.020f, -.261f), Vector3f(.285f, .281f, .431f), 22f)
+
+        val thumbBase = Quaternionf().rotationY(-27f * degree)
+        val thumbTip = Quaternionf().rotationZ(-23f * degree)
+        box(colors.shade, Vector3f(.594f, -.126f, -.120f), Vector3f(.29f, .242f, .53f), thumbBase)
+        pad(colors.body, Vector3f(.679f, -.083f, -.268f), Vector3f(.331f, .278f, .433f), .052f, thumbBase)
+        pad(colors.body, Vector3f(.796f, .014f, -.312f), Vector3f(.241f, .286f, .269f), .047f, thumbTip)
+        box(colors.highlight, Vector3f(.798f, .044f, -.450f), Vector3f(.144f, .117f, .028f), thumbTip)
     }
 
     // Both players share the carrier's horizontal position. Fixed text faces them from above the arrow.
