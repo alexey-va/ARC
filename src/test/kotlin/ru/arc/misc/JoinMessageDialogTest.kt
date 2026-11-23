@@ -8,6 +8,7 @@ import io.mockk.*
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import ru.arc.commands.arc.subcommands.JoinMessageSubCommand
 import ru.arc.commands.arc.subcommands.QuitMessageSubCommand
@@ -127,6 +128,26 @@ class JoinMessageDialogTest : FreeSpec({
         catalog.complete(JoinMessageCatalog(revision = "late"))
         preferences.complete(data)
         screen!!.body.single().text shouldBe Component.text("…")
+    }
+
+    "programmatic command entry starts a fresh flow while catalog paging stays in the current flow" {
+        mockkStatic(Bukkit::class)
+        every { Bukkit.isPrimaryThread() } returns true
+        every { ArcMenus.beginDialogFlow(player) } answers { dismiss?.invoke(); Unit }
+        JoinMessageGuiFactory.attach(config)
+        try {
+            repeat(2) {
+                JoinMessageSubCommand.execute(player, emptyArray()) shouldBe true
+                screen!!.id shouldBe "messages.catalog.join"
+                click("next")
+                plain(screen!!.body[1].text) shouldContain "2/2"
+            }
+            QuitMessageSubCommand.execute(player, emptyArray()) shouldBe true
+            screen!!.id shouldBe "messages.catalog.leave"
+            verify(exactly = 3) { ArcMenus.beginDialogFlow(player) }
+        } finally {
+            JoinMessageGuiFactory.close()
+        }
     }
 
     "upgrading bundled dialog text preserves operator overrides and adds editor defaults" {

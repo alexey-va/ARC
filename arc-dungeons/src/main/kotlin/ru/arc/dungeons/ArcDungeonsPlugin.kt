@@ -267,7 +267,7 @@ open class ArcDungeonsPlugin : JavaPlugin() {
                         initialize = {
                             PassiveClassCompatibility(
                                 this,
-                                openClasses = { player -> dungeonQol?.action(player, "classes") },
+                                openClasses = { player -> dungeonQol?.openClasses(player) },
                                 openForm = { player, id, atTrainer -> dungeonQol?.openClass(player, id, atTrainer) },
                             ).also { passiveClasses = it }.start()
                         },

@@ -381,8 +381,13 @@ internal class EMDungeonQol(
         }
     }
 
+    internal fun openClasses(player: Player) {
+        DungeonsMenus.beginDialogFlow(player)
+        menus.classes(player)
+    }
+
     internal fun openClass(player: Player, formId: String, atTrainer: Boolean = false) {
-        if (atTrainer) DungeonsMenus.beginDialogFlow(player)
+        DungeonsMenus.beginDialogFlow(player)
         menus.classDetail(player, formId, atTrainer = atTrainer)
     }
 

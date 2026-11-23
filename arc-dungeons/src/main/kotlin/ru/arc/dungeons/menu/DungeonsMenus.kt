@@ -70,6 +70,7 @@ object DungeonsMenus {
         requireNotNull(dialogRuntime) { "ArcDungeons dialog runtime is not initialized" }.close(player)
     }
 
+    /** Continue the current dialog or a flow started by [beginDialogFlow]. */
     fun openDialog(
         player: Player,
         screen: PaperDialogScreen,
@@ -86,7 +87,7 @@ object DungeonsMenus {
             closeDialogBeforeAction = true,
             onClick = {},
         )
-        requireNotNull(dialogRuntime) { "ArcDungeons dialog runtime is not initialized" }.open(
+        requireNotNull(dialogRuntime) { "ArcDungeons dialog runtime is not initialized" }.openInFlow(
             player,
             PaperDialogNavigation.bottom(
                 MenuEscapeBehavior.apply(screen, escapeGoesBack, close),

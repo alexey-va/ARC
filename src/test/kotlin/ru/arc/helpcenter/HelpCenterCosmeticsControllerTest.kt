@@ -168,10 +168,13 @@ private fun cosmeticsJourney(escapeBack: Boolean = true, block: (CosmeticsJourne
             val controller = HelpCenterCosmeticsController(settings, navigation, { viewer, screen ->
                 // Match ArcMenus.openDialog: an explicit returning footer owns native Escape too.
                 val footerBack = MenuEscapeBehavior.footerGoesBack(screen, escapeBack)
-                dialogs.open(viewer, ArcMenus.prepareDialog(screen, footerBack, close),
+                dialogs.openInFlow(viewer, ArcMenus.prepareDialog(screen, footerBack, close),
                     navigation.returnTarget(viewer), { navigation.visit(viewer) }, !footerBack)
             }, f.cosmetics, f.particles)
-            f.open = { controller.open(player) {} }
+            f.open = {
+                dialogs.beginFlow(player)
+                controller.open(player) {}
+            }
             f.click = { id ->
                 val button = (f.screen.buttons + listOfNotNull(f.screen.exitButton)).single { it.id.value == id }
                 button.closeDialogBeforeAction shouldBe false

@@ -8,6 +8,7 @@ import ru.arc.gui.ArcMenus
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
 import ru.arc.paper.menu.PaperDialogButton
+import ru.arc.paper.menu.PaperDialogRoot
 import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.util.TextUtil
 import java.nio.ByteBuffer
@@ -44,9 +45,17 @@ object RewardChoiceSelector {
 }
 
 /** Native three-button confirmation UI. Closing the dialog has no callback and cannot claim a voucher. */
-class RewardChoiceController {
-    fun open(
+internal class RewardChoiceController {
+    fun reserve(player: Player): ShowRewardChoice? {
+        val root = ArcMenus.reserveDialogRoot(player) ?: return null
+        return { voucher, spec, offeredIndices, onSelected ->
+            open(player, root, voucher, spec, offeredIndices, onSelected)
+        }
+    }
+
+    private fun open(
         player: Player,
+        root: PaperDialogRoot,
         voucher: PhysicalRewardVoucherIdentity,
         spec: PhysicalRewardSpec,
         offeredIndices: List<Int>,
@@ -74,8 +83,9 @@ class RewardChoiceController {
                 onClick = { onSelected(optionIndex) },
             )
         }
-        ArcMenus.openDialog(
+        ArcMenus.openReservedDialog(
             player,
+            root,
             PaperDialogScreen(
                 id = "reward.choice.${voucher.id.toString().replace("-", "").take(8)}",
                 title = TextUtil.mm("<gold><bold>Дар на выбор", true),
@@ -91,3 +101,5 @@ class RewardChoiceController {
         )
     }
 }
+
+internal typealias ShowRewardChoice = (PhysicalRewardVoucherIdentity, PhysicalRewardSpec, List<Int>, (Int) -> Unit) -> Unit

@@ -14,6 +14,7 @@ import ru.arc.menu.MenuId
 import ru.arc.menu.MenuRegionId
 import ru.arc.menu.MenuTemplateId
 import ru.arc.paper.menu.PaperMenuConfiguration
+import ru.arc.paper.menu.PaperDialogRoot
 import ru.arc.paper.menu.PaperDialogRuntime
 import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.paper.menu.PaperMenuClickContext
@@ -82,21 +83,40 @@ object ArcMenus {
 
     fun beginDialogFlow(player: Player) { dialogRuntime?.beginFlow(player) }
 
+    internal fun reserveDialogRoot(player: Player): PaperDialogRoot? = dialogRuntime?.reserveRoot(player)
+
     fun closeDialog(player: Player) { dialogRuntime?.close(player) }
 
+    internal fun openReservedDialog(player: Player, root: PaperDialogRoot, screen: PaperDialogScreen) =
+        openDialog(player, screen, null, null, {}, false, root)
+
+    /** Continue the current dialog or a flow started by [beginDialogFlow]. */
     fun openDialog(player: Player, screen: PaperDialogScreen, closeButton: ru.arc.paper.menu.PaperDialogButton? = null, reopen: (() -> Unit)? = null, onDismiss: () -> Unit = {}) =
         openDialog(player, screen, closeButton, reopen, onDismiss, preferBackFooter = false)
 
     /** An explicit Back footer uses native Back/history semantics, including Escape, for this visit. */
-    fun openDialog(player: Player, screen: PaperDialogScreen, closeButton: ru.arc.paper.menu.PaperDialogButton?, reopen: (() -> Unit)?, onDismiss: () -> Unit, preferBackFooter: Boolean) {
+    fun openDialog(player: Player, screen: PaperDialogScreen, closeButton: ru.arc.paper.menu.PaperDialogButton?, reopen: (() -> Unit)?, onDismiss: () -> Unit, preferBackFooter: Boolean) =
+        openDialog(player, screen, closeButton, reopen, onDismiss, preferBackFooter, root = null)
+
+    private fun openDialog(
+        player: Player,
+        screen: PaperDialogScreen,
+        closeButton: ru.arc.paper.menu.PaperDialogButton?,
+        reopen: (() -> Unit)?,
+        onDismiss: () -> Unit,
+        preferBackFooter: Boolean,
+        root: PaperDialogRoot?,
+    ) {
         val close = closeButton ?: ru.arc.paper.menu.PaperDialogButton(
             ru.arc.paper.menu.PaperDialogActionId.of("close_menu"), Component.text("Закрыть", NamedTextColor.WHITE),
             tooltip = Component.text("Закрыть", NamedTextColor.WHITE),
             width = 200, closeDialogBeforeAction = true, onClick = {},
         )
         val escapeGoesBack = MenuEscapeBehavior.footerGoesBack(screen, preferBackFooter || MenuEscapeBehavior.goesBack(player))
-        requireNotNull(dialogRuntime) { "ARC dialog runtime is not initialized" }
-            .open(player, prepareDialog(screen, escapeGoesBack, close), reopen, onDismiss, !escapeGoesBack)
+        val runtime = requireNotNull(dialogRuntime) { "ARC dialog runtime is not initialized" }
+        val prepared = prepareDialog(screen, escapeGoesBack, close)
+        if (root == null) runtime.openInFlow(player, prepared, reopen, onDismiss, !escapeGoesBack)
+        else runtime.openReservedRoot(player, root, prepared, reopen, onDismiss, !escapeGoesBack)
     }
 
     internal fun prepareDialog(screen: PaperDialogScreen, escapeGoesBack: Boolean, closeButton: ru.arc.paper.menu.PaperDialogButton): PaperDialogScreen =

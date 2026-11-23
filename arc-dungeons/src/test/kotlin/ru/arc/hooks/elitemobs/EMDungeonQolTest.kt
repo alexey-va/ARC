@@ -95,7 +95,7 @@ class EMDungeonQolTest : FreeSpec({
         }
     }
 
-    "each trainer interaction starts a fresh dialog flow before opening the class" {
+    "each native class entry starts a fresh dialog flow before opening its screen" {
         withScheduler {
             val player = paper.addPlayer("trainer")
             val qol = EMDungeonQol(config(), resolve = { null })
@@ -113,14 +113,20 @@ class EMDungeonQolTest : FreeSpec({
                 every { DungeonsMenus.beginDialogFlow(player) } returns Unit
                 every { DungeonsMenus.openDialog(player, any(), any(), any(), any()) } returns Unit
 
-                repeat(2) { qol.openClass(player, form.id, atTrainer = true) }
+                repeat(2) {
+                    qol.openClasses(player)
+                    qol.openClass(player, form.id)
+                    qol.openClass(player, form.id, atTrainer = true)
+                }
 
                 verifySequence {
                     repeat(2) {
-                        DungeonsMenus.beginDialogFlow(player)
-                        DungeonsMenus.openDialog(
-                            player, match<PaperDialogScreen> { it.id == "dungeon.classes.adventurer" }, any(), any(), any(),
-                        )
+                        for (screenId in listOf("dungeon.classes", "dungeon.classes.adventurer", "dungeon.classes.adventurer")) {
+                            DungeonsMenus.beginDialogFlow(player)
+                            DungeonsMenus.openDialog(
+                                player, match<PaperDialogScreen> { it.id == screenId }, any(), any(), any(),
+                            )
+                        }
                     }
                 }
             } finally {

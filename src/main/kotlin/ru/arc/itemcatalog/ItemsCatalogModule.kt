@@ -166,7 +166,7 @@ object ItemsCatalogModule : PluginModule {
                 } else null
                 mapFailure?.let(::mapFailureMessage) ?: nativeRewards.canRedeem(player, spec)
             },
-            nativeRewards::redeem, ARC.serverName ?: "arc", choiceDialogs::open,
+            nativeRewards::redeem, ARC.serverName ?: "arc", choiceDialogs::reserve,
             beforeUse = { player, spec, voucher ->
                 when (maps?.beforeUse(player, player.inventory.itemInMainHand)) {
                     PersonalTreasureMapUseDecision.OPEN_MAP -> {

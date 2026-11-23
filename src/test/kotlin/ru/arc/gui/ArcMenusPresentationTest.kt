@@ -109,7 +109,7 @@ class ArcMenusPresentationTest : FreeSpec({
             mockkConstructor(PaperDialogRuntime::class)
             try {
                 every { MenuEscapeBehavior.goesBack(player) } returns false
-                every { anyConstructed<PaperDialogRuntime>().open(any(), any(), any(), any(), any()) } answers {
+                every { anyConstructed<PaperDialogRuntime>().openInFlow(any(), any(), any(), any(), any()) } answers {
                     screens += secondArg<PaperDialogScreen>()
                     modes += arg<Boolean>(4)
                 }

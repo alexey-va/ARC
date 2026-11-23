@@ -37,12 +37,12 @@ internal class DialogLibraryGallery(
     }
 
     fun open(player: Player, page: Page = Page(), entry: Boolean = true, sample: String? = null) {
-        if (entry) runtime.beginFlow(player)
         val closeOnEscape = !MenuEscapeBehavior.goesBack(player)
         val screen = screen(page, entry || closeOnEscape, sample) { next, selected ->
             open(player, next, entry = false, sample = selected)
         }
-        runtime.open(player, screen, null, {}, closeOnEscape)
+        if (entry) runtime.openRoot(player, screen, closeOnEscape = closeOnEscape)
+        else runtime.openInFlow(player, screen, closeOnEscape = closeOnEscape)
     }
 
     internal fun screen(

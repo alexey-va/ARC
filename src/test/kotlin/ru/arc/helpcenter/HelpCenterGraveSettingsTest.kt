@@ -234,7 +234,7 @@ private fun graveSettingsJourney(block: (GraveSettingsJourney) -> Unit) {
                 width = 200, closeDialogBeforeAction = true, onClick = {})
             f.controller = HelpCenterSettingsController(settings, gateway, f.legacy, navigation, { viewer, screen ->
                 val footerBack = MenuEscapeBehavior.footerGoesBack(screen, true)
-                dialogs.open(viewer, ArcMenus.prepareDialog(screen, footerBack, close),
+                dialogs.openInFlow(viewer, ArcMenus.prepareDialog(screen, footerBack, close),
                     navigation.returnTarget(viewer), { navigation.visit(viewer) }, !footerBack)
             }, { _, _, _ -> error("Unexpected external command") }, { _, _ -> error("Unexpected inventory") }, {})
             f.open = { dialogs.beginFlow(player); f.controller.open(player); paper.performTicks(2) }

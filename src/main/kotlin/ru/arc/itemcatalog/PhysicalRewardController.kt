@@ -52,7 +52,7 @@ class PhysicalRewardController internal constructor(
     private val canRedeem: (org.bukkit.entity.Player, PhysicalRewardSpec) -> String? = { _, _ -> null },
     private val redeem: (org.bukkit.entity.Player, PhysicalRewardSpec, UUID) -> CompletableFuture<PhysicalRewardOutcome>,
     scope: String,
-    private val openChoice: ((org.bukkit.entity.Player, PhysicalRewardVoucherIdentity, PhysicalRewardSpec, List<Int>, (Int) -> Unit) -> Unit)? = null,
+    private val reserveChoice: ((org.bukkit.entity.Player) -> ShowRewardChoice?)? = null,
     private val beforeUse: (org.bukkit.entity.Player, PhysicalRewardSpec, PhysicalRewardVoucherIdentity) -> Boolean = { _, _, _ -> true },
     private val resolveArchiveAsync: ((String) -> CompletionStage<FrozenPhysicalArchiveLookup>)? = null,
     private val importArchiveLookup: ((String, FrozenPhysicalArchiveLookup) -> PhysicalRewardSpec?)? = null,
@@ -186,7 +186,7 @@ class PhysicalRewardController internal constructor(
             resolveFromSharedArchive(player, identity)
             return
         }
-        continueWithSpec(player, identity, spec)
+        continueWithSpec(player, identity, spec) { reserveChoice?.invoke(player) }
     }
 
     private fun resolveFromSharedArchive(player: org.bukkit.entity.Player, identity: PhysicalRewardVoucherIdentity) {
@@ -204,7 +204,11 @@ class PhysicalRewardController internal constructor(
             player.sendMessage(TextUtil.mm(BUSY_MESSAGE, true))
             return
         }
+        val showChoice: ShowRewardChoice?
         val stage = try {
+            // A frozen key does not reveal the reward type. Reserve the choice at the click
+            // so the archive response cannot replace a newer dialog visit.
+            showChoice = reserveChoice?.invoke(player)
             resolver(identity.key)
         } catch (failure: Throwable) {
             pendingArchiveLookups.remove(player.uniqueId, identity)
@@ -240,7 +244,7 @@ class PhysicalRewardController internal constructor(
                 unavailable(player)
                 return@whenCompleteSync
             }
-            continueWithSpec(player, identity, resolved)
+            continueWithSpec(player, identity, resolved) { showChoice }
         }
     }
 
@@ -248,6 +252,7 @@ class PhysicalRewardController internal constructor(
         player: org.bukkit.entity.Player,
         identity: PhysicalRewardVoucherIdentity,
         spec: PhysicalRewardSpec,
+        choiceDialog: () -> ShowRewardChoice?,
     ) {
         if (spec.key != identity.key || spec.fingerprint != identity.fingerprint) return unavailable(player)
         val mayContinue = try {
@@ -266,9 +271,9 @@ class PhysicalRewardController internal constructor(
         val offered = runCatching {
             RewardChoiceSelector.offeredIndices(identity.id, spec.fingerprint.sha256, options)
         }.getOrNull()?.toList() ?: return unavailable(player)
-        val dialog = openChoice ?: return unavailable(player)
         try {
-            dialog(player, identity, spec, offered) { selected ->
+            val show = choiceDialog() ?: return unavailable(player)
+            show(identity, spec, offered) { selected ->
                 start(
                     player,
                     identity,

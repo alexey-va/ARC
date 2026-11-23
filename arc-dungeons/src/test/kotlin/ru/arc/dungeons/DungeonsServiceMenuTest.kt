@@ -50,12 +50,11 @@ class DungeonsServiceMenuTest {
                     val plugin = mockk<ArcDungeonsPlugin> { every { dungeonQol } returns qol }
                     val provider = DungeonsServiceProvider(plugin)
                     val panel = PaperDialogScreen(Component.text("Dungeon"), id = "dungeon.panel", buttons = emptyList())
-                    every { qol.action(player, "menu", emptyList()) } answers { dungeon.open(player, panel) }
+                    every { qol.action(player, "menu", emptyList()) } answers { dungeon.openInFlow(player, panel) }
                     mockkObject(DungeonsMenus)
                     every { DungeonsMenus.beginDialogFlow(player) } answers { dungeon.beginFlow(player) }
                     try {
-                        main.beginFlow(player)
-                        main.open(player, PaperDialogScreen(Component.text("Main"), id = "help.root", buttons = emptyList()))
+                        main.openRoot(player, PaperDialogScreen(Component.text("Main"), id = "help.root", buttons = emptyList()))
                         provider.dungeonAction(player, "menu", emptyList())
                         rendered shouldBe listOf("help.root", "dungeon.panel")
 

@@ -46,7 +46,7 @@ object JoinMessageGuiFactory {
     fun show(player: Player, isJoin: Boolean = true, startPage: Int = 0) {
         val active = dialogs
         if (active == null) player.sendMessage(TextUtil.mm("<gray>Настройки сообщений пока загружаются. Попробуйте чуть позже."))
-        else active.show(player, isJoin, startPage)
+        else active.show(player, isJoin, startPage, beginFlow = true)
     }
 }
 
@@ -68,10 +68,11 @@ internal class JoinMessageDialogs(
         generations.clear()
     }
 
-    fun show(player: Player, isJoin: Boolean = true, startPage: Int = 0) {
+    fun show(player: Player, isJoin: Boolean = true, startPage: Int = 0, beginFlow: Boolean = false) {
         runOnMain {
-            val generation = advance(player)
             if (!allowed(player, isJoin)) return@runOnMain
+            if (beginFlow) ArcMenus.beginDialogFlow(player)
+            val generation = advance(player)
             showLoading(
                 player,
                 "messages.catalog.${if (isJoin) "join" else "leave"}",

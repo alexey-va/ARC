@@ -43,7 +43,7 @@ class PhysicalRewardControllerTest : StringSpec({
                     CompletableFuture.completedFuture(PhysicalRewardOutcome.Applied)
                 },
                 scope = "spawn",
-                openChoice = { _, _, _, _, _ -> effects += "choice" },
+                reserveChoice = { { _, _, _, _ -> effects += "choice" } },
                 beforeUse = { _, _, _ -> effects += "before-use"; true },
                 resolveArchiveAsync = {
                     effects += "archive"
@@ -516,6 +516,7 @@ class PhysicalRewardControllerTest : StringSpec({
             val ledger = RecordingVoucherLedger()
             val options = choiceOptions(12)
             val spec = choiceSpec(options)
+            val dialogEvents = mutableListOf<String>()
             var offered: List<Int>? = null
             var select: ((Int) -> Unit)? = null
             var appliedIndex: Int? = null
@@ -528,7 +529,15 @@ class PhysicalRewardControllerTest : StringSpec({
                     CompletableFuture.completedFuture(PhysicalRewardOutcome.Applied)
                 },
                 "spawn",
-                { _, _, _, indices, callback -> offered = indices.toList(); select = callback },
+                reserveChoice = {
+                    dialogEvents += "reserve"
+                    val show: ShowRewardChoice = { _, _, indices, callback ->
+                        dialogEvents += "show"
+                        offered = indices.toList()
+                        select = callback
+                    }
+                    show
+                },
             )
             val scheduler = TestTaskScheduler()
             Tasks.withScheduler(scheduler) {
@@ -545,6 +554,7 @@ class PhysicalRewardControllerTest : StringSpec({
                     ledger.calls shouldBe emptyList()
                     paper.callEvent(interact(player, Action.RIGHT_CLICK_AIR))
                     offered shouldBe firstOffer
+                    dialogEvents shouldContainExactly listOf("reserve", "show", "reserve", "show")
                     ledger.calls shouldBe emptyList()
 
                     val selected = firstOffer[1]
@@ -562,6 +572,64 @@ class PhysicalRewardControllerTest : StringSpec({
                     requireNotNull(select).invoke(selected)
                     flush(scheduler)
                     ledger.calls shouldContainExactly listOf("claim", "commit")
+                } finally {
+                    controller.close()
+                }
+            }
+        }
+    }
+
+    "cold choice reserves before the archive request and presents only the original reservation" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val ledger = RecordingVoucherLedger()
+            val spec = choiceSpec(choiceOptions(3))
+            val lookups = List(2) { CompletableFuture<FrozenPhysicalArchiveLookup>() }
+            val events = mutableListOf<String>()
+            var requestIndex = 0
+            var activeReservation = 0
+            val controller = PhysicalRewardController(
+                paper.createSimplePlugin("PhysicalRewardColdChoice"), ledger,
+                resolve = { null },
+                redeem = { _, _, _ -> error("A dialog open must not redeem the voucher") },
+                scope = "spawn",
+                reserveChoice = {
+                    val reservation = ++activeReservation
+                    events += "reserve"
+                    val show: ShowRewardChoice = { _, _, _, _ ->
+                        if (activeReservation == reservation) events += "show"
+                    }
+                    show
+                },
+                resolveArchiveAsync = {
+                    events += "lookup"
+                    lookups[requestIndex++]
+                },
+                importArchiveLookup = { _, _ -> spec },
+            )
+            val scheduler = TestTaskScheduler()
+            Tasks.withScheduler(scheduler) {
+                controller.register()
+                try {
+                    val player = paper.addPlayer("cold-choice")
+                    val voucher = PhysicalRewardVoucher.mark(
+                        ItemStack(Material.PAPER),
+                        PhysicalRewardVoucherIdentity(java.util.UUID.randomUUID(), spec.key, spec.fingerprint),
+                    )
+                    player.inventory.setItemInMainHand(voucher)
+
+                    paper.callEvent(interact(player, Action.RIGHT_CLICK_AIR))
+                    events shouldContainExactly listOf("reserve", "lookup")
+                    activeReservation++ // Another menu replaced the pending entry.
+                    lookups[0].complete(FrozenPhysicalArchiveLookup.Found(emptyList()))
+                    flush(scheduler)
+                    events shouldContainExactly listOf("reserve", "lookup")
+
+                    paper.callEvent(interact(player, Action.RIGHT_CLICK_AIR))
+                    lookups[1].complete(FrozenPhysicalArchiveLookup.Found(emptyList()))
+                    flush(scheduler)
+                    events shouldContainExactly listOf("reserve", "lookup", "reserve", "lookup", "show")
+                    ledger.calls shouldBe emptyList()
+                    player.inventory.itemInMainHand shouldBe voucher
                 } finally {
                     controller.close()
                 }
@@ -688,7 +756,7 @@ private fun choiceController(
     { _, _ -> null },
     redeem,
     "spawn",
-    { _, _, _, _, selected -> onDialog(selected) },
+    { { _, _, _, selected -> onDialog(selected) } },
 )
 
 private fun choiceSpec(options: List<PhysicalRewardChoiceOption>) = PhysicalRewardSpec(
