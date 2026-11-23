@@ -10,6 +10,7 @@ import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
 import io.mockk.verify
+import io.mockk.verifySequence
 import net.kyori.adventure.bossbar.BossBar
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
@@ -25,6 +26,7 @@ import ru.arc.dungeons.menu.DungeonsMenus
 import ru.arc.core.Tasks
 import ru.arc.core.TestTaskScheduler
 import ru.arc.paper.audience.PaperAudienceEffects
+import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.paper.testing.MockBukkitTestRuntime
 
 class EMDungeonQolTest : FreeSpec({
@@ -90,6 +92,41 @@ class EMDungeonQolTest : FreeSpec({
             qol.openEliteMobsMenu(disabled)
             disabled.isCancelled shouldBe false
             qol.close()
+        }
+    }
+
+    "each trainer interaction starts a fresh dialog flow before opening the class" {
+        withScheduler {
+            val player = paper.addPlayer("trainer")
+            val qol = EMDungeonQol(config(), resolve = { null })
+            val form = DungeonClassForm(
+                id = "adventurer", name = "Adventurer", rootId = "adventurer", parentId = null,
+                children = emptyList(), path = listOf("Adventurer"), unlocked = true, selected = true,
+                active = true, requiredLevel = 1, level = 1, cap = 10, xp = "0",
+                foundations = emptyList(), blockers = emptyList(), weapons = emptyList(), passives = emptyList(),
+            )
+            mockkObject(DungeonsMenus, NativeDungeonClassService)
+            try {
+                every { NativeDungeonClassService.view(player) } returns DungeonClassesView(
+                    DungeonClassAvailability.READY, runLocked = true, forms = mapOf(form.id to form),
+                )
+                every { DungeonsMenus.beginDialogFlow(player) } returns Unit
+                every { DungeonsMenus.openDialog(player, any(), any(), any(), any()) } returns Unit
+
+                repeat(2) { qol.openClass(player, form.id, atTrainer = true) }
+
+                verifySequence {
+                    repeat(2) {
+                        DungeonsMenus.beginDialogFlow(player)
+                        DungeonsMenus.openDialog(
+                            player, match<PaperDialogScreen> { it.id == "dungeon.classes.adventurer" }, any(), any(), any(),
+                        )
+                    }
+                }
+            } finally {
+                unmockkObject(DungeonsMenus, NativeDungeonClassService)
+                qol.close()
+            }
         }
     }
 
