@@ -122,7 +122,7 @@ internal class AuroraShowcase(
             AuroraShape.ORK_KROOZER, AuroraShape.IMPERIAL_AQUILA, AuroraShape.MECHANICUS_SIGIL,
             AuroraShape.CTHULHU, AuroraShape.DAGON, AuroraShape.HASTUR, AuroraShape.AZATHOTH,
             AuroraShape.YOG_SOTHOTH, AuroraShape.NYARLATHOTEP, AuroraShape.SHUB_NIGGURATH,
-            AuroraShape.JU_FUFU, AuroraShape.JU_FUFU_2D,
+            AuroraShape.BLINKING_EYE, AuroraShape.JU_FUFU, AuroraShape.JU_FUFU_2D,
             AuroraShape.DEATH_STAR, AuroraShape.IMPERIAL_STAR_DESTROYER -> 1
             else -> COPY_COUNT
         }

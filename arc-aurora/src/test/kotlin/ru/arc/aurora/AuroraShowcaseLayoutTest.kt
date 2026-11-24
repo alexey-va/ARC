@@ -45,8 +45,9 @@ class AuroraShowcaseLayoutTest : FreeSpec({
     }
 
     "large figures have a single anchor at twice the former center scale" {
-        for (shape in listOf(AuroraShape.CTHULHU, AuroraShape.DEATH_STAR, AuroraShape.JU_FUFU, AuroraShape.JU_FUFU_2D,
-            AuroraShape.IMPERIAL_AQUILA, AuroraShape.VOID_CATHEDRAL, AuroraShape.INFERNAL_PENTAGRAM)) {
+        for (shape in listOf(AuroraShape.CTHULHU, AuroraShape.DEATH_STAR, AuroraShape.BLINKING_EYE,
+            AuroraShape.JU_FUFU, AuroraShape.JU_FUFU_2D, AuroraShape.IMPERIAL_AQUILA, AuroraShape.VOID_CATHEDRAL,
+            AuroraShape.INFERNAL_PENTAGRAM)) {
             AuroraShowcase.copyCount(shape) shouldBe 1
             val profile = layoutProfile(shape)
             val center = layoutShowcase(listOf(profile)).pose(0)

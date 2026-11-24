@@ -116,6 +116,7 @@ Type a prefix and press Tab to browse the effects in that family. Existing comma
 | `DISPLAY_INFERNAL_PENTAGRAM` | A forged star opens to reveal a ring of illuminated relics. |
 | `DISPLAY_SKY_LANTERNS` | Glowing paper lanterns rise together and drift away. |
 | `LOVECRAFT_AZATHOTH` | A jagged maw opens in a heaving mass of blind eyes and suckered tentacles. |
+| `LOVECRAFT_BLINKING_EYE` | A giant eye sweeps its gaze across the sky, snaps its lids shut and opens again. |
 | `LOVECRAFT_CTHULHU` | Cthulhu spreads his bat wings while the tentacles of his face uncoil. |
 | `LOVECRAFT_DAGON` | A deep-sea giant opens its toothed jaws and reaches out with webbed claws. |
 | `LOVECRAFT_ENDLESS_TENTACLES` | Seven groups of tentacles reach inward from the horizon, coil overhead and recede in overlapping waves. Look around and above. |
@@ -632,7 +633,7 @@ Run from the repository root with JDK 25:
 ```
 
 The expected local runtime artifact is
-`arc-aurora/build/libs/ArcAurora-0.1.29.jar`. The public Maven API artifact
+`arc-aurora/build/libs/ArcAurora-0.1.30.jar`. The public Maven API artifact
 `ru.ruscrafting.arc:arc-aurora-api:0.1.0` was verified on 2026-10-29 in the
 [RusCrafting repository](https://repo.rus-crafting.ru/grocermc/ru/ruscrafting/arc/arc-aurora-api/0.1.0/arc-aurora-api-0.1.0.pom).
 That API publication does not establish a runtime-plugin build, delivery,

@@ -342,23 +342,25 @@ class AuroraEngineTest : FreeSpec({
         }
     }
 
-    "the bundled Yog-Sothoth showcase renders one large model within 100 ticks" {
-        val bundled = AuroraConfig.parse(YamlConfiguration().apply {
-            loadFromString(checkNotNull(javaClass.classLoader.getResourceAsStream("config.yml")).bufferedReader().use { it.readText() })
-        })
-        withEngine(bundled.copy(nativeBudgetMicros = 10000), highSky = true) { fixture ->
-            fixture.loadChunks(5)
-            fixture.admin(true)
-            val visibleScenes = mutableSetOf<Any>()
-            every { fixture.lanterns.updateStory(any(), any(), any(), any(), any(), any(), any(), any()) } answers {
-                val parts = arg<List<AuroraLanternDisplays.Part>>(4)
-                val visible = (arg<Int>(5) until arg<Int>(6)).any { parts[it].transform.scale.lengthSquared() > 0f }
-                if (visible) visibleScenes += arg<Any>(0)
-                visible
+    for (shape in listOf(AuroraShape.YOG_SOTHOTH, AuroraShape.BLINKING_EYE)) {
+        "the bundled $shape showcase renders one large model within 100 ticks" {
+            val bundled = AuroraConfig.parse(YamlConfiguration().apply {
+                loadFromString(checkNotNull(javaClass.classLoader.getResourceAsStream("config.yml")).bufferedReader().use { it.readText() })
+            })
+            withEngine(bundled.copy(nativeBudgetMicros = 10000), highSky = true) { fixture ->
+                fixture.loadChunks(5)
+                fixture.admin(true)
+                val visibleScenes = mutableSetOf<Any>()
+                every { fixture.lanterns.updateStory(any(), any(), any(), any(), any(), any(), any(), any()) } answers {
+                    val parts = arg<List<AuroraLanternDisplays.Part>>(4)
+                    val visible = (arg<Int>(5) until arg<Int>(6)).any { parts[it].transform.scale.lengthSquared() > 0f }
+                    if (visible) visibleScenes += arg<Any>(0)
+                    visible
+                }
+                fixture.engine.startShowcase(fixture.player, shape) shouldBe true
+                fixture.advance(100)
+                visibleScenes.size shouldBe 1
             }
-            fixture.engine.startShowcase(fixture.player, AuroraShape.YOG_SOTHOTH) shouldBe true
-            fixture.advance(100)
-            visibleScenes.size shouldBe 1
         }
     }
 

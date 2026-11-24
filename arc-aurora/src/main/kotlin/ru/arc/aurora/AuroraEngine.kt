@@ -836,7 +836,7 @@ internal class AuroraEngine(
                 AuroraSkyShapes.heldMotion(pose.size, profile.sceneDurationTicks, profile.motionPeriodTicks, profile.skyOptions)
                 else listOf(AuroraOffset(0.0, 0.0, 0.0))
             val fixedFacing = when (profile.shape) {
-                AuroraShape.DEATH_STAR -> showcase.facingAtStart(pose)
+                AuroraShape.DEATH_STAR, AuroraShape.BLINKING_EYE -> showcase.facingAtStart(pose)
                 AuroraShape.ENDLESS_TENTACLES -> showcase.facingAtStart(pose, upright = true).rotateY((index % 3 - 1) * 0.20f)
                 else -> null
             }

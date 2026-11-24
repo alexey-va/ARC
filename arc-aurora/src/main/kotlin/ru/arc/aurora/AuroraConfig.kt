@@ -93,6 +93,7 @@ enum class AuroraShape(
     MECHANICUS_SIGIL(AuroraMechanicusSigil, 220),
     KRAKEN_DRAG, RLYEH_RISING, DAGON_TIDE, NIGHT_GAUNT, COLOUR_FROM_SPACE, SHOGGOTH_ESCAPE, SILVER_KEY,
     ENDLESS_TENTACLES(AuroraEndlessTentacles, 360, loopsAtFullSize = true),
+    BLINKING_EYE(AuroraBlinkingEye, 320, loopsAtFullSize = true),
     CTHULHU(AuroraAbyssalStories, 260, loopsAtFullSize = true),
     DAGON(AuroraAbyssalStories, 220, loopsAtFullSize = true),
     HASTUR(AuroraForbiddenStories, 260, loopsAtFullSize = true),
@@ -125,7 +126,8 @@ enum class AuroraShape(
 
     internal val showcaseId: String get() = when (this) {
         VOID_CATHEDRAL, SOLAR_CORSAIR, ORK_KROOZER, IMPERIAL_AQUILA, MECHANICUS_SIGIL -> "WH40_$name"
-        ENDLESS_TENTACLES, CTHULHU, DAGON, HASTUR, AZATHOTH, YOG_SOTHOTH, NYARLATHOTEP, SHUB_NIGGURATH -> "LOVECRAFT_$name"
+        ENDLESS_TENTACLES, BLINKING_EYE, CTHULHU, DAGON, HASTUR, AZATHOTH, YOG_SOTHOTH,
+        NYARLATHOTEP, SHUB_NIGGURATH -> "LOVECRAFT_$name"
         DEATH_STAR, IMPERIAL_STAR_DESTROYER -> "STAR_WARS_$name"
         JU_FUFU, JU_FUFU_2D -> "ANIME_$name"
         else -> when {

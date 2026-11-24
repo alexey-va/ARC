@@ -81,8 +81,9 @@ class AuroraCatalogTest : FreeSpec({
             fixture.complete(admin, "showcase", "tRaCk_F") shouldBe listOf("TRACK_FLOCK", "TRACK_FLYBY")
             fixture.complete(admin, "showcase", "display_cl") shouldBe listOf("DISPLAY_CLOUD_FOX")
             fixture.complete(admin, "showcase", "lovecraft_") shouldBe listOf(
-                "LOVECRAFT_AZATHOTH", "LOVECRAFT_CTHULHU", "LOVECRAFT_DAGON", "LOVECRAFT_ENDLESS_TENTACLES",
-                "LOVECRAFT_HASTUR", "LOVECRAFT_NYARLATHOTEP", "LOVECRAFT_SHUB_NIGGURATH", "LOVECRAFT_YOG_SOTHOTH",
+                "LOVECRAFT_AZATHOTH", "LOVECRAFT_BLINKING_EYE", "LOVECRAFT_CTHULHU", "LOVECRAFT_DAGON",
+                "LOVECRAFT_ENDLESS_TENTACLES", "LOVECRAFT_HASTUR", "LOVECRAFT_NYARLATHOTEP",
+                "LOVECRAFT_SHUB_NIGGURATH", "LOVECRAFT_YOG_SOTHOTH",
             )
             fixture.complete(admin, "showcase", "wh40_") shouldBe listOf(
                 "WH40_IMPERIAL_AQUILA", "WH40_MECHANICUS_SIGIL", "WH40_ORK_KROOZER",
