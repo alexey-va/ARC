@@ -123,6 +123,7 @@ Type a prefix and press Tab to browse the effects in that family. Existing comma
 | `LOVECRAFT_HASTUR` | The King in Yellow opens his tattered mantle to reveal watching eyes and black tendrils. |
 | `LOVECRAFT_NYARLATHOTEP` | A pharaoh reveals a crimson head tendril and a rib cage full of watching eyes. |
 | `LOVECRAFT_SHUB_NIGGURATH` | Spiral horns crown a knotted mass of eyes, hooves and writhing tentacles. |
+| `LOVECRAFT_WATCHING_EYES` | Eighteen eyes watch each observer from around the sky and blink at different times. |
 | `LOVECRAFT_YOG_SOTHOTH` | A cluster of opalescent eyes turns within a tangle of living veins. |
 | `WH40_IMPERIAL_AQUILA` | A gold double-headed eagle unfolds its layered wings and tail. |
 | `WH40_MECHANICUS_SIGIL` | A toothed cog turns around a half-mechanical skull as its red lens lights up. |
@@ -633,7 +634,7 @@ Run from the repository root with JDK 25:
 ```
 
 The expected local runtime artifact is
-`arc-aurora/build/libs/ArcAurora-0.1.30.jar`. The public Maven API artifact
+`arc-aurora/build/libs/ArcAurora-0.1.31.jar`. The public Maven API artifact
 `ru.ruscrafting.arc:arc-aurora-api:0.1.0` was verified on 2026-10-29 in the
 [RusCrafting repository](https://repo.rus-crafting.ru/grocermc/ru/ruscrafting/arc/arc-aurora-api/0.1.0/arc-aurora-api-0.1.0.pom).
 That API publication does not establish a runtime-plugin build, delivery,

@@ -59,6 +59,22 @@ class AuroraShowcaseLayoutTest : FreeSpec({
         AuroraShowcase.copyCount(AuroraShape.CLOUD_FOX) shouldBe 9
     }
 
+    "watching eyes have three irregular rings and independent blink phases" {
+        val shape = AuroraShape.WATCHING_EYES
+        val count = AuroraShowcase.copyCount(shape)
+        val panel = layoutShowcase(List(count) { layoutProfile(shape) })
+        val poses = (0 until count).map(panel::pose)
+        count shouldBe 18
+        poses.map { it.phaseOffsetTicks }.toSet().size shouldBe count
+        poses.count { hypot(it.anchor.x, it.anchor.z) in 39.9..45.7 } shouldBe 8
+        poses.count { hypot(it.anchor.x, it.anchor.z) in 23.9..29.7 } shouldBe 6
+        poses.count { hypot(it.anchor.x, it.anchor.z) in 9.9..15.7 } shouldBe 4
+        poses.count { it.anchor.y >= 32.0 } shouldBe 4
+        (poses.maxOf { it.size } - poses.minOf { it.size } >= 1.9) shouldBe true
+        poses.any { it.anchor.z < 0.0 } shouldBe true
+        poses.any { it.anchor.z > 0.0 } shouldBe true
+    }
+
     "frog rain fills the zenith and surrounds the viewer throughout the complete loop" {
         val shape = AuroraShape.FROG_RAIN
         val duration = shape.storyDurationTicks

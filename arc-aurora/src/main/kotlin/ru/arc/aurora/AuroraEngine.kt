@@ -677,10 +677,10 @@ internal class AuroraEngine(
         val end = minOf(first + remaining, profile.points)
         if (end < profile.points && sky.budget >= profile.points) return 0
         val anchor = Location(player.world, scene.x, scene.y + checkNotNull(scene.surfaceY), scene.z)
-        val illustration = profile.shape.isIllustration
+        val billboard = profile.shape.usesBillboard
         val packFace = profile.hasPackFace
         val modelIndex = when {
-            illustration -> 0
+            profile.shape.isIllustration -> 0
             packFace -> AuroraJuFufu.packFaceIndex
             else -> -1
         }
@@ -696,7 +696,7 @@ internal class AuroraEngine(
         val parts = scene.storyPose ?: run {
             // CENTER applies the client's camera orientation before translation: +X is screen-right,
             // +Y is up, and +Z faces the viewer. ItemDisplay's native half-turn applies to the mesh only.
-            val rotation = if (illustration) Quaternionf() else worldFacing
+            val rotation = if (billboard) Quaternionf() else worldFacing
             val size = checkNotNull(scene.animation).size.toFloat()
             val progress = sceneAge.toDouble() / (profile.sceneDurationTicks - 1)
             List(profile.points) { index ->
@@ -710,7 +710,7 @@ internal class AuroraEngine(
             }
         }
         val spot = anchor.clone()
-        val checkedOffset = if (illustration) Vector3f() else null
+        val checkedOffset = if (billboard) Vector3f() else null
         for (index in first until end) {
             val transform = parts[index].transform
             if (transform.scale.lengthSquared() == 0f) continue

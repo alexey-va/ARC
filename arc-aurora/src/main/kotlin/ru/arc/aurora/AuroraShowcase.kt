@@ -59,6 +59,20 @@ internal class AuroraShowcase(
             return pose(AuroraOffset(radius * sin(direction), height, radius * cos(direction)), size, 0.0,
                 phase * profile.sceneDurationTicks / TENTACLE_GROUPS)
         }
+        if (profile.shape == AuroraShape.WATCHING_EYES && profiles.size == WATCHING_EYES_COUNT) {
+            val (baseRadius, baseHeight, baseDirection) = when (index) {
+                in 0..7 -> Triple(40.0, 17.0, 0.15 + index * 2.0 * PI / 8)
+                in 8..13 -> Triple(24.0, 21.0, 0.56 + (index - 8) * 2.0 * PI / 6)
+                else -> Triple(10.0, 32.0, 0.31 + (index - 14) * 2.0 * PI / 4)
+            }
+            val radius = baseRadius + 1.4 * ((index * 3) % 5)
+            val height = baseHeight + 1.25 * ((index * 5) % 7)
+            val direction = baseDirection + 0.045 * ((index * 7) % 5 - 2)
+            val size = 2.15 + 0.13 * ((index * 7) % 17)
+            val phase = (index * 7 + 3) % WATCHING_EYES_COUNT
+            return pose(AuroraOffset(radius * sin(direction), height, radius * cos(direction)), size, 0.0,
+                phase * profile.sceneDurationTicks / WATCHING_EYES_COUNT)
+        }
         if (profiles.size == COPY_COUNT) {
             val size = when (profile.shape) {
                 AuroraShape.CUBE -> 2.1
@@ -114,10 +128,12 @@ internal class AuroraShowcase(
         const val COPY_COUNT = 9
         private const val RAIN_GROUPS = 14
         private const val TENTACLE_GROUPS = 7
+        private const val WATCHING_EYES_COUNT = 18
         private const val CENTER_SCALE = 1.06
         fun copyCount(shape: AuroraShape): Int = when (shape) {
             AuroraShape.FROG_RAIN -> RAIN_GROUPS
             AuroraShape.ENDLESS_TENTACLES -> TENTACLE_GROUPS
+            AuroraShape.WATCHING_EYES -> WATCHING_EYES_COUNT
             AuroraShape.INFERNAL_PENTAGRAM, AuroraShape.VOID_CATHEDRAL, AuroraShape.SOLAR_CORSAIR,
             AuroraShape.ORK_KROOZER, AuroraShape.IMPERIAL_AQUILA, AuroraShape.MECHANICUS_SIGIL,
             AuroraShape.CTHULHU, AuroraShape.DAGON, AuroraShape.HASTUR, AuroraShape.AZATHOTH,

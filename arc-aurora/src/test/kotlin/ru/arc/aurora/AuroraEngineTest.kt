@@ -364,6 +364,58 @@ class AuroraEngineTest : FreeSpec({
         }
     }
 
+    "watching eyes keep eighteen shared anchors and face each client" {
+        val shape = AuroraShape.WATCHING_EYES
+        val settings = skySettings(shape = AuroraShape.FEATHER_GLIDER, points = 4)
+            .copy(nativeBudgetMicros = Int.MAX_VALUE)
+        withEngine(settings, highSky = true) { fixture ->
+            fixture.loadChunks(5)
+            fixture.admin(true)
+            val player = fixture.player
+            val world = player.world as EngineWorld
+            world.flatHeightMapY = world.getHighestBlockYAt(player.location.blockX, player.location.blockZ, HeightMap.WORLD_SURFACE)
+            val packets = mockk<PaperPacketDisplays>(relaxed = true)
+            val handles = mutableListOf<PacketItemDisplay>()
+            val anchors = mutableSetOf<Location>()
+            every { packets.spawnItem(any(), any()) } answers {
+                anchors += arg<Location>(0).clone()
+                mockk<PacketItemDisplay>(relaxed = true).also { handles += it }
+            }
+            val displays = AuroraLanternDisplays(packets)
+            var audience: Set<UUID>? = null
+            every { fixture.lanterns.setShowcaseAudience(any(), any()) } answers {
+                val owner = arg<UUID>(0)
+                val members = arg<Set<UUID>?>(1)
+                if (owner == player.uniqueId) audience = members
+                displays.setShowcaseAudience(owner, members)
+            }
+            every { fixture.lanterns.removeViewer(any()) } answers { displays.removeViewer(arg(0)) }
+            every { fixture.lanterns.updateStory(any(), any(), any(), any(), any(), any(), any(), any()) } answers {
+                displays.updateStory(arg(0), arg(1), arg(2), arg(3), arg(4), arg(5), arg(6), arg(7))
+            }
+
+            fixture.engine.startShowcase(player, shape) shouldBe true
+            fixture.advance(360)
+            anchors.size shouldBe 18
+            (handles.size in 18..(18 * 22)) shouldBe true
+            val initialHandles = handles.toList()
+            val observer = fixture.joinAdditional("EyeObserver", player.location.clone().add(14.0, 0.0, -6.0))
+            fixture.advance(25)
+            handles shouldBe initialHandles
+            audience shouldBe setOf(player.uniqueId, observer.uniqueId)
+            handles.forEach { handle ->
+                verify(exactly = 1) { handle.billboard = Display.Billboard.CENTER }
+                verify(exactly = 1) { handle.audienceGroup = any() }
+                verify(exactly = 0) { handle.showTo(player) }
+                verify(exactly = 0) { handle.showTo(observer) }
+                verify(exactly = 0) { handle.teleport(any()) }
+            }
+
+            fixture.engine.stopShowcase(player.uniqueId)
+            handles.forEach { handle -> verify(exactly = 1) { handle.remove() } }
+        }
+    }
+
     "the sky-wide tentacles reach overhead from seven stable shared sectors" {
         val bundled = AuroraConfig.parse(YamlConfiguration().apply {
             loadFromString(checkNotNull(javaClass.classLoader.getResourceAsStream("config.yml")).bufferedReader().use { it.readText() })

@@ -77,7 +77,7 @@ class AuroraSkyMiniaturesTest : FreeSpec({
         for (shape in listOf(AuroraShape.CTHULHU, AuroraShape.DAGON, AuroraShape.HASTUR, AuroraShape.AZATHOTH,
             AuroraShape.YOG_SOTHOTH, AuroraShape.NYARLATHOTEP, AuroraShape.SHUB_NIGGURATH,
             AuroraShape.DEATH_STAR, AuroraShape.IMPERIAL_STAR_DESTROYER, AuroraShape.ENDLESS_TENTACLES,
-            AuroraShape.BLINKING_EYE)) {
+            AuroraShape.BLINKING_EYE, AuroraShape.WATCHING_EYES)) {
             val start = storyPose(shape, 0.0)
             val end = storyPose(shape, 1.0)
             withClue(shape) {
@@ -107,6 +107,21 @@ class AuroraSkyMiniaturesTest : FreeSpec({
         (lidGap(0.22) > 0.45) shouldBe true
         (lidGap(0.265) < 0.09) shouldBe true
         (lidGap(0.35) > 0.45) shouldBe true
+    }
+
+    "the watching eyes cover their center for more than one showcase update" {
+        val shape = AuroraShape.WATCHING_EYES
+        fun lidGap(progress: Double): Double {
+            val upper = shape.part(4, progress)
+            val lower = shape.part(5, progress)
+            return upper.center.y - upper.scale.y * 0.5 - (lower.center.y + lower.scale.y * 0.5)
+        }
+
+        (lidGap(0.20) > 0.25) shouldBe true
+        for (tick in 87..105) {
+            (lidGap(tick / 239.0) < 0.04) shouldBe true
+        }
+        (lidGap(0.60) > 0.25) shouldBe true
     }
 
     "the five forged strokes join into a downward star with an overpass and an underpass per stroke" {
@@ -187,6 +202,7 @@ internal val storyShapes = listOf(
     AuroraShape.SHUB_NIGGURATH,
     AuroraShape.ENDLESS_TENTACLES,
     AuroraShape.BLINKING_EYE,
+    AuroraShape.WATCHING_EYES,
     AuroraShape.JU_FUFU,
     AuroraShape.JU_FUFU_2D,
     AuroraShape.DEATH_STAR,

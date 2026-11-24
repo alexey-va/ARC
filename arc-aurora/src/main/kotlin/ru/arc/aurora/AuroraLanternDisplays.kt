@@ -75,7 +75,7 @@ class AuroraLanternDisplays internal constructor(private val displays: PaperPack
     internal fun updateStory(key: Any, player: Player, profile: AuroraProfile, anchor: Location,
         parts: List<Part>, firstPart: Int, endPart: Int, interpolation: Int): Boolean {
         if (closed) return false
-        val billboard = if (profile.shape.isIllustration) Display.Billboard.CENTER else Display.Billboard.FIXED
+        val billboard = if (profile.shape.usesBillboard) Display.Billboard.CENTER else Display.Billboard.FIXED
         return updateParts(key, player, profile.shape, parts.size, firstPart,
             Collections.nCopies(endPart - firstPart, anchor), interpolation, fixedAnchor = true, billboardMode = billboard,
             partAt = parts::get)
