@@ -47,7 +47,6 @@ internal class AuroraEngine(
     private val showcaseProfiles: List<AuroraProfile>? = AuroraShowcase.profiles(settings),
     private val onShowcaseBlocked: (Player) -> Unit = {},
     private val showcaseEffects: Map<AuroraShape, AuroraProfile> = showcaseEffects(settings),
-    private val mapScreenFactory: (Player) -> AuroraMapScreen? = { null },
 ) : AutoCloseable {
     val showcaseShapes: Set<AuroraShape> get() = showcaseEffects.keys
 
@@ -154,7 +153,7 @@ internal class AuroraEngine(
     private data class Planned(val emissions: List<Emission>, val sky: SkyInput? = null)
     private data class Batch(val age: Long, val emissions: List<Emission>, val skies: List<SkyInput>)
     private class ShowcaseViewer(val player: Player, val eye: Location)
-    private class SharedShowcase(val panel: AuroraShowcase, val mapScreen: AuroraMapScreen?) {
+    private class SharedShowcase(val panel: AuroraShowcase) {
         var audience: Map<UUID, ShowcaseViewer> = emptyMap()
         var recipientOrder: List<UUID> = emptyList()
         var nextRecipient = 0
@@ -194,7 +193,7 @@ internal class AuroraEngine(
     }
 
     fun quit(id: UUID) {
-        retireShowcase(showcases.remove(id))
+        showcases.remove(id)?.clearParticles()
         leaveShowcases(id)
         viewers.remove(id)?.particles?.close()
         lanterns?.removeViewer(id)
@@ -223,43 +222,24 @@ internal class AuroraEngine(
             List(AuroraShowcase.copyCount(shape)) { profile }
         }
         val duration = if (shape == null) AuroraShowcase.DURATION_TICKS else AuroraShowcase.SELECTED_DURATION_TICKS
-        installShowcase(player, viewer, profiles, duration)
-        return true
-    }
-
-    fun startMapShowcase(player: Player): Boolean {
-        val viewer = viewers[player.uniqueId] ?: return false
-        if (!player.hasPermission(AURORA_ADMIN_PERMISSION)) return false
-        val screen = mapScreenFactory(player) ?: return false
-        installShowcase(player, viewer, emptyList(), AuroraShowcase.SELECTED_DURATION_TICKS, screen)
-        return true
-    }
-
-    private fun installShowcase(player: Player, viewer: Viewer, profiles: List<AuroraProfile>, duration: Long,
-        mapScreen: AuroraMapScreen? = null) {
         val eye = player.eyeLocation
         val panel = AuroraShowcase(player.world.uid, AuroraOffset(eye.x, eye.y, eye.z), eye.yaw,
             profiles, age + duration)
-        retireShowcase(showcases.put(viewer.id, SharedShowcase(panel, mapScreen)))
+        showcases.put(viewer.id, SharedShowcase(panel))?.clearParticles()
         viewer.previewDrain = null
         viewer.selection = null
         viewer.due = age
         invalidate(viewer.id)
+        return true
     }
 
     fun stopShowcase(id: UUID) {
         val viewer = viewers[id] ?: return
         val showcase = showcases.remove(id) ?: return
-        retireShowcase(showcase)
+        showcase.clearParticles()
         viewer.selection = null
         viewer.due = age
         invalidate(id)
-    }
-
-    private fun retireShowcase(showcase: SharedShowcase?) {
-        showcase?.clearParticles()
-        val screen = showcase?.mapScreen ?: return
-        retirement = CompletableFuture.allOf(retirement, screen.closeAsync())
     }
 
     fun changeWorld(id: UUID) {
@@ -274,20 +254,14 @@ internal class AuroraEngine(
     }
 
     private fun setAudience(owner: UUID, show: SharedShowcase, members: Map<UUID, ShowcaseViewer>) {
-        val oldMembers = show.audience
-        show.audience = members
-        val screen = show.mapScreen
-        if (screen != null) {
-            screen.update(members.values.map { it.player })
-            return
-        }
-        if (members.keys != oldMembers.keys) {
-            for (id in oldMembers.keys) if (id !in members) show.particles.remove(id)?.close()
+        if (members.keys != show.audience.keys) {
+            for (id in show.audience.keys) if (id !in members) show.particles.remove(id)?.close()
             show.recipientOrder = members.keys.toList()
             if (show.nextRecipient >= members.size) show.nextRecipient = 0
             if (members.isEmpty()) viewers[owner]?.let(::retireModels)
             else lanterns?.setShowcaseAudience(owner, members.keys)
         }
+        show.audience = members
     }
 
     /** The main thread snapshots membership once for all the points in this tick. */
@@ -518,8 +492,7 @@ internal class AuroraEngine(
             val player = Bukkit.getPlayer(viewer.id)
             if (player == null) { retireModels(viewer); continue }
             val selection = select(player, viewer)
-            if (selection.source == Source.SHOWCASE &&
-                (selection.profiles.isEmpty() || showcases.getValue(viewer.id).audience.isEmpty())) continue
+            if (selection.source == Source.SHOWCASE && showcases.getValue(viewer.id).audience.isEmpty()) continue
             val sky = viewer.sky
             if (sky == null || player.world.uid != sky.input.world || viewer.revision != sky.input.revision ||
                 !selection.sameAs(sky.input.selection) || !eligible(player, viewer, selection.source)) {
@@ -1091,11 +1064,11 @@ internal class AuroraEngine(
     fun closeAsync(): CompletableFuture<Void> {
         if (!closed.compareAndSet(false, true)) return retirement
         completed.set(null)
-        showcases.values.forEach(::retireShowcase)
+        showcases.values.forEach { it.clearParticles() }
         showcases.clear()
         viewers.values.forEach { it.particles.close() }
         viewers.clear(); rotation.clear(); viewerCount = 0
-        lanterns?.let { retirement = CompletableFuture.allOf(retirement, it.closeAsync()) }
+        retirement = lanterns?.closeAsync() ?: CompletableFuture.completedFuture(null)
         return retirement
     }
     override fun close() { closeAsync() }

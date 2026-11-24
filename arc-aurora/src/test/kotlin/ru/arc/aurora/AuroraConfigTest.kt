@@ -38,15 +38,14 @@ class AuroraConfigTest : FreeSpec({
     }
 
     "showcase models require a material and a positive integer" {
-        val root = "showcase-illustrations.SAKURA_IDOL_2D"
+        val root = "showcase-illustrations.anime_ju_fufu_2d"
         val source = yaml("""
             showcase-illustrations:
               SAKURA_IDOL_2D: {material: PAPER, custom-model-data: 173}
-              ju_fufu_2d: {material: 'minecraft:paper', custom-model-data: 174}
+              anime_ju_fufu_2d: {material: 'minecraft:paper', custom-model-data: 174}
               JU_FUFU: {material: PAPER, custom-model-data: 175}
         """)
         AuroraConfig.parse(source).showcaseIllustrations shouldBe mapOf(
-            AuroraShape.SAKURA_IDOL_2D to AuroraSkyModel(Material.PAPER, 173),
             AuroraShape.JU_FUFU_2D to AuroraSkyModel(Material.PAPER, 174),
             AuroraShape.JU_FUFU to AuroraSkyModel(Material.PAPER, 175),
         )
@@ -54,13 +53,13 @@ class AuroraConfigTest : FreeSpec({
             source.set("$root.custom-model-data", invalid)
             shouldThrow<AuroraConfigException> { AuroraConfig.parse(source) }.path shouldBe "$root.custom-model-data"
         }
-        source.set("$root.custom-model-data", 173)
+        source.set("$root.custom-model-data", 174)
         for (invalid in listOf(null, "AIR", "unknown")) {
             source.set("$root.material", invalid)
             shouldThrow<AuroraConfigException> { AuroraConfig.parse(source) }.path shouldBe "$root.material"
         }
         shouldThrow<AuroraConfigException> {
-            AuroraConfig.parse(profileConfig("shape" to "SAKURA_IDOL_2D", "sky-scene" to true))
+            AuroraConfig.parse(profileConfig("shape" to "ANIME_JU_FUFU_2D", "sky-scene" to true))
         }.path shouldBe "profiles.ambient.shape"
     }
 
@@ -552,8 +551,12 @@ class AuroraConfigTest : FreeSpec({
               obsolete:
                 shape: MaNtA_RaY
                 particle: invalid_obsolete_particle
+              old-fox-neighbor:
+                shape: FROST_WALKER
+              old-idol:
+                shape: SAKURA_IDOL
               ambient:
-                shape: POINT
+                shape: particle_point
             event-presets:
               retired-night:
                 old-swimmer:
@@ -575,7 +578,7 @@ class AuroraConfigTest : FreeSpec({
               empty-night: {}
         """)
         val settings = AuroraConfig.parse(source)
-        settings.profiles.map { it.id } shouldBe listOf("ambient")
+        settings.profiles.map { it.id to it.shape } shouldBe listOf("ambient" to AuroraShape.POINT)
         settings.eventPresets.keys shouldBe setOf("mixed-night", "empty-night")
         settings.eventPresets.getValue("mixed-night").map { it.id } shouldBe listOf("kept")
         settings.nightSky.enabled shouldBe false
@@ -660,7 +663,7 @@ class AuroraConfigTest : FreeSpec({
         }
         for ((field, value) in listOf("sky-palette.rim.particle" to "end_rod", "sky-tracers" to 8)) {
             shouldThrow<AuroraConfigException> {
-                AuroraConfig.parse(profileConfig("sky-scene" to true, "shape" to "ENDERMAN_SKY_THEFT", field to value))
+                AuroraConfig.parse(profileConfig("sky-scene" to true, "shape" to "DISPLAY_CLOUD_FOX", field to value))
             }.path shouldBe "profiles.ambient.${field.substringBefore('.')}"
         }
         listOf(emptyList(), listOf("flame", "soul_fire_flame")).forEach { heads ->

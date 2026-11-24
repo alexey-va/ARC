@@ -99,47 +99,40 @@ The `INFERNAL_PENTAGRAM` in the treasure-hunt sky and its showcase share one dis
 
 ### Sky showcase
 
-Stand outdoors, face open sky and run `/arcaurora showcase SKY_STITCH` with `arcaurora.admin`. The selected effect plays for three minutes. The deities, characters, ships, Death Star, Imperial and Mechanicus emblems, and infernal pentagram appear once in the center at twice the previous center size. Small effects usually appear in nine copies at different phases. Tab completes all active shape names, including the tracks, lanterns and surface effects. Run the command with another name to switch immediately. Run it in a new direction to move the display, or use `/arcaurora showcase stop` to end it early. Everyone within 64 blocks of the starting point in the same world can watch. Spectators can walk into an ongoing show and see its current phase. Each administrator controls their own show.
+Stand outdoors, face open sky and run `/arcaurora showcase DISPLAY_CLOUD_FOX` with `arcaurora.admin`. The selected effect plays for three minutes. Large figures appear once at the center. Small effects usually play in nine copies at different phases. Everyone within 64 blocks of the starting point in the same world can watch, including spectators who arrive during the show. Run another effect to switch, or use `/arcaurora showcase stop` to end the show.
 
-These sky scenes can be tried individually. They use vanilla item displays and are available with an existing config.
+Type a prefix and press Tab to browse the effects in that family. Existing command names and config shape values still work for the effects listed below. `ANIME_JU_FUFU_2D` requires an entry under `showcase-illustrations`.
 
-| Effect | Action |
+| Prefix | Effect names after the prefix |
 | --- | --- |
-| `ENDERMAN_SKY_THEFT` | An enderman pulls a square of night sky free and runs off with it. |
-| `SKY_FISHING` | A fishing line hauls up a little island with an oak. |
-| `FROST_WALKER` | Diamond boots leave a trail of ice as they step across the sky. |
-| `CLOUD_FOX` | A fox dives into a cloud and comes out carrying berries. |
-| `TOTEM_HEART` | A fading half-heart gives way to a totem, then returns as a beating full heart. |
-| `GHAST_PORTAL` | A ghast squeezes through a narrow portal and pulls its last tentacle free. |
-| `STORM_HERD` | Lightning reveals three skeletal horses leaping between clouds. |
-| `SLIME_ANVIL` | An anvil flattens a slime and gets tossed back up. |
-| `SHATTERED_SWORD` | Diamond fragments assemble into a sword that shoots skyward. |
-| `REVERSE_FIREWORK` | A firework folds its sparks back into a falling rocket. |
-| `VOID_CATHEDRAL` | A gothic voidship banks past the viewer, exposing its cathedral spires and glowing engines. |
-| `SOLAR_CORSAIR` | An ivory corsair with a scarlet solar sail heels into a turn. |
-| `ORK_KROOZER` | A patchwork armoured kroozer lurches forward behind its jaw of tusks. |
-| `IMPERIAL_AQUILA` | A gold double-headed eagle unfolds its layered wings and tail. |
-| `MECHANICUS_SIGIL` | A toothed cog turns around a half-mechanical skull as its red lens lights up. |
-| `CTHULHU` | Cthulhu spreads his bat wings while the tentacles of his face uncoil. |
-| `DAGON` | A deep-sea giant opens its toothed jaws and reaches out with webbed claws. |
-| `HASTUR` | The King in Yellow opens his tattered mantle to reveal watching eyes and black tendrils. |
-| `AZATHOTH` | A jagged maw opens in a heaving mass of blind eyes and suckered tentacles. |
-| `YOG_SOTHOTH` | A cluster of opalescent eyes turns within a tangle of living veins. |
-| `NYARLATHOTEP` | A pharaoh reveals a crimson head tendril and a rib cage full of watching eyes. |
-| `SHUB_NIGGURATH` | Spiral horns crown a knotted mass of eyes, hooves and writhing tentacles. |
-| `SAKURA_IDOL` | A pink-haired performer turns, winks and sends a heart from her palm. |
-| `JU_FUFU` | Ju Fufu poses with her mechanical popcorn pot, Huwei. |
-| `SAKURA_IDOL_2D` | A camera-facing illustration of Sakura sends a heart from her hand. |
-| `JU_FUFU_2D` | A camera-facing illustration of Ju Fufu catches popcorn from Huwei. |
-| `SAKURA_IDOL_MAP` | A 1024×1536 portrait of Sakura in the sky, assembled from vanilla maps. |
-| `DEATH_STAR` | Green tributaries converge above the dish, then a long superlaser fires. |
-| `IMPERIAL_STAR_DESTROYER` | An Imperial Star Destroyer banks past, revealing its wedge-shaped hull and engines. |
+| `TRACK_` | `EYE`, `FLYBY`, `FLOCK`, `KINK`, `KNOT`, `LENS`, `PAIR`, `RIPPLE`, `SCATTER`, `SKIP`, `SLINGSHOT`, `SPIRAL` |
+| `PARTICLE_` | `ARC`, `AURORA_CURTAIN`, `CIRCLE`, `CRYSTAL`, `CUBE`, `DANDELION_GUST`, `EMBER_VOLCANO`, `HATCHING_STAR`, `HELIX`, `INVISIBLE_HARE`, `KINGFISHER_DIVE`, `LIGHT_KNOT`, `LINE`, `METEOR`, `MOON_FAN`, `PAPER_FLOTILLA`, `POINT`, `REVERSE_LIGHTNING`, `RING`, `SKY_CORAL`, `SKY_HOURGLASS`, `SKY_STITCH`, `SPHERE`, `STAR`, `STELLAR_PRISM`, `TUMBLEWEED`, `WAVE` |
 
-The two illustrated showcases use the resource pack configured under `showcase-illustrations`. Each shape entry specifies its item `material` and `custom-model-data`. The 3D `JU_FUFU` entry in the same section optionally supplies a textured face. Her head and face rotate together. Without that entry the 3D show uses its built-in face.
+| Model showcase | Action |
+| --- | --- |
+| `DISPLAY_CLOUD_FOX` | A fox dives into a cloud and comes out carrying berries. |
+| `DISPLAY_FEATHER_GLIDER` | A winged diamond opens its feathers, banks and dives. |
+| `DISPLAY_FROG_RAIN` | Frogs fall all around the player. Turn around to see the full shower. |
+| `DISPLAY_INFERNAL_PENTAGRAM` | A forged star opens to reveal a ring of illuminated relics. |
+| `DISPLAY_SKY_LANTERNS` | Glowing paper lanterns rise together and drift away. |
+| `LOVECRAFT_AZATHOTH` | A jagged maw opens in a heaving mass of blind eyes and suckered tentacles. |
+| `LOVECRAFT_CTHULHU` | Cthulhu spreads his bat wings while the tentacles of his face uncoil. |
+| `LOVECRAFT_DAGON` | A deep-sea giant opens its toothed jaws and reaches out with webbed claws. |
+| `LOVECRAFT_HASTUR` | The King in Yellow opens his tattered mantle to reveal watching eyes and black tendrils. |
+| `LOVECRAFT_NYARLATHOTEP` | A pharaoh reveals a crimson head tendril and a rib cage full of watching eyes. |
+| `LOVECRAFT_SHUB_NIGGURATH` | Spiral horns crown a knotted mass of eyes, hooves and writhing tentacles. |
+| `LOVECRAFT_YOG_SOTHOTH` | A cluster of opalescent eyes turns within a tangle of living veins. |
+| `WH40_IMPERIAL_AQUILA` | A gold double-headed eagle unfolds its layered wings and tail. |
+| `WH40_MECHANICUS_SIGIL` | A toothed cog turns around a half-mechanical skull as its red lens lights up. |
+| `WH40_ORK_KROOZER` | A patchwork armoured kroozer lurches forward behind its jaw of tusks. |
+| `WH40_SOLAR_CORSAIR` | An ivory corsair with a scarlet solar sail heels into a turn. |
+| `WH40_VOID_CATHEDRAL` | A gothic voidship banks past the viewer, exposing its cathedral spires and glowing engines. |
+| `STAR_WARS_DEATH_STAR` | Green tributaries converge above the dish, then a long superlaser fires. |
+| `STAR_WARS_IMPERIAL_STAR_DESTROYER` | An Imperial Star Destroyer banks past, revealing its wedge-shaped hull and engines. |
+| `ANIME_JU_FUFU` | Ju Fufu poses with her mechanical popcorn pot, Huwei. |
+| `ANIME_JU_FUFU_2D` | A camera-facing illustration of Ju Fufu catches popcorn from Huwei. |
 
-`/arcaurora showcase SAKURA_IDOL_MAP` shows one upright 8×12-block panel for three minutes. Nearby players see the same image on temporary invisible frames. The artwork uses the vanilla map palette and travels with the plugin, so this showcase works without a resource pack.
-
-`/arcaurora showcase FROG_RAIN` surrounds the player with falling frogs for three minutes. Turn around to see the shower in every direction. The frogs use packet displays and have no AI or collision.
+The 2D Fufu scene uses the item `material` and `custom-model-data` configured in `showcase-illustrations.ANIME_JU_FUFU_2D`. The optional `ANIME_JU_FUFU` entry adds a textured face to the 3D model.
 
 The bare `/arcaurora showcase` opens a 60-second overview. The stitch and curtain appear above the hare tracks, paper flotilla and tumbleweed.
 
@@ -643,7 +636,7 @@ Run from the repository root with JDK 25:
 ```
 
 The expected local runtime artifact is
-`arc-aurora/build/libs/ArcAurora-0.1.27.jar`. The public Maven API artifact
+`arc-aurora/build/libs/ArcAurora-0.1.28.jar`. The public Maven API artifact
 `ru.ruscrafting.arc:arc-aurora-api:0.1.0` was verified on 2026-10-29 in the
 [RusCrafting repository](https://repo.rus-crafting.ru/grocermc/ru/ruscrafting/arc/arc-aurora-api/0.1.0/arc-aurora-api-0.1.0.pom).
 That API publication does not establish a runtime-plugin build, delivery,

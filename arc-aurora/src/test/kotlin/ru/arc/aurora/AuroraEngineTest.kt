@@ -106,62 +106,6 @@ class AuroraEngineTest : FreeSpec({
         }
     }
 
-    "a map uses the shared viewer snapshot each tick and retires on expiry or owner quit" {
-        val settings = engineSettings().copy(profiles = emptyList())
-        val first = mockk<AuroraMapScreen>(relaxed = true)
-        val second = mockk<AuroraMapScreen>(relaxed = true)
-        val audiences = mutableListOf<Set<UUID>>()
-        every { first.update(any()) } answers {
-            audiences += firstArg<Collection<Player>>().map { it.uniqueId }.toSet()
-        }
-        every { first.closeAsync() } returns CompletableFuture.completedFuture(null)
-        every { second.closeAsync() } returns CompletableFuture.completedFuture(null)
-        val screens = ArrayDeque(listOf(first, second))
-        var mounts = 0
-        withEngine(settings, mapScreenFactory = { mounts++; screens.removeFirst() }) { fixture ->
-            val owner = fixture.player
-            val origin = owner.location
-            val observer = fixture.joinAdditional("MapObserver", origin.clone().add(64.0, 0.0, 0.0))
-            fixture.joinAdditional("BeyondMapLimit", origin.clone().add(64.01, 0.0, 0.0))
-            val elsewhere = fixture.paper.addSimpleWorld("map-elsewhere")
-            var ticks = 0
-            fun advance(count: Int) {
-                fixture.advance(count)
-                ticks += count
-            }
-
-            fixture.admin(true)
-            fixture.engine.startMapShowcase(owner) shouldBe true
-            advance(2)
-            audiences shouldBe List(2) { setOf(owner.uniqueId, observer.uniqueId) }
-
-            observer.teleport(Location(elsewhere, origin.x, origin.y, origin.z)) shouldBe true
-            fixture.engine.changeWorld(observer.uniqueId)
-            audiences.last() shouldBe setOf(owner.uniqueId)
-            owner.teleport(origin.clone().add(-65.0, 0.0, 0.0)) shouldBe true
-            advance(1)
-            audiences.last() shouldBe emptySet()
-
-            owner.teleport(origin) shouldBe true
-            observer.teleport(origin.clone().add(63.0, 0.0, 0.0)) shouldBe true
-            fixture.engine.changeWorld(observer.uniqueId)
-            advance(1)
-            audiences.last() shouldBe setOf(owner.uniqueId, observer.uniqueId)
-            mounts shouldBe 1
-            fixture.emissions shouldBe emptyList()
-
-            advance((AuroraShowcase.SELECTED_DURATION_TICKS - ticks - 1).toInt())
-            verify(exactly = 0) { first.closeAsync() }
-            advance(1)
-            verify(exactly = 1) { first.closeAsync() }
-
-            fixture.engine.startMapShowcase(owner) shouldBe true
-            fixture.engine.quit(owner.uniqueId)
-            verify(exactly = 1) { second.closeAsync() }
-            mounts shouldBe 2
-        }
-    }
-
     "selected lanterns rotate all nine display groups under a cap smaller than one configured group" {
         val base = skySettings(points = 6, shape = AuroraShape.SKY_LANTERNS)
         val lantern = base.profiles.single().copy(sceneDurationTicks = 80, updateTicks = 4, skyModel = AuroraSkyModel())
@@ -317,7 +261,7 @@ class AuroraEngineTest : FreeSpec({
     }
 
     "an illustration follows the existing shared show and stamps its model only when spawning the figure" {
-        val shape = AuroraShape.SAKURA_IDOL_2D
+        val shape = AuroraShape.JU_FUFU_2D
         val model = AuroraSkyModel(Material.BOOK, 173)
         val settings = skySettings(shape = AuroraShape.FEATHER_GLIDER, points = 4)
             .copy(nativeBudgetMicros = Int.MAX_VALUE, showcaseIllustrations = mapOf(shape to model))
@@ -474,8 +418,8 @@ class AuroraEngineTest : FreeSpec({
         }
     }
 
-    "the shared herd keeps its scene and current poses as viewers enter, move and leave" {
-        val shape = AuroraShape.STORM_HERD
+    "the shared fox showcase keeps its scenes and current poses as viewers enter, move and leave" {
+        val shape = AuroraShape.CLOUD_FOX
         val count = AuroraSkyMiniatures.partCount(shape)
         val base = skySettings(points = count, shape = shape)
         val profile = base.profiles.single().copy(sceneDurationTicks = shape.storyDurationTicks, updateTicks = 3)
@@ -539,7 +483,7 @@ class AuroraEngineTest : FreeSpec({
             advance(120)
             val originalScenes = updates.keys.toSet()
             originalScenes.size shouldBe AuroraShowcase.COPY_COUNT
-            val watcher = fixture.joinAdditional("LateHerdObserver", origin.clone().add(9.0, 0.0, 0.0))
+            val watcher = fixture.joinAdditional("LateFoxObserver", origin.clone().add(9.0, 0.0, 0.0))
             advance(10)
             fixture.showcaseAudiences[player.uniqueId] shouldBe setOf(player.uniqueId, watcher.uniqueId)
 
@@ -565,7 +509,7 @@ class AuroraEngineTest : FreeSpec({
 
     "a story moves by metadata on one fixed private anchor, reusing even temporarily hidden parts" {
         withEngine { fixture ->
-            val profile = skySettings(shape = AuroraShape.STORM_HERD).profiles.single()
+            val profile = skySettings(shape = AuroraShape.CLOUD_FOX).profiles.single()
             val anchor = fixture.player.location
             val packets = mockk<PaperPacketDisplays>()
             val handle = mockk<PacketItemDisplay>(relaxed = true)
@@ -576,7 +520,7 @@ class AuroraEngineTest : FreeSpec({
             val first = pose(-1f, 0.6f)
             val moved = pose(2f, 0.6f)
             fun send(part: AuroraLanternDisplays.Part) =
-                displays.updateStory("horse", fixture.player, profile, anchor, listOf(part), 0, 1, 5)
+                displays.updateStory("fox", fixture.player, profile, anchor, listOf(part), 0, 1, 5)
             send(first) shouldBe true
             send(moved) shouldBe true
             verify { handle.transformation = moved.transform }
@@ -698,7 +642,7 @@ class AuroraEngineTest : FreeSpec({
     }
 
     "a custom story field with one request per visit finishes one sampled pose before starting the next" {
-        val shape = AuroraShape.SKY_FISHING
+        val shape = AuroraShape.CLOUD_FOX
         val count = AuroraSkyMiniatures.partCount(shape)
         val settings = skySettings(points = count, shape = shape, packets = 1).copy(nativeBudgetMicros = Int.MAX_VALUE)
         withEngine(settings, highSky = true) { fixture ->
@@ -2198,17 +2142,15 @@ class AuroraEngineTest : FreeSpec({
 
 })
 
-private fun withEngine(settings: AuroraSettings = engineSettings(), highSky: Boolean = false,
-    mapScreenFactory: (Player) -> AuroraMapScreen? = { null }, block: (EngineFixture) -> Unit) {
+private fun withEngine(settings: AuroraSettings = engineSettings(), highSky: Boolean = false, block: (EngineFixture) -> Unit) {
     failOnUnsupportedMockBukkitOperation {
         MockBukkitTestRuntime.open().use { paper ->
-            EngineFixture(paper, settings, highSky, mapScreenFactory).use(block)
+            EngineFixture(paper, settings, highSky).use(block)
         }
     }
 }
 
-private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: AuroraSettings, highSky: Boolean,
-    mapScreenFactory: (Player) -> AuroraMapScreen?) : AutoCloseable {
+private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: AuroraSettings, highSky: Boolean) : AutoCloseable {
     private val mainThread = Thread.currentThread()
     private val plugin = paper.createSimplePlugin("ArcAuroraEngineTest")
     private val world = EngineWorld(highSky).also { it.name = "ambient"; paper.server.addWorld(it) }
@@ -2235,8 +2177,7 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
     private val scope = LifecycleTaskScope(scheduler)
     private val attachment = player.addAttachment(plugin, settings.permission, false)
     val engine = AuroraEngine(plugin, scope, settings, { if (it == player.world.uid) event else null }, { emitter },
-        { if (it == player.uniqueId) preview else null }, { lanterns }, onShowcaseBlocked = { blockedShowcases += it.uniqueId },
-        mapScreenFactory = mapScreenFactory)
+        { if (it == player.uniqueId) preview else null }, { lanterns }, onShowcaseBlocked = { blockedShowcases += it.uniqueId })
 
     init {
         every { lanterns.update(any(), any(), any(), any(), any(), any(), any()) } answers {

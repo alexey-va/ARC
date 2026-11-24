@@ -82,16 +82,9 @@ enum class AuroraShape(
     SKY_HOURGLASS, DANDELION_GUST, KINGFISHER_DIVE, STELLAR_PRISM, EMBER_VOLCANO, HATCHING_STAR,
     INFERNAL_PENTAGRAM(AuroraInfernalPentagram, 320),
     FEATHER_GLIDER, ASTRAL_PENDULUM, TWIN_SAMARAS, SKY_PHONOGRAPH,
-    ENDERMAN_SKY_THEFT(AuroraLivingStories, 260),
-    SKY_FISHING(AuroraPhysicsStories, 168),
-    FROST_WALKER(AuroraPhysicsStories, 156),
-    CLOUD_FOX(AuroraLivingStories, 240),
-    TOTEM_HEART(AuroraMagicStories, 137),
-    GHAST_PORTAL(AuroraLivingStories, 236),
-    STORM_HERD(AuroraStormHerd, 156),
-    SLIME_ANVIL(AuroraPhysicsStories, 126),
-    SHATTERED_SWORD(AuroraMagicStories, 134),
-    REVERSE_FIREWORK(AuroraMagicStories, 121),
+    ENDERMAN_SKY_THEFT, SKY_FISHING, FROST_WALKER,
+    CLOUD_FOX(AuroraCloudFox, 240),
+    TOTEM_HEART, GHAST_PORTAL, STORM_HERD, SLIME_ANVIL, SHATTERED_SWORD, REVERSE_FIREWORK,
     FROG_RAIN(AuroraFrogRain, 160, loopsAtFullSize = true),
     VOID_CATHEDRAL(AuroraVoidCathedral, 240),
     SOLAR_CORSAIR(AuroraSolarCorsair, 240),
@@ -106,14 +99,14 @@ enum class AuroraShape(
     YOG_SOTHOTH(AuroraForbiddenStories, 240, loopsAtFullSize = true),
     NYARLATHOTEP(AuroraDreamlandStories, 240, loopsAtFullSize = true),
     SHUB_NIGGURATH(AuroraDreamlandStories, 260, loopsAtFullSize = true),
-    SAKURA_IDOL(AuroraSakuraIdol, 220),
+    SAKURA_IDOL,
     JU_FUFU(AuroraJuFufu, 200),
-    SAKURA_IDOL_2D(AuroraIllustratedIdols, 220, loopsAtFullSize = true),
+    SAKURA_IDOL_2D,
     JU_FUFU_2D(AuroraIllustratedIdols, 200, loopsAtFullSize = true),
     DEATH_STAR(AuroraImperialFleet, 240, loopsAtFullSize = true),
     IMPERIAL_STAR_DESTROYER(AuroraImperialFleet, 220, loopsAtFullSize = true);
 
-    internal val isIllustration: Boolean get() = this == SAKURA_IDOL_2D || this == JU_FUFU_2D
+    internal val isIllustration: Boolean get() = this == JU_FUFU_2D
     internal val isStory: Boolean get() = storyParts != null
     internal val isMiniature: Boolean get() = this == FEATHER_GLIDER || isStory
 
@@ -122,9 +115,27 @@ enum class AuroraShape(
     /** Recognized in older configuration files, with no active profile or command. */
     internal val isRetired: Boolean get() = when (this) {
         JELLYFISH, MANTA_RAY, ASTRAL_PENDULUM, TWIN_SAMARAS, SKY_PHONOGRAPH,
-        KRAKEN_DRAG, RLYEH_RISING, DAGON_TIDE, NIGHT_GAUNT, COLOUR_FROM_SPACE, SHOGGOTH_ESCAPE, SILVER_KEY -> true
+        ENDERMAN_SKY_THEFT, SKY_FISHING, FROST_WALKER, TOTEM_HEART, GHAST_PORTAL,
+        STORM_HERD, SLIME_ANVIL, SHATTERED_SWORD, REVERSE_FIREWORK,
+        KRAKEN_DRAG, RLYEH_RISING, DAGON_TIDE, NIGHT_GAUNT, COLOUR_FROM_SPACE, SHOGGOTH_ESCAPE, SILVER_KEY,
+        SAKURA_IDOL, SAKURA_IDOL_2D -> true
         else -> false
     }
+
+    internal val showcaseId: String get() = when (this) {
+        VOID_CATHEDRAL, SOLAR_CORSAIR, ORK_KROOZER, IMPERIAL_AQUILA, MECHANICUS_SIGIL -> "WH40_$name"
+        CTHULHU, DAGON, HASTUR, AZATHOTH, YOG_SOTHOTH, NYARLATHOTEP, SHUB_NIGGURATH -> "LOVECRAFT_$name"
+        DEATH_STAR, IMPERIAL_STAR_DESTROYER -> "STAR_WARS_$name"
+        JU_FUFU, JU_FUFU_2D -> "ANIME_$name"
+        else -> when {
+            isTrack -> name
+            isModel -> "DISPLAY_$name"
+            else -> "PARTICLE_$name"
+        }
+    }
+
+    internal fun matchesName(raw: String): Boolean =
+        name.equals(raw, ignoreCase = true) || (!isRetired && showcaseId.equals(raw, ignoreCase = true))
 
     companion object {
         internal val active: List<AuroraShape> = entries.filterNot { it.isRetired }
@@ -298,10 +309,11 @@ object AuroraConfig {
         val illustrations = source.section("showcase-illustrations")?.let { shapes ->
             buildMap {
                 for (key in shapes.keys) {
+                    if (AuroraShape.SAKURA_IDOL_2D.matchesName(key)) continue
                     val shape = AuroraShape.active.firstOrNull {
-                        (it.isIllustration || it == AuroraShape.JU_FUFU) && it.name.equals(key, ignoreCase = true)
-                    } ?: shapes.fail(key, "expected SAKURA_IDOL_2D, JU_FUFU_2D or JU_FUFU")
-                    shapes.check(key, shape !in this, "duplicate showcase shape ${shape.name}")
+                        (it.isIllustration || it == AuroraShape.JU_FUFU) && it.matchesName(key)
+                    } ?: shapes.fail(key, "expected ANIME_JU_FUFU_2D or ANIME_JU_FUFU")
+                    shapes.check(key, shape !in this, "duplicate showcase shape ${shape.showcaseId}")
                     val model = shapes.requiredSection(key)
                     put(shape, AuroraSkyModel(modelMaterial(model), model.int("custom-model-data", null, 1..Int.MAX_VALUE)))
                 }
@@ -343,8 +355,8 @@ object AuroraConfig {
     private fun profile(id: String, source: Fields, skyDefaults: AuroraSkyOptions): AuroraProfile? {
         source.check("", id.isNotBlank(), "profile ID must not be blank")
         val shapeName = source.string("shape", AuroraShape.POINT.name)
-        val shape = AuroraShape.entries.firstOrNull { it.name.equals(shapeName, ignoreCase = true) }
-            ?: source.fail("shape", "expected one of ${AuroraShape.active.joinToString { it.name }}")
+        val shape = AuroraShape.entries.firstOrNull { it.matchesName(shapeName) }
+            ?: source.fail("shape", "expected one of ${AuroraShape.active.joinToString { it.showcaseId }}")
         if (shape.isRetired) return null
         source.check("shape", !shape.isIllustration, "$shape is available only through the showcase command")
         val biomes = source.strings("biomes", listOf("*")).map { raw ->

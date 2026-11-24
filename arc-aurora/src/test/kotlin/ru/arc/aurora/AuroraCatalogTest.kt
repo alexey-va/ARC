@@ -44,7 +44,7 @@ class AuroraCatalogTest : FreeSpec({
             fixture.complete(fixture.paper.server.consoleSender, "show") shouldBe emptyList()
             plugin.showcase(admin) shouldBe null
             fixture.complete(admin, "show") shouldBe listOf("showcase")
-            fixture.complete(admin, "showcase", "st") shouldBe listOf("STAR", "STELLAR_PRISM", "STORM_HERD", "stop")
+            fixture.complete(admin, "showcase", "particle_st") shouldBe listOf("PARTICLE_STAR", "PARTICLE_STELLAR_PRISM")
 
             fixture.command(admin, "preview self test-gallery fan")
             admin.message() shouldBe "preview-on"
@@ -76,27 +76,45 @@ class AuroraCatalogTest : FreeSpec({
             val plugin = fixture.plugin
             val admin = fixture.admin
             val available = AuroraShape.active.filterNot { it.isIllustration }
-            val mapEffects = listOfNotNull(SAKURA_MAP_SHOWCASE.takeIf { plugin.mapScreenFactory != null })
             fixture.complete(admin, "SHOWCASE", "") shouldBe
-                (available.map { it.name } + mapEffects + "stop").sorted()
+                (available.map { it.showcaseId } + "stop").sorted()
             fixture.complete(admin, "showcase", "tRaCk_F") shouldBe listOf("TRACK_FLOCK", "TRACK_FLYBY")
+            fixture.complete(admin, "showcase", "display_cl") shouldBe listOf("DISPLAY_CLOUD_FOX")
+            fixture.complete(admin, "showcase", "lovecraft_") shouldBe listOf(
+                "LOVECRAFT_AZATHOTH", "LOVECRAFT_CTHULHU", "LOVECRAFT_DAGON", "LOVECRAFT_HASTUR",
+                "LOVECRAFT_NYARLATHOTEP", "LOVECRAFT_SHUB_NIGGURATH", "LOVECRAFT_YOG_SOTHOTH",
+            )
+            fixture.complete(admin, "showcase", "wh40_") shouldBe listOf(
+                "WH40_IMPERIAL_AQUILA", "WH40_MECHANICUS_SIGIL", "WH40_ORK_KROOZER",
+                "WH40_SOLAR_CORSAIR", "WH40_VOID_CATHEDRAL",
+            )
+            fixture.complete(admin, "showcase", "star_wars_") shouldBe listOf(
+                "STAR_WARS_DEATH_STAR", "STAR_WARS_IMPERIAL_STAR_DESTROYER",
+            )
             fixture.complete(admin, "showcase", "stop", "") shouldBe emptyList()
             fixture.complete(fixture.target, "showcase", "") shouldBe emptyList()
             fixture.complete(fixture.paper.server.consoleSender, "showcase", "") shouldBe emptyList()
 
             for (shape in available) {
-                fixture.command(admin, "showcase ${shape.name.lowercase(Locale.ROOT)}")
+                fixture.command(admin, "showcase ${shape.showcaseId.lowercase(Locale.ROOT)}")
                 val rain = shape == AuroraShape.FROG_RAIN
-                admin.message() shouldBe if (rain) "showcase-frog-rain-on" else "showcase-effect-on:${shape.name}"
+                admin.message() shouldBe if (rain) "showcase-frog-rain-on" else "showcase-effect-on:${shape.showcaseId}"
                 val showcase = checkNotNull(plugin.showcase(admin))
                 showcase.profiles.map { it.shape } shouldBe List(AuroraShowcase.copyCount(shape)) { shape }
                 showcase.expiresAt shouldBe 3_600L
             }
+            fixture.command(admin, "showcase cthulhu")
+            admin.message() shouldBe "showcase-effect-on:LOVECRAFT_CTHULHU"
+            plugin.showcase(admin)!!.profiles.single().shape shouldBe AuroraShape.CTHULHU
             plugin.showcase(fixture.target) shouldBe null
             val selected = plugin.showcase(admin)
             for (retired in listOf(
                 "jellyfish", "manta_ray", "astral_pendulum", "twin_samaras", "sky_phonograph",
                 "kraken_drag", "rlyeh_rising", "dagon_tide", "night_gaunt", "colour_from_space", "shoggoth_escape", "silver_key",
+                "sakura_idol", "sakura_idol_2d", "sakura_idol_map",
+                "enderman_sky_theft", "sky_fishing", "frost_walker", "totem_heart", "ghast_portal",
+                "storm_herd", "slime_anvil", "shattered_sword", "reverse_firework",
+                "anime_sakura_idol", "anime_sakura_idol_2d", "anime_sakura_idol_map", "display_storm_herd",
             )) {
                 fixture.complete(admin, "showcase", retired) shouldBe emptyList()
                 fixture.command(admin, "showcase $retired")
@@ -116,9 +134,8 @@ class AuroraCatalogTest : FreeSpec({
         withCatalog { fixture ->
             val admin = fixture.admin
             val plugin = fixture.plugin
-            plugin.mapScreenFactory = null
-            fixture.complete(admin, "showcase", "sakura") shouldBe listOf("SAKURA_IDOL")
-            fixture.command(admin, "showcase SAKURA_IDOL_2D")
+            fixture.complete(admin, "showcase", "anime_") shouldBe listOf("ANIME_JU_FUFU")
+            fixture.command(admin, "showcase ANIME_JU_FUFU_2D")
             admin.message() shouldBe "showcase-effect-unavailable"
             plugin.showcase(admin) shouldBe null
 
@@ -126,94 +143,23 @@ class AuroraCatalogTest : FreeSpec({
             YamlConfiguration.loadConfiguration(file).apply {
                 set("profiles", null)
                 set("event-presets", null)
-                set("showcase-illustrations.SAKURA_IDOL_2D.material", "PAPER")
-                set("showcase-illustrations.SAKURA_IDOL_2D.custom-model-data", 173)
+                set("showcase-illustrations.SAKURA_IDOL_2D", "old")
+                set("showcase-illustrations.ANIME_JU_FUFU_2D.material", "PAPER")
+                set("showcase-illustrations.ANIME_JU_FUFU_2D.custom-model-data", 173)
                 set("showcase-illustrations.JU_FUFU.material", "PAPER")
                 set("showcase-illustrations.JU_FUFU.custom-model-data", 175)
                 save(file)
             }
             fixture.command(fixture.paper.server.consoleSender, "reload")
             plugin.engine!!.settings.eventPresets shouldBe emptyMap()
-            fixture.complete(admin, "showcase", "sakura") shouldBe listOf("SAKURA_IDOL", "SAKURA_IDOL_2D")
-            fixture.complete(admin, "showcase", "ju_fufu") shouldBe listOf("JU_FUFU")
-            fixture.command(admin, "showcase sakura_idol_2d")
+            fixture.complete(admin, "showcase", "anime_") shouldBe listOf("ANIME_JU_FUFU", "ANIME_JU_FUFU_2D")
+            fixture.complete(admin, "showcase", "sakura") shouldBe emptyList()
+            fixture.command(admin, "showcase anime_ju_fufu_2d")
             val profile = checkNotNull(plugin.showcase(admin)).profiles.single()
-            profile.shape shouldBe AuroraShape.SAKURA_IDOL_2D
+            profile.shape shouldBe AuroraShape.JU_FUFU_2D
             profile.skyModel shouldBe AuroraSkyModel(Material.PAPER, 173)
-            fixture.command(admin, "showcase ju_fufu")
+            fixture.command(admin, "showcase anime_ju_fufu")
             checkNotNull(plugin.showcase(admin)).profiles.single().skyModel shouldBe AuroraSkyModel(Material.PAPER, 175)
-        }
-    }
-
-    "Sakura map is an admin showcase and a blocked placement preserves the current show" {
-        withCatalog { fixture ->
-            val plugin = fixture.plugin
-            val admin = fixture.admin
-            val guest = fixture.target
-            plugin.mapScreenFactory = null
-            fixture.complete(admin, "showcase", SAKURA_MAP_SHOWCASE) shouldBe emptyList()
-            fixture.command(admin, "showcase $SAKURA_MAP_SHOWCASE")
-            admin.message() shouldBe "showcase-effect-unavailable"
-
-            val screen = mockk<AuroraMapScreen>(relaxed = true)
-            every { screen.closeAsync() } returns CompletableFuture.completedFuture(null)
-            var placement: AuroraMapScreen? = null
-            val attempts = mutableListOf<UUID>()
-            plugin.mapScreenFactory = { owner -> attempts += owner.uniqueId; placement }
-            fixture.complete(admin, "showcase", "sakura_idol_m") shouldBe listOf(SAKURA_MAP_SHOWCASE)
-            fixture.complete(guest, "showcase", SAKURA_MAP_SHOWCASE) shouldBe emptyList()
-            fixture.command(guest, "showcase $SAKURA_MAP_SHOWCASE")
-            guest.message() shouldBe "no-permission"
-            attempts shouldBe emptyList()
-
-            fixture.command(admin, "showcase CIRCLE")
-            admin.message() shouldBe "showcase-effect-on:CIRCLE"
-            val original = checkNotNull(plugin.showcase(admin))
-            fixture.command(admin, "showcase sakura_idol_map")
-            admin.message() shouldBe "showcase-blocked"
-            plugin.showcase(admin) shouldBe original
-
-            placement = screen
-            fixture.command(admin, "showcase sakura_idol_map")
-            admin.message() shouldBe "showcase-effect-on:$SAKURA_MAP_SHOWCASE"
-            val map = checkNotNull(plugin.showcase(admin))
-            map.profiles shouldBe emptyList()
-            map.expiresAt shouldBe 3_600L
-            attempts shouldBe listOf(admin.uniqueId, admin.uniqueId)
-            fixture.command(admin, "showcase CIRCLE")
-            admin.message() shouldBe "showcase-effect-on:CIRCLE"
-            verify(exactly = 1) { screen.closeAsync() }
-        }
-    }
-
-    "reload waits for a stopped map screen and disable closes the new screen" {
-        withCatalog { fixture ->
-            val plugin = fixture.plugin
-            val drain = CompletableFuture<Void>()
-            val stopped = mockk<AuroraMapScreen>(relaxed = true)
-            val active = mockk<AuroraMapScreen>(relaxed = true)
-            every { stopped.closeAsync() } returns drain
-            every { active.closeAsync() } returns CompletableFuture.completedFuture(null)
-            var next = stopped
-            plugin.mapScreenFactory = { next }
-            fixture.command(fixture.admin, "showcase $SAKURA_MAP_SHOWCASE")
-            fixture.command(fixture.admin, "showcase stop")
-            verify(exactly = 1) { stopped.closeAsync() }
-            plugin.showcase(fixture.admin) shouldBe null
-
-            fixture.command(fixture.admin, "reload")
-            fixture.paper.performTicks(2)
-            plugin.engine shouldBe null
-            drain.complete(null)
-            fixture.paper.performTicks(2)
-            checkNotNull(plugin.engine)
-
-            next = active
-            fixture.command(fixture.admin, "showcase $SAKURA_MAP_SHOWCASE")
-            checkNotNull(plugin.showcase(fixture.admin))
-            fixture.paper.server.pluginManager.disablePlugin(plugin)
-            verify(exactly = 1) { active.closeAsync() }
-            verify(exactly = 1) { stopped.closeAsync() }
         }
     }
 
