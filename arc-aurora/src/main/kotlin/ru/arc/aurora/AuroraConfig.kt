@@ -92,6 +92,7 @@ enum class AuroraShape(
     IMPERIAL_AQUILA(AuroraImperialAquila, 200),
     MECHANICUS_SIGIL(AuroraMechanicusSigil, 220),
     KRAKEN_DRAG, RLYEH_RISING, DAGON_TIDE, NIGHT_GAUNT, COLOUR_FROM_SPACE, SHOGGOTH_ESCAPE, SILVER_KEY,
+    ENDLESS_TENTACLES(AuroraEndlessTentacles, 360, loopsAtFullSize = true),
     CTHULHU(AuroraAbyssalStories, 260, loopsAtFullSize = true),
     DAGON(AuroraAbyssalStories, 220, loopsAtFullSize = true),
     HASTUR(AuroraForbiddenStories, 260, loopsAtFullSize = true),
@@ -112,19 +113,19 @@ enum class AuroraShape(
 
     internal val isModel: Boolean get() = this == SKY_LANTERNS || isMiniature
 
-    /** Recognized in older configuration files, with no active profile or command. */
+    /** Inactive effects are recognized in older configuration files without enabling them. */
     internal val isRetired: Boolean get() = when (this) {
         JELLYFISH, MANTA_RAY, ASTRAL_PENDULUM, TWIN_SAMARAS, SKY_PHONOGRAPH,
         ENDERMAN_SKY_THEFT, SKY_FISHING, FROST_WALKER, TOTEM_HEART, GHAST_PORTAL,
         STORM_HERD, SLIME_ANVIL, SHATTERED_SWORD, REVERSE_FIREWORK,
         KRAKEN_DRAG, RLYEH_RISING, DAGON_TIDE, NIGHT_GAUNT, COLOUR_FROM_SPACE, SHOGGOTH_ESCAPE, SILVER_KEY,
-        SAKURA_IDOL, SAKURA_IDOL_2D -> true
+        SAKURA_IDOL, SAKURA_IDOL_2D, JU_FUFU, JU_FUFU_2D -> true
         else -> false
     }
 
     internal val showcaseId: String get() = when (this) {
         VOID_CATHEDRAL, SOLAR_CORSAIR, ORK_KROOZER, IMPERIAL_AQUILA, MECHANICUS_SIGIL -> "WH40_$name"
-        CTHULHU, DAGON, HASTUR, AZATHOTH, YOG_SOTHOTH, NYARLATHOTEP, SHUB_NIGGURATH -> "LOVECRAFT_$name"
+        ENDLESS_TENTACLES, CTHULHU, DAGON, HASTUR, AZATHOTH, YOG_SOTHOTH, NYARLATHOTEP, SHUB_NIGGURATH -> "LOVECRAFT_$name"
         DEATH_STAR, IMPERIAL_STAR_DESTROYER -> "STAR_WARS_$name"
         JU_FUFU, JU_FUFU_2D -> "ANIME_$name"
         else -> when {
@@ -135,7 +136,7 @@ enum class AuroraShape(
     }
 
     internal fun matchesName(raw: String): Boolean =
-        name.equals(raw, ignoreCase = true) || (!isRetired && showcaseId.equals(raw, ignoreCase = true))
+        name.equals(raw, ignoreCase = true) || showcaseId.equals(raw, ignoreCase = true)
 
     companion object {
         internal val active: List<AuroraShape> = entries.filterNot { it.isRetired }
@@ -309,10 +310,10 @@ object AuroraConfig {
         val illustrations = source.section("showcase-illustrations")?.let { shapes ->
             buildMap {
                 for (key in shapes.keys) {
-                    if (AuroraShape.SAKURA_IDOL_2D.matchesName(key)) continue
-                    val shape = AuroraShape.active.firstOrNull {
-                        (it.isIllustration || it == AuroraShape.JU_FUFU) && it.matchesName(key)
+                    val shape = AuroraShape.entries.firstOrNull {
+                        (it.isIllustration || it == AuroraShape.JU_FUFU || it == AuroraShape.SAKURA_IDOL_2D) && it.matchesName(key)
                     } ?: shapes.fail(key, "expected ANIME_JU_FUFU_2D or ANIME_JU_FUFU")
+                    if (shape.isRetired) continue
                     shapes.check(key, shape !in this, "duplicate showcase shape ${shape.showcaseId}")
                     val model = shapes.requiredSection(key)
                     put(shape, AuroraSkyModel(modelMaterial(model), model.int("custom-model-data", null, 1..Int.MAX_VALUE)))
@@ -358,7 +359,8 @@ object AuroraConfig {
         val shape = AuroraShape.entries.firstOrNull { it.matchesName(shapeName) }
             ?: source.fail("shape", "expected one of ${AuroraShape.active.joinToString { it.showcaseId }}")
         if (shape.isRetired) return null
-        source.check("shape", !shape.isIllustration, "$shape is available only through the showcase command")
+        source.check("shape", !shape.isIllustration && shape != AuroraShape.ENDLESS_TENTACLES,
+            "${shape.showcaseId} is available only through the showcase command")
         val biomes = source.strings("biomes", listOf("*")).map { raw ->
             normalizeBiomeKey(raw).also {
                 source.check("biomes", raw == "*" || biomeGlob.matches(it), "invalid biome glob '$raw'; only '*' is a wildcard")

@@ -73,10 +73,10 @@ class AuroraSkyMiniaturesTest : FreeSpec({
         }
     }
 
-    "the deities and Imperial fleet hold their poses across the loop boundary" {
+    "looping figures hold their poses across the loop boundary" {
         for (shape in listOf(AuroraShape.CTHULHU, AuroraShape.DAGON, AuroraShape.HASTUR, AuroraShape.AZATHOTH,
             AuroraShape.YOG_SOTHOTH, AuroraShape.NYARLATHOTEP, AuroraShape.SHUB_NIGGURATH,
-            AuroraShape.DEATH_STAR, AuroraShape.IMPERIAL_STAR_DESTROYER)) {
+            AuroraShape.DEATH_STAR, AuroraShape.IMPERIAL_STAR_DESTROYER, AuroraShape.ENDLESS_TENTACLES)) {
             val start = storyPose(shape, 0.0)
             val end = storyPose(shape, 1.0)
             withClue(shape) {
@@ -169,6 +169,7 @@ internal val storyShapes = listOf(
     AuroraShape.YOG_SOTHOTH,
     AuroraShape.NYARLATHOTEP,
     AuroraShape.SHUB_NIGGURATH,
+    AuroraShape.ENDLESS_TENTACLES,
     AuroraShape.JU_FUFU,
     AuroraShape.JU_FUFU_2D,
     AuroraShape.DEATH_STAR,

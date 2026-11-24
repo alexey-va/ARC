@@ -119,7 +119,7 @@ class AuroraResourcesTest : FreeSpec({
             bundled.eventPresets.getValue("treasure-hunt") +
             bundled.eventPresets[bundled.nightSky.preset].orEmpty()
 
-        (storyShapes + AuroraShape.FROG_RAIN).filterNot { it.isIllustration }.forEach { shape ->
+        (storyShapes + AuroraShape.FROG_RAIN).filterNot { it.isRetired || it.isIllustration }.forEach { shape ->
             withClue(shape) {
                 (shape in AuroraShape.active) shouldBe true
                 shape.isMiniature shouldBe true

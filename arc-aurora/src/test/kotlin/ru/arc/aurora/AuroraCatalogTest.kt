@@ -81,8 +81,8 @@ class AuroraCatalogTest : FreeSpec({
             fixture.complete(admin, "showcase", "tRaCk_F") shouldBe listOf("TRACK_FLOCK", "TRACK_FLYBY")
             fixture.complete(admin, "showcase", "display_cl") shouldBe listOf("DISPLAY_CLOUD_FOX")
             fixture.complete(admin, "showcase", "lovecraft_") shouldBe listOf(
-                "LOVECRAFT_AZATHOTH", "LOVECRAFT_CTHULHU", "LOVECRAFT_DAGON", "LOVECRAFT_HASTUR",
-                "LOVECRAFT_NYARLATHOTEP", "LOVECRAFT_SHUB_NIGGURATH", "LOVECRAFT_YOG_SOTHOTH",
+                "LOVECRAFT_AZATHOTH", "LOVECRAFT_CTHULHU", "LOVECRAFT_DAGON", "LOVECRAFT_ENDLESS_TENTACLES",
+                "LOVECRAFT_HASTUR", "LOVECRAFT_NYARLATHOTEP", "LOVECRAFT_SHUB_NIGGURATH", "LOVECRAFT_YOG_SOTHOTH",
             )
             fixture.complete(admin, "showcase", "wh40_") shouldBe listOf(
                 "WH40_IMPERIAL_AQUILA", "WH40_MECHANICUS_SIGIL", "WH40_ORK_KROOZER",
@@ -130,36 +130,29 @@ class AuroraCatalogTest : FreeSpec({
         }
     }
 
-    "only configured illustration showcases appear and launch with no runtime presets" {
+    "both Ju Fufu variants remain hidden even with old showcase models on reload" {
         withCatalog { fixture ->
             val admin = fixture.admin
             val plugin = fixture.plugin
-            fixture.complete(admin, "showcase", "anime_") shouldBe listOf("ANIME_JU_FUFU")
-            fixture.command(admin, "showcase ANIME_JU_FUFU_2D")
-            admin.message() shouldBe "showcase-effect-unavailable"
-            plugin.showcase(admin) shouldBe null
-
             val file = plugin.dataFolder.resolve("config.yml")
             YamlConfiguration.loadConfiguration(file).apply {
-                set("profiles", null)
-                set("event-presets", null)
-                set("showcase-illustrations.SAKURA_IDOL_2D", "old")
-                set("showcase-illustrations.ANIME_JU_FUFU_2D.material", "PAPER")
-                set("showcase-illustrations.ANIME_JU_FUFU_2D.custom-model-data", 173)
                 set("showcase-illustrations.JU_FUFU.material", "PAPER")
                 set("showcase-illustrations.JU_FUFU.custom-model-data", 175)
+                set("showcase-illustrations.ANIME_JU_FUFU_2D.material", "PAPER")
+                set("showcase-illustrations.ANIME_JU_FUFU_2D.custom-model-data", 173)
                 save(file)
             }
             fixture.command(fixture.paper.server.consoleSender, "reload")
-            plugin.engine!!.settings.eventPresets shouldBe emptyMap()
-            fixture.complete(admin, "showcase", "anime_") shouldBe listOf("ANIME_JU_FUFU", "ANIME_JU_FUFU_2D")
-            fixture.complete(admin, "showcase", "sakura") shouldBe emptyList()
-            fixture.command(admin, "showcase anime_ju_fufu_2d")
-            val profile = checkNotNull(plugin.showcase(admin)).profiles.single()
-            profile.shape shouldBe AuroraShape.JU_FUFU_2D
-            profile.skyModel shouldBe AuroraSkyModel(Material.PAPER, 173)
-            fixture.command(admin, "showcase anime_ju_fufu")
-            checkNotNull(plugin.showcase(admin)).profiles.single().skyModel shouldBe AuroraSkyModel(Material.PAPER, 175)
+            checkNotNull(plugin.engine).settings.showcaseIllustrations shouldBe emptyMap()
+            fixture.complete(admin, "showcase", "anime_") shouldBe emptyList()
+            fixture.command(admin, "showcase LOVECRAFT_ENDLESS_TENTACLES")
+            admin.message().contains("LOVECRAFT_ENDLESS_TENTACLES") shouldBe true
+            val active = checkNotNull(plugin.showcase(admin))
+            for (id in listOf("ANIME_JU_FUFU", "ANIME_JU_FUFU_2D", "JU_FUFU", "JU_FUFU_2D")) {
+                fixture.command(admin, "showcase $id")
+                admin.message().contains("Unknown effect.") shouldBe true
+                plugin.showcase(admin) shouldBe active
+            }
         }
     }
 

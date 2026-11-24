@@ -6,6 +6,7 @@ import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import org.bukkit.HeightMap
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.Particle
@@ -263,7 +264,7 @@ class AuroraEngineTest : FreeSpec({
     "an illustration follows the existing shared show and stamps its model only when spawning the figure" {
         val shape = AuroraShape.JU_FUFU_2D
         val model = AuroraSkyModel(Material.BOOK, 173)
-        val settings = skySettings(shape = AuroraShape.FEATHER_GLIDER, points = 4)
+        val settings = skySettings(shape = shape, points = AuroraSkyMiniatures.partCount(shape))
             .copy(nativeBudgetMicros = Int.MAX_VALUE, showcaseIllustrations = mapOf(shape to model))
         withEngine(settings, highSky = true) { fixture ->
             val player = fixture.player
@@ -316,7 +317,7 @@ class AuroraEngineTest : FreeSpec({
         }
         fallback.isNotEmpty() shouldBe true
         for (model in listOf(null, AuroraSkyModel(Material.PAPER, 175))) {
-            val settings = skySettings(shape = AuroraShape.FEATHER_GLIDER, points = 4).copy(
+            val settings = skySettings(shape = shape, points = AuroraSkyMiniatures.partCount(shape)).copy(
                 nativeBudgetMicros = Int.MAX_VALUE,
                 showcaseIllustrations = model?.let { mapOf(shape to it) }.orEmpty(),
             )
@@ -358,6 +359,72 @@ class AuroraEngineTest : FreeSpec({
             fixture.engine.startShowcase(fixture.player, AuroraShape.YOG_SOTHOTH) shouldBe true
             fixture.advance(100)
             visibleScenes.size shouldBe 1
+        }
+    }
+
+    "the sky-wide tentacles reach overhead from seven stable shared sectors" {
+        val bundled = AuroraConfig.parse(YamlConfiguration().apply {
+            loadFromString(checkNotNull(javaClass.classLoader.getResourceAsStream("config.yml")).bufferedReader().use { it.readText() })
+        })
+        val shape = AuroraShape.ENDLESS_TENTACLES
+        withEngine(bundled.copy(nativeBudgetMicros = 10000), highSky = true) { fixture ->
+            fixture.loadChunks(6)
+            fixture.admin(true)
+            val owner = fixture.player
+            val eye = owner.eyeLocation
+            val world = owner.world as EngineWorld
+            // The flat test world can answer a heightmap query without MockBukkit walking every block.
+            world.flatHeightMapY = world.getHighestBlockYAt(eye.blockX, eye.blockZ, HeightMap.WORLD_SURFACE)
+            val poses = mutableMapOf<Any, Location>()
+            var groupsSent = 0
+            var overhead = false
+            every { fixture.lanterns.updateStory(any(), any(), any(), any(), any(), any(), any(), any()) } answers {
+                val key = arg<Any>(0)
+                val anchor = arg<Location>(3)
+                val parts = arg<List<AuroraLanternDisplays.Part>>(4)
+                poses.putIfAbsent(key, anchor)?.let { it shouldBe anchor }
+                arg<AuroraProfile>(2).shape shouldBe shape
+                arg<Int>(5) shouldBe 0
+                arg<Int>(6) shouldBe AuroraSkyMiniatures.partCount(shape)
+                (parts.size <= 40) shouldBe true
+                groupsSent++
+                val visible = parts.filter { it.transform.scale.lengthSquared() > 0f }
+                overhead = overhead || visible.any { part ->
+                    val offset = part.transform.translation
+                    kotlin.math.hypot(anchor.x + offset.x - eye.x, anchor.z + offset.z - eye.z) < 15.0 &&
+                        anchor.y + offset.y - eye.y > 20.0
+                }
+                visible.isNotEmpty()
+            }
+            fun tick(count: Int) = repeat(count) {
+                groupsSent = 0
+                fixture.advance(1)
+                (groupsSent <= AuroraShowcase.STORY_COPIES_PER_VISIT) shouldBe true
+            }
+
+            fixture.engine.startShowcase(owner, shape) shouldBe true
+            tick(200)
+            poses.size shouldBe 7
+            overhead shouldBe true
+            val angles = poses.values.map { anchor ->
+                val east = anchor.x - eye.x
+                val south = anchor.z - eye.z
+                (kotlin.math.hypot(east, south) in 41.9..54.1) shouldBe true
+                kotlin.math.atan2(east, south)
+            }.sorted()
+            (angles + (angles.first() + 2.0 * Math.PI)).zipWithNext().forEach { (a, b) ->
+                (b - a < Math.PI / 3) shouldBe true
+            }
+
+            val originalScenes = poses.keys.toSet()
+            val lateViewer = fixture.joinAdditional("TentacleWatcher", owner.location.clone().add(15.0, 0.0, 8.0))
+            owner.teleport(owner.location.clone().add(8.0, 0.0, 3.0).apply { yaw += 105f }) shouldBe true
+            tick(48)
+            poses.keys shouldBe originalScenes
+            fixture.showcaseAudiences[owner.uniqueId] shouldBe setOf(owner.uniqueId, lateViewer.uniqueId)
+            fixture.engine.stopShowcase(owner.uniqueId)
+            tick(8)
+            groupsSent shouldBe 0
         }
     }
 
@@ -2404,6 +2471,11 @@ private class EngineFixture(val paper: MockBukkitTestRuntime, val settings: Auro
 private class EngineWorld(highSky: Boolean) : org.mockbukkit.mockbukkit.world.WorldMock(
     Material.DIRT, 0, if (highSky) 192 else 128, if (highSky) 64 else 5,
 ) {
+    var flatHeightMapY: Int? = null
+
+    override fun getHighestBlockYAt(x: Int, z: Int, heightMap: HeightMap): Int =
+        flatHeightMapY ?: super.getHighestBlockYAt(x, z, heightMap)
+
     override fun getUID(): java.util.UUID = java.util.UUID.fromString("00000000-0000-0000-0000-000000000001")
 }
 

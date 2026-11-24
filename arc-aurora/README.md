@@ -101,7 +101,7 @@ The `INFERNAL_PENTAGRAM` in the treasure-hunt sky and its showcase share one dis
 
 Stand outdoors, face open sky and run `/arcaurora showcase DISPLAY_CLOUD_FOX` with `arcaurora.admin`. The selected effect plays for three minutes. Large figures appear once at the center. Small effects usually play in nine copies at different phases. Everyone within 64 blocks of the starting point in the same world can watch, including spectators who arrive during the show. Run another effect to switch, or use `/arcaurora showcase stop` to end the show.
 
-Type a prefix and press Tab to browse the effects in that family. Existing command names and config shape values still work for the effects listed below. `ANIME_JU_FUFU_2D` requires an entry under `showcase-illustrations`.
+Type a prefix and press Tab to browse the effects in that family. Existing command names and config shape values still work for the effects listed below.
 
 | Prefix | Effect names after the prefix |
 | --- | --- |
@@ -118,6 +118,7 @@ Type a prefix and press Tab to browse the effects in that family. Existing comma
 | `LOVECRAFT_AZATHOTH` | A jagged maw opens in a heaving mass of blind eyes and suckered tentacles. |
 | `LOVECRAFT_CTHULHU` | Cthulhu spreads his bat wings while the tentacles of his face uncoil. |
 | `LOVECRAFT_DAGON` | A deep-sea giant opens its toothed jaws and reaches out with webbed claws. |
+| `LOVECRAFT_ENDLESS_TENTACLES` | Seven groups of tentacles reach inward from the horizon, coil overhead and recede in overlapping waves. Look around and above. |
 | `LOVECRAFT_HASTUR` | The King in Yellow opens his tattered mantle to reveal watching eyes and black tendrils. |
 | `LOVECRAFT_NYARLATHOTEP` | A pharaoh reveals a crimson head tendril and a rib cage full of watching eyes. |
 | `LOVECRAFT_SHUB_NIGGURATH` | Spiral horns crown a knotted mass of eyes, hooves and writhing tentacles. |
@@ -129,11 +130,6 @@ Type a prefix and press Tab to browse the effects in that family. Existing comma
 | `WH40_VOID_CATHEDRAL` | A gothic voidship banks past the viewer, exposing its cathedral spires and glowing engines. |
 | `STAR_WARS_DEATH_STAR` | Green tributaries converge above the dish, then a long superlaser fires. |
 | `STAR_WARS_IMPERIAL_STAR_DESTROYER` | An Imperial Star Destroyer banks past, revealing its wedge-shaped hull and engines. |
-| `ANIME_JU_FUFU` | Ju Fufu poses with her mechanical popcorn pot, Huwei. |
-| `ANIME_JU_FUFU_2D` | A camera-facing illustration of Ju Fufu catches popcorn from Huwei. |
-
-The 2D Fufu scene uses the item `material` and `custom-model-data` configured in `showcase-illustrations.ANIME_JU_FUFU_2D`. The optional `ANIME_JU_FUFU` entry adds a textured face to the 3D model.
-
 The bare `/arcaurora showcase` opens a 60-second overview. The stitch and curtain appear above the hare tracks, paper flotilla and tumbleweed.
 
 In ordinary ambience, hare tracks cross a snowy clearing on clear mornings. The paper flotilla sails on river water in rain and can pass under a bridge with hull clearance. One hull catches a lily and turns stern-first. A tumbleweed rolls over desert sand in clear daylight, catches on a cactus and quivers. The branch, lily, sand ridge and cactus are shapes made of particles. The three scenes use 16-block cells. The hare tolerates up to two snow layers of height difference. The tumbleweed rolls across level sand, and the flotilla checks the waterline up to ten blocks under the deck at its anchor.
@@ -636,7 +632,7 @@ Run from the repository root with JDK 25:
 ```
 
 The expected local runtime artifact is
-`arc-aurora/build/libs/ArcAurora-0.1.28.jar`. The public Maven API artifact
+`arc-aurora/build/libs/ArcAurora-0.1.29.jar`. The public Maven API artifact
 `ru.ruscrafting.arc:arc-aurora-api:0.1.0` was verified on 2026-10-29 in the
 [RusCrafting repository](https://repo.rus-crafting.ru/grocermc/ru/ruscrafting/arc/arc-aurora-api/0.1.0/arc-aurora-api-0.1.0.pom).
 That API publication does not establish a runtime-plugin build, delivery,

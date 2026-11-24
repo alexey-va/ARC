@@ -37,29 +37,31 @@ class AuroraConfigTest : FreeSpec({
         profile.radius shouldBe 12.0
     }
 
-    "showcase models require a material and a positive integer" {
-        val root = "showcase-illustrations.anime_ju_fufu_2d"
+    "old model keys for temporarily hidden showcases do not enable their profiles" {
         val source = yaml("""
             showcase-illustrations:
               SAKURA_IDOL_2D: {material: PAPER, custom-model-data: 173}
               anime_ju_fufu_2d: {material: 'minecraft:paper', custom-model-data: 174}
               JU_FUFU: {material: PAPER, custom-model-data: 175}
+            profiles:
+              fufu:
+                shape: ANIME_JU_FUFU
+                sky-scene: true
+              fufu-flat:
+                shape: JU_FUFU_2D
+                sky-scene: true
         """)
-        AuroraConfig.parse(source).showcaseIllustrations shouldBe mapOf(
-            AuroraShape.JU_FUFU_2D to AuroraSkyModel(Material.PAPER, 174),
-            AuroraShape.JU_FUFU to AuroraSkyModel(Material.PAPER, 175),
-        )
-        for (invalid in listOf(null, 0, -1, 1.5, "173")) {
-            source.set("$root.custom-model-data", invalid)
-            shouldThrow<AuroraConfigException> { AuroraConfig.parse(source) }.path shouldBe "$root.custom-model-data"
-        }
-        source.set("$root.custom-model-data", 174)
-        for (invalid in listOf(null, "AIR", "unknown")) {
-            source.set("$root.material", invalid)
-            shouldThrow<AuroraConfigException> { AuroraConfig.parse(source) }.path shouldBe "$root.material"
-        }
+        val settings = AuroraConfig.parse(source)
+        settings.showcaseIllustrations shouldBe emptyMap()
+        settings.profiles shouldBe emptyList()
+        source.set("showcase-illustrations.misspelling.material", "PAPER")
+        shouldThrow<AuroraConfigException> { AuroraConfig.parse(source) }
+            .path shouldBe "showcase-illustrations.misspelling"
+    }
+
+    "the sky-wide tentacles are available through the showcase only" {
         shouldThrow<AuroraConfigException> {
-            AuroraConfig.parse(profileConfig("shape" to "ANIME_JU_FUFU_2D", "sky-scene" to true))
+            AuroraConfig.parse(profileConfig("shape" to "LOVECRAFT_ENDLESS_TENTACLES", "sky-scene" to true))
         }.path shouldBe "profiles.ambient.shape"
     }
 
@@ -463,7 +465,7 @@ class AuroraConfigTest : FreeSpec({
     }
 
     "miniatures require a sky scene and always keep all authored parts" {
-        for (shape in AuroraShape.active.filter { it.isMiniature && !it.isIllustration }) {
+        for (shape in AuroraShape.active.filter { it.isMiniature && !it.isIllustration && it != AuroraShape.ENDLESS_TENTACLES }) {
             val config = profileConfig("shape" to shape.name, "sky-scene" to true)
             val parts = AuroraSkyMiniatures.partCount(shape)
             AuroraConfig.parse(config).profiles.single().points shouldBe parts

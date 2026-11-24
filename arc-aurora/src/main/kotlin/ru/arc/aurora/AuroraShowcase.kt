@@ -50,6 +50,15 @@ internal class AuroraShowcase(
             return pose(AuroraOffset(radius * sin(direction), height, radius * cos(direction)), size, 0.0,
                 phase * profiles[index].sceneDurationTicks / RAIN_GROUPS)
         }
+        if (profile.shape == AuroraShape.ENDLESS_TENTACLES && profiles.size == TENTACLE_GROUPS) {
+            val direction = 0.21 + index * 2.0 * PI / TENTACLE_GROUPS
+            val radius = 42.0 + 3 * ((index * 3) % 5)
+            val height = 25.0 + 2.8 * ((index * 2) % 5)
+            val size = 29.0 + 1.5 * ((index * 3) % 4)
+            val phase = (index * 3 + 1) % TENTACLE_GROUPS
+            return pose(AuroraOffset(radius * sin(direction), height, radius * cos(direction)), size, 0.0,
+                phase * profile.sceneDurationTicks / TENTACLE_GROUPS)
+        }
         if (profiles.size == COPY_COUNT) {
             val size = when (profile.shape) {
                 AuroraShape.CUBE -> 2.1
@@ -74,8 +83,8 @@ internal class AuroraShowcase(
         return pose(AuroraOffset(slot.right, slot.height, 32.0), slot.size, slot.tilt, 0)
     }
 
-    fun facingAtStart(pose: Pose): Quaternionf = storyFacing(
-        eye.x - pose.anchor.x, eye.y - pose.anchor.y, eye.z - pose.anchor.z)
+    fun facingAtStart(pose: Pose, upright: Boolean = false): Quaternionf = storyFacing(
+        eye.x - pose.anchor.x, if (upright) 0.0 else eye.y - pose.anchor.y, eye.z - pose.anchor.z)
 
     private fun pose(position: AuroraOffset, size: Double, tilt: Double, phaseOffsetTicks: Int): Pose {
         return Pose(
@@ -104,9 +113,11 @@ internal class AuroraShowcase(
         const val SELECTED_DURATION_TICKS = 3_600L
         const val COPY_COUNT = 9
         private const val RAIN_GROUPS = 14
+        private const val TENTACLE_GROUPS = 7
         private const val CENTER_SCALE = 1.06
         fun copyCount(shape: AuroraShape): Int = when (shape) {
             AuroraShape.FROG_RAIN -> RAIN_GROUPS
+            AuroraShape.ENDLESS_TENTACLES -> TENTACLE_GROUPS
             AuroraShape.INFERNAL_PENTAGRAM, AuroraShape.VOID_CATHEDRAL, AuroraShape.SOLAR_CORSAIR,
             AuroraShape.ORK_KROOZER, AuroraShape.IMPERIAL_AQUILA, AuroraShape.MECHANICUS_SIGIL,
             AuroraShape.CTHULHU, AuroraShape.DAGON, AuroraShape.HASTUR, AuroraShape.AZATHOTH,

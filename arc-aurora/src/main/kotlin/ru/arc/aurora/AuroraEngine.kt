@@ -835,10 +835,15 @@ internal class AuroraEngine(
             val motion = if (animation == null && profile.skyRefreshTicks > 0)
                 AuroraSkyShapes.heldMotion(pose.size, profile.sceneDurationTicks, profile.motionPeriodTicks, profile.skyOptions)
                 else listOf(AuroraOffset(0.0, 0.0, 0.0))
+            val fixedFacing = when (profile.shape) {
+                AuroraShape.DEATH_STAR -> showcase.facingAtStart(pose)
+                AuroraShape.ENDLESS_TENTACLES -> showcase.facingAtStart(pose, upright = true).rotateY((index % 3 - 1) * 0.20f)
+                else -> null
+            }
             SkyScene(profile, input.world, input.revision, input.age,
                 AuroraSkyCell(index, 0), 0L, pose.anchor.x, pose.anchor.y, pose.anchor.z,
-                showcase.normalX, showcase.normalZ, path, motion, animation, pose.phaseOffsetTicks, storyBounds(profile),
-                fixedFacing = if (profile.shape == AuroraShape.DEATH_STAR) showcase.facingAtStart(pose) else null)
+                showcase.normalX, showcase.normalZ, path, motion, animation, pose.phaseOffsetTicks,
+                storyBounds = if (fixedFacing == null) storyBounds(profile) else null, fixedFacing = fixedFacing)
         }
         val first = scenes.first().profile
         val budget = if (first.shape.isStory) first.points * AuroraShowcase.STORY_COPIES_PER_VISIT else settings.skyPacketsPerViewer
@@ -899,7 +904,9 @@ internal class AuroraEngine(
     private fun admitShowcase(sky: SkyInput, panel: ShowcaseAdmission, player: Player, deadline: Long): Boolean {
         if (panel.nextSlot == sky.scenes.size) return true
         val world = player.world
-        repeat(24) {
+        // Wider scenes can use more of the same bounded main-thread deadline.
+        val columnBudget = if (sky.scenes.first().profile.shape == AuroraShape.ENDLESS_TENTACLES) 256 else 24
+        repeat(columnBudget) {
             val scene = sky.scenes.getOrNull(panel.nextSlot) ?: return@repeat
             val clearance = panel.clearance(panel.nextSlot)
             if (System.nanoTime() >= deadline) return false
