@@ -1,0 +1,13 @@
+name: ArcDrawers
+version: '${version}'
+main: ru.arc.drawers.ArcDrawersPlugin
+api-version: '1.21.11'
+depend: [ArcCore, packetevents]
+commands:
+  arcdrawers:
+    description: Справка по ящикам
+    usage: /arcdrawers [help]
+permissions:
+  arcdrawers.admin:
+    description: Выдавать ящики командой /arcdrawers give
+    default: op
