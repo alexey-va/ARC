@@ -25,7 +25,7 @@ Paper/Purpur, ArcCore и PacketEvents. Рецепты открывает `/arcdr
 
 ```sh
 ./gradlew -p arc-drawers test shadowJar
-python3 ../arc-core/scripts/verify_consumer_architecture.py arc-drawers --jar build/libs/ArcDrawers-0.1.0.jar
+python3 ../arc-core/scripts/verify_consumer_architecture.py arc-drawers --jar build/libs/ArcDrawers-0.1.1.jar
 ```
 
 Расположение, настройки, количества и образцы сохраняются в Paper PDC чанка.

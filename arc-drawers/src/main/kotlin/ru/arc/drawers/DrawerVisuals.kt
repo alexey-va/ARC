@@ -78,16 +78,20 @@ internal class DrawerVisuals(
 
         fun update(drawer: Drawer, slot: Int?) {
             val old = previous
-            if (old == null && layout != DrawerLayout.ONE) {
-                blockPart("rail", Material.STRIPPED_DARK_OAK_LOG, -0.47f, 0.486f, 0.002f, 0.94f, 0.028f, 0.012f)
+            if (old == null) {
+                // A single matte inset covers the lid and its iron handle. The barrel supplies the wooden rim.
+                blockPart("plate", Material.CYAN_TERRACOTTA, -0.475f, 0.025f, -0.002f, 0.95f, 0.95f, 0.023f)
+                if (layout != DrawerLayout.ONE) {
+                    blockPart("rail", Material.GRAY_CONCRETE, -0.475f, 0.491f, 0.020f, 0.95f, 0.018f, 0.007f)
+                }
                 if (layout == DrawerLayout.FOUR) {
-                    blockPart("stile", Material.STRIPPED_DARK_OAK_LOG, -0.014f, 0.03f, 0.002f, 0.028f, 0.94f, 0.016f)
+                    blockPart("stile", Material.GRAY_CONCRETE, -0.009f, 0.025f, 0.020f, 0.018f, 0.95f, 0.009f)
                 }
             }
             var changed = old == null || old.locked != drawer.locked
             if (old?.locked != drawer.locked) {
                 if (drawer.locked) {
-                    blockPart("clasp", Material.COPPER_BLOCK, -0.043f, 0.905f, 0.005f, 0.086f, 0.073f, 0.021f)
+                    blockPart("clasp", Material.COPPER_BLOCK, -0.043f, 0.905f, 0.020f, 0.086f, 0.065f, 0.020f)
                 } else {
                     parts.remove("clasp")
                 }
@@ -105,10 +109,10 @@ internal class DrawerVisuals(
                     if (item == null) {
                         parts.remove("item-$i")
                     } else {
-                        val size = if (large) 0.55f else 0.31f
-                        val offset = if (!drawer.showCounts) 0f else if (large) 0.075f else 0.045f
+                        val size = if (large) 0.49f else 0.30f
+                        val offset = if (!drawer.showCounts) 0f else if (large) 0.09f else 0.062f
                         // Undo the ItemDisplay renderer's native half-turn to show the authored GUI face.
-                        val icon = pose(x, y + offset, 0.033f, size, size, 0.028f, Quaternionf(0f, 1f, 0f, 0f))
+                        val icon = pose(x, y + offset, 0.050f, size, size, 0.028f, Quaternionf(0f, 1f, 0f, 0f))
                         parts["item-$i"] = ScenePart.Item("item-$i", icon, style, item, ItemDisplay.ItemDisplayTransform.GUI)
                     }
                     changed = true
@@ -118,11 +122,11 @@ internal class DrawerVisuals(
                     if (captionText == null) {
                         parts.remove("label-$i")
                     } else {
-                        val size = if (large) 0.55f else 0.4f
+                        val size = if (large) 0.50f else 0.37f
                         // TextDisplay's origin is the lower edge of its line.
-                        val offset = if (item == null) -0.05f else if (large) -0.27f else -0.175f
-                        val caption = pose(x, y + offset, 0.024f, size, size, size)
-                        parts["label-$i"] = ScenePart.Text("label-$i", caption, style, Component.text(captionText, INK), PLAQUE)
+                        val offset = if (item == null) -0.05f else if (large) -0.27f else -0.18f
+                        val caption = pose(x, y + offset, 0.034f, size, size, size)
+                        parts["label-$i"] = ScenePart.Text("label-$i", caption, style, Component.text(captionText, INK), LETTERING)
                     }
                     changed = true
                 }
@@ -151,7 +155,7 @@ internal class DrawerVisuals(
     private companion object {
         val AUDIENCE = SceneAudience.Public()
         val INK = TextColor.color(0xf5ead8)
-        val PLAQUE = SceneTextStyle(background = Color.fromARGB(210, 49, 36, 25))
+        val LETTERING = SceneTextStyle(background = Color.fromARGB(0, 0, 0, 0), shadowed = true)
 
         fun faceBrightness(block: Block, front: BlockFace): Display.Brightness {
             val x = block.x + front.modX
