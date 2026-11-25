@@ -10,6 +10,7 @@ import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.event.world.ChunkLoadEvent
 import org.bukkit.event.world.ChunkUnloadEvent
+import org.bukkit.event.world.WorldUnloadEvent
 import org.bukkit.plugin.java.JavaPlugin
 import ru.arc.config.EmptyConfig
 import ru.arc.core.BudgetedTaskQueue
@@ -48,12 +49,15 @@ class ArcDrawersPlugin : JavaPlugin() {
         val visuals = DrawerVisuals(displays) { logger.log(Level.WARNING, "Drawer facade update failed", it) }
         val store = DrawerStore(this)
         lifecycle.own(AutoCloseable(store::clear))
+        val controllers = lifecycle.own(DrawerControllers(store, visuals))
+        store.onDrawerChanged = controllers::drawerChanged
         val items = lifecycle.own(DrawerItems(this))
         items.register()
-        val discovery = DrawerDiscovery(store, visuals, work)
+        val discovery = DrawerDiscovery(store, visuals, work, controllers)
         server.pluginManager.registerEvents(discovery, this)
         server.pluginManager.registerEvents(DrawerGameplay(store, items, visuals), this)
-        server.pluginManager.registerEvents(DrawerHoppers(store, visuals), this)
+        server.pluginManager.registerEvents(ControllerGameplay(store, items, controllers), this)
+        server.pluginManager.registerEvents(DrawerHoppers(store, visuals, controllers), this)
         lifecycle.tasks.runSync { server.worlds.forEach { world -> world.loadedChunks.forEach(discovery::discover) } }
         val command = requireNotNull(getCommand("arcdrawers"))
         command.setExecutor { sender, _, _, args ->
@@ -114,16 +118,24 @@ private class DrawerDiscovery(
     private val store: DrawerStore,
     private val visuals: DrawerVisuals,
     private val work: BudgetedTaskQueue,
+    private val controllers: DrawerControllers,
 ) : Listener {
     private data class Address(val world: UUID, val chunk: Long)
     private val pending = HashMap<Address, Any>()
 
     @EventHandler
-    fun loaded(event: ChunkLoadEvent) = discover(event.chunk)
+    fun loaded(event: ChunkLoadEvent) {
+        controllers.chunkChanged(event.chunk)
+        discover(event.chunk)
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun worldUnloaded(event: WorldUnloadEvent) = controllers.worldUnloaded(event.world.uid)
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun unloaded(event: ChunkUnloadEvent) {
         val chunk = event.chunk
+        controllers.chunkChanged(chunk, unloading = true)
         pending.remove(Address(chunk.world.uid, chunk.chunkKey))
         store.cachedBlocks(chunk).forEach(visuals::forget)
     }

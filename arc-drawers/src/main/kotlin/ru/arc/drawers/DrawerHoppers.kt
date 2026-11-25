@@ -1,9 +1,9 @@
 package ru.arc.drawers
 
 import org.bukkit.Material
-import org.bukkit.block.Barrel
 import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
+import org.bukkit.block.Container
 import org.bukkit.block.Hopper
 import org.bukkit.block.data.type.Hopper as HopperData
 import org.bukkit.event.EventHandler
@@ -16,7 +16,11 @@ import org.bukkit.event.inventory.InventoryType
 import org.bukkit.inventory.Inventory
 import org.bukkit.inventory.ItemStack
 
-internal class DrawerHoppers(private val store: DrawerStore, private val visuals: DrawerVisuals) : Listener {
+internal class DrawerHoppers(
+    private val store: DrawerStore,
+    private val visuals: DrawerVisuals,
+    private val controllers: DrawerControllers,
+) : Listener {
     private data class Transfer(
         val next: Drawer,
         val drawerSlot: Int,
@@ -30,44 +34,32 @@ internal class DrawerHoppers(private val store: DrawerStore, private val visuals
 
     @EventHandler(priority = EventPriority.HIGHEST)
     fun search(event: HopperInventorySearchEvent) {
-        val barrel = event.inventory ?: return
+        val backing = event.inventory ?: return
         val block = event.searchBlock
-        if (barrelBlock(barrel) != block) return
-        val record = store.find(block) ?: return
+        if (backingBlock(backing) != block) return
+        val controller = block.type == Material.BLAST_FURNACE
+        val record = if (controller) {
+            if (!store.isController(block)) return
+            null
+        } else {
+            store.find(block) ?: return
+        }
         event.inventory = null
-        val drawer = record.drawer ?: return
         if (proposedMove != null) return
+        if (controller) {
+            if (event.containerType == DESTINATION) pushController(event, backing)
+            return
+        }
+
+        val drawer = record?.drawer ?: return
         val hopper = readyHopper(event)?.inventory ?: return
         val pushing = event.containerType == DESTINATION
         val transfer = (if (pushing) push(drawer, hopper) else pull(drawer, hopper)) ?: return
-        val move = if (pushing) {
-            InventoryMoveItemEvent(hopper, transfer.item.clone(), barrel, true)
-        } else {
-            InventoryMoveItemEvent(barrel, transfer.item.clone(), hopper, false)
-        }
-        proposedMove = move
-        val allowed = try {
-            move.callEvent() && move.item == transfer.item
-        } finally {
-            proposedMove = null
-        }
-
-        // Other listeners may have changed either endpoint during the move event.
-        val liveHopper = readyHopper(event) ?: return
-        if (liveHopper.inventory != hopper) return
-        if (!allowed) {
-            liveHopper.transferCooldown = TRANSFER_COOLDOWN
-            return
-        }
-        if (!block.isLoaded() || (block.getState(false) as? Barrel)?.inventory != barrel) return
-        if (store.find(block) !== record || hopper.getItem(transfer.hopperSlot) != transfer.before) return
-        if (transfer.after != null && transfer.after.amount > hopper.maxStackSize) return
+        val liveHopper = approveMove(event, hopper, backing, transfer.item) ?: return
+        if (store.find(block) !== record || !hopper.canReplace(transfer.hopperSlot, transfer.before, transfer.after)) return
 
         store.save(block, transfer.next, drawer)
-        hopper.setItem(transfer.hopperSlot, transfer.after)
-        liveHopper.transferCooldown = TRANSFER_COOLDOWN
-        // Paper's hopper slot setter leaves the block entity dirty flag and comparator update to its caller.
-        liveHopper.update(false, false)
+        liveHopper.completeMove(transfer.hopperSlot, transfer.after)
         if (transfer.next !== drawer && store.find(block)?.drawer === transfer.next) {
             visuals.refresh(block, transfer.next, transfer.drawerSlot)
         }
@@ -76,7 +68,64 @@ internal class DrawerHoppers(private val store: DrawerStore, private val visuals
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun protectPhysicalInventory(event: InventoryMoveItemEvent) {
         if (event === proposedMove) return
-        if (isDrawer(event.source) || isDrawer(event.destination)) event.isCancelled = true
+        if (isManaged(event.source) || isManaged(event.destination)) event.isCancelled = true
+    }
+
+    private fun pushController(event: HopperInventorySearchEvent, backing: Inventory) {
+        val block = event.searchBlock
+        val hopper = readyHopper(event)?.inventory ?: return
+        for ((index, stack) in hopper.storageContents.withIndex()) {
+            if (stack == null || stack.isEmpty) continue
+            val item = stack.asOne()
+            if (!controllers.accepts(block, item)) continue
+            val before = stack.clone()
+            val after = stack.remainder(1)
+            val liveHopper = approveMove(event, hopper, backing, item) ?: return
+            if (!store.isController(block) || !hopper.canReplace(index, before, after)) return
+            if (controllers.insert(block, item, 1).consumed == 1) liveHopper.completeMove(index, after)
+            return
+        }
+    }
+
+    private fun approveMove(
+        event: HopperInventorySearchEvent,
+        hopper: Inventory,
+        backing: Inventory,
+        item: ItemStack,
+    ): Hopper? {
+        val pushing = event.containerType == DESTINATION
+        val move = if (pushing) {
+            InventoryMoveItemEvent(hopper, item.clone(), backing, true)
+        } else {
+            InventoryMoveItemEvent(backing, item.clone(), hopper, false)
+        }
+        proposedMove = move
+        val allowed = try {
+            move.callEvent() && move.item == item
+        } finally {
+            proposedMove = null
+        }
+
+        // Other listeners may have changed either endpoint during the move event.
+        val liveHopper = readyHopper(event) ?: return null
+        if (liveHopper.inventory != hopper) return null
+        if (!allowed) {
+            liveHopper.transferCooldown = TRANSFER_COOLDOWN
+            return null
+        }
+        val block = event.searchBlock
+        if (!block.isLoaded() || (block.getState(false) as? Container)?.inventory != backing) return null
+        return liveHopper
+    }
+
+    private fun Inventory.canReplace(slot: Int, before: ItemStack?, after: ItemStack?): Boolean =
+        getItem(slot) == before && (after == null || after.amount <= minOf(maxStackSize, after.maxStackSize))
+
+    private fun Hopper.completeMove(slot: Int, after: ItemStack?) {
+        inventory.setItem(slot, after)
+        transferCooldown = TRANSFER_COOLDOWN
+        // Paper's hopper slot setter leaves the block entity dirty flag and comparator update to its caller.
+        update(false, false)
     }
 
     private fun push(drawer: Drawer, hopper: Inventory): Transfer? {
@@ -120,12 +169,19 @@ internal class DrawerHoppers(private val store: DrawerStore, private val visuals
         return hopper.takeIf { block.getRelative(face) == event.searchBlock }
     }
 
-    private fun isDrawer(inventory: Inventory): Boolean = barrelBlock(inventory)?.let { store.find(it) != null } == true
+    private fun isManaged(inventory: Inventory): Boolean {
+        val block = backingBlock(inventory) ?: return false
+        return if (block.type == Material.BARREL) store.find(block) != null else store.isController(block)
+    }
 
-    private fun barrelBlock(inventory: Inventory): Block? =
-        if (inventory.type == InventoryType.BARREL) {
-            inventory.location?.block?.takeIf { it.isLoaded() && it.type == Material.BARREL }
-        } else null
+    private fun backingBlock(inventory: Inventory): Block? {
+        val material = when (inventory.type) {
+            InventoryType.BARREL -> Material.BARREL
+            InventoryType.BLAST_FURNACE -> Material.BLAST_FURNACE
+            else -> return null
+        }
+        return inventory.location?.block?.takeIf { it.isLoaded() && it.type == material }
+    }
 
     private fun Block.isLoaded() = world.isChunkLoaded(x shr 4, z shr 4)
 

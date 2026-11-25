@@ -16,6 +16,7 @@ internal enum class DrawerItem(val id: String, val material: Material) {
     ONE("drawer_1", Material.BARREL),
     TWO("drawer_2", Material.BARREL),
     FOUR("drawer_4", Material.BARREL),
+    CONTROLLER("controller", Material.BLAST_FURNACE),
     LOCK("lock_key", Material.TRIPWIRE_HOOK),
     COUNTS("count_key", Material.TRIPWIRE_HOOK),
     DOUBLE("capacity_2", Material.IRON_INGOT),
@@ -58,7 +59,14 @@ internal class DrawerItems(private val plugin: Plugin) : AutoCloseable {
     fun create(type: DrawerItem, amount: Int = 1): ItemStack = ItemStack(type.material, amount).apply {
         editMeta {
             it.itemName(DrawerText.message(type.id))
-            it.lore(listOf(DrawerText.message("${type.id}.hint").decoration(TextDecoration.ITALIC, false)))
+            val hint = DrawerText.message("${type.id}.hint").decoration(TextDecoration.ITALIC, false)
+            if (type == DrawerItem.CONTROLLER) {
+                val gap = Component.empty().decoration(TextDecoration.ITALIC, false)
+                val use = DrawerText.message("controller.use").decoration(TextDecoration.ITALIC, false)
+                it.lore(listOf(gap, hint, gap, use))
+            } else {
+                it.lore(listOf(hint))
+            }
             it.persistentDataContainer.set(marker, PersistentDataType.STRING, type.id)
         }
     }
@@ -67,6 +75,7 @@ internal class DrawerItems(private val plugin: Plugin) : AutoCloseable {
         add(DrawerItem.ONE, Material.BARREL, Material.IRON_NUGGET)
         add(DrawerItem.TWO, Material.BARREL, Material.BARREL, Material.IRON_NUGGET)
         add(DrawerItem.FOUR, Material.BARREL, Material.BARREL, Material.BARREL, Material.BARREL, Material.IRON_NUGGET)
+        add(DrawerItem.CONTROLLER, Material.BLAST_FURNACE, Material.COMPARATOR, Material.COPPER_INGOT)
         add(DrawerItem.LOCK, Material.TRIPWIRE_HOOK, Material.COPPER_INGOT)
         add(DrawerItem.COUNTS, Material.TRIPWIRE_HOOK, Material.REDSTONE)
         add(DrawerItem.DOUBLE, Material.CHEST, Material.IRON_INGOT, Material.IRON_INGOT, Material.IRON_INGOT, Material.IRON_INGOT)
@@ -100,6 +109,9 @@ internal object DrawerText {
         "drawer_1.hint" to "<gray>32 стопки в отделении",
         "drawer_2.hint" to "<gray>16 стопок в каждом отделении",
         "drawer_4.hint" to "<gray>8 стопок в каждом отделении",
+        "controller" to "<italic:false><white>Контроллер ящиков",
+        "controller.hint" to "<gray>Поставьте вплотную к бочке с отделениями.",
+        "controller.use" to "<#92bed8>ПКМ <gray>— разложить стопку по образцам.",
         "lock_key" to "<gold>Ключ фиксации",
         "lock_key.hint" to "<gray>ПКМ по бочке закрепляет образцы",
         "count_key" to "<gold>Ключ индикации",
@@ -126,13 +138,28 @@ internal object DrawerText {
         "void_on" to "<yellow>Лишние предметы теперь утилизируются",
         "void_present" to "<gray>Улучшение утилизации уже установлено",
         "discarded" to "<yellow>Утилизировано <count>",
+        "controller_empty" to "<yellow>Приставьте к контроллеру бочку с отделениями",
+        "controller_status" to "<gray>Бочек в сети <dark_gray>·</dark_gray> <white><count></white>",
+        "controller_no_match" to "<yellow>Нет подходящего отделения со свободным местом",
+        "controller_moved" to "<green>Сложено в бочки <count> шт.",
+        "controller_discarded" to "<gray>Сложено <white><count></white> шт. <dark_gray>·</dark_gray> <yellow>утилизировано <discarded> шт.",
         "too_many" to "<yellow>Освободите место, чтобы снять улучшение вместимости",
         "removed" to "<gray>Улучшения сняты",
         "status" to "<white><name> <gray>· <count>/<limit> <flags>",
         "empty" to "Пусто",
         "flag_locked" to "<gray>· образцы закреплены",
         "flag_void" to "<yellow>· утилизация",
-        "help" to "<white>Бочки для хранения</white>\n<gray>ПКМ по отделению — положить стопку. Двойной ПКМ — сложить все такие предметы.\nЛКМ — взять один. Приседание + ЛКМ — взять стопку.\nПриседание + ПКМ пустой рукой по боку — снять улучшения.\nРецепты бочек, ключей и улучшений открыты в книге рецептов.</gray>",
+        "help" to """
+            <white>Бочки для хранения</white>
+            <gray>ПКМ по отделению — положить стопку.
+            Двойной ПКМ — сложить все такие предметы.
+            ЛКМ — взять один предмет, в присяде — стопку.
+            Снять улучшения — присядьте и нажмите ПКМ
+              пустой рукой по боку бочки.
+            <white>Контроллер</white> принимает стопки по ПКМ и из воронки.
+            Двойной ПКМ по нему — разложить всё по образцам.
+            Все рецепты есть в книге рецептов.</gray>
+        """.trimIndent(),
         "gave" to "<gray>Выдано: <item> ×<count>",
     )
     private val catalog = object : LocaleCatalog {

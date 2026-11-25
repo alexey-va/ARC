@@ -1,6 +1,7 @@
 package ru.arc.drawers
 
 import org.bukkit.Chunk
+import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.block.Block
 import org.bukkit.inventory.ItemStack
@@ -18,6 +19,17 @@ internal class DrawerStore(private val plugin: Plugin) {
     private data class ChunkAddress(val world: UUID, val chunk: Long)
     internal data class Record(val drawer: Drawer?)
     private val cached = HashMap<ChunkAddress, MutableMap<Int, Record>>()
+    var onDrawerChanged: ((Block, Drawer?, Drawer?) -> Unit)? = null
+
+    fun isController(block: Block): Boolean =
+        block.world.isChunkLoaded(block.x shr 4, block.z shr 4) && block.type == Material.BLAST_FURNACE &&
+            block.chunk.persistentDataContainer.get(controllerKey(position(block)), PersistentDataType.BYTE) == 1.toByte()
+
+    fun setController(block: Block, present: Boolean) {
+        val data = block.chunk.persistentDataContainer
+        val key = controllerKey(position(block))
+        if (present) data.set(key, PersistentDataType.BYTE, 1.toByte()) else data.remove(key)
+    }
 
     fun find(block: Block): Record? {
         val chunk = block.chunk
@@ -54,6 +66,7 @@ internal class DrawerStore(private val plugin: Plugin) {
         payloads.forEach { (index, bytes) -> writeSample(data, position, index, bytes) }
         data.set(key(position), PersistentDataType.BYTE_ARRAY, header)
         cached.getOrPut(address(chunk), ::HashMap)[position] = Record(next)
+        onDrawerChanged?.invoke(block, previous, next)
     }
 
     fun remove(block: Block) {
@@ -62,7 +75,8 @@ internal class DrawerStore(private val plugin: Plugin) {
         val data = chunk.persistentDataContainer
         data.remove(key(position))
         repeat(DrawerLayout.FOUR.slotCount) { data.remove(sampleKey(position, it)) }
-        cached[address(chunk)]?.remove(position)
+        val previous = cached[address(chunk)]?.remove(position)?.drawer
+        onDrawerChanged?.invoke(block, previous, null)
     }
 
     fun positions(chunk: Chunk): List<Int> = chunk.persistentDataContainer.keys.mapNotNull {
@@ -75,12 +89,16 @@ internal class DrawerStore(private val plugin: Plugin) {
     fun blockAt(chunk: Chunk, position: Int): Block =
         chunk.getBlock(position and 15, position shr 8, (position shr 4) and 15)
 
-    fun clear() = cached.clear()
+    fun clear() {
+        onDrawerChanged = null
+        cached.clear()
+    }
 
     private fun position(block: Block): Int = (block.y shl 8) or ((block.z and 15) shl 4) or (block.x and 15)
     private fun address(chunk: Chunk) = ChunkAddress(chunk.world.uid, chunk.chunkKey)
     private val namespace = NamespacedKey(plugin, "drawer").namespace
     private fun key(position: Int) = NamespacedKey(plugin, "d_${position.toString(36)}")
+    private fun controllerKey(position: Int) = NamespacedKey(plugin, "c_${position.toString(36)}")
     private fun sampleKey(position: Int, slot: Int) = NamespacedKey(plugin, "d_${position.toString(36)}_${slot}")
 
     private fun writeSample(data: PersistentDataContainer, position: Int, index: Int, bytes: ByteArray?) {
