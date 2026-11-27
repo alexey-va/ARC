@@ -60,6 +60,7 @@ import ru.arc.commands.arc.subcommands.TreasuresSubCommand
 import ru.arc.travelanchors.GiveTravelAnchorSubCommand
 import ru.arc.travelanchors.GiveTravelStaffSubCommand
 import ru.arc.travelanchors.TravelAnchorSubCommand
+import ru.arc.playertransfer.PlayerTransferSubCommand
 
 /**
  * Main /arc command that routes to subcommands.
@@ -120,6 +121,7 @@ class ArcCommand(private val profile: ArcRuntimeProfile = ArcRuntimeProfile.FULL
                 StoreSubCommand,
                 ItemsCatalogSubCommand,
                 LandsSubCommand,
+                PlayerTransferSubCommand,
                 DecorInteractionSubCommand,
                 ServerSubCommand,
                 ChargesSubCommand,

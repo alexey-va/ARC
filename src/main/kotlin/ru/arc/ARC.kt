@@ -665,6 +665,7 @@ open class ARC : JavaPlugin() {
             ItemLoreModule,
             ru.arc.pvp.PvpModule,
             LandsUiModule,
+            ru.arc.playertransfer.PlayerTransferModule,
             ru.arc.decorinteraction.DecorInteractionModule,
             ru.arc.survival.SurvivalGameplayModule,
             ru.arc.playerseat.PlayerSeatModule,

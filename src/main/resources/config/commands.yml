@@ -4,6 +4,13 @@
 # =============================================================================
 
 commands:
+  playertransfer:
+    name: playertransfer
+    aliases: []
+    permission: arc.playertransfer.admin
+    player-only: false
+    description: Проверить данные двух аккаунтов перед переносом
+    usage: /arc playertransfer preview <старый-uuid> <новый-uuid>
   invlist:
     name: invlist
     aliases: []
