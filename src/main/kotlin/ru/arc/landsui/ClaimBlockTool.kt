@@ -294,7 +294,7 @@ internal class ClaimBlockTool(
 
     @Suppress("UNCHECKED_CAST")
     private fun createLand(player: Player, target: Location, lp: me.angeschossen.lands.api.player.LandPlayer): CompletableFuture<Land?> =
-        Land.of(player.name, LandType.LAND, target, lp, false, false) as CompletableFuture<Land?>
+        Land.of(player.name, null, LandType.LAND, target, lp, false, false) as CompletableFuture<Land?>
 
     private fun selectionEdge(target: Location, radius: Int): Pair<Location, Location> {
         val world = requireNotNull(target.world)

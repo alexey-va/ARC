@@ -30,14 +30,14 @@ class LandsHook {
 
     fun isClaimed(location: Location): Boolean {
         val landWorld = integration.getWorld(location.world) ?: return false
-        return landWorld.getArea(location) != null
+        return landWorld.getArea(location.blockX, location.blockY, location.blockZ) != null
     }
 
     /** Returns null when Lands cannot answer for this world; callers placing rewards must fail closed then. */
     fun isUnclaimed(location: Location): Boolean? {
         val world = location.world ?: return null
         val landWorld = integration.getWorld(world) ?: return null
-        return landWorld.getArea(location) == null
+        return landWorld.getArea(location.blockX, location.blockY, location.blockZ) == null
     }
 
     fun isLandOwner(player: Player, location: Location): Boolean =
@@ -50,7 +50,7 @@ class LandsHook {
     ): Boolean {
         val world = location.world ?: return false
         val landWorld = integration.getWorld(world) ?: return false
-        if (landWorld.getArea(location) == null) return false
+        if (landWorld.getArea(location.blockX, location.blockY, location.blockZ) == null) return false
         val landPlayer = integration.getLandPlayer(player.uniqueId) ?: return false
         return landWorld.hasRoleFlag(landPlayer, location, Flags.BLOCK_BREAK, Material.STONE, false) &&
             landWorld.hasRoleFlag(landPlayer, location, Flags.BLOCK_PLACE, Material.STONE, false)

@@ -403,6 +403,10 @@ class HookRegistry(
         register("CMI", true) {
             val hook = CMIHook()
             registerListener(CMIListener())
+            val serverName = ARC.serverName
+            if (serverName == "survival" && Bukkit.getPluginManager().isPluginEnabled("HuskSync")) {
+                registerListener(CmiFlightSyncListener(serverName))
+            }
             cmiHook = hook
             val ignorePersistence = CmiIgnorePersistenceHook(com.Zrips.CMI.CMI.getInstance())
             try {

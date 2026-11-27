@@ -7,8 +7,10 @@ import me.angeschossen.lands.api.framework.holder.Changeable
 import me.angeschossen.lands.api.flags.type.Flags
 import me.angeschossen.lands.api.land.Area
 import me.angeschossen.lands.api.land.Land
+import me.angeschossen.lands.api.limits.Limit
 import me.angeschossen.lands.api.player.LandPlayer
 import me.angeschossen.lands.api.role.Role
+import me.angeschossen.lands.api.role.enums.RoleType
 import me.angeschossen.lands.api.memberholder.CMDTarget
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
@@ -91,7 +93,7 @@ internal class LandsUiManagementService(
             viewerRole = roleName(viewerRole),
             description = titleText(land.getTitleMessage(landPlayer)),
             members = members,
-            roles = areaRoles.map { LandsUiRole(roleId(it), roleName(it), it.isVisitorRole) }
+            roles = areaRoles.map { LandsUiRole(roleId(it), roleName(it), it.type == RoleType.VISITOR) }
                 .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name }),
             areas = areas(land).map { LandsUiArea(it.ulid.toString(), it.name, it.isDefault) }
                 .sortedWith(compareBy<LandsUiArea> { !it.main }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }),
@@ -528,9 +530,9 @@ internal class LandsUiManagementService(
             name = land.name,
             ownerId = land.ownerUID,
             chunks = land.chunksAmount,
-            maxChunks = land.maxChunks,
+            maxChunks = land.getLimit(Limit.LAND_SIZE),
             memberIds = land.trustedPlayerIds() + land.ownerUID,
-            maxMembers = land.maxMembers,
+            maxMembers = land.getLimit(Limit.LAND_MEMBERS),
             balance = land.balance,
             selected = selected,
         )

@@ -1,6 +1,7 @@
 package ru.arc.landsui
 
 import me.angeschossen.lands.api.LandsIntegration
+import me.angeschossen.lands.api.limits.Limit
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import ru.arc.ARC
@@ -83,9 +84,9 @@ class BukkitLandsUiGateway internal constructor(
                     name = land.name,
                     ownerId = land.ownerUID,
                     chunks = land.chunksAmount,
-                    maxChunks = land.maxChunks,
+                    maxChunks = land.getLimit(Limit.LAND_SIZE),
                     memberIds = land.trustedPlayerIds() + land.ownerUID,
-                    maxMembers = land.maxMembers,
+                    maxMembers = land.getLimit(Limit.LAND_MEMBERS),
                     balance = land.balance,
                     selected = land.ulid.toString() == selectedId,
                 )
@@ -142,8 +143,8 @@ class BukkitLandsUiGateway internal constructor(
             ?.takeIf { it.exists() } ?: return null
         return LandsUiLand(
             id = land.ulid.toString(), name = land.name, ownerId = land.ownerUID,
-            chunks = land.chunksAmount, maxChunks = land.maxChunks,
-            memberIds = land.trustedPlayerIds() + land.ownerUID, maxMembers = land.maxMembers,
+            chunks = land.chunksAmount, maxChunks = land.getLimit(Limit.LAND_SIZE),
+            memberIds = land.trustedPlayerIds() + land.ownerUID, maxMembers = land.getLimit(Limit.LAND_MEMBERS),
             balance = land.balance, selected = false,
         )
     }

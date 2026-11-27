@@ -73,7 +73,7 @@ class ClaimBlockToolTest {
                     tool.place(player, target, radius = 1)
                     paper.performTicks(3)
                     verify(exactly = 1) { firstSelection.claim(selected, false, true) }
-                    verify(exactly = 0) { Land.of(any(), any(), any(), any(), any(), any()) }
+                    verify(exactly = 0) { Land.of(any(), any(), any(), any(), any(), any(), any()) }
 
                     // A second request while the first native claim is pending is ignored.
                     tool.place(player, target, radius = 1)

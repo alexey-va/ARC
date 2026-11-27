@@ -11,6 +11,7 @@ import io.mockk.verifyOrder
 import me.angeschossen.lands.api.LandsIntegration
 import me.angeschossen.lands.api.applicationframework.util.ULID
 import me.angeschossen.lands.api.land.Land
+import me.angeschossen.lands.api.limits.Limit
 import me.angeschossen.lands.api.player.LandPlayer
 import me.angeschossen.lands.api.player.Selection
 import org.bukkit.Location
@@ -129,14 +130,17 @@ class BukkitLandsUiGatewayTest : StringSpec({
         every { land.name } returns "Берег"
         every { land.ownerUID } returns id
         every { land.chunksAmount } returns 4
-        every { land.maxChunks } returns 64
-        every { land.maxMembers } returns 8
+        every { land.getLimit(Limit.LAND_SIZE) } returns 64
+        every { land.getLimit(Limit.LAND_MEMBERS) } returns 8
         every { land.balance } returns 0.0
         every { land.trustedPlayers } returns emptySet<java.util.UUID>()
         every { landPlayer.setEditLand(land) } just runs
 
         val gateway = BukkitLandsUiGateway(integration)
-        gateway.lands(player).single().selected shouldBe true
+        val listed = gateway.lands(player).single()
+        listed.selected shouldBe true
+        listed.maxChunks shouldBe 64
+        listed.maxMembers shouldBe 8
         gateway.select(player, "01KLAND") shouldBe true
 
         verify { landPlayer.setEditLand(land) }
@@ -164,9 +168,9 @@ class BukkitLandsUiGatewayTest : StringSpec({
         every { land.name } returns "Чужой приват"
         every { land.ownerUID } returns ownerId
         every { land.chunksAmount } returns 7
-        every { land.maxChunks } returns 64
+        every { land.getLimit(Limit.LAND_SIZE) } returns 64
         every { land.trustedPlayers } returns setOf(memberId)
-        every { land.maxMembers } returns 12
+        every { land.getLimit(Limit.LAND_MEMBERS) } returns 12
         every { land.balance } returns 50.0
 
         val inspected = BukkitLandsUiGateway(integration).inspectedLand(player)
@@ -174,6 +178,8 @@ class BukkitLandsUiGatewayTest : StringSpec({
         inspected?.id shouldBe "01KFOREIGN"
         inspected?.ownerId shouldBe ownerId
         inspected?.memberIds shouldBe setOf(ownerId, memberId)
+        inspected?.maxChunks shouldBe 64
+        inspected?.maxMembers shouldBe 12
         inspected?.selected shouldBe false
         verify(exactly = 0) { integration.getLandPlayer(playerId) }
     }
