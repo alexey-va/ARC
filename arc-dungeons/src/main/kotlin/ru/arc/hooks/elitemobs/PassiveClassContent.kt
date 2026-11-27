@@ -34,14 +34,15 @@ internal object PassiveClassContent {
         check(document["balanceFingerprint"].asString == BALANCE_FINGERPRINT)
         val overrides = document.getAsJsonObject("forms")
         val knownStock = fingerprint(stock) == STOCK_FINGERPRINT
-        val missing = overrides.keySet() - stock.mappedFormIds()
+        val formIds = EliteMobsPassiveAccess.formIds(stock)
+        val missing = overrides.keySet() - formIds
         if (!knownStock) warn("Native passive catalog changed; applying compatible balance overrides; " +
             "skipped ${missing.size} absent forms: ${missing.sorted().take(8).joinToString()}")
         val gson = Gson()
         val profiles = linkedMapOf<String, PassiveProfile>()
         val traits = linkedMapOf<String, List<PassiveTrait>>()
         val mechanics = linkedMapOf<String, List<PassiveMechanicTrait>>()
-        for (id in stock.mappedFormIds().sorted()) {
+        for (id in formIds.sorted()) {
             val override = overrides.getAsJsonObject(id)
             val profile = gson.toJsonTree(stock.require(id)).asJsonObject
             override?.getAsJsonObject("profile")?.entrySet()?.forEach { (key, value) ->
@@ -61,7 +62,7 @@ internal object PassiveClassContent {
 
     internal fun fingerprint(registry: FixedPassiveRegistry): String {
         val lines = buildList {
-            for (id in registry.mappedFormIds().sorted()) {
+            for (id in EliteMobsPassiveAccess.formIds(registry).sorted()) {
                 add("$id|profile|${registry.require(id)}")
                 addAll(registry.traits(id).map { trait ->
                     "$id|trait|${trait.conditions().map { it.name }.sorted().joinToString(",")}|${trait.profile()}"

@@ -225,13 +225,17 @@ internal class EliteMobsPassiveAccess {
     }
 
     init {
-        check(rendererType.isInterface && rendererType.declaredMethods.size == 4)
+        val rendererMethodCount = rendererType.declaredMethods.size
+        check(rendererType.isInterface && rendererMethodCount in 3..4)
         listOf(
             "showOverview" to arrayOf(Player::class.java, viewType),
             "showControls" to arrayOf(Player::class.java, viewType),
-            "showForm" to arrayOf(Player::class.java, viewType, formType),
             "showForm" to arrayOf(Player::class.java, viewType, formType, Boolean::class.javaPrimitiveType!!),
         ).forEach { (name, parameters) -> check(rendererType.getDeclaredMethod(name, *parameters).returnType == Void.TYPE) }
+        if (rendererMethodCount == 4) {
+            val legacy = rendererType.getDeclaredMethod("showForm", Player::class.java, viewType, formType)
+            check(legacy.isDefault && legacy.returnType == Void.TYPE)
+        }
         check(rendererType.isInstance(dialogs.get(coordinator)) && rendererType.isInstance(inventories.get(coordinator)))
     }
 
@@ -249,6 +253,13 @@ internal class EliteMobsPassiveAccess {
         }
 
     companion object {
+        private val registryTraits by lazy { field(FixedPassiveRegistry::class.java, "traits", Map::class.java) }
+
+        // The native mappedFormIds() getter returned this key set before it was removed in 10.9.15.
+        @Suppress("UNCHECKED_CAST")
+        fun formIds(registry: FixedPassiveRegistry): Set<String> =
+            (registryTraits.get(registry) as Map<String, *>).keys
+
         private val registryConstructor by lazy {
             FixedPassiveRegistry::class.java.getDeclaredConstructor(Map::class.java, Map::class.java, Map::class.java).also {
                 check(Modifier.isPrivate(it.modifiers) && it.trySetAccessible()) { "Native passive registry constructor is inaccessible" }

@@ -159,12 +159,11 @@ class DungeonCompassPointsTest : FreeSpec({
             DungeonCompassPointKind.CLASS_TRAINER
         compassNpcPointKind("repair", NPCInteractions.NPCInteractionType.REPAIRMAN) shouldBe
             DungeonCompassPointKind.REPAIR
-        compassNpcPointKind("scrapper", NPCInteractions.NPCInteractionType.SCRAPPER) shouldBe
-            DungeonCompassPointKind.SCRAP
         compassNpcPointKind("enchanter", NPCInteractions.NPCInteractionType.ENCHANTER) shouldBe
             DungeonCompassPointKind.ENCHANT
-        compassNpcPointKind("enhancer", NPCInteractions.NPCInteractionType.ENHANCER) shouldBe
-            DungeonCompassPointKind.ENCHANT
+        val nativeRoles = NPCInteractions.NPCInteractionType.entries.associateBy { it.name }
+        nativeRoles["SCRAPPER"]?.let { compassNpcPointKind("scrapper", it) shouldBe DungeonCompassPointKind.SCRAP }
+        nativeRoles["ENHANCER"]?.let { compassNpcPointKind("enhancer", it) shouldBe DungeonCompassPointKind.ENCHANT }
         compassNpcPointKind("unbinder", NPCInteractions.NPCInteractionType.UNBINDER) shouldBe
             DungeonCompassPointKind.UNBIND
         compassNpcPointKind("scroll_applier", NPCInteractions.NPCInteractionType.SCROLL_APPLIER) shouldBe

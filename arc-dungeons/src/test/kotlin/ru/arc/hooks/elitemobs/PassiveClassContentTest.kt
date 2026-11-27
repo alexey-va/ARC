@@ -9,8 +9,10 @@ class PassiveClassContentTest : FreeSpec({
     "all 76 forms retain the accepted balance while the stock singleton remains unchanged" {
         val stock = BuiltInClassContent.passiveRegistry()
         val balanced = PassiveClassContent.registry()
-        balanced.mappedFormIds().size shouldBe 76
-        balanced.mappedFormIds() shouldBe stock.mappedFormIds()
+        val forms = EliteMobsPassiveAccess.formIds(balanced)
+        forms.size shouldBe 76
+        forms shouldBe BuiltInClassContent.catalog().forms().map { it.id() }.toSet()
+        forms shouldBe EliteMobsPassiveAccess.formIds(stock)
         PassiveClassContent.fingerprint(balanced) shouldBe PassiveClassContent.BALANCE_FINGERPRINT
         PassiveClassContent.fingerprint(stock) shouldBe PassiveClassContent.STOCK_FINGERPRINT
         (balanced === stock) shouldBe false
@@ -20,7 +22,7 @@ class PassiveClassContentTest : FreeSpec({
         val registry = PassiveClassContent.registry()
         val removed = setOf(PassiveCondition.CLASS_ABILITY_DAMAGE, PassiveCondition.AREA_CLASS_ABILITY_DAMAGE,
             PassiveCondition.TRAP_CLASS_ABILITY_DAMAGE, PassiveCondition.BLAST_CLASS_ABILITY_DAMAGE, PassiveCondition.WARD_BROKEN)
-        registry.mappedFormIds().forEach { id ->
+        EliteMobsPassiveAccess.formIds(registry).forEach { id ->
             (listOf(registry.require(id)) + registry.traits(id).map { it.profile() }).forEach { profile ->
                 profile.healingDoneBase() shouldBe 0.0
                 profile.healingDonePerLevel() shouldBe 0.0
@@ -39,14 +41,14 @@ class PassiveClassContentTest : FreeSpec({
 
     "compatible native additions survive while retired override forms are skipped with one warning" {
         val stock = BuiltInClassContent.passiveRegistry()
-        val ids = stock.mappedFormIds() - "cleric"
+        val ids = EliteMobsPassiveAccess.formIds(stock) - "cleric"
         val profiles = ids.associateWith(stock::require) + ("new_native_form" to stock.require("ranger"))
         val traits = ids.associateWith(stock::traits) + ("new_native_form" to stock.traits("ranger"))
         val mechanics = ids.associateWith(stock::mechanicTraits) + ("new_native_form" to stock.mechanicTraits("ranger"))
         val current = EliteMobsPassiveAccess.newRegistry(profiles, traits, mechanics)
         val warnings = mutableListOf<String>()
         val balanced = PassiveClassContent.applyBalance(current) { warnings += it }
-        balanced.mappedFormIds() shouldBe current.mappedFormIds()
+        EliteMobsPassiveAccess.formIds(balanced) shouldBe (ids + "new_native_form")
         balanced.require("new_native_form") shouldBe current.require("new_native_form")
         balanced.traits("new_native_form") shouldBe current.traits("new_native_form")
         balanced.mechanicTraits("new_native_form") shouldBe current.mechanicTraits("new_native_form")

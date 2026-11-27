@@ -220,14 +220,20 @@ class PassiveClassCompatibilityTest : FreeSpec({
                     rendererType.declaredMethods.single { it.name == name }.apply { isAccessible = true }
                         .invoke(renderer, f.player, view)
                 }
-                rendererType.declaredMethods.single { it.name == "showForm" && it.parameterCount == 4 }
-                    .apply { isAccessible = true }.invoke(renderer, f.player, view, form, false)
+                val showForm = rendererType.declaredMethods.single { it.name == "showForm" && it.parameterCount == 4 }
+                    .apply { isAccessible = true }
+                showForm.invoke(renderer, f.player, view, form, false)
+                showForm.invoke(renderer, f.player, view, form, true)
             }
-            f.opened shouldBe listOf("overview", "overview", "occultist:true", "overview", "overview", "occultist:true")
+            val expected = listOf("overview", "overview", "occultist:true", "occultist:false")
+            f.opened shouldBe expected + expected
             val renderer = f.access.dialogs.get(f.access.coordinator)
-            rendererType.declaredMethods.single { it.name == "showForm" && it.parameterCount == 3 }
-                .apply { isAccessible = true }.invoke(renderer, f.player, view, form)
-            f.opened.last() shouldBe "occultist:false"
+            rendererType.declaredMethods.singleOrNull { it.name == "showForm" && it.parameterCount == 3 }?.let { legacy ->
+                legacy.isAccessible = true
+                val before = f.opened.toList()
+                legacy.invoke(renderer, f.player, view, form)
+                f.opened shouldBe before + "occultist:false"
+            }
         } }
     }
 
@@ -320,7 +326,6 @@ private class PassiveHostFixture(version: String = "compatible-native-build") : 
                     StoredClassProgress(firstArg(), it.id(), xp, catalog.persistenceVersion(), true)
                 }
             }
-            every { store.loadProgressOrZero(any(), any(), any()) } answers { StoredClassProgress.zero(firstArg(), secondArg(), thirdArg()) }
             progression = ClassProgressionModule(catalog,
                 { id -> Optional.of(FoundationLevelSnapshot(id, SkillType.entries.associateWith { 100 })) }, store, Runnable::run)
             progression.load(player.uniqueId).join()

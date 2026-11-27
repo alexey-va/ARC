@@ -1,27 +1,30 @@
 # EliteMobs compatibility
 
-ArcDungeons supports the audited stock releases **10.9.8 and 10.9.10**. Other
-version labels and modified passive catalogs remain rejected before installation.
-Compile against 10.9.8, the oldest supported API, and test the same consumer
-bytecode against both native runtime JARs.
+ArcDungeons compiles against EliteMobs **10.9.8** and checks the actual native
+contract before it installs the passive-class adapter. The rollout from
+**10.9.11** to **10.9.17** keeps the 76 native forms, the RusCrafting balance and
+the passive-only combat rules.
 
 ## Audited artifacts
 
-The official `com.magmaguy:EliteMobs` runtime JARs from
-`https://repo.magmaguy.com/releases/` were compared on 2026-10-18:
+Official `com.magmaguy:EliteMobs` runtime JARs from
+`https://repo.magmaguy.com/releases/` used for compatibility checks.
 
 | Version | SHA-256 |
 | --- | --- |
 | 10.9.8 | `7c01d9fc2375d7f23d3a875f6e63f905672bbb73ab735c2672f747f4d79b2b24` |
 | 10.9.10 | `99f4d6595739fc8d59a9e4c2cd558c0fa61b4294df202973a6cf4e7265577bb2` |
+| 10.9.11 | `807c43c515662e798b8eb47b16cb965be3cca182ba3f746f2d4ef8f49b5afec1` |
+| 10.9.17 | `5722aaab379b7818fdda2c1f7fca5a9a074016f4af2109570449c8f564877309` |
 
-All 425 `advancedcombat` classes, nine `AdvancedClass*` command classes and
-13 presentation classes are byte-identical. This includes the private fields,
-registry constructor and menu renderer interface used by `EliteMobsPassiveAccess`,
-the 76-form catalog, progression, trials and the class input router.
-The accepted passive balance and Russian menu content therefore stay unchanged;
-`passive-classes-10.9.8.json` identifies the balance's source catalog, not the only
-supported runtime. Both complete-catalog fingerprints are still checked.
+EliteMobs 10.9.15 removed `FixedPassiveRegistry.mappedFormIds()` and the default
+three-argument `ClassMenuRenderer.showForm`. `EliteMobsPassiveAccess` reads the
+same registry keys the getter used and checks the three required renderer
+methods. It also validates the legacy overload when present. The surviving
+four-argument form uses a boolean to distinguish browsing from trainer entry.
+The native passive profiles, traits and mechanics have the same complete
+fingerprint on 10.9.11 and 10.9.17. The existing catalog and balance checks still
+run before replacing the registry.
 
 The relevant binary break is `QuestTracking.getPlayerTrackingQuests()`:
 its return descriptor changes from `HashMap` to `ConcurrentHashMap`. The isolated
@@ -33,7 +36,7 @@ their audited types. No native storage, weapon ability or progression is replace
 
 ## Empty event announcements
 
-Both supported releases convert an absent event message from `null` to `""`
+EliteMobs 10.9.8 and 10.9.10 convert an absent event message from `null` to `""`
 through `TranslationsConfig.add` and `ChatColorConverter.convert`. Native
 `CustomEvent.start/end` check only for null; announcement priority zero still
 sends the resulting empty string to every player in the event world.
@@ -43,7 +46,7 @@ before either timed or action events start. It restores null only for visually
 empty start/end messages, retaining visible text and all gameplay state. The
 normal native-listener lifecycle owns registration and cleanup. The focused
 `EliteMobsEventAnnouncementGuardTest` exercises the native announcement sender
-against both runtime versions with the same compiled addon.
+against the selected runtime version with the same compiled addon.
 
 ## Grindstone enchantment removal
 
@@ -69,8 +72,8 @@ Native identity detection, item extraction and XP still need player acceptance.
 
 Run `:arc-dungeons:test` with the five filters `PassiveClassContentTest`,
 `PassiveClassCompatibilityTest`, `NativeQuestTrackingTest`, `DungeonQuestsTest`
-and `QuestCompassTest` in package `ru.arc.hooks.elitemobs`. The default test runtime
-is 10.9.10; repeat with `-PeliteMobsTestVersion=10.9.8` for retained compatibility.
+and `QuestCompassTest` in package `ru.arc.hooks.elitemobs`. Run the rollout matrix
+with `-PeliteMobsTestVersion=10.9.17` and `-PeliteMobsTestVersion=10.9.11`.
 The fixture reads the version from the actual runtime JAR's plugin descriptor.
 Keep unsupported MockBukkit platform observations separate from real Paper/client
 acceptance; never alter production behavior to satisfy a test double.

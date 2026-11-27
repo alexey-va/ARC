@@ -20,11 +20,12 @@ import org.bukkit.inventory.meta.LeatherArmorMeta
 import org.bukkit.persistence.PersistentDataType
 import ru.arc.config.Config
 import ru.arc.paper.testing.MockBukkitTestRuntime
+import ru.arc.testing.ArcDungeonItemsFixture
 
 class EliteLootCaseSkinTest : FreeSpec({
     "a recognized FMM staff receives a crossbow model without changing its weapon data" {
         MockBukkitTestRuntime.open().use {
-            mockkStatic(EliteItemManager::class, WeaponIdentityResolver::class)
+            mockLootClassification()
             try {
                 every { EliteItemManager.isEliteMobsItem(any()) } returns true
                 every { WeaponIdentityResolver.progressionSkill(any()) } returns SkillType.STAVES
@@ -66,7 +67,7 @@ class EliteLootCaseSkinTest : FreeSpec({
 
     "staff routing requires explicit FMM identity and leaves wands and existing sword skins alone" {
         MockBukkitTestRuntime.open().use {
-            mockkStatic(EliteItemManager::class, WeaponIdentityResolver::class)
+            mockLootClassification()
             try {
                 every { EliteItemManager.isEliteMobsItem(any()) } returns true
                 every { WeaponIdentityResolver.progressionSkill(any()) } returns SkillType.WANDS
@@ -87,12 +88,14 @@ class EliteLootCaseSkinTest : FreeSpec({
     }
 
     "spawn preparation applies an in-place skin before pickup without changing the source reward" {
-        MockBukkitTestRuntime.open().use {
+        MockBukkitTestRuntime.open().use { runtime ->
+            val items = ArcDungeonItemsFixture(runtime)
             mockkStatic(EliteItemManager::class, ItemSettingsConfig::class)
             try {
                 every { EliteItemManager.isEliteMobsItem(any()) } returns true
                 every { EliteItemManager.getRoundedItemLevel(any()) } returns 43
                 every { ItemSettingsConfig.getWeaponEntry() } returns ""
+                every { ItemSettingsConfig.getLoreStructure() } returns emptyList()
                 val original = ItemStack(Material.DIAMOND_CHESTPLATE)
                 val key = NamespacedKey("elitemobs", "soulbind")
                 original.editMeta { it.persistentDataContainer.set(key, PersistentDataType.STRING, "owner") }
@@ -107,7 +110,10 @@ class EliteLootCaseSkinTest : FreeSpec({
                 original.itemMeta.hasCustomModelData() shouldBe false
                 prepared.type shouldBe Material.DIAMOND_CHESTPLATE
                 verify(exactly = 1) { processor.processEliteLoot(any(), false) }
-            } finally { unmockkStatic(EliteItemManager::class, ItemSettingsConfig::class) }
+            } finally {
+                unmockkStatic(EliteItemManager::class, ItemSettingsConfig::class)
+                items.close()
+            }
         }
     }
 
@@ -148,3 +154,9 @@ class EliteLootCaseSkinTest : FreeSpec({
         }
     }
 })
+
+private fun mockLootClassification() {
+    // Initialize the native lookup cache before MockK can intercept its initializer.
+    Class.forName(WeaponIdentityResolver::class.java.name)
+    mockkStatic(EliteItemManager::class, WeaponIdentityResolver::class)
+}
